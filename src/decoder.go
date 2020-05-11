@@ -1,0 +1,75 @@
+package decoder
+
+import (
+	"image"
+	"io"
+
+	"github.com/disintegration/imaging"
+	"github.com/rwcarlsen/goexif/exif"
+)
+
+func Decode(reader io.ReadSeeker) (image.Image, string, error) {
+	img, fmt, err := image.Decode(reader)
+	if err != nil {
+		return img, fmt, err
+	}
+	reader.Seek(0, io.SeekStart)
+	orientation := getOrientation(reader)
+	switch orientation {
+	case "1":
+	case "2":
+		img = imaging.FlipH(img)
+	case "3":
+		img = imaging.Rotate180(img)
+	case "4":
+		img = imaging.Rotate180(imaging.FlipH(img))
+	case "5":
+		img = imaging.Rotate270(imaging.FlipV(img))
+	case "6":
+		img = imaging.Rotate270(img)
+	case "7":
+		img = imaging.Rotate90(imaging.FlipV(img))
+	case "8":
+		img = imaging.Rotate90(img)
+	}
+
+	return img, fmt, err
+}
+
+func DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
+	conf, fmt, err := image.DecodeConfig(reader)
+	if err != nil {
+		return conf, fmt, err
+	}
+	reader.Seek(0, io.SeekStart)
+	orientation := getOrientation(reader)
+	switch orientation {
+	case "5":
+		fallthrough
+	case "6":
+		fallthrough
+	case "7":
+		fallthrough
+	case "8":
+		conf.Width, conf.Height = conf.Height, conf.Width
+	}
+	return conf, fmt, err
+}
+
+func getOrientation(reader io.Reader) string {
+	x, err := exif.Decode(reader)
+	if err != nil {
+		return "1"
+	}
+	if x != nil {
+		orient, err := x.Get(exif.Orientation)
+		if err != nil {
+			return "1"
+		}
+		if orient != nil {
+			return orient.String()
+		}
+	}
+
+	return "1"
+}

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhotoField</title>
+</head>
+<body>
+  <div id="openseadragon1" style="width: 800px; height: 600px;"></div>
+  <script src="/vendor/openseadragon/openseadragon.min.js"></script>
+  <script src="/vendor/openseadragon/openseadragon-smartScrollZoom.js"></script>
+  <script type="text/javascript">
+  
+    const tileSize = 256
+    const minLevel = 0
+    const maxLevel = 12
+    const power = 1 << maxLevel
+    const viewer = OpenSeadragon({
+        id: "openseadragon1",
+        prefixUrl: "/vendor/openseadragon/images/",
+        navigatorSizeRatio: 1,
+        tileSources:   {
+            height: power*tileSize,
+            width:  power*tileSize,
+            tileSize,
+            minLevel,
+            maxLevel,
+            getTileUrl: function( level, x, y ){
+              return "tiles?zoom=" + level + "&x=" + x + "&y=" + y
+            }
+        }
+    });
+    viewer.smartScrollZoom({
+      enabled: true,
+      minScrolls: 2,
+      zoomIncrement: 0.2,
+      timeThreshold: 500,
+    });
+    
+  </script>
+</body>
+</html>
