@@ -3,10 +3,16 @@ package decoder
 import (
 	"image"
 	"io"
+	"time"
 
 	"github.com/disintegration/imaging"
 	"github.com/rwcarlsen/goexif/exif"
 )
+
+type Info struct {
+	Config   *image.Config
+	DateTime time.Time
+}
 
 func Decode(reader io.ReadSeeker) (image.Image, string, error) {
 	img, fmt, err := image.Decode(reader)
@@ -36,6 +42,70 @@ func Decode(reader io.ReadSeeker) (image.Image, string, error) {
 	return img, fmt, err
 }
 
+func DecodeInfo(reader io.ReadSeeker) (Info, error) {
+	info := Info{}
+
+	x, err := exif.Decode(reader)
+	if err == nil {
+		info.DateTime, _ = x.DateTime()
+	}
+
+	portrait := getPortraitFromExif(x)
+	reader.Seek(0, io.SeekStart)
+	conf, _, err := image.DecodeConfig(reader)
+	if err != nil {
+		return info, err
+	}
+	if portrait {
+		conf.Width, conf.Height = conf.Height, conf.Width
+	}
+
+	if err != nil {
+		return info, err
+	}
+	info.Config = &conf
+
+	return info, nil
+}
+
+func getPortraitFromExif(x *exif.Exif) bool {
+	orientation := getOrientationFromExif(x)
+	switch orientation {
+	case "1":
+		fallthrough
+	case "2":
+		fallthrough
+	case "3":
+		fallthrough
+	case "4":
+		return false
+	case "5":
+		fallthrough
+	case "6":
+		fallthrough
+	case "7":
+		fallthrough
+	case "8":
+		return true
+	default:
+		return false
+	}
+}
+
+func getOrientationFromExif(x *exif.Exif) string {
+	if x == nil {
+		return "1"
+	}
+	orient, err := x.Get(exif.Orientation)
+	if err != nil {
+		return "1"
+	}
+	if orient != nil {
+		return orient.String()
+	}
+	return "1"
+}
+
 func DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
 	conf, fmt, err := image.DecodeConfig(reader)
 	if err != nil {
@@ -56,7 +126,7 @@ func DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
 	return conf, fmt, err
 }
 
-func getOrientation(reader io.Reader) string {
+func getOrientation(reader io.ReadSeeker) string {
 	x, err := exif.Decode(reader)
 	if err != nil {
 		return "1"
