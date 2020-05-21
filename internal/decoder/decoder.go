@@ -1,4 +1,4 @@
-package decoder
+package photofield
 
 import (
 	"image"
@@ -10,8 +10,8 @@ import (
 )
 
 type Info struct {
-	Config   *image.Config
-	DateTime time.Time
+	Width, Height int
+	DateTime      time.Time
 }
 
 func Decode(reader io.ReadSeeker) (image.Image, string, error) {
@@ -63,7 +63,7 @@ func DecodeInfo(reader io.ReadSeeker) (Info, error) {
 	if err != nil {
 		return info, err
 	}
-	info.Config = &conf
+	info.Width, info.Height = conf.Width, conf.Height
 
 	return info, nil
 }

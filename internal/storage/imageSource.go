@@ -13,12 +13,23 @@ import (
 	decoder "photofield/internal/decoder"
 
 	"github.com/dgraph-io/ristretto"
+	"github.com/jinzhu/gorm"
 )
 
+type ImageInfo struct {
+	Path      string `gorm:"type:varchar(4096);primary_key;unique_index"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
+	decoder.Info
+}
+
 type ImageSource struct {
-	imagesLoading sync.Map
-	images        *ristretto.Cache
-	infos         *ristretto.Cache
+	imagesLoading  sync.Map
+	images         *ristretto.Cache
+	infos          *ristretto.Cache
+	db             *gorm.DB
+	dbPendingInfos chan *ImageInfo
 	// imageByPath       sync.Map
 	// imageConfigByPath sync.Map
 }
@@ -95,6 +106,9 @@ func NewImageSource() *ImageSource {
 			// return unsafe.Sizeof(image.RGBA) + config.Width*config.Height
 		},
 	})
+	if err != nil {
+		panic(err)
+	}
 	source.infos, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).
 		MaxCost:     1 << 27, // maximum cost of cache (128MB).
@@ -104,6 +118,30 @@ func NewImageSource() *ImageSource {
 	if err != nil {
 		panic(err)
 	}
+
+	db, err := gorm.Open("sqlite3", "photofield.cache.db")
+	if err != nil {
+		panic("failed to connect database")
+	}
+	source.db = db
+
+	// Migrate the schema
+	db.AutoMigrate(&ImageInfo{})
+
+	source.dbPendingInfos = make(chan *ImageInfo)
+	go writePendingInfos(source.dbPendingInfos, db)
+
+	// // Create
+	// db.Create(&Product{Code: "L1212", Price: 1000})
+
+	// // Read
+	// var product Product
+	// db.First(&product, 1)                   // find product with id 1
+	// db.First(&product, "code = ?", "L1212") // find product with code l1212
+
+	// // Update - update product's price to 2000
+	// db.Model(&product).Update("Price", 2000)
+
 	return &source
 }
 
@@ -238,16 +276,34 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	// return loadedImage
 }
 
+func writePendingInfos(pendingInfos chan *ImageInfo, db *gorm.DB) {
+	for imageInfo := range pendingInfos {
+		db.Where("path = ?", imageInfo.Path).Create(imageInfo)
+	}
+}
+
 func (source *ImageSource) GetImageInfo(path string) *decoder.Info {
 	value, found := source.infos.Get(path)
 	if found {
 		return value.(*decoder.Info)
 	} else {
+		var imageInfo ImageInfo
+		source.db.First(&imageInfo, "path = ?", path)
+		if imageInfo.Path != "" {
+			return &imageInfo.Info
+		}
+
 		info, err := source.LoadImageInfo(path)
 		if err != nil {
 			panic(err)
 		}
 		source.infos.Set(path, info, 1)
+
+		source.dbPendingInfos <- &ImageInfo{
+			Path: path,
+			Info: *info,
+		}
+
 		return info
 	}
 }

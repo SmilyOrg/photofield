@@ -11,8 +11,11 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/edwvee/exiffix v0.0.0-20190810152521-16aac9658f23 // indirect
 	github.com/fatih/color v1.9.0 // indirect
+	github.com/githubnemo/CompileDaemon v1.2.1 // indirect
 	github.com/google/pprof v0.0.0-20200507031123-427632fa3b1c // indirect
 	github.com/imdario/mergo v0.3.9 // indirect
+	github.com/jinzhu/gorm v1.9.12
+	github.com/labstack/gommon v0.3.0
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/pelletier/go-toml v1.7.0 // indirect
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd

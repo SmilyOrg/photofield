@@ -2,11 +2,15 @@ package photofield
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"math"
 	"path/filepath"
+	"sync"
 	"text/template"
+	"time"
 
 	storage "photofield/internal/storage"
 
@@ -18,6 +22,7 @@ import (
 type Config struct {
 	TileSize   int
 	Thumbnails []Thumbnail
+	LogDraws   bool
 }
 
 type ThumbnailSizeType int32
@@ -111,12 +116,27 @@ type Text struct {
 	Text   string
 }
 
+type Bounds struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
+type Region struct {
+	Id     int    `json:"id"`
+	Bounds Bounds `json:"bounds"`
+}
+
 type Scene struct {
-	Size   Size
+	Size         Size
+	Solids       []Solid
+	Photos       []Photo
+	Texts        []Text
+	RegionSource func(canvas.Rect, *Scene) []Region
+
 	Canvas draw.Image
-	Solids []Solid
-	Photos []Photo
-	Texts  []Text
+	Zoom   int
 }
 
 type Scales struct {
@@ -163,21 +183,81 @@ func NewTextFromRect(rect canvas.Rect, font *canvas.FontFace, txt string) Text {
 	return text
 }
 
+func drawPhotos(photos []Photo, config *Config, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+	for i := range photos {
+		photo := &photos[i]
+		photo.Draw(config, scene, c, scales, source)
+	}
+}
+
+func drawPhotoChannel(id int, index chan int, config *Config, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
+
+	var lastLogTime time.Time
+	if config.LogDraws {
+		lastLogTime = time.Now()
+	}
+
+	for i := range index {
+		photo := &scene.Photos[i]
+		if config.LogDraws {
+			now := time.Now()
+			if now.Sub(lastLogTime) > 1*time.Second {
+				lastLogTime = now
+				log.Printf("draw photo %d (goroutine %d)\n", i, id)
+			}
+		}
+		photo.Draw(config, scene, c, scales, source)
+	}
+
+	wg.Done()
+}
+
 func (scene *Scene) Draw(config *Config, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
 		solid.Draw(c, scales)
 	}
 
-	for i := range scene.Photos {
-		photo := &scene.Photos[i]
-		photo.Draw(config, scene, c, scales, source)
+	// for i := range scene.Photos {
+	// 	photo := &scene.Photos[i]
+	// 	photo.Draw(config, scene, c, scales, source)
+	// }
+
+	// concurrent := 1
+	// photoCount := len(scene.Photos)
+	// if photoCount < concurrent {
+	// 	concurrent = photoCount
+	// }
+
+	index := make(chan int, 1)
+	concurrent := 100
+
+	wg := &sync.WaitGroup{}
+	wg.Add(concurrent)
+
+	for i := 0; i < concurrent; i++ {
+		go drawPhotoChannel(i, index, config, scene, c, scales, wg, source)
 	}
+	for i := range scene.Photos {
+		index <- i
+	}
+	close(index)
+	wg.Wait()
 
 	for i := range scene.Texts {
 		text := &scene.Texts[i]
 		text.Draw(c, scales)
 	}
+}
+
+func (scene *Scene) GetVisiblePhotos(output chan *Photo, view canvas.Rect) {
+	for i := range scene.Photos {
+		photo := &scene.Photos[i]
+		if photo.Original.Sprite.IsVisibleInRect(view) {
+			output <- photo
+		}
+	}
+	close(output)
 }
 
 func RenderImageFast(rimg draw.Image, img image.Image, m canvas.Matrix) {
@@ -239,31 +319,20 @@ func RenderImageFast(rimg draw.Image, img image.Image, m canvas.Matrix) {
 }
 
 func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
-	// bitmap.sprite.transform.Push(c)
-	// defer bitmap.sprite.transform.Pop(c)
-	// bitmap.ensureImage()
-
 	if bitmap.Sprite.IsVisible(c, scales) {
 		image, err := source.GetImage(bitmap.Path)
 		if err != nil {
 			panic(err)
 		}
 
-		// p := unsafe.Pointer(&c)
-
 		// c.RenderImage(*image, c.View().Mul(bitmap.Sprite.transform.view))
 		RenderImageFast(scene.Canvas, *image, c.View().Mul(bitmap.Sprite.transform.view))
-
-		// bitmap.RenderImage(c, *image, c.View().Mul(bitmap.Sprite.transform.view))
-		// c.RenderImageFast()
 	}
-
-	// c.RenderPath(canvas.Rectangle(bitmap.sprite.size.width, bitmap.sprite.size.height), c.Style, c.View().Mul(bitmap.sprite.transform.view))
 }
 
 func (bitmap *Bitmap) GetSize(source *storage.ImageSource) image.Point {
 	info := source.GetImageInfo(bitmap.Path)
-	return image.Point{X: info.Config.Width, Y: info.Config.Height}
+	return image.Point{X: info.Width, Y: info.Height}
 }
 
 func (sprite *Sprite) PlaceFitHeight(
@@ -390,6 +459,12 @@ func (sprite *Sprite) DrawDebugOverlay(c *canvas.Context, scales Scales) {
 	c.Pop()
 }
 
+func (sprite *Sprite) GetBounds() canvas.Rect {
+	rect := canvas.Rect{X: 0, Y: 0, W: sprite.size.Width, H: sprite.size.Height}
+	canvasToUnit := sprite.transform.view
+	return rect.Transform(canvasToUnit)
+}
+
 func (sprite *Sprite) IsVisible(c *canvas.Context, scales Scales) bool {
 	rect := canvas.Rect{X: 0, Y: 0, W: sprite.size.Width, H: sprite.size.Height}
 	canvasToUnit := canvas.Identity.
@@ -397,6 +472,13 @@ func (sprite *Sprite) IsVisible(c *canvas.Context, scales Scales) bool {
 		Mul(c.View().Mul(sprite.transform.view))
 	unitRect := rect.Transform(canvasToUnit)
 	return unitRect.X <= 1 && unitRect.Y <= 1 && unitRect.X+unitRect.W >= 0 && unitRect.Y+unitRect.H >= 0
+}
+
+func (sprite *Sprite) IsVisibleInRect(view canvas.Rect) bool {
+	rect := canvas.Rect{X: 0, Y: 0, W: sprite.size.Width, H: sprite.size.Height}
+	canvasRect := rect.Transform(sprite.transform.view)
+	fmt.Println(view.String(), canvasRect.String())
+	return canvasRect.X <= view.X+view.W && canvasRect.Y <= view.Y+view.H && canvasRect.X+canvasRect.W >= view.X && canvasRect.Y+canvasRect.H >= view.Y
 }
 
 func (sprite *Sprite) GetTileArea(scales Scales) float64 {
@@ -600,4 +682,31 @@ func (solid *Solid) Draw(c *canvas.Context, scales Scales) {
 		c.SetFillColor(prevFill)
 		// c.Pop()
 	}
+}
+
+// func (scene *Scene) NormalizeRegions() {
+// 	for i := range scene.Regions {
+// 		region := &scene.Regions[i]
+// 		region.X /= scene.Size.Width
+// 		region.Y = 1 + (region.Y / scene.Size.Height)
+// 		region.W /= scene.Size.Width
+// 		region.H /= scene.Size.Height
+// 	}
+// }
+
+func (scene *Scene) GetRegions(bounds Bounds) []Region {
+	rect := canvas.Rect{
+		X: bounds.X * scene.Size.Width,
+		Y: bounds.Y * scene.Size.Height,
+		W: bounds.W * scene.Size.Width,
+		H: bounds.H * scene.Size.Height,
+	}
+	return scene.RegionSource(rect, scene)
+	// for i := range scene.Regions {
+	// 	region := &scene.Regions[i]
+	// 	region.X /= scene.Size.Width
+	// 	region.Y = 1 + (region.Y / scene.Size.Height)
+	// 	region.W /= scene.Size.Width
+	// 	region.H /= scene.Size.Height
+	// }
 }
