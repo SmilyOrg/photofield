@@ -3,16 +3,12 @@ package photofield
 import (
 	"image"
 	"io"
-	"time"
+
+	. "photofield/internal"
 
 	"github.com/disintegration/imaging"
 	"github.com/rwcarlsen/goexif/exif"
 )
-
-type Info struct {
-	Width, Height int
-	DateTime      time.Time
-}
 
 func Decode(reader io.ReadSeeker) (image.Image, string, error) {
 	img, fmt, err := image.Decode(reader)
@@ -42,8 +38,7 @@ func Decode(reader io.ReadSeeker) (image.Image, string, error) {
 	return img, fmt, err
 }
 
-func DecodeInfo(reader io.ReadSeeker) (Info, error) {
-	info := Info{}
+func DecodeInfo(reader io.ReadSeeker, info *ImageInfo) error {
 
 	x, err := exif.Decode(reader)
 	if err == nil {
@@ -54,18 +49,18 @@ func DecodeInfo(reader io.ReadSeeker) (Info, error) {
 	reader.Seek(0, io.SeekStart)
 	conf, _, err := image.DecodeConfig(reader)
 	if err != nil {
-		return info, err
+		return err
 	}
 	if portrait {
 		conf.Width, conf.Height = conf.Height, conf.Width
 	}
 
 	if err != nil {
-		return info, err
+		return err
 	}
 	info.Width, info.Height = conf.Width, conf.Height
 
-	return info, nil
+	return nil
 }
 
 func getPortraitFromExif(x *exif.Exif) bool {

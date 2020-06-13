@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PhotoField</title>
+  <link href="vendor/vuetify/css/fonts.css" rel="stylesheet">
+  <link href="vendor/vuetify/css/materialdesignicons.min.css" rel="stylesheet">
+  <link href="vendor/vuetify/vuetify-v2.2.19.min.css" rel="stylesheet">
   <style>
     body, html {
       padding: 0;
@@ -12,6 +15,7 @@
     body, html, #viewer {
       width: 100%;
       height: 100%;
+      overflow: hidden;
     }
 
     #app {
@@ -19,67 +23,787 @@
       top: 0;
       left: 0;
     }
+
+    .region {
+      /* background-color:rgba(65, 255, 81, 0.5); */
+      color: white;
+      /* width: 100%;
+      height: 100%; */
+    }
+
+    .config {
+      position: absolute;
+      left: 160px;
+    }
+
+    .navigation {
+      position: absolute;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+    }
+
+    .navigation .hitarea {
+      position: absolute;
+      width: 30%;
+      height: 100%;
+      /* background-color: red; */
+      opacity: 0;
+      pointer-events: all;
+    }
+
+    .navigation .hitarea:hover {
+      opacity: 1;
+    }
     
-    #image-ruler{
+    .navigation .hitarea.right {
+      right: 0;
+    }
+
+    .navigation .hitarea .button {
+      /* position: relative; */
+      position: absolute;
+      top: calc(50% - 64px/2);
+    }
+
+    /* .navigation .button {
+      position: absolute;
+      top: calc(50% - 64px/2);
+      height: 100%;
+    } */
+
+    .navigation .hitarea.left .button {
+      left: 10px;
+    }
+
+    .navigation .hitarea.right .button {
+      left: calc(100% - 64px - 10px);
+    }
+
+    .circle.button {
+      background-color: rgba(0, 0, 0, 0.2);
+      border-radius: 50%;
+      width: 64px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .circle.button .icon {
+      margin-top: 2px;
+    }
+    
+    /* #image-ruler{
       background-color:red;
       width: 50px;
       height: 50px;
-    }
+    } */
 
   </style>
 </head>
 <body>
   <div id="viewer"></div>
   <div id="app">
-    <div>{{ hello }}</div>
+
+    <div v-if="fullscreenRegion" class="navigation">
+
+      <div class="hitarea left" @click="navigate(-1)" @mousedown="onNavigationMouseDown">
+        <div class="circle button">
+          <v-icon class="icon" dark large>mdi-chevron-left</v-icon>
+        </div>
+        <!-- <v-btn class="button" fab dark large :ripple="false" color="primary"> -->
+        <!-- </v-btn> -->
+      </div>
+
+      <div class="hitarea right" @click="navigate(1)" @mousedown="onNavigationMouseDown">
+        <div class="circle button">
+          <v-icon class="icon" dark large>mdi-chevron-right</v-icon>
+        </div>
+        <!-- <v-btn class="button right" fab dark large color="primary"> -->
+        <!-- </v-btn> -->
+      </div>
+
+    </div>
+
+    <div class="config">
+
+      <input type="checkbox" id="debugOverdraw" v-model="debug.overdraw">
+      <label for="debugOverdraw">Debug Overdraw</label>
+
+      <input type="checkbox" id="debugThumbnails" v-model="debug.thumbnails">
+      <label for="debugThumbnails">Debug Thumbnails</label>
+
+    </div>
+    
+    {{ regionPoolInUse }} / {{ regions.length }} / {{ regionPool.length }}
+    <!-- <div class="added-regions" :key="addedRegionsTime">
+      <div
+        v-for="region in addedRegions"
+        :key="region.id"
+        class="region"
+        :id="'region-' + region.id"
+        @click="onRegionClick(region)">
+        {{ region.id }}
+        {{ timestamp }}
+      </div>
+    </div> -->
+    <div class="region-pool" :key="regionPoolUpdateTime">
+      <div
+        v-for="region in regionPool"
+        :key="region.poolId"
+        :id="'region-' + region.poolId"
+        class="region"
+        @click="onRegionClick(region)">
+        <!-- {{ region.poolId }} -->
+        <!-- {{ region.id }} -->
+        <!-- {{ region.viewRatio }}
+        {{ region.distFromCenter }} -->
+        <!-- {{ timestamp }} -->
+        <span v-if="region.data" class="data">
+          <!-- {{ region.data.filename }} -->
+        </span>
+      </div>
+    </div>
   </div>
-  <div id="image-ruler"> </div>
+  <!-- <div id="image-ruler"> </div> -->
   <script src="/vendor/openseadragon/openseadragon.min.js"></script>
   <script src="/vendor/openseadragon/openseadragon-smartScrollZoom.js"></script>
   <script src="/vendor/vue.js"></script>
+  <script src="/vendor/vuetify/vuetify-v2.2.19.js"></script>
   <script type="text/javascript">
   
-    const tileSize = 256
-    const minLevel = 0
-    const maxLevel = 16
-    const power = 1 << maxLevel
-    const viewer = OpenSeadragon({
-        id: "viewer",
-        prefixUrl: "/vendor/openseadragon/images/",
-        navigatorSizeRatio: 0.01,
-        tileSources:   {
-            height: power*tileSize,
-            width:  power*tileSize,
-            tileSize,
-            minLevel,
-            maxLevel,
-            getTileUrl: function( level, x, y ){
-              return "tiles?tileSize=" + tileSize + "&zoom=" + level + "&x=" + x + "&y=" + y
-            }
-        }
-    });
-    viewer.smartScrollZoom({
-      enabled: true,
-      minScrolls: 2,
-      zoomIncrement: 0.2,
-      timeThreshold: 500,
-    });
+    // const tileSize = 256
+    // const minLevel = 0
+    // const maxLevel = 16
+    // const power = 1 << maxLevel
+    // const viewer = OpenSeadragon({
+    //     id: "viewer",
+    //     prefixUrl: "/vendor/openseadragon/images/",
+    //     navigatorSizeRatio: 0.01,
+    //     tileSources:   {
+    //         height: power*tileSize,
+    //         width:  power*tileSize,
+    //         tileSize,
+    //         minLevel,
+    //         maxLevel,
+    //         getTileUrl: function( level, x, y ){
+    //           return "tiles?tileSize=" + tileSize + "&zoom=" + level + "&x=" + x + "&y=" + y
+    //         }
+    //     }
+    // });
+    // viewer.smartScrollZoom({
+    //   enabled: true,
+    //   minScrolls: 2,
+    //   zoomIncrement: 0.2,
+    //   timeThreshold: 500,
+    // });
 
-    viewer.addHandler("viewport-change", event => {
-      const viewport = event.eventSource.viewport;
-      // console.log(viewport.getBounds());
-    })
+    // viewer.addHandler("canvas-click", event => {
+    //   // const viewport = event.eventSource.viewport;
+    //   event.preventDefaultAction = true;
+    //   // console.log(event);
+    // })
+
+    
 
     // var IMAGE_RULER_HIGHLIGHT = "image-ruler";
     // var IMAGE_RULER_DEFAULT_POSITION =      new OpenSeadragon.Point(0.5, 0);
     // var overlay = viewer.addOverlay(IMAGE_RULER_HIGHLIGHT, IMAGE_RULER_DEFAULT_POSITION, OpenSeadragon.Placement.CENTER)
     
+    const overlays = [];
+    const overlayById = {};
+    const regionsById = {};
+    let viewer = null;
     var app = new Vue({
       el: '#app',
+      vuetify: new Vuetify(),
       data: {
         hello: "world",
+        timestamp: 0,
+        scene: {
+          size: {
+            width: 0,
+            height: 0,
+          },
+        },
+        addedRegionsTime: 0,
+        addedRegions: [],
+        regionPool: [],
+        regionPoolInUse: 0,
+        regionPoolCount: 100,
+        regionPoolUpdateTime: 0,
+        regions: [],
+        fullscreenRegion: null,
+        viewportBounds: {
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+          degrees: 0,
+        },
+        regionUpdatePending: false,
+        regionUpdateRunning: false,
+        debug: {
+          overdraw: false,
+          thumbnails: false,
+        },
       },
       async mounted() {
+
+        setInterval(() => this.timestamp = Date.now(), 1000)
+        
+        await this.updateScene();
+        this.initSeadragon();
+        this.initRegionPool();
+        this.updateRegions();
+      },
+      watch: {
+        viewportBounds() {
+          // this.updateRegionsView();
+          this.updateRegions();
+        },
+        debug: {
+          handler() {
+            this.resetTiles();
+          },
+          deep: true,
+        }
+      },
+      methods: {
+        resetTiles() {
+          var oldImage = viewer.world.getItemAt(0);
+          var oldBounds = oldImage.getBounds();
+          var oldSource = oldImage.source;
+          viewer.addTiledImage({
+            tileSource: oldSource,
+            x: oldBounds.x,
+            y: oldBounds.y,
+            width: oldBounds.width, // It'll do height automatically based on aspect ratio
+            success: () => viewer.world.removeItem(oldImage)
+          });
+        },
+        async updateScene() {
+          const scenes = await (await fetch("scenes")).json();
+          if (!scenes || scenes.length < 1) {
+            throw new Error("Scene not found");
+          }
+          this.scene = scenes[0];
+        },
+        getTileSources() {
+          const tileSize = 256
+          const minLevel = 0
+          const maxLevel = 16
+          const power = 1 << maxLevel
+          let width = power*tileSize
+          let height = power*tileSize
+          const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
+          if (sceneAspect < 1) {
+            width = height * sceneAspect;
+          } else {
+            height = width / sceneAspect;
+          }
+          return {
+            width,
+            height,
+            tileSize,
+            minLevel,
+            maxLevel,
+            getTileUrl: (level, x, y) => {
+              let url = "tiles";
+              url += "?tileSize=" + tileSize;
+              url += "&zoom=" + level;
+              url += "&x=" + x;
+              url += "&y=" + y;
+              for (const [key, value] of Object.entries(this.debug)) {
+                url += "&debug" + key.slice(0, 1).toUpperCase() + key.slice(1) + "=" + (value ? "true" : "false");
+              }
+              return url;
+            }
+          }
+        },
+        initSeadragon() {
+          viewer = OpenSeadragon({
+            id: "viewer",
+            prefixUrl: "/vendor/openseadragon/images/",
+            navigatorSizeRatio: 0.01,
+            tileSources: this.getTileSources()
+          });
+          viewer.smartScrollZoom({
+            enabled: true,
+            minScrolls: 2,
+            zoomIncrement: 0.2,
+            timeThreshold: 500,
+          });
+
+          viewer.addHandler("canvas-click", event => {
+            // const viewport = event.eventSource.viewport;
+            event.preventDefaultAction = true;
+            if (!event.quick) return;
+            this.onViewportClick(viewer.viewport.viewerElementToViewportCoordinates(event.position));
+          })
+
+          viewer.innerTracker.keyDownHandler = this.onKeyDown;
+        },
+        async initRegionPool() {
+          this.regionPoolInUse = this.regionPoolCount;
+          for (let i = 0; i < this.regionPoolCount; i++) {
+            const region = {
+              poolId: i,
+              marked: false,
+              id: 0,
+              bounds: {
+                x: 0,
+                y: 0,
+                w: 0,
+                h: 0,
+              },
+              viewRatio: 0,
+              distFromCenter: Infinity,
+            }
+            this.regionPool.push(region);
+            this.releaseRegion(region);
+          }
+
+          await Vue.nextTick();
+
+          for (let i = 0; i < this.regionPool.length; i++) {
+            this.addOverlay(this.regionPool[i]);
+          }
+
+          viewer.addHandler("viewport-change", event => {
+            const viewport = event.eventSource.viewport;
+            this.viewportBounds = viewport.getBounds();
+          })
+        },
+        onRegionClick(region) {
+          // viewer.viewport.fitBounds(new OpenSeadragon.Rect(
+          //   region.bounds.x,
+          //   region.bounds.y,
+          //   region.bounds.w,
+          //   region.bounds.h,
+          // ))
+        },
+
+        async onViewportClick(pos) {
+          const regions = await this.getRegions(pos.x, pos.y, 0, 0);
+          if (regions.length < 1) return;
+          const region = regions[0];
+          console.log(region.data.path);
+          console.log(region);
+          
+          const viewerBounds = viewer.viewport.getBounds();
+          const viewerArea = viewerBounds.width * viewerBounds.height;
+          const regionArea = region.bounds.w * region.bounds.h;
+          const areaDiff = viewerArea/regionArea;
+          // const animationTime = Math.abs(Math.log(areaDiff) / 2);
+          const animationTime = Math.pow(areaDiff, 0.1);
+          // console.log(areaDiff, animationTime);
+
+          this.fitRegion(region, {
+            animationTime,
+          });
+        },
+
+        onNavigationMouseDown(event) {
+          // Prevent focusing navigation elements
+          event.preventDefault();
+        },
+
+        onKeyDown(event) {
+          switch (event.originalEvent.key) {
+            case "ArrowLeft": this.navigate(-1); break;
+            case "ArrowRight": this.navigate(1); break;
+            case "Escape": this.navigateExit(); break;
+          }
+        },
+
+        fitRect(rect, options) {
+          function withSpeed(animationTime, callback) {
+            const viewport = viewer.viewport;
+            const prevValues = {
+              centerSpringX: viewport.centerSpringX.animationTime,
+              centerSpringY: viewport.centerSpringY.animationTime,
+              zoomSpring: viewport.zoomSpring.animationTime,
+            }
+
+            viewport.centerSpringX.animationTime =
+            viewport.centerSpringY.animationTime =
+            viewport.zoomSpring.animationTime =
+            animationTime;
+
+            callback();
+
+            viewport.centerSpringX.animationTime = prevValues.centerSpringX;
+            viewport.centerSpringY.animationTime = prevValues.centerSpringY;
+            viewport.zoomSpring.animationTime = prevValues.zoomSpring;
+          }
+
+          let fitFunc = () => {
+            viewer.viewport.fitBounds(rect, options.immediate)
+          }
+
+          if (options && options.animationTime) {
+            fitFunc = withSpeed.bind(this, options.animationTime, fitFunc);
+          }
+
+          fitFunc();
+        },
+
+        fitRegion(region, options) {
+          this.fitRect(new OpenSeadragon.Rect(
+            region.bounds.x,
+            region.bounds.y,
+            region.bounds.w,
+            region.bounds.h,
+          ), options);
+        },
+
+        async navigate(offset) {
+          const region = this.fullscreenRegion;
+          if (!region) return;
+          const nextId = region.id + offset;
+          const nextRegion = await this.getOrFetchRegion(nextId);
+          if (!nextRegion) return;
+          this.fitRegion(nextRegion, {
+            animationTime: 0.1,
+            immediate: true,
+          });
+        },
+        async navigateExit() {
+          const region = this.fullscreenRegion;
+          if (!region) return;
+          
+          this.fitRect(new OpenSeadragon.Rect(
+            0,
+            region.bounds.y,
+            1,
+            region.bounds.h,
+          ), {
+            animationTime: 1
+          });
+        },
+        addOverlay(region) {
+          // const overlay = {
+          //   id: region.poolId,
+          //   elementId: `region-${region.poolId}`,
+          //   marked: false,
+          // }
+          // overlays.push(overlay);
+          // overlayById[overlay.poolId] = overlay;
+          // console.log(this.getOverlayId(region))
+          viewer.addOverlay(
+            this.getOverlayId(region),
+            new OpenSeadragon.Rect(
+              region.bounds.x,
+              region.bounds.y,
+              region.bounds.w,
+              region.bounds.h
+            ),
+          );
+        },
+        getOverlayId(region) {
+          return `region-${region.poolId}`
+        },
+        getRegion(id) {
+          return regionsById[id];
+        },
+        async getOrFetchRegion(id) {
+          let region = this.getRegion(id);
+          if (!region) {
+            region = await this.fetchRegion(id);
+          }
+          return region;
+        },
+        addRegion(region) {
+          const poolRegion = this.acquireRegion();
+          if (!poolRegion) return;
+          Object.assign(poolRegion, {
+            ...region,
+            poolId: poolRegion.poolId,
+            marked: false,
+          });
+          // Vue.set(poolRegion, "data", region.data);
+          this.regions.push(poolRegion);
+          regionsById[region.id] = poolRegion;
+          // console.log("add", region.id);
+        },
+        removeRegionAtIndex(index) {
+          const removed = this.regions.splice(index, 1);
+          if (removed.length != 1) {
+            throw new Error("Unable to remove region");
+          }
+          const region = removed[0];
+          // console.log("remove", region.id);
+          delete regionsById[region.id];
+          this.releaseRegion(region);
+        },
+        acquireRegion() {
+          for (let i = 0; i < this.regionPool.length; i++) {
+            const region = this.regionPool[i];
+            if (region.id != -1) continue;
+            this.regionPoolInUse++;
+            // console.log("acquire", this.regionPoolInUse);
+            return region;
+          }
+          return null;
+          // throw new Error("Region pool exhausted: " + this.regionPool.length);
+        },
+        releaseRegion(region) {
+          if (region.id == -1) {
+            throw new Error("Tried to release already released region");
+          }
+          this.regionPoolInUse--;
+          // console.log("release", this.regionPoolInUse);
+          region.id = -1;
+          region.bounds.x = -10000;
+          region.bounds.y = -10000;
+          region.bounds.w = 0;
+          region.bounds.h = 0;
+        },
+        updateRegionOverlay(region) {
+          // viewer.updateOverlay(
+          //   this.getOverlayId(region),
+          //   new OpenSeadragon.Rect(
+          //     region.bounds.x,
+          //     region.bounds.y,
+          //     region.bounds.w,
+          //     region.bounds.h
+          //   ),
+          // );
+          const overlay = viewer.getOverlayById(this.getOverlayId(region));
+          overlay.update(new OpenSeadragon.Rect(
+            region.bounds.x,
+            region.bounds.y,
+            region.bounds.w,
+            region.bounds.h
+          ));
+          this.updateRegionViewFromOverlay(region, overlay);
+        },
+        updateRegionsView() {
+          for (let i = 0; i < this.regions.length; i++) {
+            const region = this.regions[i];
+            const overlay = viewer.getOverlayById(this.getOverlayId(region));
+            this.updateRegionViewFromOverlay(region, overlay);
+          }
+        },
+        updateRegionViewFromOverlay(region, overlay) {
+          const overlayBounds = overlay.getBounds(viewer.viewport);
+          const viewerBounds = viewer.viewport.getBounds();
+          const widthRatio = overlayBounds.width / viewerBounds.width;
+          const heightRatio = overlayBounds.height / viewerBounds.height;
+          region.viewRatio = Math.max(widthRatio, heightRatio);
+          const overlayCenterX = overlayBounds.x + overlayBounds.width/2;
+          const overlayCenterY = overlayBounds.y + overlayBounds.height/2;
+          const viewerCenterX = viewerBounds.x + viewerBounds.width/2;
+          const viewerCenterY = viewerBounds.y + viewerBounds.height/2;
+          region.distFromCenter = Math.sqrt(
+            Math.pow(overlayCenterX - viewerCenterX, 2) +
+            Math.pow(overlayCenterY - viewerCenterY, 2)
+          );
+          if (region.viewRatio > 0.75 && region.viewRatio < 1.25 && region.distFromCenter < 0.03) {
+            this.fullscreenRegion = region;
+          } else {
+            if (this.fullscreenRegion == region) this.fullscreenRegion = null;
+          }
+        },
+        async updateRegionPool() {
+
+          // const addedRegions = [];
+          // for (let i = 0; i < overlays.length; i++) {
+          //   const overlay = overlays[i];
+          //   overlay.marked = true;
+          // }
+          // for (let i = 0; i < regions.length; i++) {
+          //   const region = regions[i];
+          //   const overlay = overlayById[region.id];
+          //   if (overlay) {
+          //     overlay.marked = false;
+          //   } else {
+          //     addedRegions.push(region);
+          //   }
+          // }
+          // for (let i = overlays.length - 1; i >= 0; i--) {
+          //   const overlay = overlays[i];
+          //   if (overlay.marked) {
+          //     viewer.removeOverlay(overlay.elementId);
+          //     overlays.splice(i, 1);
+          //     delete overlayById[overlay.id];
+          //     // console.log("remove", overlay.id);
+          //   }
+          // }
+
+          // this.addedRegions = addedRegions;
+          // this.addedRegionsTime = Date.now();
+          // await Vue.nextTick();
+
+          // for (let i = 0; i < addedRegions.length; i++) {
+          //   const region = addedRegions[i];
+          //   const overlay = {
+          //     id: region.id,
+          //     elementId: `region-${region.id}`,
+          //     marked: false,
+          //   }
+          //   overlays.push(overlay);
+          //   overlayById[overlay.id] = overlay;
+          //   viewer.addOverlay(
+          //     overlay.elementId,
+          //     new OpenSeadragon.Rect(
+          //       region.bounds.x,
+          //       region.bounds.y,
+          //       region.bounds.w,
+          //       region.bounds.h
+          //     ),
+          //   );
+          //   console.log("add", overlay.id);
+          // }
+        },
+        async getRegions(x, y, w, h) {
+          const url = `regions?x=${x}&y=${y}&w=${w}&h=${h}`;
+          return await (await fetch(url)).json();
+        },
+        async fetchRegion(id) {
+          const url = `regions/${id}`;
+          const response = await fetch(url);
+          if (!response.ok) return null;
+          return await response.json();
+        },
+        async updateRegions() {
+          if (this.regionUpdateRunning) {
+            this.regionUpdatePending = true;
+            return;
+          }
+          this.regionUpdateRunning = true;
+          const regions = await this.getRegions(
+            this.viewportBounds.x,
+            this.viewportBounds.y,
+            this.viewportBounds.width,
+            this.viewportBounds.height,
+          )
+
+          for (let i = 0; i < this.regions.length; i++) {
+            const region = this.regions[i];
+            region.marked = true;
+          }
+
+          for (let i = 0; i < regions.length; i++) {
+            const region = regions[i];
+            const existingRegion = this.getRegion(region.id);
+            if (existingRegion) {
+              existingRegion.marked = false;
+            } else {
+              this.addRegion(region);
+            }
+          }
+
+          for (let i = this.regions.length - 1; i >= 0; i--) {
+            const region = this.regions[i];
+            if (region.marked) {
+              this.removeRegionAtIndex(i);
+              this.updateRegionOverlay(region);
+            }
+          }
+
+          for (let i = 0; i < this.regions.length; i++) {
+            const region = this.regions[i];
+            // console.log("update", region.id, this.getOverlayId(region), region.bounds.x, region.bounds.y, region.bounds.w, region.bounds.h)
+            this.updateRegionOverlay(region);
+            // const area = region.bounds.w * region.bounds.h;
+            // console.log(area);
+          }
+          
+          if (this.regionUpdatePending) {
+            setTimeout(() => {
+              this.regionUpdatePending = false;
+              this.regionUpdateRunning = false;
+              this.updateRegions();
+            }, 100);
+          } else {
+            this.regionUpdateRunning = false;
+          }
+
+
+          // const addedRegions = [];
+          // for (let i = 0; i < overlays.length; i++) {
+          //   const overlay = overlays[i];
+          //   overlay.marked = true;
+          // }
+          // for (let i = 0; i < regions.length; i++) {
+          //   const region = regions[i];
+          //   const overlay = overlayById[region.id];
+          //   if (overlay) {
+          //     overlay.marked = false;
+          //   } else {
+          //     addedRegions.push(region);
+          //   }
+          // }
+          // for (let i = overlays.length - 1; i >= 0; i--) {
+          //   const overlay = overlays[i];
+          //   if (overlay.marked) {
+          //     viewer.removeOverlay(overlay.elementId);
+          //     overlays.splice(i, 1);
+          //     delete overlayById[overlay.id];
+          //     // console.log("remove", overlay.id);
+          //   }
+          // }
+
+          // this.addedRegions = addedRegions;
+          // this.addedRegionsTime = Date.now();
+          // await Vue.nextTick();
+
+          // for (let i = 0; i < addedRegions.length; i++) {
+          //   const region = addedRegions[i];
+          //   const overlay = {
+          //     id: region.id,
+          //     elementId: `region-${region.id}`,
+          //     marked: false,
+          //   }
+          //   overlays.push(overlay);
+          //   overlayById[overlay.id] = overlay;
+          //   viewer.addOverlay(
+          //     overlay.elementId,
+          //     new OpenSeadragon.Rect(
+          //       region.bounds.x,
+          //       region.bounds.y,
+          //       region.bounds.w,
+          //       region.bounds.h
+          //     ),
+          //   );
+          //   console.log("add", overlay.id);
+          // }
+
+          // if (this.regionUpdatePending) {
+          //   await new Promise(resolve => setTimeout(resolve, 1000));
+          //   this.regionUpdatePending = false;
+          //   this.regionUpdateRunning = false;
+          //   this.updateRegions();
+          // } else {
+          //   this.regionUpdateRunning = false;
+          // }
+
+          // this.regionsUpdateTime = Date.now();
+          // viewer.clearOverlays();
+          // await Vue.nextTick();
+          // this.regions.forEach(region => {
+          //   viewer.addOverlay(
+          //     `region-${region.id}`,
+          //     new OpenSeadragon.Rect(
+          //       region.bounds.x,
+          //       region.bounds.y,
+          //       region.bounds.w,
+          //       region.bounds.h
+          //     ),
+          //   );
+          // });
+          // if (this.regionUpdatePending) {
+          //   await new Promise(resolve => setTimeout(resolve, 500));
+          //   this.regionUpdatePending = false;
+          //   this.regionUpdateRunning = false;
+          //   this.updateRegions();
+          // } else {
+          //   this.regionUpdateRunning = false;
+          // }
+        }
       },
     })
   </script>

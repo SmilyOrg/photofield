@@ -6,10 +6,12 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
+	. "photofield/internal"
 	storage "photofield/internal/storage"
 
 	"github.com/tdewolff/canvas"
@@ -30,9 +32,11 @@ func LayoutSquare(scene *Scene, source *storage.ImageSource) {
 	cols := edgeCount
 	rows := int(math.Ceil(float64(photoCount) / float64(cols)))
 
-	scene.Size = Size{
-		Width:  float64(cols+2) * (imageWidth + margin),
-		Height: math.Ceil(float64(rows+2)) * (imageHeight + margin),
+	scene.Bounds = Rect{
+		X: 0,
+		Y: 0,
+		W: float64(cols+2) * (imageWidth + margin),
+		H: math.Ceil(float64(rows+2)) * (imageHeight + margin),
 	}
 
 	// cols := int(scene.size.width/(imageWidth+margin)) - 2
@@ -60,10 +64,10 @@ type Section struct {
 type SectionPhoto struct {
 	Index int
 	Photo *Photo
-	Size  Size
+	Size  image.Point
 }
 
-func layoutSectionChannel(photos chan SectionPhoto, bounds canvas.Rect, boundsOut chan canvas.Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, scene *Scene, source *storage.ImageSource) {
+func layoutSectionChannel(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, scene *Scene, source *storage.ImageSource) {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()
@@ -72,7 +76,7 @@ func layoutSectionChannel(photos chan SectionPhoto, bounds canvas.Rect, boundsOu
 
 		// log.Println("layout", photo.Index)
 
-		aspectRatio := photo.Size.Width / photo.Size.Height
+		aspectRatio := float64(photo.Size.X) / float64(photo.Size.Y)
 		imageWidth := float64(imageHeight) * aspectRatio
 
 		if x+imageWidth+imageSpacing > bounds.W {
@@ -80,12 +84,14 @@ func layoutSectionChannel(photos chan SectionPhoto, bounds canvas.Rect, boundsOu
 			y += imageHeight + lineSpacing
 		}
 
+		// fmt.Printf("%4.0f %4.0f %4.0f %4.0f %4.0f %4.0f %4.0f\n", bounds.X, bounds.Y, x, y, imageHeight, photo.Size.Width, photo.Size.Height)
+
 		photo.Photo.Original.Sprite.PlaceFitHeight(
 			bounds.X+x,
 			bounds.Y+y,
 			imageHeight,
-			photo.Size.Width,
-			photo.Size.Height,
+			float64(photo.Size.X),
+			float64(photo.Size.Y),
 		)
 
 		// photoRect := photo.Photo.Original.Sprite.GetBounds()
@@ -112,7 +118,7 @@ func layoutSectionChannel(photos chan SectionPhoto, bounds canvas.Rect, boundsOu
 	}
 	x = 0
 	y += imageHeight + lineSpacing
-	boundsOut <- canvas.Rect{
+	boundsOut <- Rect{
 		X: bounds.X,
 		Y: bounds.Y,
 		W: bounds.W,
@@ -121,7 +127,7 @@ func layoutSectionChannel(photos chan SectionPhoto, bounds canvas.Rect, boundsOu
 	close(boundsOut)
 }
 
-func layoutSection(section *Section, bounds canvas.Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, source *storage.ImageSource) canvas.Point {
+func layoutSection(section *Section, bounds Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, source *storage.ImageSource) canvas.Point {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()
@@ -211,31 +217,70 @@ func orderSectionPhotoStream(input chan SectionPhoto, output chan SectionPhoto) 
 	close(output)
 }
 
-func getSectionPhotos(id int, scene *Scene, index chan int, output chan SectionPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
+func getSectionPhotosUnordered(id int, section *Section, index chan int, output chan SectionPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
 	for i := range index {
-		// log.Println("get", id, i)
-		// if i == 0 {
-		// 	time.Sleep(1 * time.Millisecond)
-		// }
-		photo := &scene.Photos[i]
+		photo := section.photos[i]
 		size := photo.Original.GetSize(source)
 		output <- SectionPhoto{
 			Index: i,
 			Photo: photo,
-			Size:  Size{Width: float64(size.X), Height: float64(size.Y)},
+			Size:  size,
 		}
 	}
 	wg.Done()
-	// close(output)
 }
 
-func LayoutWallRegionSource(rect canvas.Rect, scene *Scene) []Region {
-	fmt.Println(rect.String(), scene.Size.Width)
+func getSectionPhotos(section *Section, output chan SectionPhoto, source *storage.ImageSource) {
+	index := make(chan int, 1)
+	unordered := make(chan SectionPhoto, 1)
+
+	concurrent := 100
+	wg := &sync.WaitGroup{}
+	wg.Add(concurrent)
+
+	for i := 0; i < concurrent; i++ {
+		go getSectionPhotosUnordered(i, section, index, unordered, wg, source)
+	}
+	go orderSectionPhotoStream(unordered, output)
+
+	for i := range section.photos {
+		index <- i
+	}
+	close(index)
+	wg.Wait()
+	close(unordered)
+}
+
+// func getPhotosSize(id int, scene *Scene, index chan int, output chan SectionPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
+// 	for i := range index {
+// 		photo := &scene.Photos[i]
+// 		photo.Original.Size = photo.Original.GetSize(source)
+// 	}
+// 	wg.Done()
+// }
+
+type PhotoRegionData struct {
+	Path     string `json:"path"`
+	Filename string `json:"filename"`
+}
+
+type LayoutWallRegionSource struct {
+}
+
+func (regionSource *LayoutWallRegionSource) GetRegionsFromBounds(rect Rect, scene *Scene, regionConfig RegionConfig) []Region {
+	// fmt.Println(rect.String(), scene.Size.Width)
 	regions := make([]Region, 0)
-	photos := make(chan *Photo)
-	go scene.GetVisiblePhotos(photos, rect)
+	photos := make(chan PhotoRef)
+	go scene.GetVisiblePhotos(photos, rect, regionConfig.MaxCount)
 	for photo := range photos {
-		fmt.Println(photo.Original.Path)
+		regions = append(regions, Region{
+			Id:     photo.Index,
+			Bounds: photo.Photo.Original.Sprite.Rect,
+			Data: PhotoRegionData{
+				Path:     photo.Photo.Original.Path,
+				Filename: filepath.Base(photo.Photo.Original.Path),
+			},
+		})
 	}
 	return regions
 	// return Region{
@@ -265,12 +310,14 @@ func LayoutWall(config *Config, scene *Scene, source *storage.ImageSource) {
 	cols := edgeCount
 	rows := int(math.Ceil(float64(photoCount) / float64(cols)))
 
-	scene.Size = Size{
-		Width:  float64(cols+2) * (imageWidth + margin),
-		Height: math.Ceil(float64(rows+2)) * (imageHeight + margin),
+	scene.Bounds = Rect{
+		X: 0,
+		Y: 0,
+		W: float64(cols+2) * (imageWidth + margin),
+		H: math.Ceil(float64(rows+2)) * (imageHeight + margin),
 	}
 
-	fmt.Printf("%f %f\n", scene.Size.Width, scene.Size.Height)
+	fmt.Printf("%f %f\n", scene.Bounds.W, scene.Bounds.H)
 
 	// imageWidth := 200.
 	// imageHeight := 160.
@@ -302,39 +349,22 @@ func LayoutWall(config *Config, scene *Scene, source *storage.ImageSource) {
 	x := sceneMargin
 	y := sceneMargin
 
-	index := make(chan int, 1)
-	unordered := make(chan SectionPhoto, 1)
-	ordered := make(chan SectionPhoto, 1)
-	boundsOut := make(chan canvas.Rect)
-
-	concurrent := 100
-	wg := &sync.WaitGroup{}
-	wg.Add(concurrent)
-
-	for i := 0; i < concurrent; i++ {
-		go getSectionPhotos(i, scene, index, unordered, wg, source)
-	}
-
-	go orderSectionPhotoStream(unordered, ordered)
-	go layoutSectionChannel(ordered, canvas.Rect{
+	photos := make(chan SectionPhoto, 1)
+	boundsOut := make(chan Rect)
+	go layoutSectionChannel(photos, Rect{
 		X: x,
 		Y: y,
-		W: scene.Size.Width - sceneMargin*2,
-		H: scene.Size.Height - sceneMargin*2,
+		W: scene.Bounds.W - sceneMargin*2,
+		H: scene.Bounds.H - sceneMargin*2,
 	}, boundsOut, imageHeight, imageSpacing, lineSpacing, scene, source)
+	getSectionPhotos(&section, photos, source)
 
-	for i := range scene.Photos {
-		index <- i
-	}
-	close(index)
-	wg.Wait()
-	close(unordered)
 	newBounds := <-boundsOut
 
-	scene.Size.Height = newBounds.Y + newBounds.H + sceneMargin
-	scene.RegionSource = LayoutWallRegionSource
+	scene.Bounds.H = newBounds.Y + newBounds.H + sceneMargin
+	// scene.RegionSource = LayoutWallRegionSource
 
-	// scene.RegionSource = func(rect canvas.Rect, scene *Scene) {
+	// scene.RegionSource = func(rect Rect, scene *Scene) {
 	// }
 
 	// scene.NormalizeRegions()
@@ -351,13 +381,48 @@ func LayoutWall(config *Config, scene *Scene, source *storage.ImageSource) {
 	// 	index <- i
 	// }
 
-	// p := layoutSection(&section, canvas.Rect{
+	// p := layoutSection(&section, Rect{
 	// 	X: x,
 	// 	Y: y,
 	// 	W: scene.Size.Width - sceneMargin*2,
 	// 	H: scene.Size.Height - sceneMargin*2,
 	// }, imageHeight, imageSpacing, lineSpacing, source)
 
+}
+
+type PhotoRegionSource struct {
+}
+
+func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect Rect, scene *Scene, regionConfig RegionConfig) []Region {
+	regions := make([]Region, 0)
+	photos := make(chan PhotoRef)
+	go scene.GetVisiblePhotos(photos, rect, regionConfig.MaxCount)
+	for photo := range photos {
+		regions = append(regions, Region{
+			Id:     photo.Index,
+			Bounds: photo.Photo.Original.Sprite.Rect,
+			Data: PhotoRegionData{
+				Path:     photo.Photo.Original.Path,
+				Filename: filepath.Base(photo.Photo.Original.Path),
+			},
+		})
+	}
+	return regions
+}
+
+func (regionSource PhotoRegionSource) GetRegionById(id int, scene *Scene, regionConfig RegionConfig) Region {
+	if id < 0 || id >= len(scene.Photos)-1 {
+		return Region{Id: -1}
+	}
+	photo := scene.Photos[id]
+	return Region{
+		Id:     id,
+		Bounds: photo.Original.Sprite.Rect,
+		Data: PhotoRegionData{
+			Path:     photo.Original.Path,
+			Filename: filepath.Base(photo.Original.Path),
+		},
+	}
 }
 
 func LayoutTimeline(config *Config, scene *Scene, source *storage.ImageSource) {
@@ -389,13 +454,11 @@ func LayoutTimeline(config *Config, scene *Scene, source *storage.ImageSource) {
 
 	// imageWidth := 200.
 	imageHeight := 160.
-	imageSpacing := 6.
-	lineSpacing := 6.
+	imageSpacing := 3.
+	lineSpacing := 3.
 	sceneMargin := 10.
 
-	scene.Size.Width = 2000
-
-	// cols := int(scene.size.width/(imageWidth+margin)) - 2
+	scene.Bounds.W = 2000
 
 	log.Println("layout")
 	lastLogTime := time.Now()
@@ -404,43 +467,254 @@ func LayoutTimeline(config *Config, scene *Scene, source *storage.ImageSource) {
 	y := sceneMargin
 	for i := range days {
 		day := days[i]
-		p := layoutSection(day, canvas.Rect{X: x, Y: y, W: scene.Size.Width, H: scene.Size.Height}, imageHeight, imageSpacing, lineSpacing, source)
-		x = p.X
-		y = p.Y
-		// for i := range day.photos {
-		// 	photo := day.photos[i]
-		// 	size := photo.Original.GetSize(source)
 
-		// 	// fmt.Printf("%4d %4d\n", size.X, size.Y)
+		photos := make(chan SectionPhoto, 1)
+		boundsOut := make(chan Rect)
+		go layoutSectionChannel(photos, Rect{
+			X: x,
+			Y: y,
+			W: scene.Bounds.W - sceneMargin*2,
+			H: scene.Bounds.H - sceneMargin*2,
+		}, boundsOut, imageHeight, imageSpacing, lineSpacing, scene, source)
+		go getSectionPhotos(day, photos, source)
 
-		// 	aspectRatio := float64(size.X) / float64(size.Y)
-		// 	imageWidth := float64(imageHeight) * aspectRatio
+		newBounds := <-boundsOut
 
-		// 	// photo.Place(x, y, imageWidth, imageHeight, source)
-		// 	photo.Original.Sprite.PlaceFitHeight(x, y, imageHeight, float64(size.X), float64(size.Y))
+		scene.Bounds.H = newBounds.Y + newBounds.H + sceneMargin
+		// scene.RegionSource = LayoutWallRegionSource
 
-		// 	x += imageWidth + imageSpacing
-		// 	if x+imageWidth+imageSpacing > scene.Size.Width {
-		// 		x = sceneMargin
-		// 		y += imageHeight + lineSpacing
-		// 	}
+		x = newBounds.X
+		y = newBounds.Y + newBounds.H
 
 		now := time.Now()
 		if now.Sub(lastLogTime) > 10000*time.Second {
 			lastLogTime = now
 			log.Printf("layout %d / %d\n", i, photoCount)
 		}
-		// }
-		// x = sceneMargin
-		// y += imageHeight + lineSpacing + 60
 	}
 
-	scene.Size.Height = y + sceneMargin
+	scene.Bounds.H = y + sceneMargin
+	// scene.RegionSource = LayoutTimelineRegionSource
 
 }
 
-func getColumnBounds(value int, total int, spacing float64, bounds canvas.Rect) canvas.Rect {
-	return canvas.Rect{
+type Event struct {
+	StartTime time.Time
+	Section   Section
+}
+
+func LayoutTimelineEvent(rect Rect, event *Event, headerFont *canvas.FontFace, scene *Scene, source *storage.ImageSource) Rect {
+
+	imageHeight := 160.
+	imageSpacing := 3.
+	lineSpacing := 3.
+
+	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
+
+	textHeight := 40.
+	textBounds := Rect{
+		X: rect.X,
+		Y: rect.Y,
+		W: rect.W,
+		H: textHeight,
+	}
+	timeFormat := "Mon, Jan 2, 15:04"
+	scene.Texts = append(scene.Texts,
+		NewTextFromRect(
+			textBounds,
+			headerFont,
+			event.StartTime.Format(timeFormat),
+		),
+	)
+	rect.Y += textHeight + 20
+
+	photos := make(chan SectionPhoto, 1)
+	boundsOut := make(chan Rect)
+	go layoutSectionChannel(photos, rect, boundsOut, imageHeight, imageSpacing, lineSpacing, scene, source)
+	go getSectionPhotos(&event.Section, photos, source)
+	newBounds := <-boundsOut
+
+	rect.Y = newBounds.Y + newBounds.H
+	rect.Y += 160
+	return rect
+}
+
+type TimelinePhoto struct {
+	Index int
+	Photo Photo
+	Info  ImageInfo
+}
+
+func getTimelinePhotosUnordered(id int, photoRefs chan PhotoRef, output chan TimelinePhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
+	// lastLogTime := time.Now()
+	// lastIndex := -1
+	// interval := 5 * time.Second
+	for photoRef := range photoRefs {
+		// if lastIndex == -1 {
+		// 	lastIndex = photoRef.Index
+		// }
+		info := source.GetImageInfo(photoRef.Photo.Original.Path)
+		// now := time.Now()
+		// if now.Sub(lastLogTime) > interval {
+		// 	perSec := float64(photoRef.Index-lastIndex) / interval.Seconds()
+		// 	log.Printf("layout load info %d, %.2f / sec (goroutine %d)\n", photoRef.Index, perSec, id)
+		// 	lastLogTime = now
+		// 	lastIndex = photoRef.Index
+		// }
+		output <- TimelinePhoto{
+			Index: photoRef.Index,
+			Photo: *photoRef.Photo,
+			Info:  *info,
+		}
+	}
+	wg.Done()
+}
+
+func getPhotoRefs(photos []Photo, output chan PhotoRef, wg *sync.WaitGroup) {
+	for i := range photos {
+		photo := &photos[i]
+		output <- PhotoRef{
+			Index: i,
+			Photo: photo,
+		}
+	}
+	close(output)
+	wg.Done()
+}
+
+func getTimelinePhotosSlice(photos chan TimelinePhoto, output chan []TimelinePhoto) {
+	var timelinePhotos []TimelinePhoto
+	lastIndex := -1
+	lastLogTime := time.Now()
+	logInterval := 2 * time.Second
+	for photo := range photos {
+		now := time.Now()
+		if now.Sub(lastLogTime) > logInterval {
+			perSec := float64(photo.Index-lastIndex) / logInterval.Seconds()
+			log.Printf("layout load info %d, %.2f / sec\n", photo.Index, perSec)
+			lastLogTime = now
+			lastIndex = photo.Index
+		}
+		timelinePhotos = append(timelinePhotos, photo)
+	}
+	output <- timelinePhotos
+}
+
+func getTimelinePhotos(photos []Photo, source *storage.ImageSource) []TimelinePhoto {
+	photoRefs := make(chan PhotoRef, 1)
+	unordered := make(chan TimelinePhoto, 1)
+
+	concurrent := 10
+	wg := &sync.WaitGroup{}
+	wg.Add(concurrent)
+
+	for i := 0; i < concurrent; i++ {
+		go getTimelinePhotosUnordered(i, photoRefs, unordered, wg, source)
+	}
+	wg.Add(1)
+	go getPhotoRefs(photos, photoRefs, wg)
+
+	timelinePhotosChan := make(chan []TimelinePhoto)
+	go getTimelinePhotosSlice(unordered, timelinePhotosChan)
+
+	wg.Wait()
+	close(unordered)
+
+	// sort.Slice(scene.Photos, func(i, j int) bool {
+	// 	a := source.GetImageInfo(scene.Photos[i].Original.Path)
+	// 	b := source.GetImageInfo(scene.Photos[j].Original.Path)
+	// 	return a.DateTime.After(b.DateTime)
+	// })
+
+	return <-timelinePhotosChan
+}
+
+func LayoutTimelineEvents(config *Config, scene *Scene, source *storage.ImageSource) {
+
+	log.Println("layout")
+
+	// imageWidth := 120.
+	photoCount := len(scene.Photos)
+
+	log.Println("layout load info")
+	timelinePhotos := getTimelinePhotos(scene.Photos, source)
+
+	log.Println("layout sort")
+	sort.Slice(timelinePhotos, func(i, j int) bool {
+		a := timelinePhotos[i]
+		b := timelinePhotos[j]
+		return a.Info.DateTime.After(b.Info.DateTime)
+	})
+
+	// for i := range timelinePhotos {
+	// 	scene.Photos[i] = timelinePhotos[i].Photo
+	// 	// println(timelinePhotos[i].Info.DateTime.Format("2006-02-01"), timelinePhotos[i].Photo.Original.Path)
+	// }
+
+	// sort.Slice(scene.Photos, func(i, j int) bool {
+	// 	a := source.GetImageInfo(scene.Photos[i].Original.Path)
+	// 	b := source.GetImageInfo(scene.Photos[j].Original.Path)
+	// 	return a.DateTime.After(b.DateTime)
+	// })
+
+	sceneMargin := 10.
+
+	scene.Bounds.W = 2000
+
+	event := Event{}
+	var lastPhotoTime time.Time
+
+	rect := Rect{
+		X: sceneMargin,
+		Y: sceneMargin,
+		W: scene.Bounds.W - sceneMargin*2,
+		H: 0,
+	}
+
+	fontFamily := canvas.NewFontFamily("Roboto")
+	err := fontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
+	if err != nil {
+		panic(err)
+	}
+	headerFont := fontFamily.Face(140.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
+
+	log.Println("layout placing")
+	lastLogTime := time.Now()
+	for i := range scene.Photos {
+		timelinePhoto := timelinePhotos[i]
+		scene.Photos[i] = timelinePhoto.Photo
+		photo := &scene.Photos[i]
+		info := timelinePhoto.Info
+		photoTime := info.DateTime
+		elapsed := lastPhotoTime.Sub(photoTime)
+		if elapsed > 10*time.Minute {
+
+			rect = LayoutTimelineEvent(rect, &event, &headerFont, scene, source)
+
+			event = Event{}
+			event.StartTime = photoTime
+		}
+		lastPhotoTime = photoTime
+		event.Section.photos = append(event.Section.photos, photo)
+
+		now := time.Now()
+		if now.Sub(lastLogTime) > 1*time.Second {
+			lastLogTime = now
+			log.Printf("layout %d / %d\n", i, photoCount)
+		}
+	}
+
+	if len(event.Section.photos) > 0 {
+		rect = LayoutTimelineEvent(rect, &event, &headerFont, scene, source)
+	}
+
+	scene.Bounds.H = rect.Y + sceneMargin
+	scene.RegionSource = PhotoRegionSource{}
+
+}
+
+func getColumnBounds(value int, total int, spacing float64, bounds Rect) Rect {
+	return Rect{
 		X: bounds.X,
 		Y: bounds.Y + float64(value)/float64(total)*(bounds.H+spacing),
 		W: bounds.W,
@@ -448,8 +722,8 @@ func getColumnBounds(value int, total int, spacing float64, bounds canvas.Rect) 
 	}
 }
 
-func getRowBounds(value int, total int, spacing float64, bounds canvas.Rect) canvas.Rect {
-	return canvas.Rect{
+func getRowBounds(value int, total int, spacing float64, bounds Rect) Rect {
+	return Rect{
 		X: bounds.X + float64(value)/float64(total)*(bounds.W),
 		Y: bounds.Y,
 		W: 1.0 / float64(total) * (bounds.W - spacing),
@@ -460,19 +734,19 @@ func getRowBounds(value int, total int, spacing float64, bounds canvas.Rect) can
 type Hour struct {
 	Section
 	Number int
-	Bounds canvas.Rect
+	Bounds Rect
 }
 
 type Day struct {
 	Section
 	Number int
-	Bounds canvas.Rect
+	Bounds Rect
 	Hours  map[int]*Hour
 }
 
 type Week struct {
 	Number int
-	Bounds canvas.Rect
+	Bounds Rect
 	Days   map[int]Day
 }
 
@@ -495,7 +769,7 @@ func LayoutCalendar(config *Config, scene *Scene, source *storage.ImageSource) {
 	// lineSpacing := 6.
 	sceneMargin := 10.
 
-	scene.Size.Width = 2000
+	scene.Bounds.W = 2000
 
 	// cols := int(scene.size.width/(imageWidth+margin)) - 2
 
@@ -503,16 +777,6 @@ func LayoutCalendar(config *Config, scene *Scene, source *storage.ImageSource) {
 	lastLogTime := time.Now()
 
 	// weeks := make(map[int]Week)
-
-	fontFamily := canvas.NewFontFamily("Roboto")
-	// fontFamily.Use(canvas.CommonLigatures)
-	err := fontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
-	if err != nil {
-		panic(err)
-	}
-
-	headerFont := fontFamily.Face(96.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal)
-	hourFont := fontFamily.Face(24.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal)
 
 	// var lastHour *Hour
 
@@ -535,16 +799,16 @@ func LayoutCalendar(config *Config, scene *Scene, source *storage.ImageSource) {
 		if week == nil || week.Number != weekNum {
 			week = &Week{
 				Number: weekNum,
-				Bounds: getColumnBounds(weekNum, 1, 30, canvas.Rect{
+				Bounds: getColumnBounds(weekNum, 1, 30, Rect{
 					X: sceneMargin,
 					Y: sceneMargin,
-					W: scene.Size.Width - sceneMargin*2,
+					W: scene.Bounds.W - sceneMargin*2,
 					H: imageHeight,
 				}),
-				// Bounds: canvas.Rect{
+				// Bounds: Rect{
 				// 	X: sceneMargin,
 				// 	Y: -1,
-				// 	W: scene.Size.Width - sceneMargin*2,
+				// 	W: scene.Bounds.Width - sceneMargin*2,
 				// 	H: imageHeight,
 				// },
 			}
@@ -584,7 +848,7 @@ func LayoutCalendar(config *Config, scene *Scene, source *storage.ImageSource) {
 			if dayNum == 1 {
 				dayFormat = "2 Jan"
 			}
-			scene.Texts = append(scene.Texts, NewHeaderFromRect(day.Bounds, &headerFont,
+			scene.Texts = append(scene.Texts, NewTextFromRect(day.Bounds, &scene.Fonts.Header,
 				dateTime.Format(dayFormat),
 			))
 		}
@@ -604,7 +868,7 @@ func LayoutCalendar(config *Config, scene *Scene, source *storage.ImageSource) {
 			hour.Bounds.W -= hourBoundsIndent
 
 			scene.Solids = append(scene.Solids, NewSolidFromRect(hour.Bounds, color.Gray{Y: 0xE0}))
-			scene.Texts = append(scene.Texts, NewTextFromRect(hourBoundsOriginal.Move(canvas.Point{X: 2, Y: 0}), &hourFont,
+			scene.Texts = append(scene.Texts, NewTextFromRect(hourBoundsOriginal.Move(Point{X: 2, Y: 0}), &scene.Fonts.Hour,
 				dateTime.Format("15:00"),
 			))
 
@@ -661,6 +925,6 @@ func LayoutCalendar(config *Config, scene *Scene, source *storage.ImageSource) {
 	// x = sceneMargin
 	// y += imageHeight + lineSpacing
 
-	scene.Size.Height = y + sceneMargin
+	scene.Bounds.H = y + sceneMargin
 
 }

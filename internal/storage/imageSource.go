@@ -4,32 +4,42 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
+	"log"
 	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
+	. "photofield/internal"
 	decoder "photofield/internal/decoder"
 
+	"github.com/EdlinOrg/prominentcolor"
 	"github.com/dgraph-io/ristretto"
 	"github.com/jinzhu/gorm"
+	"github.com/karrick/godirwalk"
 )
 
-type ImageInfo struct {
+type ImageInfoDb struct {
 	Path      string `gorm:"type:varchar(4096);primary_key;unique_index"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt *time.Time
-	decoder.Info
+	ImageInfo
 }
 
 type ImageSource struct {
+	Thumbnails []Thumbnail
+
 	imagesLoading  sync.Map
 	images         *ristretto.Cache
 	infos          *ristretto.Cache
+	fileExists     *ristretto.Cache
 	db             *gorm.DB
-	dbPendingInfos chan *ImageInfo
+	dbPendingInfos chan *ImageInfoDb
 	// imageByPath       sync.Map
 	// imageConfigByPath sync.Map
 }
@@ -109,7 +119,18 @@ func NewImageSource() *ImageSource {
 	if err != nil {
 		panic(err)
 	}
+
 	source.infos, err = ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1e7,     // number of keys to track frequency of (10M).
+		MaxCost:     1 << 27, // maximum cost of cache (128MB).
+		BufferItems: 64,      // number of keys per Get buffer.
+		Metrics:     true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	source.fileExists, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).
 		MaxCost:     1 << 27, // maximum cost of cache (128MB).
 		BufferItems: 64,      // number of keys per Get buffer.
@@ -126,9 +147,9 @@ func NewImageSource() *ImageSource {
 	source.db = db
 
 	// Migrate the schema
-	db.AutoMigrate(&ImageInfo{})
+	db.AutoMigrate(&ImageInfoDb{})
 
-	source.dbPendingInfos = make(chan *ImageInfo)
+	source.dbPendingInfos = make(chan *ImageInfoDb)
 	go writePendingInfos(source.dbPendingInfos, db)
 
 	// // Create
@@ -145,6 +166,35 @@ func NewImageSource() *ImageSource {
 	return &source
 }
 
+func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan string, wg *sync.WaitGroup) error {
+	lastLogTime := time.Now()
+	files := 0
+	error := godirwalk.Walk(dir, &godirwalk.Options{
+		Unsorted: true,
+		Callback: func(path string, dir *godirwalk.Dirent) error {
+			if strings.Contains(path, "@eaDir") {
+				return filepath.SkipDir
+			}
+			if !strings.HasSuffix(strings.ToLower(path), ".jpg") {
+				return nil
+			}
+			files++
+			now := time.Now()
+			if now.Sub(lastLogTime) > 1*time.Second {
+				lastLogTime = now
+				log.Printf("listing %d\n", files)
+			}
+			paths <- path
+			if files >= maxPhotos {
+				return errors.New("Skipping the rest")
+			}
+			return nil
+		},
+	})
+	wg.Done()
+	return error
+}
+
 func (source *ImageSource) LoadImage(path string) (*image.Image, error) {
 	// fmt.Printf("loading %s\n", path)
 	file, err := os.Open(path)
@@ -156,16 +206,58 @@ func (source *ImageSource) LoadImage(path string) (*image.Image, error) {
 	return &image, err
 }
 
-func (source *ImageSource) LoadImageInfo(path string) (*decoder.Info, error) {
+func (source *ImageSource) GetSmallestThumbnail(path string) string {
+	for i := range source.Thumbnails {
+		thumbnail := &source.Thumbnails[i]
+		thumbnailPath := thumbnail.GetPath(path)
+		if source.Exists(thumbnailPath) {
+			return thumbnailPath
+		}
+	}
+	return ""
+}
+
+func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {
+	colorPath := source.GetSmallestThumbnail(path)
+	if colorPath == "" {
+		colorPath = path
+	}
+	colorImage, err := source.LoadImage(colorPath)
+	if err != nil {
+		return color.RGBA{}, err
+	}
+	centroids, err := prominentcolor.Kmeans(*colorImage)
+	if err != nil {
+		return color.RGBA{}, err
+	}
+	promColor := centroids[0]
+	return color.RGBA{
+		A: 0xFF,
+		R: uint8(promColor.Color.R),
+		G: uint8(promColor.Color.G),
+		B: uint8(promColor.Color.B),
+	}, nil
+}
+
+func (source *ImageSource) LoadImageInfo(path string) (*ImageInfo, error) {
 	file, err := os.Open(path)
 	defer file.Close()
 	if err != nil {
 		return nil, err
 	}
-	info, err := decoder.DecodeInfo(file)
+
+	var info ImageInfo
+	err = decoder.DecodeInfo(file, &info)
 	if err != nil {
 		return nil, err
 	}
+
+	color, err := source.LoadImageColor(path)
+	if err != nil {
+		return &info, err
+	}
+
+	info.SetColorRGBA(color)
 	return &info, nil
 }
 
@@ -176,6 +268,30 @@ func (source *ImageSource) CacheImage(path string) (*image.Image, error) {
 		image: image,
 	}, 0)
 	return image, err
+}
+
+func (source *ImageSource) Exists(path string) bool {
+	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
+	// 	source.fileExists.Metrics.Ratio()*100,
+	// 	source.fileExists.Metrics.CostAdded()/1024/1024,
+	// 	source.fileExists.Metrics.CostEvicted()/1024/1024,
+	// 	source.fileExists.Metrics.Hits(),
+	// 	source.fileExists.Metrics.Misses())
+
+	value, found := source.fileExists.Get(path)
+	if found {
+		return value.(bool)
+	}
+	// statStart := time.Now()
+	_, err := os.Stat(path)
+	// statElapsed := time.Since(statStart)
+	// if statElapsed > 100*time.Millisecond {
+	// 	log.Printf("Stat took %s for %s\n", statElapsed, path)
+	// }
+
+	exists := !os.IsNotExist(err)
+	source.fileExists.SetWithTTL(path, exists, 1, 1*time.Minute)
+	return exists
 }
 
 func (source *ImageSource) GetImage(path string) (*image.Image, error) {
@@ -227,7 +343,8 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 				// log.Printf("%v not found, try %v, loading, mutex locked\n", path, try)
 				image, err := source.LoadImage(path)
 				if err != nil {
-					panic(err)
+					// log.Println("Unable to load image", err)
+					return nil, errors.New(fmt.Sprintf("Unable to load image from path: %s", path))
 				}
 
 				imageRef := imageRef{
@@ -276,34 +393,139 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	// return loadedImage
 }
 
-func writePendingInfos(pendingInfos chan *ImageInfo, db *gorm.DB) {
+func writePendingInfos(pendingInfos chan *ImageInfoDb, db *gorm.DB) {
 	for imageInfo := range pendingInfos {
-		db.Where("path = ?", imageInfo.Path).Create(imageInfo)
+		db.Where("path = ?", imageInfo.Path).
+			Assign(imageInfo).
+			Assign(imageInfo.ImageInfo).
+			FirstOrCreate(imageInfo)
 	}
 }
 
-func (source *ImageSource) GetImageInfo(path string) *decoder.Info {
+func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 	value, found := source.infos.Get(path)
 	if found {
-		return value.(*decoder.Info)
+		return value.(*ImageInfo)
 	} else {
-		var imageInfo ImageInfo
-		source.db.First(&imageInfo, "path = ?", path)
-		if imageInfo.Path != "" {
-			return &imageInfo.Info
+		var imageInfoDb ImageInfoDb
+		source.db.First(&imageInfoDb, "path = ?", path)
+
+		valid := true
+		if imageInfoDb.Path == "" {
+			valid = false
+		}
+		// if imageInfoDb.ImageInfo.Width == 0 || imageInfoDb.ImageInfo.Height == 0 {
+		// 	valid = false
+		// }
+		// if imageInfoDb.ImageInfo.DateTime.IsZero() {
+		// 	valid = false
+		// }
+		// if imageInfoDb.ImageInfo.Color == 0 {
+		// 	valid = false
+		// }
+		if valid {
+			return &imageInfoDb.ImageInfo
 		}
 
 		info, err := source.LoadImageInfo(path)
 		if err != nil {
-			panic(err)
+			return &ImageInfo{}
 		}
 		source.infos.Set(path, info, 1)
 
-		source.dbPendingInfos <- &ImageInfo{
-			Path: path,
-			Info: *info,
+		source.dbPendingInfos <- &ImageInfoDb{
+			Path:      path,
+			ImageInfo: *info,
 		}
 
 		return info
 	}
 }
+
+// func (source *ImageSource) GetImageColor(path string, getPathForColor func() string) color.RGBA {
+// 	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
+// 	// 	source.infos.Metrics.Ratio()*100,
+// 	// 	source.infos.Metrics.CostAdded()/1024/1024,
+// 	// 	source.infos.Metrics.CostEvicted()/1024/1024,
+// 	// 	source.infos.Metrics.Hits(),
+// 	// 	source.infos.Metrics.Misses())
+
+// 	value, found := source.infos.Get(path)
+// 	info := ImageInfo{}
+// 	c := color.RGBA{}
+// 	cache := false
+// 	save := false
+// 	if found {
+// 		info := value.(*ImageInfo)
+// 		c = info.GetColor()
+// 	} else {
+// 		infoDb := ImageInfoDb{}
+// 		queryStart := time.Now()
+// 		source.db.First(&infoDb, "path = ?", path)
+// 		queryElapsed := time.Since(queryStart)
+// 		if queryElapsed > 100*time.Millisecond {
+// 			// log.Printf("GetImageColor query took %s for %s\n", queryElapsed, path)
+// 		}
+// 		c = infoDb.ImageInfo.GetColor()
+// 		cache = true
+// 	}
+// 	if c.A == 0 {
+// 		// println("1")
+// 		colorPath := getPathForColor()
+// 		if colorPath == "" {
+// 			c = color.RGBA{
+// 				A: 0xFF,
+// 				R: 0xFF,
+// 				G: 0x00,
+// 				B: 0x00,
+// 			}
+// 		} else {
+// 			colorImage, err := source.LoadImage(colorPath)
+// 			if err != nil {
+// 				// log.Println("Unable to load image color", err)
+// 				c = color.RGBA{
+// 					A: 0xFF,
+// 					R: 0xFF,
+// 					G: 0x00,
+// 					B: 0x00,
+// 				}
+// 			} else {
+// 				centroids, err := prominentcolor.Kmeans(*colorImage)
+// 				if err == nil {
+// 					// panic(err)
+// 					promColor := centroids[0]
+// 					c = color.RGBA{
+// 						A: 0xFF,
+// 						R: uint8(promColor.Color.R),
+// 						G: uint8(promColor.Color.G),
+// 						B: uint8(promColor.Color.B),
+// 					}
+// 					save = true
+// 				}
+// 			}
+// 		}
+// 		cache = true
+// 	}
+// 	if c.A == 0 {
+// 		return color.RGBA{
+// 			A: 0xFF,
+// 			R: 0x10,
+// 			G: 0x10,
+// 			B: 0x10,
+// 		}
+// 	}
+// 	if cache || save {
+// 		info.SetColorRGBA(c)
+// 	}
+// 	if cache {
+// 		source.infos.Set(path, &info, 1)
+// 	}
+// 	if save {
+// 		infoDb := ImageInfoDb{
+// 			Path:      path,
+// 			ImageInfo: info,
+// 		}
+// 		source.dbPendingInfos <- &infoDb
+// 	}
+// 	return c
+// }

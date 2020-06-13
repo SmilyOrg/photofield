@@ -1,17 +1,15 @@
 package photofield
 
 import (
-	"bytes"
 	"fmt"
 	"image"
 	"image/color"
 	"log"
 	"math"
-	"path/filepath"
 	"sync"
-	"text/template"
 	"time"
 
+	. "photofield/internal"
 	storage "photofield/internal/storage"
 
 	"github.com/tdewolff/canvas"
@@ -20,86 +18,31 @@ import (
 )
 
 type Config struct {
-	TileSize   int
-	Thumbnails []Thumbnail
-	LogDraws   bool
-}
-
-type ThumbnailSizeType int32
-
-const (
-	FitOutside ThumbnailSizeType = iota
-	FitInside  ThumbnailSizeType = iota
-)
-
-type Thumbnail struct {
-	pathTemplate *template.Template
-	SizeType     ThumbnailSizeType
-	Size         Size
-}
-
-func NewThumbnail(pathTemplate string, sizeType ThumbnailSizeType, size Size) Thumbnail {
-	template, err := template.New("").Parse(pathTemplate)
-	if err != nil {
-		panic(err)
-	}
-	return Thumbnail{
-		pathTemplate: template,
-		SizeType:     sizeType,
-		Size:         size,
-	}
-}
-
-func (thumbnail *Thumbnail) GetPath(originalPath string) (string, error) {
-	var rendered bytes.Buffer
-	dir, filename := filepath.Split(originalPath)
-	err := thumbnail.pathTemplate.Execute(&rendered, PhotoTemplateData{
-		Dir:      dir,
-		Filename: filename,
-	})
-	if err != nil {
-		return "", err
-	}
-	return rendered.String(), nil
-}
-
-func (thumbnail *Thumbnail) Fit(originalSize Size) Size {
-	thumbWidth, thumbHeight := thumbnail.Size.Width, thumbnail.Size.Height
-	thumbRatio := thumbWidth / thumbHeight
-	originalWidth, originalHeight := originalSize.Width, originalSize.Height
-	originalRatio := originalWidth / originalHeight
-	switch thumbnail.SizeType {
-	case FitInside:
-		if thumbRatio < originalRatio {
-			thumbHeight = thumbWidth / originalRatio
-		} else {
-			thumbWidth = thumbHeight * originalRatio
-		}
-	case FitOutside:
-		if thumbRatio > originalRatio {
-			thumbHeight = thumbWidth / originalRatio
-		} else {
-			thumbWidth = thumbHeight * originalRatio
-		}
-	}
-	return Size{
-		Width:  math.Round(thumbWidth),
-		Height: math.Round(thumbHeight),
-	}
-}
-
-type PhotoTemplateData struct {
-	Dir      string
-	Filename string
+	TileSize          int
+	MaxSolidPixelArea float64
+	LogDraws          bool
+	DebugOverdraw     bool
+	DebugThumbnails   bool
 }
 
 type Transform struct {
 	view canvas.Matrix
 }
 
+type Point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type Rect struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
 type Sprite struct {
-	transform Transform
-	size      Size
+	Rect Rect
 }
 type Bitmap struct {
 	Sprite Sprite
@@ -116,36 +59,42 @@ type Text struct {
 	Text   string
 }
 
-type Bounds struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-	W float64 `json:"w"`
-	H float64 `json:"h"`
+type Region struct {
+	Id     int         `json:"id"`
+	Bounds Rect        `json:"bounds"`
+	Data   interface{} `json:"data"`
 }
 
-type Region struct {
-	Id     int    `json:"id"`
-	Bounds Bounds `json:"bounds"`
+type RegionConfig struct {
+	MaxCount int
+}
+
+type Fonts struct {
+	Header canvas.FontFace
+	Hour   canvas.FontFace
+	Debug  canvas.FontFace
+}
+
+type RegionSource interface {
+	GetRegionsFromBounds(Rect, *Scene, RegionConfig) []Region
+	GetRegionById(int, *Scene, RegionConfig) Region
 }
 
 type Scene struct {
-	Size         Size
-	Solids       []Solid
-	Photos       []Photo
-	Texts        []Text
-	RegionSource func(canvas.Rect, *Scene) []Region
+	Fonts        Fonts
+	Bounds       Rect         `json:"bounds"`
+	Solids       []Solid      `json:"-"`
+	Photos       []Photo      `json:"-"`
+	Texts        []Text       `json:"-"`
+	RegionSource RegionSource `json:"-"`
 
-	Canvas draw.Image
-	Zoom   int
+	Canvas draw.Image `json:"-"`
+	Zoom   int        `json:"-"`
 }
 
 type Scales struct {
 	Pixel float64
 	Tile  float64
-}
-
-type Size struct {
-	Width, Height float64
 }
 
 type Photo struct {
@@ -154,32 +103,79 @@ type Photo struct {
 	// solid    Sprite
 }
 
-func NewSolidFromRect(rect canvas.Rect, color color.Color) Solid {
+type PhotoRef struct {
+	Index int
+	Photo *Photo
+}
+
+func NewRectFromCanvasRect(r canvas.Rect) Rect {
+	return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}
+}
+
+func (rect Rect) ToCanvasRect() canvas.Rect {
+	return canvas.Rect{X: rect.X, Y: rect.Y, W: rect.W, H: rect.H}
+}
+
+func (rect Rect) Move(offset Point) Rect {
+	rect.X += offset.X
+	rect.Y += offset.Y
+	return rect
+}
+
+func (rect Rect) ScalePoint(scale Point) Rect {
+	rect.X *= scale.X
+	rect.W *= scale.X
+	rect.Y *= scale.Y
+	rect.H *= scale.Y
+	return rect
+}
+
+func (rect Rect) Scale(scale float64) Rect {
+	rect.X *= scale
+	rect.W *= scale
+	rect.Y *= scale
+	rect.H *= scale
+	return rect
+}
+
+func (rect Rect) Transform(m canvas.Matrix) Rect {
+	return NewRectFromCanvasRect(rect.ToCanvasRect().Transform(m))
+}
+
+func (rect Rect) String() string {
+	return fmt.Sprintf("%3.3f %3.3f %3.3f %3.3f", rect.X, rect.Y, rect.W, rect.H)
+}
+
+func (rect Rect) FitInside(container Rect) Rect {
+	imageRatio := rect.W / rect.H
+
+	var scale float64
+	if container.W/container.H < imageRatio {
+		scale = container.W / rect.W
+	} else {
+		scale = container.H / rect.H
+	}
+
+	return Rect{
+		X: container.X,
+		Y: container.Y,
+		W: rect.W * scale,
+		H: rect.H * scale,
+	}
+}
+
+func NewSolidFromRect(rect Rect, color color.Color) Solid {
 	solid := Solid{}
 	solid.Color = color
-	solid.Sprite.size = Size{Width: rect.W, Height: rect.H}
-	solid.Sprite.transform.view = canvas.Identity.
-		Translate(rect.X, -rect.H-rect.Y)
+	solid.Sprite.Rect = rect
 	return solid
 }
 
-func NewHeaderFromRect(rect canvas.Rect, font *canvas.FontFace, txt string) Text {
+func NewTextFromRect(rect Rect, font *canvas.FontFace, txt string) Text {
 	text := Text{}
 	text.Text = txt
 	text.Font = font
-	text.Sprite.size = Size{Width: rect.W, Height: rect.H}
-	text.Sprite.transform.view = canvas.Identity.
-		Translate(rect.X, -rect.Y)
-	return text
-}
-
-func NewTextFromRect(rect canvas.Rect, font *canvas.FontFace, txt string) Text {
-	text := Text{}
-	text.Text = txt
-	text.Font = font
-	text.Sprite.size = Size{Width: rect.W, Height: rect.H}
-	text.Sprite.transform.view = canvas.Identity.
-		Translate(rect.X, -rect.Y-font.Metrics().Ascent)
+	text.Sprite.Rect = rect
 	return text
 }
 
@@ -191,24 +187,10 @@ func drawPhotos(photos []Photo, config *Config, scene *Scene, c *canvas.Context,
 }
 
 func drawPhotoChannel(id int, index chan int, config *Config, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
-
-	var lastLogTime time.Time
-	if config.LogDraws {
-		lastLogTime = time.Now()
-	}
-
 	for i := range index {
 		photo := &scene.Photos[i]
-		if config.LogDraws {
-			now := time.Now()
-			if now.Sub(lastLogTime) > 1*time.Second {
-				lastLogTime = now
-				log.Printf("draw photo %d (goroutine %d)\n", i, id)
-			}
-		}
 		photo.Draw(config, scene, c, scales, source)
 	}
-
 	wg.Done()
 }
 
@@ -223,14 +205,13 @@ func (scene *Scene) Draw(config *Config, c *canvas.Context, scales Scales, sourc
 	// 	photo.Draw(config, scene, c, scales, source)
 	// }
 
-	// concurrent := 1
-	// photoCount := len(scene.Photos)
-	// if photoCount < concurrent {
-	// 	concurrent = photoCount
-	// }
+	index := make(chan int)
 
-	index := make(chan int, 1)
 	concurrent := 100
+	photoCount := len(scene.Photos)
+	if photoCount < concurrent {
+		concurrent = photoCount
+	}
 
 	wg := &sync.WaitGroup{}
 	wg.Add(concurrent)
@@ -238,8 +219,24 @@ func (scene *Scene) Draw(config *Config, c *canvas.Context, scales Scales, sourc
 	for i := 0; i < concurrent; i++ {
 		go drawPhotoChannel(i, index, config, scene, c, scales, wg, source)
 	}
+
+	var lastLogTime time.Time
+	lastLogIndex := 0
+	if config.LogDraws {
+		lastLogTime = time.Now()
+	}
 	for i := range scene.Photos {
 		index <- i
+		if config.LogDraws {
+			now := time.Now()
+			logInterval := 1 * time.Second
+			if now.Sub(lastLogTime) > logInterval {
+				perSec := float64(i-lastLogIndex) / logInterval.Seconds()
+				log.Printf("draw photo %d, %.2f / sec \n", i, perSec)
+				lastLogTime = now
+				lastLogIndex = i
+			}
+		}
 	}
 	close(index)
 	wg.Wait()
@@ -250,88 +247,77 @@ func (scene *Scene) Draw(config *Config, c *canvas.Context, scales Scales, sourc
 	}
 }
 
-func (scene *Scene) GetVisiblePhotos(output chan *Photo, view canvas.Rect) {
+func (scene *Scene) AddPhotosFromPaths(paths chan string) {
+	for path := range paths {
+		photo := Photo{}
+		photo.SetImagePath(path)
+		scene.Photos = append(scene.Photos, photo)
+	}
+}
+
+func (scene *Scene) GetVisiblePhotos(output chan PhotoRef, view Rect, maxCount int) {
+	count := 0
 	for i := range scene.Photos {
 		photo := &scene.Photos[i]
-		if photo.Original.Sprite.IsVisibleInRect(view) {
-			output <- photo
+		if photo.Original.Sprite.Rect.IsVisible(view) {
+			output <- PhotoRef{
+				Index: i,
+				Photo: photo,
+			}
+			count++
+			if count >= maxCount {
+				break
+			}
 		}
 	}
 	close(output)
 }
 
 func RenderImageFast(rimg draw.Image, img image.Image, m canvas.Matrix) {
-	// add transparent margin to image for smooth borders when rotating
-	// margin := 4
-	// size := img.Bounds().Size()
-	// sp := img.Bounds().Min // starting point
-	// img2 := image.NewRGBA(image.Rect(0, 0, size.X+margin*2, size.Y+margin*2))
-	// draw.Draw(img2, image.Rect(margin, margin, size.X+margin, size.Y+margin), img, sp, draw.Over)
-
-	// resolution := 1
-
-	// size := img.Bounds().Size()
-	// sp := img.Bounds().Min // starting point
-
-	// draw to destination image
-	// note that we need to correct for the added margin in origin and m
-	// TODO: optimize when transformation is only translation or stretch
-	origin := m.Dot(canvas.Point{0, float64(img.Bounds().Size().Y)})
-	// m = m.Scale((float64(size.X) / float64(size.X)), (float64(size.Y) / float64(size.Y)))
-
+	origin := m.Dot(canvas.Point{X: 0, Y: float64(img.Bounds().Size().Y)})
 	h := float64(rimg.Bounds().Size().Y)
 	aff3 := f64.Aff3{m[0][0], -m[0][1], origin.X, -m[1][0], m[1][1], h - origin.Y}
-	// draw.CatmullRom.Transform(rimg, aff3, img, img.Bounds(), draw.Over, nil)
-	// draw.NearestNeighbor.Transform(rimg, aff3, img, img.Bounds(), draw.Over, nil)
-	// draw.ApproxBiLinear.Transform(rimg, aff3, img, img.Bounds(), draw.Over, nil)
 	draw.ApproxBiLinear.Transform(rimg, aff3, img, img.Bounds(), draw.Src, nil)
-	// draw.NearestNeighbor.Transform(rimg, aff3, img, img.Bounds(), draw.Src, nil)
+}
 
-	// margin := 4
-	// size := img.Bounds().Size()
-	// sp := img.Bounds().Min // starting point
-	// img2 := image.NewRGBA(image.Rect(0, 0, size.X+margin*2, size.Y+margin*2))
-	// draw.Draw(img2, image.Rect(margin, margin, size.X+margin, size.Y+margin), img, sp, draw.Over)
+func (rect *Rect) GetMatrix() canvas.Matrix {
+	return canvas.Identity.
+		Translate(rect.X, -rect.Y-rect.H)
+}
 
-	// origin := m.Dot(canvas.Point{-float64(margin), float64(img2.Bounds().Size().Y - margin)}).Mul(float64(resolution))
-	// m = m.Scale(float64(resolution)*(float64(size.X+margin)/float64(size.X)), float64(resolution)*(float64(size.Y+margin)/float64(size.Y)))
-	// h := float64(rimg.Bounds().Size().Y)
-	// aff3 := f64.Aff3{m[0][0], -m[0][1], origin.X, -m[1][0], m[1][1], h - origin.Y}
-	// draw.CatmullRom.Transform(rimg, aff3, img2, img2.Bounds(), draw.Over, nil)
+func (rect *Rect) GetMatrixFitWidth(width float64) canvas.Matrix {
+	scale := rect.W / width
+	return rect.GetMatrix().
+		Scale(scale, scale)
+}
 
-	// draw to destination image
-	// note that we need to correct for the added margin in origin and m
-	// TODO: optimize when transformation is only translation or stretch
-	// origin := m.Dot(canvas.Point{-float64(margin), float64(img2.Bounds().Size().Y - margin)}).Mul(float64(resolution))
-	// m = m.Scale(float64(resolution)*(float64(size.X+margin)/float64(size.X)), float64(resolution)*(float64(size.Y+margin)/float64(size.Y)))
-
-	// h := float64(rimg.Bounds().Size().Y)
-	// aff3 := f64.Aff3{m[0][0], -m[0][1], 0, -m[1][0], m[1][1], h - 0}
-	// draw.CatmullRom.Transform(rimg, aff3, img2, img2.Bounds(), draw.Over, nil)
-
-	// origin := m.Dot(canvas.Point{-float64(0), float64(img.Bounds().Size().Y - 0)}).Mul(float64(resolution))
-	// 	m = m.Scale(float64(resolution)*(float64(size.X+0)/float64(size.X)), float64(resolution)*(float64(size.Y+0)/float64(size.Y)))
-
-	// 	h := float64(rimg.Bounds().Size().Y)
-	// 	aff3 := f64.Aff3{m[0][0], -m[0][1], origin.X, -m[1][0], m[1][1], h - origin.Y}
-
-	// draw.CatmullRom.Transform(rimg, aff3, img, img.Bounds(), draw.Over, nil)
+func (rect *Rect) GetMatrixFitImage(image *image.Image) canvas.Matrix {
+	bounds := (*image).Bounds()
+	return rect.GetMatrixFitWidth(float64(bounds.Max.X) - float64(bounds.Min.X))
 }
 
 func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	if bitmap.Sprite.IsVisible(c, scales) {
 		image, err := source.GetImage(bitmap.Path)
 		if err != nil {
-			panic(err)
+			style := c.Style
+			style.FillColor = canvas.Red
+			bitmap.Sprite.DrawWithStyle(c, style)
+			return
 		}
 
-		// c.RenderImage(*image, c.View().Mul(bitmap.Sprite.transform.view))
-		RenderImageFast(scene.Canvas, *image, c.View().Mul(bitmap.Sprite.transform.view))
+		model := bitmap.Sprite.Rect.GetMatrixFitImage(image)
+		m := c.View().Mul(model)
+
+		RenderImageFast(scene.Canvas, *image, m)
 	}
 }
 
 func (bitmap *Bitmap) GetSize(source *storage.ImageSource) image.Point {
 	info := source.GetImageInfo(bitmap.Path)
+	if info.Width == 0 {
+		fmt.Println(bitmap.Path, info.Width, info.Height)
+	}
 	return image.Point{X: info.Width, Y: info.Height}
 }
 
@@ -344,12 +330,12 @@ func (sprite *Sprite) PlaceFitHeight(
 ) {
 	scale := fitHeight / contentHeight
 
-	y += -fitHeight + scale*contentHeight
-
-	sprite.size = Size{Width: contentWidth, Height: contentHeight}
-	sprite.transform.view = canvas.Identity.
-		Translate(x, -fitHeight-y).
-		Scale(scale, scale)
+	sprite.Rect = Rect{
+		X: x,
+		Y: y,
+		W: contentWidth * scale,
+		H: contentHeight * scale,
+	}
 }
 
 func (sprite *Sprite) PlaceFit(
@@ -371,12 +357,12 @@ func (sprite *Sprite) PlaceFit(
 		// x = x - width*0.5 + scale*contentWidth*0.5
 	}
 
-	y += -fitHeight + scale*contentHeight
-
-	sprite.size = Size{Width: contentWidth, Height: contentHeight}
-	sprite.transform.view = canvas.Identity.
-		Translate(x, -fitHeight-y).
-		Scale(scale, scale)
+	sprite.Rect = Rect{
+		X: x,
+		Y: y,
+		W: contentWidth * scale,
+		H: contentHeight * scale,
+	}
 }
 
 func (photo *Photo) Place(x float64, y float64, width float64, height float64, source *storage.ImageSource) {
@@ -384,192 +370,107 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	imageWidth := float64(imageSize.X)
 	imageHeight := float64(imageSize.Y)
 
-	// photo.solid.Place(x, y, width, height, imageWidth, imageHeight)
 	photo.Original.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
-	// for i := range photo.bitmaps {
-	// 	bitmap := &photo.bitmaps[i]
-	// 	imageSize := bitmap.GetSize()
-	// 	imageWidth := float64(imageSize.X)
-	// 	imageHeight := float64(imageSize.Y)
-	// 	bitmap.sprite.Place(x, y, width, height, imageWidth, imageHeight)
-
-	// 	// px, py := thumb.sprite.transform.view.Pos()
-	// 	// fmt.Printf("%v %v %v\n", width, imageWidth, thumb.sprite.size.width)
-	// }
-
-	// photo.solid.size = Size{width: scale * imageWidth, height: scale * imageHeight}
-	// photo.solid.transform.view = canvas.Identity.
-	// 	Translate(x, y)
 }
 
 func (sprite *Sprite) Draw(c *canvas.Context) {
-	c.RenderPath(canvas.Rectangle(sprite.size.Width, sprite.size.Height), c.Style, c.View().Mul(sprite.transform.view))
+	c.RenderPath(
+		canvas.Rectangle(sprite.Rect.W, sprite.Rect.H),
+		c.Style,
+		c.View().Mul(sprite.Rect.GetMatrix()),
+	)
 }
 
-func (sprite *Sprite) DrawText(c *canvas.Context, x float64, y float64, size float64, text string) {
-	// px, py := sprite.transform.view.Pos()
-	// px += x
-	// py += y
-	// matrix := c.View().Translate(px, py)
-	// textFace := fontFamily.Face(size, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal)
-	// textBox := canvas.NewTextBox(textFace, text, sprite.size.width, sprite.size.height, canvas.Justify, canvas.Top, 5.0, 0.0)
-	// textBox := canvas.NewTextLine(textFace, text, canvas.Left)
-	// c.RenderText(textBox, matrix)
+func (sprite *Sprite) DrawWithStyle(c *canvas.Context, style canvas.Style) {
+	c.RenderPath(
+		canvas.Rectangle(sprite.Rect.W, sprite.Rect.H),
+		style,
+		c.View().Mul(sprite.Rect.GetMatrix()),
+	)
 }
 
 func (text *Text) Draw(c *canvas.Context, scales Scales) {
-	// px, py := sprite.transform.view.Pos()
-	// px += x
-	// py += y
-	// textFace := fontFamily.Face(size, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal)
-	// textBox := canvas.NewTextBox(textFace, text, sprite.size.width, sprite.size.height, canvas.Justify, canvas.Top, 5.0, 0.0)
-	// textBox := canvas.NewTextLine(textFace, text, canvas.Left)
 	if text.Sprite.IsVisible(c, scales) {
 		textLine := canvas.NewTextLine(*text.Font, text.Text, canvas.Left)
-		c.RenderText(textLine, c.View().Mul(text.Sprite.transform.view))
+		c.RenderText(textLine, c.View().Mul(text.Sprite.Rect.GetMatrix()))
 	}
-	// c.RenderPath(canvas.Rectangle(sprite.size.Width, sprite.size.Height), c.Style, c.View().Mul(sprite.transform.view))
 }
 
-func (sprite *Sprite) DrawDebugOverlay(c *canvas.Context, scales Scales) {
-	c.Push()
-	pixelZoom := sprite.GetPixelZoom(c, scales)
+func getRGBA(col color.Color) color.RGBA {
+	r, g, b, a := col.RGBA()
+	return color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), uint8(a >> 8)}
+}
+
+func (bitmap *Bitmap) DrawOverdraw(c *canvas.Context, source *storage.ImageSource) {
+	style := c.Style
+
+	size := bitmap.GetSize(source)
+	pixelZoom := bitmap.Sprite.Rect.GetPixelZoom(c, size)
+	// fmt.Printf("%4d %4d %2.4f\n", size.X, size.Y, pixelZoom)
 	barWidth := -pixelZoom * 0.1
 	// barHeight := 0.04
 	alpha := pixelZoom * 0.1 * 0xFF
 	max := 0.8 * float64(0xFF)
 	if barWidth > 0 {
 		alpha = math.Min(max, math.Max(0, -alpha))
-		c.SetFillColor(color.NRGBA{0xFF, 0x00, 0x00, uint8(alpha)})
+		style.FillColor = getRGBA(color.NRGBA{0xFF, 0x00, 0x00, uint8(alpha)})
 	} else {
 		alpha = math.Min(max, math.Max(0, alpha))
-		c.SetFillColor(color.NRGBA{0x00, 0x00, 0xFF, uint8(alpha)})
+		style.FillColor = getRGBA(color.NRGBA{0x00, 0x00, 0xFF, uint8(alpha)})
 	}
+
+	bitmap.Sprite.DrawWithStyle(c, style)
+
+	// style.FillColor = canvas.Yellowgreen
 	// c.RenderPath(
-	// 	canvas.Rectangle(sprite.size.width*0.5*barWidth, sprite.size.height*barHeight),
-	// 	c.Style,
-	// 	c.View().Mul(sprite.transform.view).Translate(sprite.size.width*0.5, sprite.size.height*(0.5-barHeight*0.5)),
+	// 	canvas.Rectangle(bitmap.Sprite.Rect.W*0.5*barWidth, bitmap.Sprite.Rect.H*barHeight),
+	// 	style,
+	// 	c.View().Mul(bitmap.Sprite.Rect.GetMatrix()).
+	// 		Translate(
+	// 			bitmap.Sprite.Rect.W*0.5,
+	// 			bitmap.Sprite.Rect.H*(0.5-barHeight*0.5),
+	// 		),
 	// )
-
-	sprite.Draw(c)
-	// sprite.DrawText(c, 10, 10, 100*scales.pixel, fmt.Sprintf("Pixel zoom: %v", pixelZoom))
-
-	// drawText(c, 30.0, canvas.NewTextBox(textFace, "Hello", 140.0, 0.0, canvas.Justify, canvas.Top, 5.0, 0.0))
-
-	c.Pop()
 }
 
-func (sprite *Sprite) GetBounds() canvas.Rect {
-	rect := canvas.Rect{X: 0, Y: 0, W: sprite.size.Width, H: sprite.size.Height}
-	canvasToUnit := sprite.transform.view
-	return rect.Transform(canvasToUnit)
+func (sprite *Sprite) DrawText(c *canvas.Context, scales Scales, font *canvas.FontFace, txt string) {
+	text := NewTextFromRect(sprite.Rect, font, txt)
+	text.Draw(c, scales)
 }
 
 func (sprite *Sprite) IsVisible(c *canvas.Context, scales Scales) bool {
-	rect := canvas.Rect{X: 0, Y: 0, W: sprite.size.Width, H: sprite.size.Height}
+	rect := canvas.Rect{X: 0, Y: 0, W: sprite.Rect.W, H: sprite.Rect.H}
 	canvasToUnit := canvas.Identity.
 		Scale(scales.Tile, scales.Tile).
-		Mul(c.View().Mul(sprite.transform.view))
+		Mul(c.View().Mul(sprite.Rect.GetMatrix()))
 	unitRect := rect.Transform(canvasToUnit)
 	return unitRect.X <= 1 && unitRect.Y <= 1 && unitRect.X+unitRect.W >= 0 && unitRect.Y+unitRect.H >= 0
 }
 
-func (sprite *Sprite) IsVisibleInRect(view canvas.Rect) bool {
-	rect := canvas.Rect{X: 0, Y: 0, W: sprite.size.Width, H: sprite.size.Height}
-	canvasRect := rect.Transform(sprite.transform.view)
-	fmt.Println(view.String(), canvasRect.String())
-	return canvasRect.X <= view.X+view.W && canvasRect.Y <= view.Y+view.H && canvasRect.X+canvasRect.W >= view.X && canvasRect.Y+canvasRect.H >= view.Y
-}
-
-func (sprite *Sprite) GetTileArea(scales Scales) float64 {
-	return sprite.size.Width * sprite.size.Height * scales.Pixel * scales.Pixel
-}
-
-func (sprite *Sprite) GetPixelArea(c *canvas.Context, scales Scales) float64 {
-	rect := canvas.Rect{X: 0, Y: 0, W: 1, H: 1}
-	canvasToTile := c.View().Mul(sprite.transform.view)
-	tileRect := rect.Transform(canvasToTile)
-	area := tileRect.W * tileRect.H
-	return area
-}
-
-func (sprite *Sprite) GetPixelZoom(c *canvas.Context, scales Scales) float64 {
-	pixelArea := sprite.GetPixelArea(c, scales)
-	if pixelArea >= 1 {
-		return pixelArea
-	} else {
-		return -1 / pixelArea
-	}
-	// if zoom < 0 {
-	// 	zoom = 1 / zoom
-	// }
-	// return zoom
+func (rect *Rect) IsVisible(view Rect) bool {
+	return rect.X <= view.X+view.W &&
+		rect.Y <= view.Y+view.H &&
+		rect.X+rect.W >= view.X &&
+		rect.Y+rect.H >= view.Y
 }
 
 func (photo *Photo) SetImagePath(path string) {
 	photo.Original.Path = path
-	// dir, filename := filepath.Split(path)
-	// photo.Dir = dir
-	// photo.Filename = filename
-
-	// small := Bitmap{
-	// 	path: fmt.Sprintf("%s@eaDir/%s/SYNOPHOTO_THUMB_S.jpg", dir, filename),
-	// }
-	// photo.bitmaps = append(photo.bitmaps, small)
-
-	// medium := Bitmap{
-	// 	path: fmt.Sprintf("%s@eaDir/%s/SYNOPHOTO_THUMB_M.jpg", dir, filename),
-	// }
-	// photo.bitmaps = append(photo.bitmaps, medium)
-
-	// big := Bitmap{
-	// 	path: fmt.Sprintf("%s@eaDir/%s/SYNOPHOTO_THUMB_B.jpg", dir, filename),
-	// }
-	// photo.bitmaps = append(photo.bitmaps, big)
-
-	// xl := Bitmap{
-	// 	path: fmt.Sprintf("%s@eaDir/%s/SYNOPHOTO_THUMB_XL.jpg", dir, filename),
-	// }
-	// photo.bitmaps = append(photo.bitmaps, xl)
-
-	// photo.bitmaps = append(photo.bitmaps, photo.original)
 }
 
-// func (sprite *Sprite) GetPixelArea(c *canvas.Context, scales Scales) float64 {
-// 	rect := canvas.Rect{X: 0, Y: 0, W: 1, H: 1}
-// 	canvasToTile := c.View().Mul(sprite.transform.view)
-// 	tileRect := rect.Transform(canvasToTile)
-// 	area := tileRect.W * tileRect.H
-// 	return area
-// }
-
-// func (sprite *Sprite) GetPixelZoom(c *canvas.Context, scales Scales) float64 {
-// 	pixelArea := sprite.GetPixelArea(c, scales)
-// 	if pixelArea >= 1 {
-// 		return pixelArea
-// 	} else {
-// 		return -1 / pixelArea
-// 	}
-// 	// if zoom < 0 {
-// 	// 	zoom = 1 / zoom
-// 	// }
-// 	// return zoom
-// }
-
-func (sprite *Sprite) GetPixelAreaThumb(c *canvas.Context, size Size) float64 {
-	rect := canvas.Rect{X: 0, Y: 0, W: 1, H: 1}
-	canvasToTile := c.View().Mul(sprite.transform.view).
-		Scale(
-			sprite.size.Width/size.Width,
-			sprite.size.Height/size.Height,
-		)
-	tileRect := rect.Transform(canvasToTile)
+func (rect *Rect) GetPixelArea(c *canvas.Context, size image.Point) float64 {
+	pixel := canvas.Rect{X: 0, Y: 0, W: 1, H: 1}
+	canvasToTile := c.View().Mul(rect.GetMatrixFitWidth(float64(size.X)))
+	tileRect := pixel.Transform(canvasToTile)
+	// fmt.Printf("rect w %4.0f h %4.0f   size w %4.0f h %4.0f   tileRect w %4f h %4f\n", rect.W, rect.H, size.Width, size.Height, tileRect.W, tileRect.H)
+	// tx, ty, theta, sx, sy, phi := canvasToTile.Decompose()
+	// log.Printf("tx %f ty %f theta %f sx %f sy %f phi %f rectw %f tw %f th %f\n", tx, ty, theta, sx, sy, phi, rect.W, tileRect.W, tileRect.H)
 	area := tileRect.W * tileRect.H
 	return area
 }
 
-func (sprite *Sprite) GetPixelZoomThumb(c *canvas.Context, size Size) float64 {
-	pixelArea := sprite.GetPixelAreaThumb(c, size)
+func (rect *Rect) GetPixelZoom(c *canvas.Context, size image.Point) float64 {
+	pixelArea := rect.GetPixelArea(c, size)
 	if pixelArea >= 1 {
 		return pixelArea
 	} else {
@@ -577,136 +478,132 @@ func (sprite *Sprite) GetPixelZoomThumb(c *canvas.Context, size Size) float64 {
 	}
 }
 
-func (sprite *Sprite) GetPixelZoomDistThumb(c *canvas.Context, size Size) float64 {
-	return math.Abs(sprite.GetPixelZoomThumb(c, size))
+func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size image.Point) float64 {
+	return math.Abs(rect.GetPixelZoom(c, size))
 }
 
-func (photo *Photo) getBestBitmap(config *Config, c *canvas.Context, scales Scales) *Bitmap {
+func (photo *Photo) getBestBitmap(config *Config, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) *Bitmap {
 	var best *Thumbnail
-	var bestSize Size
-	originalSize := photo.Original.Sprite.size
-	bestZoomDist := photo.Original.Sprite.GetPixelZoomDistThumb(c, originalSize)
-	for i := range config.Thumbnails {
-		thumbnail := &config.Thumbnails[i]
-		// thumbSize := thumbnail.Size
-		// originalPortrait := originalSize.Width < originalSize.Height
-		// thumbPortrait := thumbSize.Width < thumbSize.Height
-		// if originalPortrait != thumbPortrait {
-		// 	thumbSize.Width, thumbSize.Height = thumbSize.Height, thumbSize.Width
-		// }
+	originalSize := photo.Original.GetSize(source)
+	// fmt.Printf("%4.0f %4.0f\n", photo.Original.Sprite.Rect.W, photo.Original.Sprite.Rect.H)
+	bestZoomDist := photo.Original.Sprite.Rect.GetPixelZoomDist(c, originalSize)
+	for i := range source.Thumbnails {
+		thumbnail := &source.Thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
-		zoomDist := photo.Original.Sprite.GetPixelZoomDistThumb(c, thumbSize)
+		zoomDist := photo.Original.Sprite.Rect.GetPixelZoomDist(c, thumbSize)
 		if zoomDist < bestZoomDist {
-			best = thumbnail
-			bestSize = thumbSize
-			bestZoomDist = zoomDist
+			thumbnailPath := thumbnail.GetPath(photo.Original.Path)
+			if source.Exists(thumbnailPath) {
+				best = thumbnail
+				bestZoomDist = zoomDist
+			}
 		}
+		// fmt.Printf("orig w %4.0f h %4.0f   thumb w %4.0f h %4.0f   zoom dist best %8.2f cur %8.2f area %8.6f\n", originalSize.Width, originalSize.Height, thumbSize.Width, thumbSize.Height, bestZoomDist, zoomDist, photo.Original.Sprite.Rect.GetPixelArea(c, thumbSize))
 	}
+
+	// photo.Original.Sprite.DrawText(c, scales, &scene.Fonts.Debug, fmt.Sprintf(
+	// 	"w %d h %d %.2f\n", originalSize.X, originalSize.Y, bestZoomDist,
+	// ))
+
 	if best == nil {
 		return &photo.Original
 	}
 
-	path, err := best.GetPath(photo.Original.Path)
-	if err != nil {
-		panic(err)
-	}
-	scale := photo.Original.Sprite.size.Width / bestSize.Width
-
 	return &Bitmap{
-		Path: path,
+		Path: best.GetPath(photo.Original.Path),
 		Sprite: Sprite{
-			size: Size{
-				Width:  bestSize.Width,
-				Height: bestSize.Height,
-			},
-			transform: Transform{
-				view: photo.Original.Sprite.transform.view.Scale(scale, scale),
-			},
+			Rect: photo.Original.Sprite.Rect,
 		},
 	}
 }
 
 func (photo *Photo) Draw(config *Config, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
-	// photo.original.Draw(c)
-
-	// c.Push()
-
-	// if photo.solid.IsVisible(c, scales) {
-	// c.SetFillColor(canvas.Black)
-	// 	println("visible")
-	// } else {
-	// 	c.SetFillColor(canvas.Red)
-	// 	println("invisible")
-	// }
 
 	if photo.Original.Sprite.IsVisible(c, scales) {
 
-		// var best *Bitmap
-		// bestZoomDist := math.Inf(1)
-		// for i := range photo.bitmaps {
-		// 	bitmap := &photo.bitmaps[i]
-		// 	zoom := bitmap.sprite.GetPixelZoom(c, scales)
-		// 	zoomDist := math.Abs(zoom)
-		// 	if zoomDist < bestZoomDist {
-		// 		best = bitmap
-		// 		bestZoomDist = zoomDist
-		// 	}
-		// }
+		pixelArea := photo.Original.Sprite.Rect.GetPixelArea(c, image.Point{X: 1, Y: 1})
+		if pixelArea < config.MaxSolidPixelArea {
+			style := c.Style
 
-		best := photo.getBestBitmap(config, c, scales)
+			info := source.GetImageInfo(photo.Original.Path)
+			style.FillColor = info.GetColor()
+
+			photo.Original.Sprite.DrawWithStyle(c, style)
+			return
+		}
+
+		best := photo.getBestBitmap(config, scene, c, scales, source)
 
 		if best != nil {
 			bitmap := best
 			bitmap.Draw(scene, c, scales, source)
-			// bitmap.sprite.DrawDebugOverlay(c, scales)
-			// bitmap.sprite.DrawText(c, 0, 0, 100, filepath.Base(bitmap.path))
+			if config.DebugOverdraw {
+				bitmap.DrawOverdraw(c, source)
+			}
+			if config.DebugThumbnails {
+				text := ""
+
+				for i := range source.Thumbnails {
+					thumbnail := &source.Thumbnails[i]
+					thumbnailPath := thumbnail.GetPath(photo.Original.Path)
+					if source.Exists(thumbnailPath) {
+						text += thumbnail.Name + " "
+					}
+				}
+
+				bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
+				// bitmap.Sprite.DrawText(c, 0, 0, 100, filepath.Base(bitmap.path))
+			}
 			// bitmap.sprite.DrawText(c, 0, 0, 100, fmt.Sprintf("%d %.2f", bestIndex, bestZoomDist))
 		}
-		// photo.original.Draw(c)
-		// photo.solid.Draw(c)
 	}
 
-	// photo.solid.Draw(c)
-
-	// c.Pop()
-
-	// fmt.Printf("%f\n", photo.solid.GetPixelArea(pixelScale))
 }
 
 func (solid *Solid) Draw(c *canvas.Context, scales Scales) {
 	if solid.Sprite.IsVisible(c, scales) {
-		// c.Push()
 		prevFill := c.FillColor
 		c.SetFillColor(solid.Color)
 		solid.Sprite.Draw(c)
 		c.SetFillColor(prevFill)
-		// c.Pop()
 	}
 }
 
-// func (scene *Scene) NormalizeRegions() {
-// 	for i := range scene.Regions {
-// 		region := &scene.Regions[i]
-// 		region.X /= scene.Size.Width
-// 		region.Y = 1 + (region.Y / scene.Size.Height)
-// 		region.W /= scene.Size.Width
-// 		region.H /= scene.Size.Height
-// 	}
-// }
+func (scene *Scene) getRegionScale() float64 {
+	return scene.Bounds.W
+	// tileRect := Rect{X: 0, Y: 0, W: float64(config.TileSize), H: float64(config.TileSize)}
+	// fitRect := sceneRect.FitInside(tileRect)
+	// return scale
+}
 
-func (scene *Scene) GetRegions(bounds Bounds) []Region {
-	rect := canvas.Rect{
-		X: bounds.X * scene.Size.Width,
-		Y: bounds.Y * scene.Size.Height,
-		W: bounds.W * scene.Size.Width,
-		H: bounds.H * scene.Size.Height,
+func (scene *Scene) GetRegions(config *Config, bounds Rect) []Region {
+	// sceneRect := Rect{X: 0, Y: 0, W: scene.Size.Width, H: scene.Size.Height}
+	// tileRect := Rect{X: 0, Y: 0, W: float64(config.TileSize), H: float64(config.TileSize)}
+	// fitRect := sceneRect.FitInside(tileRect)
+	// scale := Point{X: tileRect.W / fitRect.W * sceneRect.W, Y: tileRect.H / fitRect.H * sceneRect.H}
+	// scale.Y = scale.X
+
+	scale := scene.getRegionScale()
+
+	// invScale := Point{X: 1 / scale.X, Y: 1 / scale.Y}
+	rect := bounds.Scale(scale)
+	regions := scene.RegionSource.GetRegionsFromBounds(
+		rect,
+		scene,
+		RegionConfig{
+			MaxCount: 10,
+		},
+	)
+	for i := range regions {
+		region := &regions[i]
+		region.Bounds = region.Bounds.Scale(1 / scale)
 	}
-	return scene.RegionSource(rect, scene)
-	// for i := range scene.Regions {
-	// 	region := &scene.Regions[i]
-	// 	region.X /= scene.Size.Width
-	// 	region.Y = 1 + (region.Y / scene.Size.Height)
-	// 	region.W /= scene.Size.Width
-	// 	region.H /= scene.Size.Height
-	// }
+	return regions
+}
+
+func (scene *Scene) GetRegion(id int) Region {
+	scale := scene.getRegionScale()
+	region := scene.RegionSource.GetRegionById(id, scene, RegionConfig{})
+	region.Bounds = region.Bounds.Scale(1 / scale)
+	return region
 }
