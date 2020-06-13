@@ -15,14 +15,23 @@
     body, html, #viewer {
       width: 100%;
       height: 100%;
-      overflow: hidden;
     }
 
-    #app {
-      position: absolute;
+    #viewer {
+      position: fixed;
       top: 0;
       left: 0;
     }
+
+    #app .content {
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+
+    /* .virtual-canvas { */
+      /* height: 10000px; */
+    /* } */
 
     .region {
       /* background-color:rgba(65, 255, 81, 0.5); */
@@ -33,7 +42,8 @@
 
     .config {
       position: absolute;
-      left: 160px;
+      width: 300px;
+      left: calc(100vw - 300px);
     }
 
     .navigation {
@@ -106,68 +116,77 @@
   <div id="viewer"></div>
   <div id="app">
 
-    <div v-if="fullscreenRegion" class="navigation">
+    <div class="content">
 
-      <div class="hitarea left" @click="navigate(-1)" @mousedown="onNavigationMouseDown">
-        <div class="circle button">
-          <v-icon class="icon" dark large>mdi-chevron-left</v-icon>
+      <div v-if="fullscreenRegion" class="navigation">
+
+        <div class="hitarea left" @click="navigate(-1)" @mousedown="onNavigationMouseDown">
+          <div class="circle button">
+            <v-icon class="icon" dark large>mdi-chevron-left</v-icon>
+          </div>
+          <!-- <v-btn class="button" fab dark large :ripple="false" color="primary"> -->
+          <!-- </v-btn> -->
         </div>
-        <!-- <v-btn class="button" fab dark large :ripple="false" color="primary"> -->
-        <!-- </v-btn> -->
-      </div>
-
-      <div class="hitarea right" @click="navigate(1)" @mousedown="onNavigationMouseDown">
-        <div class="circle button">
-          <v-icon class="icon" dark large>mdi-chevron-right</v-icon>
+  
+        <div class="hitarea right" @click="navigate(1)" @mousedown="onNavigationMouseDown">
+          <div class="circle button">
+            <v-icon class="icon" dark large>mdi-chevron-right</v-icon>
+          </div>
+          <!-- <v-btn class="button right" fab dark large color="primary"> -->
+          <!-- </v-btn> -->
         </div>
-        <!-- <v-btn class="button right" fab dark large color="primary"> -->
-        <!-- </v-btn> -->
+  
       </div>
-
-    </div>
-
-    <div class="config">
-
-      <input type="checkbox" id="debugOverdraw" v-model="debug.overdraw">
-      <label for="debugOverdraw">Debug Overdraw</label>
-
-      <input type="checkbox" id="debugThumbnails" v-model="debug.thumbnails">
-      <label for="debugThumbnails">Debug Thumbnails</label>
-
+  
+      <div class="config">
+  
+        <input type="checkbox" id="debugOverdraw" v-model="debug.overdraw">
+        <label for="debugOverdraw">Debug Overdraw</label>
+  
+        <input type="checkbox" id="debugThumbnails" v-model="debug.thumbnails">
+        <label for="debugThumbnails">Debug Thumbnails</label>
+  
+      </div>
+      
+      <!-- {{ regionPoolInUse }} / {{ regions.length }} / {{ regionPool.length }} -->
+      <!-- <div class="added-regions" :key="addedRegionsTime">
+        <div
+          v-for="region in addedRegions"
+          :key="region.id"
+          class="region"
+          :id="'region-' + region.id"
+          @click="onRegionClick(region)">
+          {{ region.id }}
+          {{ timestamp }}
+        </div>
+      </div> -->
+      <div class="region-pool" :key="regionPoolUpdateTime">
+        <div
+          v-for="region in regionPool"
+          :key="region.poolId"
+          :id="'region-' + region.poolId"
+          class="region"
+          @click="onRegionClick(region)">
+          <!-- {{ region.poolId }} -->
+          <!-- {{ region.id }} -->
+          <!-- {{ region.viewRatio }}
+          {{ region.distFromCenter }} -->
+          <!-- {{ timestamp }} -->
+          <span v-if="region.data" class="data">
+            <!-- {{ region.data.filename }} -->
+          </span>
+        </div>
+      </div>
     </div>
     
-    {{ regionPoolInUse }} / {{ regions.length }} / {{ regionPool.length }}
-    <!-- <div class="added-regions" :key="addedRegionsTime">
-      <div
-        v-for="region in addedRegions"
-        :key="region.id"
-        class="region"
-        :id="'region-' + region.id"
-        @click="onRegionClick(region)">
-        {{ region.id }}
-        {{ timestamp }}
-      </div>
-    </div> -->
-    <div class="region-pool" :key="regionPoolUpdateTime">
-      <div
-        v-for="region in regionPool"
-        :key="region.poolId"
-        :id="'region-' + region.poolId"
-        class="region"
-        @click="onRegionClick(region)">
-        <!-- {{ region.poolId }} -->
-        <!-- {{ region.id }} -->
-        <!-- {{ region.viewRatio }}
-        {{ region.distFromCenter }} -->
-        <!-- {{ timestamp }} -->
-        <span v-if="region.data" class="data">
-          <!-- {{ region.data.filename }} -->
-        </span>
-      </div>
+    <div
+      class="virtual-canvas"
+      :style="{ height: canvasSize.height + 'px' }">
     </div>
+
   </div>
   <!-- <div id="image-ruler"> </div> -->
-  <script src="/vendor/openseadragon/openseadragon.min.js"></script>
+  <script src="/vendor/openseadragon/openseadragon.js"></script>
   <script src="/vendor/openseadragon/openseadragon-smartScrollZoom.js"></script>
   <script src="/vendor/vue.js"></script>
   <script src="/vendor/vuetify/vuetify-v2.2.19.js"></script>
@@ -211,6 +230,9 @@
     // var IMAGE_RULER_DEFAULT_POSITION =      new OpenSeadragon.Point(0.5, 0);
     // var overlay = viewer.addOverlay(IMAGE_RULER_HIGHLIGHT, IMAGE_RULER_DEFAULT_POSITION, OpenSeadragon.Placement.CENTER)
     
+
+    // window.addEventListener('scroll', event => console.log(event));
+
     const overlays = [];
     const overlayById = {};
     const regionsById = {};
@@ -222,10 +244,15 @@
         hello: "world",
         timestamp: 0,
         scene: {
-          size: {
-            width: 0,
-            height: 0,
+          bounds: {
+            w: 0,
+            h: 0,
           },
+        },
+        view: {
+          zoom: 0,
+          width: 0,
+          height: 0,
         },
         addedRegionsTime: 0,
         addedRegions: [],
@@ -249,7 +276,18 @@
           thumbnails: false,
         },
       },
+      created() {
+        window.addEventListener('scroll', this.onScroll);
+      },
       async mounted() {
+        
+        this.tempRect = new OpenSeadragon.Rect();
+        this.tempPoint = new OpenSeadragon.Point();
+        this.scrollDebounce = false;
+        this.scrollDebounceDirty = false;
+        this.scrollDebounceTimer = null;
+        this.lastScrollTime = 0;
+        this.lastPanTime = 0;
 
         setInterval(() => this.timestamp = Date.now(), 1000)
         
@@ -257,6 +295,10 @@
         this.initSeadragon();
         this.initRegionPool();
         this.updateRegions();
+        setTimeout(this.onScroll, 0);
+      },
+      destroyed() {
+        window.removeEventListener('scroll', this.onScroll);
       },
       watch: {
         viewportBounds() {
@@ -270,7 +312,116 @@
           deep: true,
         }
       },
+      computed: {
+        canvasSize() {
+          const aspectRatio = this.scene.bounds.w / this.scene.bounds.h;
+          return {
+            width: this.view.width,
+            height: this.view.width / aspectRatio,
+          }
+        },
+      },
       methods: {
+        onScroll() {
+
+          const now = Date.now();
+          const elapsedSincePan = now - this.lastPanTime;
+          if (elapsedSincePan < 50) return;
+
+          // console.log("scroll")
+
+          // if (this.ignoreScroll) return;
+          if (this.scrollDebounce) {
+            if (this.scrollDebounceTimer) {
+              this.scrollDebounceDirty = true;
+              return;
+            }
+            this.onScrollNoDebounce();
+            this.scrollDebounceTimer = setTimeout(this.onScrollTimeout, 100);
+          } else {
+            this.onScrollNoDebounce();
+          }
+
+          
+          // } else {
+          //   viewport.panTo(point, true);
+          // }
+          // viewport.fitHorizontally(true);
+          // console.log(scrollRatio, point)
+        },
+        onScrollTimeout() {
+          this.scrollDebounceTimer = null;
+          if (this.scrollDebounceDirty) {
+            this.scrollDebounceDirty = false;
+            this.onScrollNoDebounce();
+          }
+        },
+        onScrollNoDebounce() {
+          const viewport = viewer.viewport;
+          const canvasAspectRatio = this.canvasSize.width / this.canvasSize.height;
+          const viewerAspectRatio = this.view.width / this.view.height;
+          const viewportViewWidth = 1;
+          const viewportViewHeight = 1 / viewerAspectRatio;
+          const viewportCanvasHeight = 1 / canvasAspectRatio;
+          const viewportScrollHeight = viewportCanvasHeight - viewportViewHeight;
+
+          const scrollRatio = window.scrollY / window.scrollMaxY;
+          const viewportOffset = scrollRatio * viewportScrollHeight;
+          // const point = this.tempPoint;
+          // point.x = viewportViewWidth * 0.5;
+          // point.y = viewportViewHeight * 0.5 + viewportOffset;
+          const rect = this.tempRect;
+          rect.x = 0;
+          rect.y = viewportOffset;
+          rect.width = viewportViewWidth;
+          rect.height = viewportViewHeight;
+          let immediate = !this.scrollDebounce;
+          if (this.view.zoom > 1 && !this.scrollDebounce) {
+            immediate = false;
+            this.scrollDebounce = true;
+            setTimeout(() => this.scrollDebounce = false, 1000);
+          }
+          this.lastScrollTime = Date.now();
+          viewport.fitBounds(rect, immediate);
+        },
+        onViewerScroll(originalHandler, event) {
+          // console.log(originalHandler, event);
+          const originalEvent = event.originalEvent;
+          if (originalEvent.ctrlKey) {
+            originalEvent.preventDefault();
+            originalHandler(event);
+          }
+        },
+        onViewerKeyDown(originalHandler, event) {
+          switch (event.originalEvent.key) {
+            case "ArrowLeft": this.navigate(-1); return;
+            case "ArrowRight": this.navigate(1); return;
+            case "Escape": this.navigateExit(); return;
+          }
+          // Propagate event
+          return true;
+        },
+        onViewerPan(event) {
+          const now = Date.now();
+          const elapsedSinceScroll = now - this.lastScrollTime;
+          if (elapsedSinceScroll < 50) return;
+
+          // console.log("pan")
+
+          const viewport = viewer.viewport;
+          const canvasAspectRatio = this.canvasSize.width / this.canvasSize.height;
+          const viewerAspectRatio = this.view.width / this.view.height;
+          const viewportViewWidth = 1;
+          const viewportViewHeight = 1 / viewerAspectRatio;
+          const viewportCanvasHeight = 1 / canvasAspectRatio;
+          const viewportScrollHeight = viewportCanvasHeight - viewportViewHeight;
+          
+          const viewportOffset = event.center.y - viewportViewHeight * 0.5;
+          const scrollRatio = viewportOffset / viewportScrollHeight;
+          const scrollY = scrollRatio * window.scrollMaxY;
+          this.lastPanTime = Date.now();
+          window.scrollTo(window.scrollX, scrollY);
+        },
         resetTiles() {
           var oldImage = viewer.world.getItemAt(0);
           var oldBounds = oldImage.getBounds();
@@ -326,24 +477,106 @@
           viewer = OpenSeadragon({
             id: "viewer",
             prefixUrl: "/vendor/openseadragon/images/",
+            tileSources: this.getTileSources(),
             navigatorSizeRatio: 0.01,
-            tileSources: this.getTileSources()
+            // panHorizontal: false,
+            showNavigationControl: false,
+            defaultZoomLevel: 1,
+            visibilityRatio: 	1,
+            constrainDuringPan: true,
+            minZoomLevel: 1,
+            viewportMargins: {
+              left: 0,
+              right: 0,
+            },
+            // springStiffness: 3,
+            gestureSettingsMouse: {
+              // scrollToZoom: false,
+              // flickEnabled: true,
+              // flickMomentum: 0.25,
+              // flickEnabled: false,
+              clickToZoom: false,
+              // dblClickToZoom: false
+            },
+            animationTime: 0.5,
+            // springStiffness: 100,
+            zoomPerSecond: 1.0,
+            zoomPerScroll: 1.2
+            // zoomPerScroll: 2,
+            // zoomPerSecond: 0.2,
+            // mouseNavEnabled: false,
           });
-          viewer.smartScrollZoom({
-            enabled: true,
-            minScrolls: 2,
-            zoomIncrement: 0.2,
-            timeThreshold: 500,
-          });
+
+          console.log(viewer)
+
+          // viewer.smartScrollZoom({
+          //   enabled: true,
+          //   minScrolls: 2,
+          //   zoomIncrement: 0.2,
+          //   timeThreshold: 500,
+          // });
 
           viewer.addHandler("canvas-click", event => {
             // const viewport = event.eventSource.viewport;
-            event.preventDefaultAction = true;
+            // event.preventDefaultAction = true;
+            // console.log(event)
             if (!event.quick) return;
             this.onViewportClick(viewer.viewport.viewerElementToViewportCoordinates(event.position));
           })
 
-          viewer.innerTracker.keyDownHandler = this.onKeyDown;
+          // viewer.addHandler("canvas-scroll", event => {
+          //   // console.log(event);
+          //   event.preventDefaultAction = true;
+          //   event.preventDefault = true;
+          // })
+
+          viewer.addHandler("resize", event => {
+            this.view.width = event.newContainerSize.x;
+            this.view.height = event.newContainerSize.y;
+          })
+          const viewerElement = document.getElementById("viewer");
+          this.view.width = viewerElement.clientWidth;
+          this.view.height = viewerElement.clientHeight;
+
+          viewer.addHandler("open", () => {
+            this.onScroll();
+          });
+
+          viewer.addHandler("zoom", event => {
+            this.view.zoom = event.zoom;
+          });
+
+          viewer.addHandler("pan", this.onViewerPan.bind(this));
+
+          viewer.innerTracker.keyDownHandler = this.onViewerKeyDown.bind(this, viewer.innerTracker.scrollHandler);
+          viewer.innerTracker.scrollHandler = this.onViewerScroll.bind(this, viewer.innerTracker.scrollHandler);
+          // viewer.innerTracker.nonPrimaryPressHandler = null;
+          // viewer.innerTracker.nonPrimaryReleaseHandler = null;
+          viewer.innerTracker.nonPrimaryPressHandler = event => {
+            // Middle mouse propagation hack
+            if (event.button == 1) {
+              
+              // This prevents later preventDefault() by momentarily disabling handlers
+              const tracker = viewer.innerTracker;
+              const clickHandler = tracker.clickHandler; tracker.clickHandler = null;
+              const dblClickHandler = tracker.dblClickHandler; tracker.dblClickHandler = null;
+              const pressHandler = tracker.pressHandler; tracker.pressHandler = null;
+              const dragHandler = tracker.dragHandler; tracker.dragHandler = null;
+              const dragEndHandler = tracker.dragEndHandler; tracker.dragEndHandler = null;
+              const pinchHandler = tracker.pinchHandler; tracker.pinchHandler = null;
+              setTimeout(() => {
+                tracker.clickHandler = clickHandler;
+                tracker.dblClickHandler = dblClickHandler;
+                tracker.pressHandler = pressHandler;
+                tracker.dragHandler = dragHandler;
+                tracker.dragEndHandler = dragEndHandler;
+                tracker.pinchHandler = pinchHandler;
+              }, 0);
+              
+              // This prevents immediate preventDefault() in OpenSeadragon
+              return true;
+            }
+          }
         },
         async initRegionPool() {
           this.regionPoolInUse = this.regionPoolCount;
@@ -408,14 +641,6 @@
         onNavigationMouseDown(event) {
           // Prevent focusing navigation elements
           event.preventDefault();
-        },
-
-        onKeyDown(event) {
-          switch (event.originalEvent.key) {
-            case "ArrowLeft": this.navigate(-1); break;
-            case "ArrowRight": this.navigate(1); break;
-            case "Escape": this.navigateExit(); break;
-          }
         },
 
         fitRect(rect, options) {

@@ -66,11 +66,46 @@ type SectionPhoto struct {
 	Size  Size
 }
 
+func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64 {
+	count := len(row)
+	if count == 0 {
+		return 1.
+	}
+	firstPhoto := row[0]
+	firstRect := firstPhoto.Photo.Original.Sprite.Rect
+	lastPhoto := row[count-1]
+	lastRect := lastPhoto.Photo.Original.Sprite.Rect
+	totalSpacing := float64(count-1) * imageSpacing
+
+	rowWidth := lastRect.X + lastRect.W
+	scale := (bounds.W - totalSpacing) / (rowWidth - totalSpacing)
+	x := firstRect.X
+	for i := range row {
+		photo := row[i]
+		rect := photo.Photo.Original.Sprite.Rect
+		photo.Photo.Original.Sprite.Rect = Rect{
+			X: x,
+			Y: rect.Y,
+			W: rect.W * scale,
+			H: rect.H * scale,
+		}
+		x += photo.Photo.Original.Sprite.Rect.W + imageSpacing
+	}
+
+	// fmt.Printf("fit row width %5.2f / %5.2f -> %5.2f  scale %.2f\n", rowWidth, bounds.W, lastPhoto.Photo.Original.Sprite.Rect.X+lastPhoto.Photo.Original.Sprite.Rect.W, scale)
+
+	x -= imageSpacing
+	return scale
+}
+
 func layoutSectionChannel(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, scene *Scene, source *storage.ImageSource) {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()
 	i := 0
+
+	row := make([]SectionPhoto, 0)
+
 	for photo := range photos {
 
 		// log.Println("layout", photo.Index)
@@ -78,9 +113,11 @@ func layoutSectionChannel(photos chan SectionPhoto, bounds Rect, boundsOut chan 
 		aspectRatio := float64(photo.Size.X) / float64(photo.Size.Y)
 		imageWidth := float64(imageHeight) * aspectRatio
 
-		if x+imageWidth+imageSpacing > bounds.W {
+		if x+imageWidth > bounds.W {
+			scale := layoutFitRow(row, bounds, imageSpacing)
+			row = nil
 			x = 0
-			y += imageHeight + lineSpacing
+			y += imageHeight*scale + lineSpacing
 		}
 
 		// fmt.Printf("%4.0f %4.0f %4.0f %4.0f %4.0f %4.0f %4.0f\n", bounds.X, bounds.Y, x, y, imageHeight, photo.Size.Width, photo.Size.Height)
@@ -92,6 +129,8 @@ func layoutSectionChannel(photos chan SectionPhoto, bounds Rect, boundsOut chan 
 			float64(photo.Size.X),
 			float64(photo.Size.Y),
 		)
+
+		row = append(row, photo)
 
 		// photoRect := photo.Photo.Original.Sprite.GetBounds()
 		// scene.Regions = append(scene.Regions, Region{
@@ -502,7 +541,7 @@ type Event struct {
 	Section   Section
 }
 
-func LayoutTimelineEvent(rect Rect, event *Event, headerFont *canvas.FontFace, scene *Scene, source *storage.ImageSource) Rect {
+func LayoutTimelineEvent(rect Rect, event *Event, headerFont *canvas.FontFace, fontFamily *canvas.FontFamily, scene *Scene, source *storage.ImageSource) Rect {
 
 	imageHeight := 160.
 	imageSpacing := 3.
@@ -510,22 +549,28 @@ func LayoutTimelineEvent(rect Rect, event *Event, headerFont *canvas.FontFace, s
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
-	textHeight := 40.
+	textHeight := 30.
 	textBounds := Rect{
 		X: rect.X,
 		Y: rect.Y,
 		W: rect.W,
 		H: textHeight,
 	}
+
 	timeFormat := "Mon, Jan 2, 15:04"
+	if event.StartTime.Year() != time.Now().Year() {
+		timeFormat = "Mon, Jan 2, 2006, 15:04"
+	}
+	font := fontFamily.Face(70.0, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+
 	scene.Texts = append(scene.Texts,
 		NewTextFromRect(
 			textBounds,
-			headerFont,
+			&font,
 			event.StartTime.Format(timeFormat),
 		),
 	)
-	rect.Y += textHeight + 20
+	rect.Y += textHeight + 30
 
 	photos := make(chan SectionPhoto, 1)
 	boundsOut := make(chan Rect)
@@ -659,6 +704,7 @@ func LayoutTimelineEvents(config *Config, scene *Scene, source *storage.ImageSou
 	sceneMargin := 10.
 
 	scene.Bounds.W = 2000
+	// scene.Bounds.W = 10000
 
 	event := Event{}
 	var lastPhotoTime time.Time
@@ -675,7 +721,7 @@ func LayoutTimelineEvents(config *Config, scene *Scene, source *storage.ImageSou
 	if err != nil {
 		panic(err)
 	}
-	headerFont := fontFamily.Face(140.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
+	headerFont := fontFamily.Face(80.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
 
 	log.Println("layout placing")
 	lastLogTime := time.Now()
@@ -688,7 +734,7 @@ func LayoutTimelineEvents(config *Config, scene *Scene, source *storage.ImageSou
 		elapsed := lastPhotoTime.Sub(photoTime)
 		if elapsed > 10*time.Minute {
 
-			rect = LayoutTimelineEvent(rect, &event, &headerFont, scene, source)
+			rect = LayoutTimelineEvent(rect, &event, &headerFont, fontFamily, scene, source)
 
 			event = Event{}
 			event.StartTime = photoTime
@@ -704,7 +750,7 @@ func LayoutTimelineEvents(config *Config, scene *Scene, source *storage.ImageSou
 	}
 
 	if len(event.Section.photos) > 0 {
-		rect = LayoutTimelineEvent(rect, &event, &headerFont, scene, source)
+		rect = LayoutTimelineEvent(rect, &event, &headerFont, fontFamily, scene, source)
 	}
 
 	scene.Bounds.H = rect.Y + sceneMargin

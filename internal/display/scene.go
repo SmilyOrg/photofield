@@ -312,9 +312,6 @@ func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, sourc
 
 func (bitmap *Bitmap) GetSize(source *storage.ImageSource) Size {
 	info := source.GetImageInfo(bitmap.Path)
-	if info.Width == 0 {
-		fmt.Println(bitmap.Path, info.Width, info.Height)
-	}
 	return Size{X: info.Width, Y: info.Height}
 }
 

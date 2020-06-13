@@ -368,15 +368,15 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 		if imageInfoDb.Path == "" {
 			valid = false
 		}
-		// if imageInfoDb.ImageInfo.Width == 0 || imageInfoDb.ImageInfo.Height == 0 {
-		// 	valid = false
-		// }
+		if imageInfoDb.ImageInfo.Width == 0 || imageInfoDb.ImageInfo.Height == 0 {
+			valid = false
+		}
 		// if imageInfoDb.ImageInfo.DateTime.IsZero() {
 		// 	valid = false
 		// }
-		// if imageInfoDb.ImageInfo.Color == 0 {
-		// 	valid = false
-		// }
+		if imageInfoDb.ImageInfo.Color == 0 {
+			valid = false
+		}
 		if valid {
 			return &imageInfoDb.ImageInfo
 		}
