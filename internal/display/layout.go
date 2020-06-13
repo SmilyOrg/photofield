@@ -2,7 +2,6 @@ package photofield
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"log"
 	"math"
@@ -64,7 +63,7 @@ type Section struct {
 type SectionPhoto struct {
 	Index int
 	Photo *Photo
-	Size  image.Point
+	Size  Size
 }
 
 func layoutSectionChannel(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, scene *Scene, source *storage.ImageSource) {
@@ -790,7 +789,7 @@ func LayoutCalendar(config *Config, scene *Scene, source *storage.ImageSource) {
 		photo := &scene.Photos[i]
 		info := source.GetImageInfo(photo.Original.Path)
 		dateTime := info.DateTime
-		size := image.Point{X: info.Width, Y: info.Height}
+		size := Size{X: info.Width, Y: info.Height}
 
 		_, weekNum := info.DateTime.ISOWeek()
 

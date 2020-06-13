@@ -308,24 +308,9 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 			return value.(imageRef).image, nil
 		} else {
 			loading := &loadingImage{}
-			// loadingImage.cond = sync.NewCond(&loadingImage.mutex)
 			loading.mutex.Lock()
 			stored, loaded := source.imagesLoading.LoadOrStore(path, loading)
 			if loaded {
-				// loadingImage.mutex.Unlock()
-				// loadingImage = stored.(*LoadingImage)
-				// loadingImage.mutex.Lock()
-				// if loadingImage.cond != nil {
-				// 	log.Printf("%v not found, try %v, waiting\n", path, try)
-				// 	loadingImage.cond.Wait()
-				// 	log.Printf("%v not found, try %v, waiting done\n", path, try)
-				// 	imageRef := loadingImage.imageRef
-				// 	loadingImage.mutex.Unlock()
-				// 	return imageRef.image, nil
-				// } else {
-				// 	log.Printf("%v not found, try %v, done (no cond)\n", path, try)
-				// 	return loadingImage.imageRef.image, nil
-				// }
 				loading.mutex.Unlock()
 				loading = stored.(*loadingImage)
 				// log.Printf("%v not found, try %v, waiting load, mutex rlocked\n", path, try)
@@ -353,13 +338,6 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 				}
 				source.images.Set(path, imageRef, 0)
 				loading.imageRef = &imageRef
-				// log.Printf("%v not found, try %v, loaded, broadcast\n", path, try)
-				// cond := loadingImage.cond
-				// loadingImage.cond = nil
-				// cond.Broadcast()
-
-				// source.imagesLoading.Delete(path)
-				// log.Printf("%v not found, try %v, loaded, mutex unlocked\n", path, try)
 				loading.mutex.Unlock()
 
 				return image, nil
@@ -367,30 +345,6 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 		}
 	}
 	return nil, errors.New(fmt.Sprintf("Unable to get image after %v tries", tries))
-
-	// imageRef := &ImageRef{}
-	// imageRef.mutex.Lock()
-	// stored, loaded := source.imageByPath.LoadOrStore(path, imageRef)
-
-	// var loadedImage *image.Image
-
-	// if loaded {
-	// 	imageRef.mutex.Unlock()
-	// 	imageRef = stored.(*ImageRef)
-	// 	imageRef.mutex.RLock()
-	// 	loadedImage = imageRef.image
-	// 	imageRef.mutex.RUnlock()
-	// } else {
-	// 	image, err := source.LoadImage(path)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	imageRef.image = image
-	// 	loadedImage = imageRef.image
-	// 	imageRef.mutex.Unlock()
-	// }
-
-	// return loadedImage
 }
 
 func writePendingInfos(pendingInfos chan *ImageInfoDb, db *gorm.DB) {
@@ -441,91 +395,3 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 		return info
 	}
 }
-
-// func (source *ImageSource) GetImageColor(path string, getPathForColor func() string) color.RGBA {
-// 	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
-// 	// 	source.infos.Metrics.Ratio()*100,
-// 	// 	source.infos.Metrics.CostAdded()/1024/1024,
-// 	// 	source.infos.Metrics.CostEvicted()/1024/1024,
-// 	// 	source.infos.Metrics.Hits(),
-// 	// 	source.infos.Metrics.Misses())
-
-// 	value, found := source.infos.Get(path)
-// 	info := ImageInfo{}
-// 	c := color.RGBA{}
-// 	cache := false
-// 	save := false
-// 	if found {
-// 		info := value.(*ImageInfo)
-// 		c = info.GetColor()
-// 	} else {
-// 		infoDb := ImageInfoDb{}
-// 		queryStart := time.Now()
-// 		source.db.First(&infoDb, "path = ?", path)
-// 		queryElapsed := time.Since(queryStart)
-// 		if queryElapsed > 100*time.Millisecond {
-// 			// log.Printf("GetImageColor query took %s for %s\n", queryElapsed, path)
-// 		}
-// 		c = infoDb.ImageInfo.GetColor()
-// 		cache = true
-// 	}
-// 	if c.A == 0 {
-// 		// println("1")
-// 		colorPath := getPathForColor()
-// 		if colorPath == "" {
-// 			c = color.RGBA{
-// 				A: 0xFF,
-// 				R: 0xFF,
-// 				G: 0x00,
-// 				B: 0x00,
-// 			}
-// 		} else {
-// 			colorImage, err := source.LoadImage(colorPath)
-// 			if err != nil {
-// 				// log.Println("Unable to load image color", err)
-// 				c = color.RGBA{
-// 					A: 0xFF,
-// 					R: 0xFF,
-// 					G: 0x00,
-// 					B: 0x00,
-// 				}
-// 			} else {
-// 				centroids, err := prominentcolor.Kmeans(*colorImage)
-// 				if err == nil {
-// 					// panic(err)
-// 					promColor := centroids[0]
-// 					c = color.RGBA{
-// 						A: 0xFF,
-// 						R: uint8(promColor.Color.R),
-// 						G: uint8(promColor.Color.G),
-// 						B: uint8(promColor.Color.B),
-// 					}
-// 					save = true
-// 				}
-// 			}
-// 		}
-// 		cache = true
-// 	}
-// 	if c.A == 0 {
-// 		return color.RGBA{
-// 			A: 0xFF,
-// 			R: 0x10,
-// 			G: 0x10,
-// 			B: 0x10,
-// 		}
-// 	}
-// 	if cache || save {
-// 		info.SetColorRGBA(c)
-// 	}
-// 	if cache {
-// 		source.infos.Set(path, &info, 1)
-// 	}
-// 	if save {
-// 		infoDb := ImageInfoDb{
-// 			Path:      path,
-// 			ImageInfo: info,
-// 		}
-// 		source.dbPendingInfos <- &infoDb
-// 	}
-// 	return c
-// }

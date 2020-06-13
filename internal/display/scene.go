@@ -47,7 +47,6 @@ type Sprite struct {
 type Bitmap struct {
 	Sprite Sprite
 	Path   string
-	// image  *image.Image
 }
 type Solid struct {
 	Sprite Sprite
@@ -99,8 +98,6 @@ type Scales struct {
 
 type Photo struct {
 	Original Bitmap
-	// bitmaps  []Bitmap
-	// solid    Sprite
 }
 
 type PhotoRef struct {
@@ -313,12 +310,12 @@ func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, sourc
 	}
 }
 
-func (bitmap *Bitmap) GetSize(source *storage.ImageSource) image.Point {
+func (bitmap *Bitmap) GetSize(source *storage.ImageSource) Size {
 	info := source.GetImageInfo(bitmap.Path)
 	if info.Width == 0 {
 		fmt.Println(bitmap.Path, info.Width, info.Height)
 	}
-	return image.Point{X: info.Width, Y: info.Height}
+	return Size{X: info.Width, Y: info.Height}
 }
 
 func (sprite *Sprite) PlaceFitHeight(
@@ -406,7 +403,6 @@ func (bitmap *Bitmap) DrawOverdraw(c *canvas.Context, source *storage.ImageSourc
 
 	size := bitmap.GetSize(source)
 	pixelZoom := bitmap.Sprite.Rect.GetPixelZoom(c, size)
-	// fmt.Printf("%4d %4d %2.4f\n", size.X, size.Y, pixelZoom)
 	barWidth := -pixelZoom * 0.1
 	// barHeight := 0.04
 	alpha := pixelZoom * 0.1 * 0xFF
@@ -458,7 +454,7 @@ func (photo *Photo) SetImagePath(path string) {
 	photo.Original.Path = path
 }
 
-func (rect *Rect) GetPixelArea(c *canvas.Context, size image.Point) float64 {
+func (rect *Rect) GetPixelArea(c *canvas.Context, size Size) float64 {
 	pixel := canvas.Rect{X: 0, Y: 0, W: 1, H: 1}
 	canvasToTile := c.View().Mul(rect.GetMatrixFitWidth(float64(size.X)))
 	tileRect := pixel.Transform(canvasToTile)
@@ -469,7 +465,7 @@ func (rect *Rect) GetPixelArea(c *canvas.Context, size image.Point) float64 {
 	return area
 }
 
-func (rect *Rect) GetPixelZoom(c *canvas.Context, size image.Point) float64 {
+func (rect *Rect) GetPixelZoom(c *canvas.Context, size Size) float64 {
 	pixelArea := rect.GetPixelArea(c, size)
 	if pixelArea >= 1 {
 		return pixelArea
@@ -478,7 +474,7 @@ func (rect *Rect) GetPixelZoom(c *canvas.Context, size image.Point) float64 {
 	}
 }
 
-func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size image.Point) float64 {
+func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size Size) float64 {
 	return math.Abs(rect.GetPixelZoom(c, size))
 }
 
@@ -501,10 +497,6 @@ func (photo *Photo) getBestBitmap(config *Config, scene *Scene, c *canvas.Contex
 		// fmt.Printf("orig w %4.0f h %4.0f   thumb w %4.0f h %4.0f   zoom dist best %8.2f cur %8.2f area %8.6f\n", originalSize.Width, originalSize.Height, thumbSize.Width, thumbSize.Height, bestZoomDist, zoomDist, photo.Original.Sprite.Rect.GetPixelArea(c, thumbSize))
 	}
 
-	// photo.Original.Sprite.DrawText(c, scales, &scene.Fonts.Debug, fmt.Sprintf(
-	// 	"w %d h %d %.2f\n", originalSize.X, originalSize.Y, bestZoomDist,
-	// ))
-
 	if best == nil {
 		return &photo.Original
 	}
@@ -521,7 +513,7 @@ func (photo *Photo) Draw(config *Config, scene *Scene, c *canvas.Context, scales
 
 	if photo.Original.Sprite.IsVisible(c, scales) {
 
-		pixelArea := photo.Original.Sprite.Rect.GetPixelArea(c, image.Point{X: 1, Y: 1})
+		pixelArea := photo.Original.Sprite.Rect.GetPixelArea(c, Size{X: 1, Y: 1})
 		if pixelArea < config.MaxSolidPixelArea {
 			style := c.Style
 
@@ -552,9 +544,7 @@ func (photo *Photo) Draw(config *Config, scene *Scene, c *canvas.Context, scales
 				}
 
 				bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
-				// bitmap.Sprite.DrawText(c, 0, 0, 100, filepath.Base(bitmap.path))
 			}
-			// bitmap.sprite.DrawText(c, 0, 0, 100, fmt.Sprintf("%d %.2f", bestIndex, bestZoomDist))
 		}
 	}
 
@@ -571,21 +561,10 @@ func (solid *Solid) Draw(c *canvas.Context, scales Scales) {
 
 func (scene *Scene) getRegionScale() float64 {
 	return scene.Bounds.W
-	// tileRect := Rect{X: 0, Y: 0, W: float64(config.TileSize), H: float64(config.TileSize)}
-	// fitRect := sceneRect.FitInside(tileRect)
-	// return scale
 }
 
 func (scene *Scene) GetRegions(config *Config, bounds Rect) []Region {
-	// sceneRect := Rect{X: 0, Y: 0, W: scene.Size.Width, H: scene.Size.Height}
-	// tileRect := Rect{X: 0, Y: 0, W: float64(config.TileSize), H: float64(config.TileSize)}
-	// fitRect := sceneRect.FitInside(tileRect)
-	// scale := Point{X: tileRect.W / fitRect.W * sceneRect.W, Y: tileRect.H / fitRect.H * sceneRect.H}
-	// scale.Y = scale.X
-
 	scale := scene.getRegionScale()
-
-	// invScale := Point{X: 1 / scale.X, Y: 1 / scale.Y}
 	rect := bounds.Scale(scale)
 	regions := scene.RegionSource.GetRegionsFromBounds(
 		rect,

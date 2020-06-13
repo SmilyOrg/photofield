@@ -219,66 +219,48 @@ func regionHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	// go func() {
-	// 	time.Sleep(20 * time.Second)
-	// 	println("writing profile")
-	// 	memprof, err := os.Create("mem.pprof")
-	// 	if err != nil {
-	// 		logrus.Fatal(err)
-	// 	}
-	// 	pprof.WriteHeapProfile(memprof)
-	// 	memprof.Close()
-	// }()
-
 	imageSource = NewImageSource()
 	imageSource.Thumbnails = []Thumbnail{
 		NewThumbnail(
 			"S",
 			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg",
 			FitInside,
-			// Size{Width: 120, Height: 80},
-			image.Point{X: 120, Y: 120},
+			Size{X: 120, Y: 120},
 		),
 		NewThumbnail(
 			"SM",
 			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg",
 			FitOutside,
-			// image.Point{X: 480, Y: 320},
-			image.Point{X: 240, Y: 240},
+			Size{X: 240, Y: 240},
 		),
 		// NewThumbnail(
 		// 	"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_PREVIEW.jpg",
-		// 	// image.Point{X: 480, Y: 320},
-		// 	// image.Point{X: 480, Y: 480},
-		// 	image.Point{X: 160, Y: 160},
+		// 	// Size{X: 480, Y: 320},
+		// 	// Size{X: 480, Y: 480},
+		// 	Size{X: 160, Y: 160},
 		// ),
 		NewThumbnail(
 			"M",
 			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg",
 			FitOutside,
-			// image.Point{X: 480, Y: 320},
-			// image.Point{X: 480, Y: 480},
-			image.Point{X: 320, Y: 320},
+			Size{X: 320, Y: 320},
 		),
 		NewThumbnail(
 			"B",
 			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg",
 			FitInside,
-			// image.Point{X: 640, Y: 427},
-			image.Point{X: 640, Y: 640},
+			Size{X: 640, Y: 640},
 		),
 		// NewThumbnail(
 		// 	"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_L.jpg",
-		// 	// image.Point{X: 640, Y: 427},
-		// 	image.Point{X: 800, Y: 800},
+		// 	// Size{X: 640, Y: 427},
+		// 	Size{X: 800, Y: 800},
 		// ),
 		NewThumbnail(
 			"XL",
 			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg",
 			FitOutside,
-			// image.Point{X: 1920, Y: 1280},
-			// image.Point{X: 1920, Y: 1920},
-			image.Point{X: 1280, Y: 1280},
+			Size{X: 1280, Y: 1280},
 		),
 	}
 
@@ -326,40 +308,6 @@ func main() {
 		Hour:   fontFamily.Face(24.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
 		Debug:  fontFamily.Face(64.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),
 	}
-
-	// log.Println("walking")
-	// lastLogTime := time.Now()
-	// for _, photoDir := range photoDirs {
-	// 	filepath.Walk(photoDir,
-	// 		func(path string, info os.FileInfo, err error) error {
-
-	// 			now := time.Now()
-	// 			if now.Sub(lastLogTime) > 1*time.Second {
-	// 				lastLogTime = now
-	// 				log.Printf("walking %d\n", len(scene.Photos))
-	// 			}
-
-	// 			if err != nil {
-	// 				return err
-	// 			}
-	// 			if strings.Contains(path, "@eaDir") {
-	// 				return filepath.SkipDir
-	// 			}
-	// 			if !strings.HasSuffix(strings.ToLower(path), ".jpg") {
-	// 				return nil
-	// 			}
-
-	// 			photo := Photo{}
-	// 			photo.SetImagePath(path)
-	// 			scene.Photos = append(scene.Photos, photo)
-
-	// 			if len(scene.Photos) >= maxPhotos {
-	// 				return errors.New("Skipping the rest")
-	// 			}
-	// 			return nil
-	// 		},
-	// 	)
-	// }
 
 	log.Println("listing")
 	preListing := time.Now()
@@ -413,7 +361,6 @@ func main() {
 	log.Println("serving")
 
 	fs := http.FileServer(http.Dir("./static"))
-	// http.Handle("/", fs)
 
 	r := mux.NewRouter()
 	r.HandleFunc("/scenes", scenesHandler)
@@ -421,7 +368,6 @@ func main() {
 	r.HandleFunc("/regions", regionsHandler)
 	r.HandleFunc("/regions/{id}", regionHandler)
 	r.PathPrefix("/").Handler(fs)
-	// r.Handle("/", fs)
 	http.Handle("/", r)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))

@@ -3,6 +3,7 @@ profiles/
 main
 photofield
 photofield.exe
+photofield.exe~
 photofield.cache.db
 out.png
 tmp

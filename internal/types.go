@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+type Size image.Point
+
 type ImageInfo struct {
 	Width, Height int
 	DateTime      time.Time
@@ -50,10 +52,10 @@ type Thumbnail struct {
 	Name         string
 	PathTemplate *template.Template
 	SizeType     ThumbnailSizeType
-	Size         image.Point
+	Size         Size
 }
 
-func NewThumbnail(name string, pathTemplate string, sizeType ThumbnailSizeType, size image.Point) Thumbnail {
+func NewThumbnail(name string, pathTemplate string, sizeType ThumbnailSizeType, size Size) Thumbnail {
 	template, err := template.New("").Parse(pathTemplate)
 	if err != nil {
 		panic(err)
@@ -84,7 +86,7 @@ func (thumbnail *Thumbnail) GetPath(originalPath string) string {
 	return rendered.String()
 }
 
-func (thumbnail *Thumbnail) Fit(originalSize image.Point) image.Point {
+func (thumbnail *Thumbnail) Fit(originalSize Size) Size {
 	thumbWidth, thumbHeight := float64(thumbnail.Size.X), float64(thumbnail.Size.Y)
 	thumbRatio := thumbWidth / thumbHeight
 	originalWidth, originalHeight := float64(originalSize.X), float64(originalSize.Y)
@@ -103,7 +105,7 @@ func (thumbnail *Thumbnail) Fit(originalSize image.Point) image.Point {
 			thumbWidth = thumbHeight * originalRatio
 		}
 	}
-	return image.Point{
+	return Size{
 		X: int(math.Round(thumbWidth)),
 		Y: int(math.Round(thumbHeight)),
 	}
