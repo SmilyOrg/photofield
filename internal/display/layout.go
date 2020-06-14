@@ -648,7 +648,7 @@ func getTimelinePhotos(photos []Photo, source *storage.ImageSource) []TimelinePh
 	photoRefs := make(chan PhotoRef, 1)
 	unordered := make(chan TimelinePhoto, 1)
 
-	concurrent := 10
+	concurrent := 20
 	wg := &sync.WaitGroup{}
 	wg.Add(concurrent)
 

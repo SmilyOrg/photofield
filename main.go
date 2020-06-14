@@ -41,6 +41,10 @@ type ImageConfigRef struct {
 	config image.Config
 }
 
+type Metrics struct {
+	ImageSource ImageSourceMetrics `json:"imageSource"`
+}
+
 func drawTile(c *canvas.Context, config *Config, scene *Scene, zoom int, x int, y int) {
 
 	tileSize := float64(config.TileSize)
@@ -93,6 +97,18 @@ func getTileSize(config *Config, query *url.Values) int {
 		return tileSizeQuery
 	}
 	return config.TileSize
+}
+
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	metrics := Metrics{
+		ImageSource: imageSource.GetMetrics(),
+	}
+	err := json.NewEncoder(w).Encode(metrics)
+	if err != nil {
+		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
+		return
+	}
 }
 
 func scenesHandler(w http.ResponseWriter, r *http.Request) {
@@ -271,8 +287,14 @@ func main() {
 	// maxPhotos := 1000
 	// maxPhotos := 2500
 	// maxPhotos := 5000
+	// maxPhotos := 10000
+	// maxPhotos := 15000
 	// maxPhotos := 20000
-	maxPhotos := 50000
+	// maxPhotos := 50000
+	// maxPhotos := 60000
+	// maxPhotos := 75000
+	maxPhotos := 100000
+	// maxPhotos := 150000
 	var photoDirs = []string{
 		// "/mnt/d/photos/copy/USA 2018/Lumix/100_PANA",
 		// "/mnt/d/photos/copy/USA 2018/Lumix/101_PANA",
@@ -288,8 +310,9 @@ func main() {
 		// "P:/Moments",
 		// "V:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
 		// "V:/photo/Moments",
-		"P:/photo/Moments",
 		// "P:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
+		"P:/homes/Miha/Drive/Moments",
+		// "P:/photo/Moments",
 		// "P:/photo/Moments/2020 Tierpark",
 		// "\\\\Denkarium/photo/Moments",
 	}
@@ -363,6 +386,7 @@ func main() {
 	fs := http.FileServer(http.Dir("./static"))
 
 	r := mux.NewRouter()
+	r.HandleFunc("/metrics", metricsHandler)
 	r.HandleFunc("/scenes", scenesHandler)
 	r.HandleFunc("/tiles", tilesHandler)
 	r.HandleFunc("/regions", regionsHandler)

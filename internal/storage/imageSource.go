@@ -44,6 +44,28 @@ type ImageSource struct {
 	// imageConfigByPath sync.Map
 }
 
+type ImageSourceMetrics struct {
+	Cache ImageSourceMetricsCaches `json:"cache"`
+}
+
+type ImageSourceMetricsCaches struct {
+	Images ImageSourceMetricsCache `json:"images"`
+	Infos  ImageSourceMetricsCache `json:"infos"`
+	Exists ImageSourceMetricsCache `json:"exists"`
+}
+
+type ImageSourceMetricsCache struct {
+	HitRatio float64                     `json:"hit_ratio"`
+	Hits     uint64                      `json:"hits"`
+	Misses   uint64                      `json:"misses"`
+	Cost     ImageSourceMetricsCacheCost `json:"cost"`
+}
+
+type ImageSourceMetricsCacheCost struct {
+	Added   uint64 `json:"added"`
+	Evicted uint64 `json:"evicted"`
+}
+
 type imageRef struct {
 	path  string
 	image *image.Image
@@ -164,6 +186,28 @@ func NewImageSource() *ImageSource {
 	// db.Model(&product).Update("Price", 2000)
 
 	return &source
+}
+
+func (source *ImageSource) GetMetrics() ImageSourceMetrics {
+	return ImageSourceMetrics{
+		Cache: ImageSourceMetricsCaches{
+			Images: source.GetCacheMetrics(source.images),
+			Infos:  source.GetCacheMetrics(source.infos),
+			Exists: source.GetCacheMetrics(source.fileExists),
+		},
+	}
+}
+
+func (source *ImageSource) GetCacheMetrics(cache *ristretto.Cache) ImageSourceMetricsCache {
+	return ImageSourceMetricsCache{
+		HitRatio: cache.Metrics.Ratio(),
+		Hits:     cache.Metrics.Hits(),
+		Misses:   cache.Metrics.Misses(),
+		Cost: ImageSourceMetricsCacheCost{
+			Added:   cache.Metrics.CostAdded(),
+			Evicted: cache.Metrics.CostEvicted(),
+		},
+	}
 }
 
 func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan string, wg *sync.WaitGroup) error {
@@ -357,6 +401,13 @@ func writePendingInfos(pendingInfos chan *ImageInfoDb, db *gorm.DB) {
 }
 
 func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
+	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
+	// 	source.infos.Metrics.Ratio()*100,
+	// 	source.infos.Metrics.CostAdded()/1024/1024,
+	// 	source.infos.Metrics.CostEvicted()/1024/1024,
+	// 	source.infos.Metrics.Hits(),
+	// 	source.infos.Metrics.Misses())
+
 	value, found := source.infos.Get(path)
 	if found {
 		return value.(*ImageInfo)
@@ -377,21 +428,21 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 		if imageInfoDb.ImageInfo.Color == 0 {
 			valid = false
 		}
+		var info *ImageInfo
 		if valid {
-			return &imageInfoDb.ImageInfo
-		}
-
-		info, err := source.LoadImageInfo(path)
-		if err != nil {
-			return &ImageInfo{}
+			info = &imageInfoDb.ImageInfo
+		} else {
+			var err error
+			info, err = source.LoadImageInfo(path)
+			if err != nil {
+				return &ImageInfo{}
+			}
+			source.dbPendingInfos <- &ImageInfoDb{
+				Path:      path,
+				ImageInfo: *info,
+			}
 		}
 		source.infos.Set(path, info, 1)
-
-		source.dbPendingInfos <- &ImageInfoDb{
-			Path:      path,
-			ImageInfo: *info,
-		}
-
 		return info
 	}
 }

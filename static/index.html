@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
   <title>PhotoField</title>
   <link href="vendor/vuetify/css/fonts.css" rel="stylesheet">
   <link href="vendor/vuetify/css/materialdesignicons.min.css" rel="stylesheet">
@@ -42,8 +42,15 @@
 
     .config {
       position: absolute;
-      width: 300px;
-      left: calc(100vw - 300px);
+      width: 360px;
+      left: calc(100vw - 380px);
+      /* background: white; */
+    }
+
+    .config-toggle {
+      position: absolute;
+      top: 10px;
+      right: 5px;
     }
 
     .navigation {
@@ -113,14 +120,15 @@
   </style>
 </head>
 <body>
+
   <div id="viewer"></div>
   <div id="app">
 
-    <div class="content">
+    <v-app class="content">
 
       <div v-if="fullscreenRegion" class="navigation">
 
-        <div class="hitarea left" @click="navigate(-1)" @mousedown="onNavigationMouseDown">
+        <div class="hitarea left" @click="navigate(-1)" @wheel="onNavigationWheel" @mousedown="onNavigationMouseDown">
           <div class="circle button">
             <v-icon class="icon" dark large>mdi-chevron-left</v-icon>
           </div>
@@ -137,14 +145,28 @@
         </div>
   
       </div>
-  
+
       <div class="config">
+
+        <v-card v-if="showConfig" class="px-4 py-1">
+          <v-switch v-model="debug.overdraw" label="Debug Overdraw"></v-switch>
+          <v-switch v-model="debug.thumbnails" label="Debug Thumbnails"></v-switch>
   
-        <input type="checkbox" id="debugOverdraw" v-model="debug.overdraw">
+          <realtime-chart
+            :chart-data="metricsInitialChartConfig"
+            :values="metricsValues"
+          ></realtime-chart>
+        </v-card>
+  
+        <v-btn class="config-toggle mx-2" @click="showConfig = !showConfig" fab dark small color="primary">
+          <v-icon dark>mdi-tune</v-icon>
+        </v-btn>
+
+        <!-- <input type="checkbox" id="debugOverdraw" v-model="debug.overdraw">
         <label for="debugOverdraw">Debug Overdraw</label>
   
         <input type="checkbox" id="debugThumbnails" v-model="debug.thumbnails">
-        <label for="debugThumbnails">Debug Thumbnails</label>
+        <label for="debugThumbnails">Debug Thumbnails</label> -->
   
       </div>
       
@@ -177,7 +199,7 @@
           </span>
         </div>
       </div>
-    </div>
+    </v-app>
     
     <div
       class="virtual-canvas"
@@ -190,6 +212,11 @@
   <script src="/vendor/openseadragon/openseadragon-smartScrollZoom.js"></script>
   <script src="/vendor/vue.js"></script>
   <script src="/vendor/vuetify/vuetify-v2.2.19.js"></script>
+  <script src="/vendor/moment.min.js"></script>
+  <script src="/vendor/chartjs/Chart.js"></script>
+  <script src="/vendor/chartjs/vue-chartjs.js"></script>
+  <script src="/vendor/chartjs/chartjs-plugin-streaming.js"></script>
+  <!-- <script src="/vendor/chartjs/chartjs-plugin-datalabels.js"></script> -->
   <script type="text/javascript">
   
     // const tileSize = 256
@@ -233,6 +260,109 @@
 
     // window.addEventListener('scroll', event => console.log(event));
 
+    Vue.component("realtime-chart", {
+      props: ["chartData", "values"],
+      extends: VueChartJs.Line,
+      mixins: [VueChartJs.mixins.reactiveProp],
+      mounted() {
+
+        // console.log(this)
+        this.renderChart(this.chartData, {
+          title: {
+            display: false,
+            text: "",
+          },
+          scales: {
+            xAxes: [{
+              type: 'realtime',
+              realtime: {
+                // onRefresh: function (chart) {
+                //   chart.data.datasets.forEach(function (dataset) {
+                //     dataset.data.push({
+                //       x: Date.now(),
+                //       y: Math.random()
+                //     });
+                //   });
+                // },
+                delay: 2000,
+              }
+            }],
+            yAxes: [{
+              type: 'linear',
+              ticks: {
+                suggestedMin: 0,
+                suggestedMax: 1,
+              },
+              scaleLabel: {
+                display: true,
+                labelString: "Hit Ratio"
+              }
+            }],
+          },
+          plugins: {
+            datalabels: {
+              backgroundColor: function(context) {
+                return context.dataset.backgroundColor;
+              },
+              borderRadius: 4,
+              clip: true,
+              color: 'white',
+              font: {
+                weight: 'bold'
+              },
+              formatter: function(value) {
+                return value.y;
+              }
+            }
+          }
+        });
+        
+
+        // this.updateDatasets(this.datasets);
+
+        // this.updateValues(this.values)
+
+      },
+      watch: {
+        chartData(chartData) {
+          
+        },
+        values(values) {
+          this.updateValues(values);
+        },
+        // datasets(datasets) {
+        //   this.updateDatasets(this.datasets);
+        //   // console.log(datasets)
+        // }
+      },
+      methods: {
+        updateValues(values) {
+          const chart = this.$data._chart;
+          const datasets = chart.data.datasets;
+          values.forEach(value => {
+            const dataset = datasets.find(dataset => dataset.label == value.label);
+            if (!dataset) return;
+            dataset.data.push({
+              x: Date.now(),
+              y: value.value,
+            })
+          });
+          chart.update({
+            preservation: true,
+          });
+          
+          // this.$data._chart.data.datasets.forEach(dataset => {
+          //   dataset.data.push({
+          //     x: Date.now(),
+          //     y: values[index],
+          //   })
+          // });
+        },
+      }
+    });
+
+
+
     const overlays = [];
     const overlayById = {};
     const regionsById = {};
@@ -254,6 +384,9 @@
           width: 0,
           height: 0,
         },
+        showConfig: false,
+        metrics: null,
+        metricsInitialChartConfig: null,
         addedRegionsTime: 0,
         addedRegions: [],
         regionPool: [],
@@ -290,6 +423,8 @@
         this.lastPanTime = 0;
 
         setInterval(() => this.timestamp = Date.now(), 1000)
+        setInterval(() => this.updateMetrics(), 1000);
+        this.updateMetrics();
         
         await this.updateScene();
         this.initSeadragon();
@@ -319,6 +454,40 @@
             width: this.view.width,
             height: this.view.width / aspectRatio,
           }
+        },
+        metricsChartConfig() {
+          if (!this.metrics) return [];
+          const chartColors = [
+            'rgb(255, 99, 132)',
+            'rgb(255, 159, 64)',
+            'rgb(255, 205, 86)',
+            'rgb(75, 192, 192)',
+            'rgb(54, 162, 235)',
+            'rgb(153, 102, 255)',
+            'rgb(201, 203, 207)',
+          ];
+          const datasets = Object.entries(this.metrics.imageSource.cache)
+          .map(([ key, value ], index) => {
+            const color = chartColors[index % chartColors.length];
+            return {
+              label: key,
+              fill: false,
+              backgroundColor: color,
+              borderColor: color,
+            }
+          })
+          return {
+            datasets,
+          }
+        },
+        metricsValues() {
+          if (!this.metrics) return [];
+          return Object.entries(this.metrics.imageSource.cache).map(([ key, value ], index) => {
+            return {
+              label: key,
+              value: value.hit_ratio*100,
+            }
+          })
         },
       },
       methods: {
@@ -434,6 +603,17 @@
             success: () => viewer.world.removeItem(oldImage)
           });
         },
+        async updateMetrics() {
+          const metrics = await (await fetch("metrics")).json();
+          if (!metrics) {
+            throw new Error("Metrics not found");
+          }
+          const first = !this.metrics;
+          this.metrics = metrics;
+          if (first) {
+            this.metricsInitialChartConfig = this.metricsChartConfig;
+          }
+        },
         async updateScene() {
           const scenes = await (await fetch("scenes")).json();
           if (!scenes || scenes.length < 1) {
@@ -444,7 +624,7 @@
         getTileSources() {
           const tileSize = 256
           const minLevel = 0
-          const maxLevel = 16
+          const maxLevel = 20
           const power = 1 << maxLevel
           let width = power*tileSize
           let height = power*tileSize
@@ -640,6 +820,17 @@
 
         onNavigationMouseDown(event) {
           // Prevent focusing navigation elements
+          event.preventDefault();
+        },
+
+        onNavigationWheel(event) {
+          console.log(event);
+          const viewerElement = document.getElementById("viewer");
+          const redispatched = new MouseEvent(event.type, event);
+          redispatched.explicitOriginalTarget = viewerElement;
+          redispatched.target = viewerElement;
+          redispatched.srcElement = viewerElement;
+          viewerElement.dispatchEvent(redispatched);
           event.preventDefault();
         },
 
