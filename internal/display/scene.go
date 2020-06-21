@@ -65,7 +65,7 @@ type Region struct {
 }
 
 type RegionConfig struct {
-	MaxCount int
+	Limit int
 }
 
 type Fonts struct {
@@ -293,6 +293,23 @@ func (rect *Rect) GetMatrixFitImage(image *image.Image) canvas.Matrix {
 	return rect.GetMatrixFitWidth(float64(bounds.Max.X) - float64(bounds.Min.X))
 }
 
+func (rect *Rect) GetMatrixFitImageRotate(image *image.Image) canvas.Matrix {
+	bounds := (*image).Bounds()
+	rectAspectRatio := rect.W / rect.H
+	imageWidth := float64(bounds.Max.X - bounds.Min.X)
+	imageHeight := float64(bounds.Max.Y - bounds.Min.Y)
+	imageAspectRatio := imageWidth / imageHeight
+	imageAspectRatioRotated := 1 / imageAspectRatio
+	var matrix canvas.Matrix
+	if math.Abs(rectAspectRatio-imageAspectRatio) < math.Abs(rectAspectRatio-imageAspectRatioRotated) {
+		matrix = rect.GetMatrixFitWidth(imageWidth)
+	} else {
+		imageWidth, imageHeight = imageHeight, imageWidth
+		matrix = rect.GetMatrixFitWidth(imageWidth).Translate(0, imageHeight).Rotate(-90)
+	}
+	return matrix
+}
+
 func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	if bitmap.Sprite.IsVisible(c, scales) {
 		image, err := source.GetImage(bitmap.Path)
@@ -303,7 +320,7 @@ func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, sourc
 			return
 		}
 
-		model := bitmap.Sprite.Rect.GetMatrixFitImage(image)
+		model := bitmap.Sprite.Rect.GetMatrixFitImageRotate(image)
 		m := c.View().Mul(model)
 
 		RenderImageFast(scene.Canvas, *image, m)
@@ -479,7 +496,10 @@ func (photo *Photo) getBestBitmap(config *Config, scene *Scene, c *canvas.Contex
 	var best *Thumbnail
 	originalSize := photo.Original.GetSize(source)
 	// fmt.Printf("%4.0f %4.0f\n", photo.Original.Sprite.Rect.W, photo.Original.Sprite.Rect.H)
-	bestZoomDist := photo.Original.Sprite.Rect.GetPixelZoomDist(c, originalSize)
+	bestZoomDist := math.Inf(1)
+	if source.IsSupportedImage(photo.Original.Path) {
+		bestZoomDist = photo.Original.Sprite.Rect.GetPixelZoomDist(c, originalSize)
+	}
 	for i := range source.Thumbnails {
 		thumbnail := &source.Thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
@@ -567,7 +587,7 @@ func (scene *Scene) GetRegions(config *Config, bounds Rect) []Region {
 		rect,
 		scene,
 		RegionConfig{
-			MaxCount: 10,
+			Limit: 100,
 		},
 	)
 	for i := range regions {

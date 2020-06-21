@@ -1,16 +1,47 @@
 package photofield
 
 import (
+	"bufio"
 	"image"
 	"io"
+	"strconv"
+	"strings"
+	"time"
 
 	. "photofield/internal"
 
 	"github.com/disintegration/imaging"
+	"github.com/mostlygeek/go-exiftool"
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-func Decode(reader io.ReadSeeker) (image.Image, string, error) {
+type MediaDecoder struct {
+	exifTool *exiftool.Pool
+}
+
+func NewMediaDecoder(concurrent int) *MediaDecoder {
+	var err error
+	decoder := MediaDecoder{}
+	decoder.exifTool, err = exiftool.NewPool(
+		"exiftool", concurrent,
+		"-Orientation",
+		"-Rotation",
+		"-ImageWidth",
+		"-ImageHeight",
+		"-FileCreateDate", // This likely exists and contains timezone
+		"-DateTimeOriginal",
+		"-CreateDate",
+		"-Time:All",
+		"-n", // Machine-readable values
+		"-S", // Short tag names with no padding
+	)
+	if err != nil {
+		panic(err)
+	}
+	return &decoder
+}
+
+func (decoder *MediaDecoder) Decode(reader io.ReadSeeker) (image.Image, string, error) {
 	img, fmt, err := image.Decode(reader)
 	if err != nil {
 		return img, fmt, err
@@ -38,7 +69,92 @@ func Decode(reader io.ReadSeeker) (image.Image, string, error) {
 	return img, fmt, err
 }
 
-func DecodeInfo(reader io.ReadSeeker, info *ImageInfo) error {
+func parseDateTime(value string) (time.Time, error) {
+	t, err := time.Parse("2006:01:02 15:04:05Z07:00", value)
+	if err == nil {
+		return t, nil
+	}
+	t, err = time.Parse("2006:01:02 15:04:05", value)
+	if err == nil {
+		return t, nil
+	}
+	return t, err
+}
+
+func (decoder *MediaDecoder) DecodeInfoExifTool(path string, info *ImageInfo) error {
+
+	bytes, err := decoder.exifTool.Extract(path)
+	if err != nil {
+		return err
+	}
+
+	orientation := ""
+	rotation := ""
+	imageWidth := ""
+	imageHeight := ""
+
+	output := string(bytes)
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := scanner.Text()
+		nameValueSplit := strings.SplitN(line, ":", 2)
+		if len(nameValueSplit) < 2 {
+			continue
+		}
+		name := strings.TrimSpace(nameValueSplit[0])
+		value := strings.TrimSpace(nameValueSplit[1])
+		// println(name, value)
+		switch name {
+		case "Orientation":
+			orientation = value
+		case "Rotation":
+			rotation = value
+		case "ImageWidth":
+			imageWidth = value
+		case "ImageHeight":
+			imageHeight = value
+		default:
+			if info.DateTime.IsZero() &&
+				(strings.Contains(name, "Date") || strings.Contains(name, "Time")) {
+				info.DateTime, _ = parseDateTime(value)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	if imageWidth != "" {
+		info.Width, err = strconv.Atoi(imageWidth)
+		if err != nil {
+			info.Width = 0
+		}
+	}
+
+	if imageHeight != "" {
+		info.Height, err = strconv.Atoi(imageHeight)
+		if err != nil {
+			info.Height = 0
+		}
+	}
+
+	portrait := false
+	if orientation != "" {
+		portrait = getPortraitFromOrientation(orientation)
+	} else if rotation != "" {
+		portrait = getPortraitFromRotation(rotation)
+	}
+
+	if portrait {
+		info.Width, info.Height = info.Height, info.Width
+	}
+
+	// println(path, info.Width, info.Height, info.DateTime.String())
+
+	return nil
+}
+
+func (decoder *MediaDecoder) DecodeInfo(reader io.ReadSeeker, info *ImageInfo) error {
 
 	x, err := exif.Decode(reader)
 	if err == nil {
@@ -64,7 +180,21 @@ func DecodeInfo(reader io.ReadSeeker, info *ImageInfo) error {
 }
 
 func getPortraitFromExif(x *exif.Exif) bool {
-	orientation := getOrientationFromExif(x)
+	return getPortraitFromOrientation(getOrientationFromExif(x))
+}
+
+func getPortraitFromRotation(rotation string) bool {
+	switch rotation {
+	case "90":
+		fallthrough
+	case "270":
+		return true
+	default:
+		return false
+	}
+}
+
+func getPortraitFromOrientation(orientation string) bool {
 	switch orientation {
 	case "1":
 		fallthrough
@@ -101,7 +231,7 @@ func getOrientationFromExif(x *exif.Exif) string {
 	return "1"
 }
 
-func DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
+func (decoder *MediaDecoder) DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
 	conf, fmt, err := image.DecodeConfig(reader)
 	if err != nil {
 		return conf, fmt, err

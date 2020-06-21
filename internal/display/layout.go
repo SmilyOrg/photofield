@@ -7,6 +7,7 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -298,8 +299,11 @@ func getSectionPhotos(section *Section, output chan SectionPhoto, source *storag
 // }
 
 type PhotoRegionData struct {
-	Path     string `json:"path"`
-	Filename string `json:"filename"`
+	Id        int    `json:"id"`
+	Path      string `json:"path"`
+	Filename  string `json:"filename"`
+	Extension string `json:"extension"`
+	Video     bool   `json:"video"`
 }
 
 type LayoutWallRegionSource struct {
@@ -309,7 +313,7 @@ func (regionSource *LayoutWallRegionSource) GetRegionsFromBounds(rect Rect, scen
 	// fmt.Println(rect.String(), scene.Size.Width)
 	regions := make([]Region, 0)
 	photos := make(chan PhotoRef)
-	go scene.GetVisiblePhotos(photos, rect, regionConfig.MaxCount)
+	go scene.GetVisiblePhotos(photos, rect, regionConfig.Limit)
 	for photo := range photos {
 		regions = append(regions, Region{
 			Id:     photo.Index,
@@ -429,19 +433,23 @@ func LayoutWall(config *Config, scene *Scene, source *storage.ImageSource) {
 }
 
 type PhotoRegionSource struct {
+	imageSource *storage.ImageSource
 }
 
 func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect Rect, scene *Scene, regionConfig RegionConfig) []Region {
 	regions := make([]Region, 0)
 	photos := make(chan PhotoRef)
-	go scene.GetVisiblePhotos(photos, rect, regionConfig.MaxCount)
+	go scene.GetVisiblePhotos(photos, rect, regionConfig.Limit)
 	for photo := range photos {
 		regions = append(regions, Region{
 			Id:     photo.Index,
 			Bounds: photo.Photo.Original.Sprite.Rect,
 			Data: PhotoRegionData{
-				Path:     photo.Photo.Original.Path,
-				Filename: filepath.Base(photo.Photo.Original.Path),
+				Id:        photo.Index,
+				Path:      photo.Photo.Original.Path,
+				Filename:  filepath.Base(photo.Photo.Original.Path),
+				Extension: strings.ToLower(filepath.Ext(photo.Photo.Original.Path)),
+				Video:     regionSource.imageSource.IsSupportedVideo(photo.Photo.Original.Path),
 			},
 		})
 	}
@@ -754,7 +762,9 @@ func LayoutTimelineEvents(config *Config, scene *Scene, source *storage.ImageSou
 	}
 
 	scene.Bounds.H = rect.Y + sceneMargin
-	scene.RegionSource = PhotoRegionSource{}
+	scene.RegionSource = PhotoRegionSource{
+		imageSource: source,
+	}
 
 }
 

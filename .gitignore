@@ -4,6 +4,6 @@ main
 photofield
 photofield.exe
 photofield.exe~
-photofield.cache.db
+*.cache.db
 out.png
 tmp

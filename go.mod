@@ -6,6 +6,8 @@ require (
 	github.com/EdlinOrg/prominentcolor v1.0.0
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
 	github.com/amarburg/go-fast-png v0.0.0-20170609231517-41e792c58a01
+	github.com/barasher/go-exiftool v1.1.1
+	github.com/buger/jsonparser v1.0.0 // indirect
 	github.com/cosmtrek/air v1.12.1 // indirect
 	github.com/creack/pty v1.1.10 // indirect
 	github.com/dgraph-io/ristretto v0.0.2
@@ -23,9 +25,11 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/mkevac/debugcharts v0.0.0-20191222103121-ae1c48aa8615
+	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/oliamb/cutter v0.2.2 // indirect
 	github.com/pelletier/go-toml v1.7.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rakyll/gom v0.0.0-20161122080731-183a9e70f477
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sirupsen/logrus v1.6.0

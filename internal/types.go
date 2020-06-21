@@ -44,8 +44,9 @@ func (info *ImageInfo) SetColorRGB32(r uint32, g uint32, b uint32) {
 type ThumbnailSizeType int32
 
 const (
-	FitOutside ThumbnailSizeType = iota
-	FitInside  ThumbnailSizeType = iota
+	FitOutside   ThumbnailSizeType = iota
+	FitInside    ThumbnailSizeType = iota
+	OriginalSize ThumbnailSizeType = iota
 )
 
 type Thumbnail struct {
@@ -104,6 +105,9 @@ func (thumbnail *Thumbnail) Fit(originalSize Size) Size {
 		} else {
 			thumbWidth = thumbHeight * originalRatio
 		}
+	case OriginalSize:
+		thumbWidth = originalWidth
+		thumbHeight = originalHeight
 	}
 	return Size{
 		X: int(math.Round(thumbWidth)),

@@ -233,6 +233,78 @@ func regionHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+func fileHandler(w http.ResponseWriter, r *http.Request) {
+
+	scene := &mainScene
+
+	vars := mux.Vars(r)
+
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if id < 0 || id >= len(scene.Photos) {
+		http.Error(w, "Id out of bounds", http.StatusBadRequest)
+		return
+	}
+
+	photo := &scene.Photos[id]
+	http.ServeFile(w, r, photo.Original.Path)
+
+}
+
+func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
+
+	scene := &mainScene
+
+	vars := mux.Vars(r)
+
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if id < 0 || id >= len(scene.Photos) {
+		http.Error(w, "Id out of bounds", http.StatusBadRequest)
+		return
+	}
+
+	size := vars["size"]
+	if size == "" {
+		http.Error(w, "Invalid video size", http.StatusBadRequest)
+		return
+	}
+
+	if size == "thumb" {
+		size = "M"
+	}
+
+	photo := &scene.Photos[id]
+	path := ""
+	for i := range imageSource.Videos {
+		video := imageSource.Videos[i]
+		candidatePath := video.GetPath(photo.Original.Path)
+		if !imageSource.Exists(candidatePath) {
+			continue
+		}
+		if size != "full" && video.Name != size {
+			continue
+		}
+		path = candidatePath
+	}
+
+	if path == "" || !imageSource.Exists(path) {
+		http.Error(w, "Video not found", http.StatusNotFound)
+		return
+	}
+
+	http.ServeFile(w, r, path)
+
+}
+
 func main() {
 
 	imageSource = NewImageSource()
@@ -279,21 +351,37 @@ func main() {
 			Size{X: 1280, Y: 1280},
 		),
 	}
+	imageSource.Videos = []Thumbnail{
+		NewThumbnail(
+			"M",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4",
+			FitInside,
+			Size{X: 120, Y: 120},
+		),
+		NewThumbnail(
+			"H264",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4",
+			OriginalSize,
+			Size{},
+		),
+	}
 
 	// maxPhotos := 1
+	// maxPhotos := 3
+	// maxPhotos := 10
 	// maxPhotos := 20
 	// maxPhotos := 100
 	// maxPhotos := 500
 	// maxPhotos := 1000
 	// maxPhotos := 2500
-	// maxPhotos := 5000
+	maxPhotos := 5000
 	// maxPhotos := 10000
 	// maxPhotos := 15000
 	// maxPhotos := 20000
 	// maxPhotos := 50000
 	// maxPhotos := 60000
 	// maxPhotos := 75000
-	maxPhotos := 100000
+	// maxPhotos := 100000
 	// maxPhotos := 150000
 	var photoDirs = []string{
 		// "/mnt/d/photos/copy/USA 2018/Lumix/100_PANA",
@@ -311,9 +399,12 @@ func main() {
 		// "V:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
 		// "V:/photo/Moments",
 		// "P:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
-		"P:/homes/Miha/Drive/Moments",
+		// "P:/homes/Miha/Drive/Moments",
 		// "P:/photo/Moments",
 		// "P:/photo/Moments/2020 Tierpark",
+		// "P:/photo/Moments/Cuba 2019",
+		// "P:/photo/Moments/2020 Usedom",
+		"P:/photo/Moments/USA 2018",
 		// "\\\\Denkarium/photo/Moments",
 	}
 
@@ -391,6 +482,8 @@ func main() {
 	r.HandleFunc("/tiles", tilesHandler)
 	r.HandleFunc("/regions", regionsHandler)
 	r.HandleFunc("/regions/{id}", regionHandler)
+	r.HandleFunc("/files/{id}", fileHandler)
+	r.HandleFunc("/files/{id}/video/{size}/{filename}", fileVideoHandler)
 	r.PathPrefix("/").Handler(fs)
 	http.Handle("/", r)
 

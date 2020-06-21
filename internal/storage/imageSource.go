@@ -15,13 +15,15 @@ import (
 	"unsafe"
 
 	. "photofield/internal"
-	decoder "photofield/internal/decoder"
+	. "photofield/internal/decoder"
 
 	"github.com/EdlinOrg/prominentcolor"
 	"github.com/dgraph-io/ristretto"
 	"github.com/jinzhu/gorm"
 	"github.com/karrick/godirwalk"
 )
+
+var NotAnImageError = errors.New("Not a supported image extension, might be video")
 
 type ImageInfoDb struct {
 	Path      string `gorm:"type:varchar(4096);primary_key;unique_index"`
@@ -32,8 +34,13 @@ type ImageInfoDb struct {
 }
 
 type ImageSource struct {
-	Thumbnails []Thumbnail
+	ListExtensions  []string
+	ImageExtensions []string
+	VideoExtensions []string
+	Thumbnails      []Thumbnail
+	Videos          []Thumbnail
 
+	decoder        *MediaDecoder
 	imagesLoading  sync.Map
 	images         *ristretto.Cache
 	infos          *ristretto.Cache
@@ -83,6 +90,12 @@ type loadingImage struct {
 func NewImageSource() *ImageSource {
 	var err error
 	source := ImageSource{}
+	source.decoder = NewMediaDecoder(5)
+	// source.ListExtensions = []string{".jpg"}
+	source.ListExtensions = []string{".jpg", ".mp4"}
+	// source.ListExtensions = []string{".mp4"}
+	source.ImageExtensions = []string{".jpg", ".jpeg", ".png", ".gif"}
+	source.VideoExtensions = []string{".mp4"}
 	source.images, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).
 		MaxCost:     1 << 30, // maximum cost of cache
@@ -219,9 +232,18 @@ func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan stri
 			if strings.Contains(path, "@eaDir") {
 				return filepath.SkipDir
 			}
-			if !strings.HasSuffix(strings.ToLower(path), ".jpg") {
+
+			suffix := ""
+			for _, ext := range source.ListExtensions {
+				if strings.HasSuffix(strings.ToLower(path), ext) {
+					suffix = ext
+					break
+				}
+			}
+			if suffix == "" {
 				return nil
 			}
+
 			files++
 			now := time.Now()
 			if now.Sub(lastLogTime) > 1*time.Second {
@@ -246,7 +268,7 @@ func (source *ImageSource) LoadImage(path string) (*image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	image, _, err := decoder.Decode(file)
+	image, _, err := source.decoder.Decode(file)
 	return &image, err
 }
 
@@ -291,7 +313,7 @@ func (source *ImageSource) LoadImageInfo(path string) (*ImageInfo, error) {
 	}
 
 	var info ImageInfo
-	err = decoder.DecodeInfo(file, &info)
+	err = source.decoder.DecodeInfoExifTool(path, &info)
 	if err != nil {
 		return nil, err
 	}
@@ -338,6 +360,28 @@ func (source *ImageSource) Exists(path string) bool {
 	return exists
 }
 
+func (source *ImageSource) IsSupportedImage(path string) bool {
+	supportedImage := false
+	pathExt := strings.ToLower(filepath.Ext(path))
+	for _, ext := range source.ImageExtensions {
+		if pathExt == ext {
+			supportedImage = true
+			break
+		}
+	}
+	return supportedImage
+}
+
+func (source *ImageSource) IsSupportedVideo(path string) bool {
+	pathExt := strings.ToLower(filepath.Ext(path))
+	for _, ext := range source.VideoExtensions {
+		if pathExt == ext {
+			return true
+		}
+	}
+	return false
+}
+
 func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
 	// 	source.images.Metrics.Ratio()*100,
@@ -345,6 +389,7 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	// 	source.images.Metrics.CostEvicted()/1024/1024,
 	// 	source.images.Metrics.Hits(),
 	// 	source.images.Metrics.Misses())
+
 	tries := 1000
 	for try := 0; try < tries; try++ {
 		value, found := source.images.Get(path)
@@ -435,6 +480,7 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 			var err error
 			info, err = source.LoadImageInfo(path)
 			if err != nil {
+				fmt.Println(err)
 				return &ImageInfo{}
 			}
 			source.dbPendingInfos <- &ImageInfoDb{
