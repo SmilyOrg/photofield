@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -48,8 +49,8 @@ type Sprite struct {
 	Rect Rect
 }
 type Bitmap struct {
-	Sprite Sprite
 	Path   string
+	Sprite Sprite
 }
 type Solid struct {
 	Sprite Sprite
@@ -97,7 +98,8 @@ type Scales struct {
 }
 
 type Photo struct {
-	Original Bitmap
+	Id     storage.ImageId
+	Sprite Sprite
 }
 
 type PhotoRef struct {
@@ -244,10 +246,18 @@ func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales,
 	}
 }
 
-func (scene *Scene) AddPhotosFromPaths(paths <-chan string) {
-	for path := range paths {
+func (scene *Scene) AddPhotosFromIds(ids <-chan storage.ImageId) {
+	for id := range ids {
 		photo := Photo{}
-		photo.SetImagePath(path)
+		photo.Id = id
+		scene.Photos = append(scene.Photos, photo)
+	}
+}
+
+func (scene *Scene) AddPhotosFromIdSlice(ids []storage.ImageId) {
+	for _, id := range ids {
+		photo := Photo{}
+		photo.Id = id
 		scene.Photos = append(scene.Photos, photo)
 	}
 }
@@ -256,7 +266,7 @@ func (scene *Scene) GetVisiblePhotos(output chan PhotoRef, view Rect, maxCount i
 	count := 0
 	for i := range scene.Photos {
 		photo := &scene.Photos[i]
-		if photo.Original.Sprite.Rect.IsVisible(view) {
+		if photo.Sprite.Rect.IsVisible(view) {
 			output <- PhotoRef{
 				Index: i,
 				Photo: photo,
@@ -310,14 +320,11 @@ func (rect *Rect) GetMatrixFitImageRotate(image *image.Image) canvas.Matrix {
 	return matrix
 }
 
-func (bitmap *Bitmap) Draw(rimg draw.Image, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func (bitmap *Bitmap) Draw(rimg draw.Image, c *canvas.Context, scales Scales, source *storage.ImageSource) error {
 	if bitmap.Sprite.IsVisible(c, scales) {
 		image, err := source.GetImage(bitmap.Path)
 		if err != nil {
-			style := c.Style
-			style.FillColor = canvas.Red
-			bitmap.Sprite.DrawWithStyle(c, style)
-			return
+			return err
 		}
 
 		model := bitmap.Sprite.Rect.GetMatrixFitImageRotate(image)
@@ -325,10 +332,16 @@ func (bitmap *Bitmap) Draw(rimg draw.Image, c *canvas.Context, scales Scales, so
 
 		RenderImageFast(rimg, *image, m)
 	}
+	return nil
 }
 
 func (bitmap *Bitmap) GetSize(source *storage.ImageSource) Size {
 	info := source.GetImageInfo(bitmap.Path)
+	return Size{X: info.Width, Y: info.Height}
+}
+
+func (photo *Photo) GetSize(source *storage.ImageSource) Size {
+	info := source.GetImageInfo(source.GetImagePath(photo.Id))
 	return Size{X: info.Width, Y: info.Height}
 }
 
@@ -377,11 +390,11 @@ func (sprite *Sprite) PlaceFit(
 }
 
 func (photo *Photo) Place(x float64, y float64, width float64, height float64, source *storage.ImageSource) {
-	imageSize := photo.Original.GetSize(source)
+	imageSize := photo.GetSize(source)
 	imageWidth := float64(imageSize.X)
 	imageHeight := float64(imageSize.Y)
 
-	photo.Original.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
+	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
 func (sprite *Sprite) Draw(c *canvas.Context) {
@@ -464,10 +477,6 @@ func (rect *Rect) IsVisible(view Rect) bool {
 		rect.Y+rect.H >= view.Y
 }
 
-func (photo *Photo) SetImagePath(path string) {
-	photo.Original.Path = path
-}
-
 func (rect *Rect) GetPixelArea(c *canvas.Context, size Size) float64 {
 	pixel := canvas.Rect{X: 0, Y: 0, W: 1, H: 1}
 	canvasToTile := c.View().Mul(rect.GetMatrixFitWidth(float64(size.X)))
@@ -492,20 +501,22 @@ func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size Size) float64 {
 	return math.Abs(rect.GetPixelZoom(c, size))
 }
 
-func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) *Bitmap {
+func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) (Bitmap, float64) {
 	var best *Thumbnail
-	originalSize := photo.Original.GetSize(source)
-	// fmt.Printf("%4.0f %4.0f\n", photo.Original.Sprite.Rect.W, photo.Original.Sprite.Rect.H)
-	bestZoomDist := math.Inf(1)
-	if source.IsSupportedImage(photo.Original.Path) {
-		bestZoomDist = photo.Original.Sprite.Rect.GetPixelZoomDist(c, originalSize)
+	originalSize := photo.GetSize(source)
+	originalPath := source.GetImagePath(photo.Id)
+	originalZoomDist := math.Inf(1)
+	if source.IsSupportedImage(originalPath) {
+		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
 	}
+	// fmt.Printf("%4.0f %4.0f\n", photo.Original.Sprite.Rect.W, photo.Original.Sprite.Rect.H)
+	bestZoomDist := originalZoomDist
 	for i := range source.Thumbnails {
 		thumbnail := &source.Thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
-		zoomDist := photo.Original.Sprite.Rect.GetPixelZoomDist(c, thumbSize)
+		zoomDist := photo.Sprite.Rect.GetPixelZoomDist(c, thumbSize)
 		if zoomDist < bestZoomDist {
-			thumbnailPath := thumbnail.GetPath(photo.Original.Path)
+			thumbnailPath := thumbnail.GetPath(originalPath)
 			if source.Exists(thumbnailPath) {
 				best = thumbnail
 				bestZoomDist = zoomDist
@@ -515,54 +526,124 @@ func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.
 	}
 
 	if best == nil {
-		return &photo.Original
+		return Bitmap{
+			Path:   originalPath,
+			Sprite: photo.Sprite,
+		}, originalZoomDist
 	}
 
-	return &Bitmap{
-		Path: best.GetPath(photo.Original.Path),
+	return Bitmap{
+		Path: best.GetPath(originalPath),
 		Sprite: Sprite{
-			Rect: photo.Original.Sprite.Rect,
+			Rect: photo.Sprite.Rect,
 		},
+	}, bestZoomDist
+}
+
+type BitmapAtZoom struct {
+	Bitmap   Bitmap
+	ZoomDist float64
+}
+
+func (photo *Photo) getBestBitmaps(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) []BitmapAtZoom {
+
+	originalSize := photo.GetSize(source)
+	originalPath := source.GetImagePath(photo.Id)
+	originalZoomDist := math.Inf(1)
+	if source.IsSupportedImage(originalPath) {
+		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
 	}
+
+	bitmaps := make([]BitmapAtZoom, 1+len(source.Thumbnails))
+	bitmaps[0] = BitmapAtZoom{
+		Bitmap: Bitmap{
+			Path:   originalPath,
+			Sprite: photo.Sprite,
+		},
+		ZoomDist: originalZoomDist,
+	}
+
+	for i := range source.Thumbnails {
+		thumbnail := &source.Thumbnails[i]
+		thumbSize := thumbnail.Fit(originalSize)
+		bitmaps[1+i] = BitmapAtZoom{
+			Bitmap: Bitmap{
+				Path: thumbnail.GetPath(originalPath),
+				Sprite: Sprite{
+					Rect: photo.Sprite.Rect,
+				},
+			},
+			ZoomDist: photo.Sprite.Rect.GetPixelZoomDist(c, thumbSize),
+		}
+		// fmt.Printf("orig w %4.0f h %4.0f   thumb w %4.0f h %4.0f   zoom dist best %8.2f cur %8.2f area %8.6f\n", originalSize.Width, originalSize.Height, thumbSize.Width, thumbSize.Height, bestZoomDist, zoomDist, photo.Original.Sprite.Rect.GetPixelArea(c, thumbSize))
+	}
+
+	sort.Slice(bitmaps, func(i, j int) bool {
+		a := bitmaps[i]
+		b := bitmaps[j]
+		return a.ZoomDist < b.ZoomDist
+	})
+
+	return bitmaps
 }
 
 func (photo *Photo) Draw(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 
-	if photo.Original.Sprite.IsVisible(c, scales) {
+	if photo.Sprite.IsVisible(c, scales) {
 
-		pixelArea := photo.Original.Sprite.Rect.GetPixelArea(c, Size{X: 1, Y: 1})
+		pixelArea := photo.Sprite.Rect.GetPixelArea(c, Size{X: 1, Y: 1})
 		if pixelArea < config.MaxSolidPixelArea {
 			style := c.Style
 
-			info := source.GetImageInfo(photo.Original.Path)
+			info := source.GetImageInfo(source.GetImagePath(photo.Id))
 			style.FillColor = info.GetColor()
 
-			photo.Original.Sprite.DrawWithStyle(c, style)
+			photo.Sprite.DrawWithStyle(c, style)
 			return
 		}
 
-		best := photo.getBestBitmap(config, scene, c, scales, source)
+		drawn := false
+		bitmaps := photo.getBestBitmaps(config, scene, c, scales, source)
+		for _, bitmapAtZoom := range bitmaps {
+			bitmap := bitmapAtZoom.Bitmap
 
-		if best != nil {
-			bitmap := best
-			bitmap.Draw(config.CanvasImage, c, scales, source)
-			if config.DebugOverdraw {
-				bitmap.DrawOverdraw(c, source)
-			}
-			if config.DebugThumbnails {
-				text := ""
+			// text := fmt.Sprintf("index %d zd %4.2f %s", index, bitmapAtZoom.ZoomDist, bitmap.Path)
+			// println(text)
 
-				for i := range source.Thumbnails {
-					thumbnail := &source.Thumbnails[i]
-					thumbnailPath := thumbnail.GetPath(photo.Original.Path)
-					if source.Exists(thumbnailPath) {
-						text += thumbnail.Name + " "
-					}
+			err := bitmap.Draw(config.CanvasImage, c, scales, source)
+			if err == nil {
+				drawn = true
+
+				if config.DebugOverdraw {
+					bitmap.DrawOverdraw(c, source)
 				}
 
-				bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
+				if config.DebugThumbnails {
+					text := ""
+
+					for i := range source.Thumbnails {
+						thumbnail := &source.Thumbnails[i]
+						thumbnailPath := thumbnail.GetPath(source.GetImagePath(photo.Id))
+						if source.Exists(thumbnailPath) {
+							text += thumbnail.Name + " "
+						}
+					}
+
+					bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
+				}
+
+				break
 			}
+
+			// bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
 		}
+
+		if !drawn {
+			style := c.Style
+			style.FillColor = canvas.Red
+			photo.Sprite.DrawWithStyle(c, style)
+		}
+
 	}
 
 }

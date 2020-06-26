@@ -3,10 +3,10 @@ package photofield
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/dgraph-io/ristretto"
 
+	. "photofield/internal"
 	. "photofield/internal/collection"
 	. "photofield/internal/display"
 	. "photofield/internal/storage"
@@ -15,8 +15,8 @@ import (
 type SceneSource struct {
 	DefaultScene Scene
 
-	files  *ristretto.Cache
-	scenes *ristretto.Cache
+	imageIds *ristretto.Cache
+	scenes   *ristretto.Cache
 }
 
 type SceneConfig struct {
@@ -29,7 +29,7 @@ type SceneConfig struct {
 func NewSceneSource() *SceneSource {
 	var err error
 	source := SceneSource{}
-	source.files, err = ristretto.NewCache(&ristretto.Config{
+	source.imageIds, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).
 		MaxCost:     1 << 27, // maximum cost of cache (128MB).
 		BufferItems: 64,      // number of keys per Get buffer.
@@ -45,6 +45,26 @@ func NewSceneSource() *SceneSource {
 		panic(err)
 	}
 	return &source
+}
+
+func (source *SceneSource) getImageIds(collection Collection, imageSource *ImageSource) []ImageId {
+	key := fmt.Sprintf("%v", collection.ListLimit)
+	for _, dir := range collection.Dirs {
+		key += " " + dir
+	}
+
+	value, found := source.imageIds.Get(key)
+	if found {
+		return value.([]ImageId)
+	}
+
+	ids := make([]ImageId, 0)
+	for id := range collection.GetIds(imageSource) {
+		ids = append(ids, id)
+	}
+
+	source.imageIds.Set(key, ids, 1)
+	return ids
 }
 
 func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource) *Scene {
@@ -63,17 +83,16 @@ func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource
 	}
 
 	scene := source.DefaultScene
-	scene.AddPhotosFromPaths(config.Collection.GetPaths(imageSource))
-	log.Printf("photos %d\n", len(scene.Photos))
+	ids := source.getImageIds(config.Collection, imageSource)
+	scene.AddPhotosFromIdSlice(ids)
 
-	preLayout := time.Now()
+	layoutFinished := ElapsedWithCount("layout", len(ids))
 	LayoutTimelineEvents(config.Layout, &scene, imageSource)
-	layoutElapsed := time.Since(preLayout).Milliseconds()
+	layoutFinished()
 
-	log.Printf("layout %4d ms all, %4.2f ms / photo\n", layoutElapsed, float64(layoutElapsed)/float64(len(scene.Photos)))
-	log.Printf("scene %.0f %.0f\n", scene.Bounds.W, scene.Bounds.H)
+	log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
 
-	source.scenes.Set(key, &scene, 0)
+	source.scenes.Set(key, &scene, 1)
 
 	return &scene
 }

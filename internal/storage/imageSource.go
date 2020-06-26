@@ -25,6 +25,8 @@ import (
 
 var NotAnImageError = errors.New("Not a supported image extension, might be video")
 
+type ImageId int
+
 type ImageInfoDb struct {
 	Path      string `gorm:"type:varchar(4096);primary_key;unique_index"`
 	CreatedAt time.Time
@@ -39,6 +41,10 @@ type ImageSource struct {
 	VideoExtensions []string
 	Thumbnails      []Thumbnail
 	Videos          []Thumbnail
+
+	pathToIndex sync.Map
+	paths       []string
+	pathMutex   sync.RWMutex
 
 	decoder        *MediaDecoder
 	imagesLoading  sync.Map
@@ -75,6 +81,7 @@ type ImageSourceMetricsCacheCost struct {
 
 type imageRef struct {
 	path  string
+	err   error
 	image *image.Image
 	// mutex LoadingImage
 	// LoadingImage.loadOnce
@@ -91,8 +98,8 @@ func NewImageSource() *ImageSource {
 	var err error
 	source := ImageSource{}
 	source.decoder = NewMediaDecoder(5)
-	source.ListExtensions = []string{".jpg"}
-	// source.ListExtensions = []string{".jpg", ".mp4"}
+	// source.ListExtensions = []string{".jpg"}
+	source.ListExtensions = []string{".jpg", ".mp4"}
 	// source.ListExtensions = []string{".mp4"}
 	source.ImageExtensions = []string{".jpg", ".jpeg", ".png", ".gif"}
 	source.VideoExtensions = []string{".mp4"}
@@ -104,6 +111,9 @@ func NewImageSource() *ImageSource {
 		Metrics:     true,
 		Cost: func(value interface{}) int64 {
 			imageRef := value.(imageRef)
+			if imageRef.image == nil {
+				return 1
+			}
 			// config := source.GetImageConfig(imageRef.path)
 			// switch imageType := (*imageRef.image).(type) {
 			// case image.YCbCr:
@@ -379,6 +389,39 @@ func (source *ImageSource) IsSupportedVideo(path string) bool {
 	return false
 }
 
+func (source *ImageSource) GetImagePath(id ImageId) string {
+	index := int(id)
+	source.pathMutex.RLock()
+	if index < 0 || index >= len(source.paths) {
+		log.Printf("Unable to get image path, id not found: %v\n", index)
+		return ""
+	}
+	path := source.paths[index]
+	source.pathMutex.RUnlock()
+	return path
+}
+
+func (source *ImageSource) GetImageId(path string) ImageId {
+	source.pathMutex.RLock()
+	stored, ok := source.pathToIndex.Load(path)
+	if ok {
+		source.pathMutex.RUnlock()
+		return ImageId(stored.(int))
+	}
+	source.pathMutex.RUnlock()
+	source.pathMutex.Lock()
+	count := len(source.paths)
+	stored, loaded := source.pathToIndex.LoadOrStore(path, count)
+	if loaded {
+		source.pathMutex.Unlock()
+		return ImageId(stored.(int))
+	}
+	source.paths = append(source.paths, path)
+	// log.Printf("add image id %5d %s\n", stored.(int), path)
+	source.pathMutex.Unlock()
+	return ImageId(stored.(int))
+}
+
 func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
 	// 	source.images.Metrics.Ratio()*100,
@@ -391,7 +434,7 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	for try := 0; try < tries; try++ {
 		value, found := source.images.Get(path)
 		if found {
-			return value.(imageRef).image, nil
+			return value.(imageRef).image, value.(imageRef).err
 		} else {
 			loading := &loadingImage{}
 			loading.mutex.Lock()
@@ -408,25 +451,21 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 					time.Sleep(10 * time.Millisecond)
 					continue
 				}
-				return imageRef.image, nil
+				return imageRef.image, imageRef.err
 			} else {
 
 				// log.Printf("%v not found, try %v, loading, mutex locked\n", path, try)
 				image, err := source.LoadImage(path)
-				if err != nil {
-					// log.Println("Unable to load image", err)
-					return nil, errors.New(fmt.Sprintf("Unable to load image from path: %s", path))
-				}
-
 				imageRef := imageRef{
 					path:  path,
 					image: image,
+					err:   err,
 				}
 				source.images.Set(path, imageRef, 0)
 				loading.imageRef = &imageRef
 				loading.mutex.Unlock()
 
-				return image, nil
+				return image, err
 			}
 		}
 	}
@@ -477,7 +516,7 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 			var err error
 			info, err = source.LoadImageInfo(path)
 			if err != nil {
-				fmt.Println("Unable to load image info", err, path)
+				// fmt.Println("Unable to load image info", err, path)
 				return &ImageInfo{}
 			}
 			source.dbPendingInfos <- &ImageInfoDb{

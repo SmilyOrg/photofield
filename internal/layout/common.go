@@ -49,15 +49,16 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect Rect, scene *Sce
 	source := regionSource.imageSource
 	go scene.GetVisiblePhotos(photos, rect, regionConfig.Limit)
 	for photo := range photos {
+		originalPath := source.GetImagePath(photo.Photo.Id)
 		regions = append(regions, Region{
 			Id:     photo.Index,
-			Bounds: photo.Photo.Original.Sprite.Rect,
+			Bounds: photo.Photo.Sprite.Rect,
 			Data: PhotoRegionData{
 				Id:        photo.Index,
-				Path:      photo.Photo.Original.Path,
-				Filename:  filepath.Base(photo.Photo.Original.Path),
-				Extension: strings.ToLower(filepath.Ext(photo.Photo.Original.Path)),
-				Video:     source.IsSupportedVideo(photo.Photo.Original.Path),
+				Path:      originalPath,
+				Filename:  filepath.Base(originalPath),
+				Extension: strings.ToLower(filepath.Ext(originalPath)),
+				Video:     source.IsSupportedVideo(originalPath),
 				// SmallestThumbnail: source.GetSmallestThumbnail(photo.Photo.Original.Path),
 			},
 		})
@@ -70,12 +71,13 @@ func (regionSource PhotoRegionSource) GetRegionById(id int, scene *Scene, region
 		return Region{Id: -1}
 	}
 	photo := scene.Photos[id]
+	originalPath := regionSource.imageSource.GetImagePath(photo.Id)
 	return Region{
 		Id:     id,
-		Bounds: photo.Original.Sprite.Rect,
+		Bounds: photo.Sprite.Rect,
 		Data: PhotoRegionData{
-			Path:     photo.Original.Path,
-			Filename: filepath.Base(photo.Original.Path),
+			Path:     originalPath,
+			Filename: filepath.Base(originalPath),
 		},
 	}
 }
@@ -86,9 +88,9 @@ func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64
 		return 1.
 	}
 	firstPhoto := row[0]
-	firstRect := firstPhoto.Photo.Original.Sprite.Rect
+	firstRect := firstPhoto.Photo.Sprite.Rect
 	lastPhoto := row[count-1]
-	lastRect := lastPhoto.Photo.Original.Sprite.Rect
+	lastRect := lastPhoto.Photo.Sprite.Rect
 	totalSpacing := float64(count-1) * imageSpacing
 
 	rowWidth := lastRect.X + lastRect.W
@@ -96,14 +98,14 @@ func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64
 	x := firstRect.X
 	for i := range row {
 		photo := row[i]
-		rect := photo.Photo.Original.Sprite.Rect
-		photo.Photo.Original.Sprite.Rect = Rect{
+		rect := photo.Photo.Sprite.Rect
+		photo.Photo.Sprite.Rect = Rect{
 			X: x,
 			Y: rect.Y,
 			W: rect.W * scale,
 			H: rect.H * scale,
 		}
-		x += photo.Photo.Original.Sprite.Rect.W + imageSpacing
+		x += photo.Photo.Sprite.Rect.W + imageSpacing
 	}
 
 	// fmt.Printf("fit row width %5.2f / %5.2f -> %5.2f  scale %.2f\n", rowWidth, bounds.W, lastPhoto.Photo.Original.Sprite.Rect.X+lastPhoto.Photo.Original.Sprite.Rect.W, scale)
@@ -162,7 +164,7 @@ func orderSectionPhotoStream(input chan SectionPhoto, output chan SectionPhoto) 
 func getSectionPhotosUnordered(id int, section *Section, index chan int, output chan SectionPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
 	for i := range index {
 		photo := section.photos[i]
-		size := photo.Original.GetSize(source)
+		size := photo.GetSize(source)
 		output <- SectionPhoto{
 			Index: i,
 			Photo: photo,
@@ -217,7 +219,7 @@ func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan R
 
 		// fmt.Printf("%4.0f %4.0f %4.0f %4.0f %4.0f %4.0f %4.0f\n", bounds.X, bounds.Y, x, y, imageHeight, photo.Size.Width, photo.Size.Height)
 
-		photo.Photo.Original.Sprite.PlaceFitHeight(
+		photo.Photo.Sprite.PlaceFitHeight(
 			bounds.X+x,
 			bounds.Y+y,
 			imageHeight,
@@ -267,7 +269,7 @@ func layoutSectionList(section *Section, bounds Rect, imageHeight float64, image
 	photoCount := len(section.photos)
 	for i := range section.photos {
 		photo := section.photos[i]
-		size := photo.Original.GetSize(source)
+		size := photo.GetSize(source)
 
 		aspectRatio := float64(size.X) / float64(size.Y)
 		imageWidth := float64(imageHeight) * aspectRatio
@@ -277,7 +279,7 @@ func layoutSectionList(section *Section, bounds Rect, imageHeight float64, image
 			y += imageHeight + lineSpacing
 		}
 
-		photo.Original.Sprite.PlaceFitHeight(
+		photo.Sprite.PlaceFitHeight(
 			bounds.X+x,
 			bounds.Y+y,
 			imageHeight,

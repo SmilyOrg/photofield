@@ -6,7 +6,6 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
-	"time"
 
 	// "image/png"
 	"io"
@@ -26,7 +25,6 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/mkevac/debugcharts"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
 
@@ -279,7 +277,8 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	photo := &scene.Photos[id]
-	http.ServeFile(w, r, photo.Original.Path)
+	path := imageSource.GetImagePath(photo.Id)
+	http.ServeFile(w, r, path)
 
 }
 
@@ -318,7 +317,7 @@ func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
 	path := ""
 	for i := range imageSource.Videos {
 		video := imageSource.Videos[i]
-		candidatePath := video.GetPath(photo.Original.Path)
+		candidatePath := video.GetPath(imageSource.GetImagePath(photo.Id))
 		if !imageSource.Exists(candidatePath) {
 			continue
 		}
@@ -344,12 +343,9 @@ func renderSample(config RenderConfig, scene *Scene) {
 	image, context := getTileImage(&config)
 	config.CanvasImage = image
 
-	preDraw := time.Now()
-
+	drawFinished := ElapsedWithCount("draw", len(scene.Photos))
 	drawTile(context, &config, scene, 0, 0, 0)
-
-	drawElapsed := time.Since(preDraw).Milliseconds()
-	log.Printf("draw %4d ms all, %4.2f ms / photo\n", drawElapsed, float64(drawElapsed)/float64(len(scene.Photos)))
+	drawFinished()
 
 	f, err := os.Create("out.png")
 	if err != nil {
@@ -388,36 +384,6 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 	// return getScene(sceneConfig), nil
 
 	return sceneSource.GetScene(sceneConfig, imageSource), nil
-}
-
-func getScene(sceneConfig SceneConfig) *Scene {
-	rc := &mainSceneConfig
-
-	layoutDirty := false
-	if !cmp.Equal(rc.Collection, sceneConfig.Collection) {
-		rc.Collection = sceneConfig.Collection
-		rc.Scene = defaultSceneConfig.Scene
-		layoutDirty = true
-		rc.Scene.AddPhotosFromPaths(rc.Collection.GetPaths(imageSource))
-		scene := &rc.Scene
-		log.Printf("photos %d\n", len(scene.Photos))
-	}
-
-	scene := &rc.Scene
-
-	if layoutDirty || !cmp.Equal(rc.Layout, sceneConfig.Layout) {
-		rc.Layout = sceneConfig.Layout
-		preLayout := time.Now()
-		// LayoutSquare(scene, imageSource)
-		// LayoutWall(&config, scene, imageSource)
-		// LayoutTimeline(&config, scene, imageSource)
-		// LayoutCalendar(&config, scene, imageSource)
-		LayoutTimelineEvents(rc.Layout, scene, imageSource)
-		layoutElapsed := time.Since(preLayout).Milliseconds()
-		log.Printf("layout %4d ms all, %4.2f ms / photo\n", layoutElapsed, float64(layoutElapsed)/float64(len(scene.Photos)))
-		log.Printf("scene %.0f %.0f\n", scene.Bounds.W, scene.Bounds.H)
-	}
-	return scene
 }
 
 func main() {
@@ -488,7 +454,7 @@ func main() {
 		// ListLimit: 3,
 		// ListLimit: 10,
 		// ListLimit: 20,
-		ListLimit: 100,
+		// ListLimit: 100,
 		// ListLimit: 500,
 		// ListLimit: 1000,
 		// ListLimit: 2500,
@@ -500,7 +466,7 @@ func main() {
 		// ListLimit: 60000,
 		// ListLimit: 75000,
 		// ListLimit: 100000,
-		// ListLimit: 200000,
+		ListLimit: 200000,
 		Dirs: []string{
 			// "P:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
 			"P:/homes/Miha/Drive/Moments",
@@ -548,9 +514,9 @@ func main() {
 	}
 
 	defaultSceneConfig.Scene.Fonts = Fonts{
-		Header: fontFamily.Face(96.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
+		Header: fontFamily.Face(14.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
 		Hour:   fontFamily.Face(24.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
-		Debug:  fontFamily.Face(64.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),
+		Debug:  fontFamily.Face(30.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
@@ -564,7 +530,7 @@ func main() {
 		ImageHeight: 160,
 	}
 
-	// renderSample(mainConfig, scene)
+	renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 
 	log.Println("serving")
 

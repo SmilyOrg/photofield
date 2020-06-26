@@ -26,7 +26,8 @@ type TimelinePhoto struct {
 
 func getTimelinePhotosUnordered(id int, photoRefs chan PhotoRef, output chan TimelinePhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
 	for photoRef := range photoRefs {
-		info := source.GetImageInfo(photoRef.Photo.Original.Path)
+		path := source.GetImagePath(photoRef.Photo.Id)
+		info := source.GetImageInfo(path)
 		output <- TimelinePhoto{
 			Index: photoRef.Index,
 			Photo: *photoRef.Photo,
@@ -117,7 +118,7 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Sc
 	if event.StartTime.Year() != time.Now().Year() {
 		timeFormat = "Mon, Jan 2, 2006, 15:04"
 	}
-	font := config.FontFamily.Face(70.0, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	font := config.FontFamily.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 
 	scene.Texts = append(scene.Texts,
 		NewTextFromRect(
@@ -139,21 +140,26 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Sc
 	return rect
 }
 
+func sortByDate(photos []TimelinePhoto) {
+	defer ElapsedWithCount("layout sort by date", len(photos))()
+
+	// log.Println("layout sort")
+	sort.Slice(photos, func(i, j int) bool {
+		a := photos[i]
+		b := photos[j]
+		return a.Info.DateTime.After(b.Info.DateTime)
+	})
+}
+
 func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
 
-	log.Println("layout")
+	// log.Println("layout")
 
 	photoCount := len(scene.Photos)
 
-	log.Println("layout load info")
+	// log.Println("layout load info")
 	timelinePhotos := getTimelinePhotos(scene.Photos, source)
-
-	log.Println("layout sort")
-	sort.Slice(timelinePhotos, func(i, j int) bool {
-		a := timelinePhotos[i]
-		b := timelinePhotos[j]
-		return a.Info.DateTime.After(b.Info.DateTime)
-	})
+	sortByDate(timelinePhotos)
 
 	sceneMargin := 10.
 
@@ -184,7 +190,8 @@ func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.Ima
 	scene.Solids = make([]Solid, 0)
 	scene.Texts = make([]Text, 0)
 
-	log.Println("layout placing")
+	// log.Println("layout placing")
+	layoutPlaced := ElapsedWithCount("layout placing", len(timelinePhotos))
 	lastLogTime := time.Now()
 	for i := range scene.Photos {
 		timelinePhoto := &timelinePhotos[i]
@@ -209,6 +216,7 @@ func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.Ima
 			log.Printf("layout %d / %d\n", i, photoCount)
 		}
 	}
+	layoutPlaced()
 
 	if len(event.Section.photos) > 0 {
 		rect = LayoutTimelineEvent(config, rect, &event, scene, source)
