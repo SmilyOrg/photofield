@@ -91,8 +91,8 @@ func NewImageSource() *ImageSource {
 	var err error
 	source := ImageSource{}
 	source.decoder = NewMediaDecoder(5)
-	// source.ListExtensions = []string{".jpg"}
-	source.ListExtensions = []string{".jpg", ".mp4"}
+	source.ListExtensions = []string{".jpg"}
+	// source.ListExtensions = []string{".jpg", ".mp4"}
 	// source.ListExtensions = []string{".mp4"}
 	source.ImageExtensions = []string{".jpg", ".jpeg", ".png", ".gif"}
 	source.VideoExtensions = []string{".mp4"}
@@ -292,9 +292,12 @@ func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {
 	if err != nil {
 		return color.RGBA{}, err
 	}
-	centroids, err := prominentcolor.Kmeans(*colorImage)
+	centroids, err := prominentcolor.KmeansWithAll(1, *colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, prominentcolor.GetDefaultMasks())
 	if err != nil {
-		return color.RGBA{}, err
+		centroids, err = prominentcolor.KmeansWithAll(1, *colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, make([]prominentcolor.ColorBackgroundMask, 0))
+		if err != nil {
+			return color.RGBA{}, err
+		}
 	}
 	promColor := centroids[0]
 	return color.RGBA{
@@ -306,14 +309,8 @@ func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {
 }
 
 func (source *ImageSource) LoadImageInfo(path string) (*ImageInfo, error) {
-	file, err := os.Open(path)
-	defer file.Close()
-	if err != nil {
-		return nil, err
-	}
-
 	var info ImageInfo
-	err = source.decoder.DecodeInfoExifTool(path, &info)
+	err := source.decoder.DecodeInfoExifTool(path, &info)
 	if err != nil {
 		return nil, err
 	}
@@ -480,7 +477,7 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 			var err error
 			info, err = source.LoadImageInfo(path)
 			if err != nil {
-				fmt.Println(err)
+				fmt.Println("Unable to load image info", err, path)
 				return &ImageInfo{}
 			}
 			source.dbPendingInfos <- &ImageInfoDb{

@@ -17,12 +17,15 @@ import (
 	"golang.org/x/image/math/f64"
 )
 
-type Config struct {
+type RenderConfig struct {
 	TileSize          int
 	MaxSolidPixelArea float64
 	LogDraws          bool
 	DebugOverdraw     bool
 	DebugThumbnails   bool
+
+	Zoom        int
+	CanvasImage draw.Image
 }
 
 type Transform struct {
@@ -80,15 +83,12 @@ type RegionSource interface {
 }
 
 type Scene struct {
-	Fonts        Fonts
+	Fonts        Fonts        `json:"-"`
 	Bounds       Rect         `json:"bounds"`
-	Solids       []Solid      `json:"-"`
 	Photos       []Photo      `json:"-"`
+	Solids       []Solid      `json:"-"`
 	Texts        []Text       `json:"-"`
 	RegionSource RegionSource `json:"-"`
-
-	Canvas draw.Image `json:"-"`
-	Zoom   int        `json:"-"`
 }
 
 type Scales struct {
@@ -176,14 +176,14 @@ func NewTextFromRect(rect Rect, font *canvas.FontFace, txt string) Text {
 	return text
 }
 
-func drawPhotos(photos []Photo, config *Config, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func drawPhotos(photos []Photo, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	for i := range photos {
 		photo := &photos[i]
 		photo.Draw(config, scene, c, scales, source)
 	}
 }
 
-func drawPhotoChannel(id int, index chan int, config *Config, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
+func drawPhotoChannel(id int, index chan int, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
 	for i := range index {
 		photo := &scene.Photos[i]
 		photo.Draw(config, scene, c, scales, source)
@@ -191,7 +191,7 @@ func drawPhotoChannel(id int, index chan int, config *Config, scene *Scene, c *c
 	wg.Done()
 }
 
-func (scene *Scene) Draw(config *Config, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
 		solid.Draw(c, scales)
@@ -244,7 +244,7 @@ func (scene *Scene) Draw(config *Config, c *canvas.Context, scales Scales, sourc
 	}
 }
 
-func (scene *Scene) AddPhotosFromPaths(paths chan string) {
+func (scene *Scene) AddPhotosFromPaths(paths <-chan string) {
 	for path := range paths {
 		photo := Photo{}
 		photo.SetImagePath(path)
@@ -310,7 +310,7 @@ func (rect *Rect) GetMatrixFitImageRotate(image *image.Image) canvas.Matrix {
 	return matrix
 }
 
-func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func (bitmap *Bitmap) Draw(rimg draw.Image, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	if bitmap.Sprite.IsVisible(c, scales) {
 		image, err := source.GetImage(bitmap.Path)
 		if err != nil {
@@ -323,7 +323,7 @@ func (bitmap *Bitmap) Draw(scene *Scene, c *canvas.Context, scales Scales, sourc
 		model := bitmap.Sprite.Rect.GetMatrixFitImageRotate(image)
 		m := c.View().Mul(model)
 
-		RenderImageFast(scene.Canvas, *image, m)
+		RenderImageFast(rimg, *image, m)
 	}
 }
 
@@ -492,7 +492,7 @@ func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size Size) float64 {
 	return math.Abs(rect.GetPixelZoom(c, size))
 }
 
-func (photo *Photo) getBestBitmap(config *Config, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) *Bitmap {
+func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) *Bitmap {
 	var best *Thumbnail
 	originalSize := photo.Original.GetSize(source)
 	// fmt.Printf("%4.0f %4.0f\n", photo.Original.Sprite.Rect.W, photo.Original.Sprite.Rect.H)
@@ -526,7 +526,7 @@ func (photo *Photo) getBestBitmap(config *Config, scene *Scene, c *canvas.Contex
 	}
 }
 
-func (photo *Photo) Draw(config *Config, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func (photo *Photo) Draw(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 
 	if photo.Original.Sprite.IsVisible(c, scales) {
 
@@ -545,7 +545,7 @@ func (photo *Photo) Draw(config *Config, scene *Scene, c *canvas.Context, scales
 
 		if best != nil {
 			bitmap := best
-			bitmap.Draw(scene, c, scales, source)
+			bitmap.Draw(config.CanvasImage, c, scales, source)
 			if config.DebugOverdraw {
 				bitmap.DrawOverdraw(c, source)
 			}
@@ -580,7 +580,7 @@ func (scene *Scene) getRegionScale() float64 {
 	return scene.Bounds.W
 }
 
-func (scene *Scene) GetRegions(config *Config, bounds Rect) []Region {
+func (scene *Scene) GetRegions(config *RenderConfig, bounds Rect) []Region {
 	scale := scene.getRegionScale()
 	rect := bounds.Scale(scale)
 	regions := scene.RegionSource.GetRegionsFromBounds(

@@ -16,6 +16,7 @@ require (
 	github.com/emef/bitfield v0.0.0-20170503144143-7d3f8f823065 // indirect
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/githubnemo/CompileDaemon v1.2.1 // indirect
+	github.com/google/go-cmp v0.5.0
 	github.com/google/pprof v0.0.0-20200507031123-427632fa3b1c // indirect
 	github.com/gorilla/mux v1.7.4
 	github.com/imdario/mergo v0.3.9 // indirect

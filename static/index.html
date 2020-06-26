@@ -175,13 +175,55 @@
 
       <div class="config">
 
-        <v-card v-if="showConfig" class="px-4 py-1">
+        <v-btn-toggle v-model="imageHeight">
+          
+          <v-btn value="30">
+            <v-icon>mdi-image-size-select-small</v-icon>
+          </v-btn>
+
+          <v-btn :value="100">
+            <v-icon>mdi-image-size-select-large</v-icon>
+          </v-btn>
+
+          <v-btn :value="300">
+            <v-icon>mdi-image-size-select-actual</v-icon>
+          </v-btn>
+
+        </v-btn-toggle>
+      
+        <!-- <v-text-field
+          label="Image Height"
+          v-model="imageHeight"
+          single-line
+          type="number"
+        ></v-text-field> -->
+
+        <v-card v-if="showConfig" class="px-4 pt-4 py-1">
+
+          <v-slider
+            class="mt-2"
+            v-model="imageHeight"
+            min="1"
+            max="400"
+            label="Image Size"
+          ></v-slider> 
+
           <v-switch v-model="debug.overdraw" label="Debug Overdraw"></v-switch>
           <v-switch v-model="debug.thumbnails" label="Debug Thumbnails"></v-switch>
   
           <realtime-chart
-            :chart-data="metricsInitialChartConfig"
-            :values="metricsValues"
+            axis-label="Hit Ratio"
+            :chart-data="getMetricsChartConfig()"
+            :values="metricsHitRatio"
+            postfix="%"
+          ></realtime-chart>
+
+          <realtime-chart
+            axis-label="Cost"
+            :chart-data="getMetricsChartConfig()"
+            :values="metricsCost"
+            scale="1000000"
+            postfix=" MB"
           ></realtime-chart>
         </v-card>
   
@@ -269,10 +311,33 @@
   <script src="/vendor/chartjs/chartjs-plugin-streaming.js"></script>
   <script src="/vendor/videojs/video.js"></script>
   <!-- <script src="/vendor/chartjs/chartjs-plugin-datalabels.js"></script> -->
-  <script type="text/javascript">
+  <script type="module">
   
-    window.addEventListener('scroll', console.log);
-        
+    function debounce(callback, delay) {
+      let timer = null;
+      let pending = false;
+      let pendingThis = null;
+      let pendingArgs = null;
+      function timeout() {
+        timer = null;
+        if (pending) {
+          pending = false;
+          timer = setTimeout(timeout, delay);
+          callback.apply(pendingThis, pendingArgs);
+        }
+      }
+      return function() {
+        if (timer) {
+          pending = true;
+          pendingThis = this;
+          pendingArgs = arguments;
+          return;
+        }
+        callback.apply(this, arguments);
+        timer = setTimeout(timeout, delay);
+      };
+    }
+
     // const tileSize = 256
     // const minLevel = 0
     // const maxLevel = 16
@@ -315,12 +380,11 @@
     // window.addEventListener('scroll', event => console.log(event));
 
     Vue.component("realtime-chart", {
-      props: ["chartData", "values"],
+      props: ["chartData", "values", "axisLabel", "scale", "postfix"],
       extends: VueChartJs.Line,
       mixins: [VueChartJs.mixins.reactiveProp],
       mounted() {
 
-        // console.log(this)
         this.renderChart(this.chartData, {
           title: {
             display: false,
@@ -346,10 +410,14 @@
               ticks: {
                 suggestedMin: 0,
                 suggestedMax: 1,
+                // Include a dollar sign in the ticks
+                callback: (value, index, values) => {
+                  return (value / (this.scale || 1)) + (this.postfix || '');
+                },
               },
               scaleLabel: {
                 display: true,
-                labelString: "Hit Ratio"
+                labelString: this.axisLabel,
               }
             }],
           },
@@ -505,6 +573,7 @@
       vuetify: new Vuetify(),
       data: {
         timestamp: 0,
+        imageHeight: 30,
         scene: {
           bounds: {
             w: 0,
@@ -518,7 +587,7 @@
         },
         showConfig: false,
         metrics: null,
-        metricsInitialChartConfig: null,
+        // metricsInitialChartConfig: null,
         addedRegionsTime: 0,
         addedRegions: [],
         regionPool: [],
@@ -542,6 +611,9 @@
         },
       },
       async created() {
+
+        this.view.width = document.getElementById("viewer").clientWidth;
+
         window.addEventListener('scroll', this.onScroll);
         await this.updateScene();
         this.initSeadragon();
@@ -569,14 +641,16 @@
         this.lastPanTime = 0;
 
         setInterval(() => this.timestamp = Date.now(), 1000)
-        setInterval(() => this.updateMetrics(), 1000);
-        this.updateMetrics();
         
       },
       destroyed() {
         window.removeEventListener('scroll', this.onScroll);
       },
       watch: {
+        sceneParams: debounce(async function() {
+          await this.updateScene();
+          this.resetTiles();
+        }, 500),
         viewportBounds() {
           // this.updateRegionsView();
           this.updateRegions();
@@ -587,14 +661,20 @@
           },
           deep: true,
         },
+        showConfig(showConfig) {
+          clearInterval(this.metricsTimer);
+          if (showConfig) {
+            this.metricsTimer = setInterval(() => this.updateMetrics(), 1000);
+          }
+        },
         fullscreenRegion(fullscreenRegion) {
-          setTimeout(() => {
-            if (fullscreenRegion) {
-              document.documentElement.classList.add("hide-scrollbar");
-            } else {
-              document.documentElement.classList.remove("hide-scrollbar");
-            }
-          }, 1000);
+          // setTimeout(() => {
+          //   if (fullscreenRegion) {
+          //     document.documentElement.classList.add("hide-scrollbar");
+          //   } else {
+          //     document.documentElement.classList.remove("hide-scrollbar");
+          //   }
+          // }, 1000);
         }
       },
       computed: {
@@ -605,7 +685,35 @@
             height: this.view.width / aspectRatio,
           }
         },
-        metricsChartConfig() {
+        sceneParams() {
+          const params = {
+            imageHeight: this.imageHeight,
+            sceneWidth: this.view.width,
+          };
+          return Object.entries(params).map(([key, value]) => `${key}=${value}`).join("&");
+        },
+        metricsHitRatio() {
+          if (!this.metrics) return [];
+          return Object.entries(this.metrics.imageSource.cache).map(([ key, value ], index) => {
+            return {
+              label: key,
+              value: value.hit_ratio*100,
+            }
+          })
+        },
+        metricsCost() {
+          if (!this.metrics) return [];
+          return Object.entries(this.metrics.imageSource.cache).map(([ key, value ], index) => {
+            return {
+              label: key,
+              value: value.cost.added - value.cost.evicted,
+            }
+          })
+        },
+      },
+      methods: {
+
+        getMetricsChartConfig() {
           if (!this.metrics) return [];
           const chartColors = [
             'rgb(255, 99, 132)',
@@ -630,17 +738,6 @@
             datasets,
           }
         },
-        metricsValues() {
-          if (!this.metrics) return [];
-          return Object.entries(this.metrics.imageSource.cache).map(([ key, value ], index) => {
-            return {
-              label: key,
-              value: value.hit_ratio*100,
-            }
-          })
-        },
-      },
-      methods: {
         onScroll() {
 
           const now = Date.now();
@@ -692,6 +789,7 @@
             this.scrollDebounce = true;
             setTimeout(() => this.scrollDebounce = false, 1000);
           }
+          // immediate = true;
           this.lastScrollTime = Date.now();
           viewport.fitBounds(rect, immediate);
         },
@@ -735,14 +833,18 @@
         },
         resetTiles() {
           var oldImage = viewer.world.getItemAt(0);
-          var oldBounds = oldImage.getBounds();
-          var oldSource = oldImage.source;
+          // var oldBounds = oldImage.getBounds();
+          // var oldSource = oldImage.source;
+          // console.log(oldBounds, oldSource)
+          const newSource = this.getTileSources();
           viewer.addTiledImage({
-            tileSource: oldSource,
-            x: oldBounds.x,
-            y: oldBounds.y,
-            width: oldBounds.width, // It'll do height automatically based on aspect ratio
-            success: () => viewer.world.removeItem(oldImage)
+            tileSource: newSource,
+            // x: oldBounds.x,
+            // y: oldBounds.y,
+            // width: oldBounds.width, // It'll do height automatically based on aspect ratio
+            success: () => {
+              if (oldImage) viewer.world.removeItem(oldImage);
+            }
           });
         },
         async updateMetrics() {
@@ -752,12 +854,13 @@
           }
           const first = !this.metrics;
           this.metrics = metrics;
-          if (first) {
-            this.metricsInitialChartConfig = this.metricsChartConfig;
-          }
+          // if (first) {
+          //   this.metricsInitialChartConfig = this.metricsChartConfig;
+          // }
         },
         async updateScene() {
-          const scenes = await (await fetch("scenes")).json();
+          const url = `scenes?${this.sceneParams}`;
+          const scenes = await (await fetch(url)).json();
           if (!scenes || scenes.length < 1) {
             throw new Error("Scene not found");
           }
@@ -776,6 +879,8 @@
           } else {
             height = width / sceneAspect;
           }
+          if (width < 1) width = 1;
+          if (height < 1) height = 1;
           return {
             width,
             height,
@@ -784,7 +889,8 @@
             maxLevel,
             getTileUrl: (level, x, y) => {
               let url = "tiles";
-              url += "?tileSize=" + tileSize;
+              url += "?" + this.sceneParams;
+              url += "&tileSize=" + tileSize;
               url += "&zoom=" + level;
               url += "&x=" + x;
               url += "&y=" + y;
@@ -804,7 +910,7 @@
             // panHorizontal: false,
             showNavigationControl: false,
             defaultZoomLevel: 1,
-            visibilityRatio: 	1,
+            // visibilityRatio: 	1,
             constrainDuringPan: true,
             minZoomLevel: 1,
             viewportMargins: {
@@ -823,7 +929,10 @@
             animationTime: 0.5,
             // springStiffness: 100,
             zoomPerSecond: 1.0,
-            zoomPerScroll: 1.2
+            zoomPerScroll: 1.2,
+            blendTime: 0.1,
+            // debugMode: true,
+            // immediateRender: true,
             // zoomPerScroll: 2,
             // zoomPerSecond: 0.2,
             // mouseNavEnabled: false,
@@ -837,6 +946,11 @@
           //   zoomIncrement: 0.2,
           //   timeThreshold: 500,
           // });
+
+          viewer.addHandler("viewport-change", event => {
+            const viewport = event.eventSource.viewport;
+            this.viewportBounds = viewport.getBounds();
+          })
 
           viewer.addHandler("canvas-click", event => {
             // const viewport = event.eventSource.viewport;
@@ -928,11 +1042,6 @@
           for (let i = 0; i < this.regionPool.length; i++) {
             this.addOverlay(this.regionPool[i]);
           }
-
-          viewer.addHandler("viewport-change", event => {
-            const viewport = event.eventSource.viewport;
-            this.viewportBounds = viewport.getBounds();
-          })
         },
         onRegionClick(region) {
           // viewer.viewport.fitBounds(new OpenSeadragon.Rect(
@@ -1036,10 +1145,8 @@
           if (!region) return;
           this.fullscreenRegion = null;
           this.fitRect(new OpenSeadragon.Rect(
-            0,
-            region.bounds.y,
-            1,
-            region.bounds.h,
+            0, region.bounds.y,
+            1, region.bounds.h,
           ), {
             animationTime: 1
           });
@@ -1221,11 +1328,11 @@
           // }
         },
         async getRegions(x, y, w, h) {
-          const url = `regions?x=${x}&y=${y}&w=${w}&h=${h}`;
+          const url = `regions?${this.sceneParams}&x=${x}&y=${y}&w=${w}&h=${h}`;
           return await (await fetch(url)).json();
         },
         async fetchRegion(id) {
-          const url = `regions/${id}`;
+          const url = `regions/${id}?${this.sceneParams}`;
           const response = await fetch(url);
           if (!response.ok) return null;
           return await response.json();
