@@ -23,12 +23,18 @@
       top: 0;
       left: 0;
     }
-
-    #app > .content {
-      position: fixed;
-      top: 0;
-      left: 0;
+    
+    .v-app {
+      /* position: fixed;
+      width: 100%; */
     }
+
+    /* #app > .content { */
+      /* position: fixed;
+      top: 0;
+      left: 0; */
+      /* width: 100%; */
+    /* } */
 
     .hide-scrollbar {
       overflow-y: scroll;
@@ -39,10 +45,6 @@
       width: 0;
       height: 0;
     }
-
-    /* .virtual-canvas { */
-      /* height: 10000px; */
-    /* } */
 
     .region {
       /* background-color:rgba(65, 255, 81, 0.5); */
@@ -63,6 +65,16 @@
       width: 360px;
       left: calc(100vw - 380px);
       /* background: white; */
+    }
+
+    .toolbar {
+      position: absolute;
+      right: 40px;
+      display: flex;
+    }
+
+    .toolbar > * {
+      margin: 10px;
     }
 
     .config-toggle {
@@ -148,35 +160,29 @@
     </div>
   </script>
   
-  <div id="viewer"></div>
-  <div id="app">
+  <div id="vue">
 
-    <v-app class="content">
+    <v-app class="v-app">
 
-      <div v-if="fullscreenRegion" class="navigation">
-
-        <div class="hitarea left" @click="navigate(-1)" @wheel="onNavigationWheel" @mousedown="onNavigationMouseDown">
-          <div class="circle button">
-            <v-icon class="icon" dark large>mdi-chevron-left</v-icon>
-          </div>
-          <!-- <v-btn class="button" fab dark large :ripple="false" color="primary"> -->
-          <!-- </v-btn> -->
-        </div>
+      <v-app-bar
+        fixed
+        flat
+        color="white"
+        :value="!fullscreenRegion"
+      >
+        <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
+        <v-toolbar-title>Photos</v-toolbar-title>
+        <v-spacer></v-spacer>
   
-        <div class="hitarea right" @click="navigate(1)" @mousedown="onNavigationMouseDown">
-          <div class="circle button">
-            <v-icon class="icon" dark large>mdi-chevron-right</v-icon>
-          </div>
-          <!-- <v-btn class="button right" fab dark large color="primary"> -->
-          <!-- </v-btn> -->
-        </div>
-  
-      </div>
 
-      <div class="config">
+        <v-btn-toggle borderless class="mx-1" v-model="collectionSelectedId">
+          <v-btn v-for="collection in collections" :key="collection.id" :value="collection.id">
+            {{ collection.name }}
+          </v-btn>
+        </v-btn-toggle>
+        
 
-        <v-btn-toggle v-model="imageHeight">
-          
+        <v-btn-toggle borderless class="mx-1" v-model="imageHeight">
           <v-btn value="30">
             <v-icon>mdi-image-size-select-small</v-icon>
           </v-btn>
@@ -188,15 +194,93 @@
           <v-btn :value="300">
             <v-icon>mdi-image-size-select-actual</v-icon>
           </v-btn>
-
+          
         </v-btn-toggle>
+
+
+      </v-app-bar>
       
-        <!-- <v-text-field
-          label="Image Height"
-          v-model="imageHeight"
-          single-line
-          type="number"
-        ></v-text-field> -->
+      <v-navigation-drawer
+        v-model="drawer"
+        fixed
+        temporary
+      >
+        <v-list-item>
+          <v-list-item-content>
+            <v-list-item-icon>
+            </v-list-item-icon>
+            <v-list-item-title class="title">
+              Photos
+            </v-list-item-title>
+            <v-list-item-subtitle>
+              {{ scene.photoCount.toLocaleString() }} files
+            </v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
+    
+        <v-divider></v-divider>
+    
+        <v-list
+          nav
+        >
+          <!-- <v-list-item
+            link
+          >
+            <v-list-item-icon>
+              <v-icon>mdi-view-dashboard</v-icon>
+            </v-list-item-icon>
+
+            <v-list-item-content>
+              <v-list-item-title>Dashboard</v-list-item-title>
+            </v-list-item-content>
+          </v-list-item> -->
+
+
+          <v-list-item>
+            <v-list-item-content>
+              <v-slider
+                v-model="imageHeight"
+                min="1"
+                max="400"
+                label="Image Size"
+              ></v-slider> 
+            </v-list-item-content>
+          </v-list-item>
+
+          <v-list-item>
+            <v-switch v-model="debug.overdraw" label="Debug Overdraw"></v-switch>
+          </v-list-item>
+          <v-list-item>
+            <v-switch v-model="debug.thumbnails" label="Debug Thumbnails"></v-switch>
+          </v-list-item>
+
+  
+
+        </v-list>
+      </v-navigation-drawer>
+
+      <div
+        class="virtual-canvas"
+        :style="{ height: canvasSize.height + 'px' }">
+      </div>
+
+      <div v-if="fullscreenRegion" class="navigation">
+
+        <div class="hitarea left" @click="navigate(-1)" @wheel="onNavigationWheel" @mousedown="onNavigationMouseDown">
+          <div class="circle button">
+            <v-icon class="icon" dark large>mdi-chevron-left</v-icon>
+          </div>
+        </div>
+  
+        <div class="hitarea right" @click="navigate(1)" @mousedown="onNavigationMouseDown">
+          <div class="circle button">
+            <v-icon class="icon" dark large>mdi-chevron-right</v-icon>
+          </div>
+        </div>
+  
+      </div>
+
+      <div class="config">
 
         <v-card v-if="showConfig" class="px-4 pt-4 py-1">
 
@@ -231,26 +315,8 @@
           <v-icon dark>mdi-tune</v-icon>
         </v-btn>
 
-        <!-- <input type="checkbox" id="debugOverdraw" v-model="debug.overdraw">
-        <label for="debugOverdraw">Debug Overdraw</label>
-  
-        <input type="checkbox" id="debugThumbnails" v-model="debug.thumbnails">
-        <label for="debugThumbnails">Debug Thumbnails</label> -->
-  
       </div>
       
-      <!-- {{ regionPoolInUse }} / {{ regions.length }} / {{ regionPool.length }} -->
-      <!-- <div class="added-regions" :key="addedRegionsTime">
-        <div
-          v-for="region in addedRegions"
-          :key="region.id"
-          class="region"
-          :id="'region-' + region.id"
-          @click="onRegionClick(region)">
-          {{ region.id }}
-          {{ timestamp }}
-        </div>
-      </div> -->
       <div class="region-pool" :key="regionPoolUpdateTime">
         <div
           v-for="region in regionPool"
@@ -258,46 +324,22 @@
           :id="'region-' + region.poolId"
           class="region"
           @click="onRegionClick(region)">
-          <!-- {{ region.poolId }} -->
-          <!-- {{ region.id }} -->
-          <!-- {{ region.viewRatio }}
-          {{ region.distFromCenter }} -->
-          <!-- {{ timestamp }} -->
-          <!-- <span v-if="region.data" class="data">
-            {{ region.data.filename }}
-          </span> -->
 
-          <div class="video" v-if="region.data && region.data.video">
+          <!-- {{ region.poolId }} {{ region.active }} -->
+
+          <!-- <div class="video" v-if="region.data && region.data.video">
             <video-player
               :size="fullscreenRegion == region ? 'full' : 'thumb'"
               :region="region"
+              :params="sceneParams"
             ></video-player>
-            <!-- <video
-              class="video-js"
-              controls
-              preload="auto"
-              poster="MY_VIDEO_POSTER.jpg"
-              data-setup="{}"
-            >
-              <source src="20200606_135743.mp4" type="video/mp4" />
-              <p class="vjs-no-js">
-                To view this video please enable JavaScript, and consider upgrading to a
-                web browser that
-                <a href="https://videojs.com/html5-video-support/" target="_blank"
-                  >supports HTML5 video</a
-                >
-              </p>
-            </video> -->
-          </div>
+          </div> -->
 
         </div>
       </div>
+
     </v-app>
-    
-    <div
-      class="virtual-canvas"
-      :style="{ height: canvasSize.height + 'px' }">
-    </div>
+    <div id="viewer"></div>
 
   </div>
   <!-- <div id="image-ruler"> </div> -->
@@ -337,47 +379,6 @@
         timer = setTimeout(timeout, delay);
       };
     }
-
-    // const tileSize = 256
-    // const minLevel = 0
-    // const maxLevel = 16
-    // const power = 1 << maxLevel
-    // const viewer = OpenSeadragon({
-    //     id: "viewer",
-    //     prefixUrl: "/vendor/openseadragon/images/",
-    //     navigatorSizeRatio: 0.01,
-    //     tileSources:   {
-    //         height: power*tileSize,
-    //         width:  power*tileSize,
-    //         tileSize,
-    //         minLevel,
-    //         maxLevel,
-    //         getTileUrl: function( level, x, y ){
-    //           return "tiles?tileSize=" + tileSize + "&zoom=" + level + "&x=" + x + "&y=" + y
-    //         }
-    //     }
-    // });
-    // viewer.smartScrollZoom({
-    //   enabled: true,
-    //   minScrolls: 2,
-    //   zoomIncrement: 0.2,
-    //   timeThreshold: 500,
-    // });
-
-    // viewer.addHandler("canvas-click", event => {
-    //   // const viewport = event.eventSource.viewport;
-    //   event.preventDefaultAction = true;
-    //   // console.log(event);
-    // })
-
-    
-
-    // var IMAGE_RULER_HIGHLIGHT = "image-ruler";
-    // var IMAGE_RULER_DEFAULT_POSITION =      new OpenSeadragon.Point(0.5, 0);
-    // var overlay = viewer.addOverlay(IMAGE_RULER_HIGHLIGHT, IMAGE_RULER_DEFAULT_POSITION, OpenSeadragon.Placement.CENTER)
-    
-
-    // window.addEventListener('scroll', event => console.log(event));
 
     Vue.component("realtime-chart", {
       props: ["chartData", "values", "axisLabel", "scale", "postfix"],
@@ -492,6 +493,9 @@
         size: {
           type: String,
         },
+        params: {
+          type: String,
+        },
       },
       data() {
         return {
@@ -520,7 +524,7 @@
               loop: true,
               muted: this.size != "full",
               sources: [{
-                src: `files/${this.region.data.id}/video/${this.size}/${this.region.data.filename}`,
+                src: `files/${this.region.data.id}/video/${this.size}/${this.region.data.filename}?${this.params}`,
                 type: 'video/mp4',
               }],
             };
@@ -567,18 +571,21 @@
     const overlays = [];
     const overlayById = {};
     const regionsById = {};
-    let viewer = null;
-    var app = new Vue({
-      el: '#app',
+    window.app = new Vue({
+      el: '#vue',
       vuetify: new Vuetify(),
       data: {
+        drawer: false,
         timestamp: 0,
         imageHeight: 100,
+        collections: [],
+        collectionSelectedId: -1,
         scene: {
           bounds: {
             w: 0,
             h: 0,
           },
+          photoCount: 0,
         },
         view: {
           zoom: 0,
@@ -595,6 +602,8 @@
         regionPoolCount: 100,
         regionPoolUpdateTime: 0,
         regions: [],
+        regionsUpdateTime: 0,
+        regionsUpdateTimer: null,
         fullscreenRegion: null,
         viewportBounds: {
           x: 0,
@@ -612,9 +621,12 @@
       },
       async created() {
 
+        this.viewer = null;
+
         this.view.width = document.getElementById("viewer").clientWidth;
 
         window.addEventListener('scroll', this.onScroll);
+        await this.updateCollections();
         await this.updateScene();
         this.initSeadragon();
         this.initRegionPool();
@@ -647,12 +659,22 @@
         window.removeEventListener('scroll', this.onScroll);
       },
       watch: {
+        canvasSize() {
+          this.onScrollNoDebounce();
+        },
+        view() {
+          this.onScrollNoDebounce();
+        },
         sceneParams: debounce(async function() {
           await this.updateScene();
           this.resetTiles();
         }, 500),
-        viewportBounds() {
+        viewportBounds(bounds) {
           // this.updateRegionsView();
+          if (isNaN(bounds.x) || isNaN(bounds.y) || isNaN(bounds.width) || isNaN(bounds.height)) {
+            console.warn("Invalid viewport bounds, ignoring update", bounds.x, bounds.y, bounds.width, bounds.height);
+            return;
+          }
           this.updateRegions();
         },
         debug: {
@@ -678,6 +700,12 @@
         }
       },
       computed: {
+        collection() {
+          if (this.collectionSelectedId < 0 || this.collectionSelectedId >= this.collections.length) {
+            return { id: 0 };
+          }
+          return this.collections[this.collectionSelectedId];
+        },
         canvasSize() {
           const aspectRatio = this.scene.bounds.w / this.scene.bounds.h;
           return {
@@ -687,6 +715,7 @@
         },
         sceneParams() {
           const params = {
+            collection: this.collection ? this.collection.id : null,
             imageHeight: this.imageHeight,
             sceneWidth: this.view.width,
           };
@@ -743,6 +772,7 @@
           const now = Date.now();
           const elapsedSincePan = now - this.lastPanTime;
           if (elapsedSincePan < 50) return;
+          // console.log("onScroll")
 
           if (this.scrollDebounce) {
             if (this.scrollDebounceTimer) {
@@ -764,7 +794,12 @@
           }
         },
         onScrollNoDebounce() {
-          const viewport = viewer.viewport;
+          if (!this.viewer) {
+            this.scrollDebounceDirty = true;
+            this.scrollDebounceTimer = setTimeout(this.onScrollTimeout, 100);
+            return;
+          }
+          const viewport = this.viewer.viewport;
           const canvasAspectRatio = this.canvasSize.width / this.canvasSize.height;
           const viewerAspectRatio = this.view.width / this.view.height;
           const viewportViewWidth = 1;
@@ -773,7 +808,7 @@
           const viewportScrollHeight = viewportCanvasHeight - viewportViewHeight;
 
           const scrollMaxY = document.body.scrollHeight - window.innerHeight;
-          const scrollRatio = window.scrollY / scrollMaxY;
+          const scrollRatio = scrollMaxY ? window.scrollY / scrollMaxY : 0;
           const viewportOffset = scrollRatio * viewportScrollHeight;
           // const point = this.tempPoint;
           // point.x = viewportViewWidth * 0.5;
@@ -794,6 +829,7 @@
           viewport.fitBounds(rect, immediate);
         },
         onViewerScroll(originalHandler, event) {
+          // console.log("onViewerScroll")
           const originalEvent = event.originalEvent;
           if (originalEvent.ctrlKey) {
             originalEvent.preventDefault();
@@ -810,12 +846,13 @@
           return true;
         },
         onViewerPan(event) {
+          // console.log("onViewerPan")
           // return;
           const now = Date.now();
           const elapsedSinceScroll = now - this.lastScrollTime;
           if (elapsedSinceScroll < 50) return;
 
-          const viewport = viewer.viewport;
+          const viewport = this.viewer.viewport;
           const canvasAspectRatio = this.canvasSize.width / this.canvasSize.height;
           const viewerAspectRatio = this.view.width / this.view.height;
           const viewportViewWidth = 1;
@@ -825,25 +862,28 @@
           
           const viewportOffset = event.center.y - viewportViewHeight * 0.5;
 
-          const scrollRatio = viewportOffset / viewportScrollHeight;
+          const scrollRatio = viewportScrollHeight > 0 ? viewportOffset / viewportScrollHeight : 0;
           const scrollMaxY = document.body.scrollHeight - window.innerHeight;
           const scrollY = scrollRatio * scrollMaxY;
           this.lastPanTime = Date.now();
+          // console.log(event)
+          // Only for mouse...
           window.scrollTo(window.scrollX, scrollY);
         },
         resetTiles() {
-          var oldImage = viewer.world.getItemAt(0);
+          if (!this.viewer) return;
+          var oldImage = this.viewer.world.getItemAt(0);
           // var oldBounds = oldImage.getBounds();
           // var oldSource = oldImage.source;
           // console.log(oldBounds, oldSource)
           const newSource = this.getTileSources();
-          viewer.addTiledImage({
+          this.viewer.addTiledImage({
             tileSource: newSource,
             // x: oldBounds.x,
             // y: oldBounds.y,
             // width: oldBounds.width, // It'll do height automatically based on aspect ratio
             success: () => {
-              if (oldImage) viewer.world.removeItem(oldImage);
+              if (oldImage) this.viewer.world.removeItem(oldImage);
             }
           });
         },
@@ -857,6 +897,12 @@
           // if (first) {
           //   this.metricsInitialChartConfig = this.metricsChartConfig;
           // }
+        },
+        async updateCollections() {
+          const url = `collections`;
+          const collections = await (await fetch(url)).json();
+          this.collections = collections;
+          this.collectionSelectedId = 0;
         },
         async updateScene() {
           const url = `scenes?${this.sceneParams}`;
@@ -902,21 +948,22 @@
           }
         },
         initSeadragon() {
-          viewer = OpenSeadragon({
+          this.viewer = OpenSeadragon({
             id: "viewer",
             prefixUrl: "/vendor/openseadragon/images/",
             tileSources: this.getTileSources(),
-            navigatorSizeRatio: 0.01,
+            // navigatorSizeRatio: 0.01,
             // panHorizontal: false,
             showNavigationControl: false,
             defaultZoomLevel: 1,
             // visibilityRatio: 	1,
             constrainDuringPan: true,
-            minZoomLevel: 1,
+            // minZoomLevel: 1,
             viewportMargins: {
               left: 0,
               right: 0,
             },
+            springStiffness: 4,
             // springStiffness: 3,
             gestureSettingsMouse: {
               // scrollToZoom: false,
@@ -924,13 +971,18 @@
               // flickMomentum: 0.25,
               // flickEnabled: false,
               clickToZoom: false,
+              flickMomentum: 0.2,
               // dblClickToZoom: false
             },
+            gestureSettingsTouch: {
+              clickToZoom: false,
+              flickMomentum: 0.2,
+            },
             animationTime: 0.5,
-            // springStiffness: 100,
             zoomPerSecond: 1.0,
             zoomPerScroll: 1.2,
-            blendTime: 0.1,
+            // blendTime: 0.1,
+            blendTime: 0.3,
             // debugMode: true,
             // immediateRender: true,
             // zoomPerScroll: 2,
@@ -947,17 +999,18 @@
           //   timeThreshold: 500,
           // });
 
-          viewer.addHandler("viewport-change", event => {
+          this.viewer.addHandler("viewport-change", event => {
+            // console.log("viewport-change")
             const viewport = event.eventSource.viewport;
             this.viewportBounds = viewport.getBounds();
           })
 
-          viewer.addHandler("canvas-click", event => {
+          this.viewer.addHandler("canvas-click", event => {
             // const viewport = event.eventSource.viewport;
             // event.preventDefaultAction = true;
             // console.log(event)
             if (!event.quick) return;
-            this.onViewportClick(viewer.viewport.viewerElementToViewportCoordinates(event.position));
+            this.onViewportClick(this.viewer.viewport.viewerElementToViewportCoordinates(event.position));
           })
 
           // viewer.addHandler("canvas-scroll", event => {
@@ -966,7 +1019,7 @@
           //   event.preventDefault = true;
           // })
 
-          viewer.addHandler("resize", event => {
+          this.viewer.addHandler("resize", event => {
             this.view.width = event.newContainerSize.x;
             this.view.height = event.newContainerSize.y;
           })
@@ -974,28 +1027,28 @@
           this.view.width = viewerElement.clientWidth;
           this.view.height = viewerElement.clientHeight;
 
-          viewer.addHandler("open", () => {
+          this.viewer.addHandler("open", () => {
             // console.log("open")
 
             // Initializing pans a couple of times, so wait with this handler
             // until after initialization
-            viewer.addHandler("pan", this.onViewerPan.bind(this));
+            this.viewer.addHandler("pan", this.onViewerPan.bind(this));
           });
 
-          viewer.addHandler("zoom", event => {
+          this.viewer.addHandler("zoom", event => {
             this.view.zoom = event.zoom;
           });
 
-          viewer.innerTracker.keyDownHandler = this.onViewerKeyDown.bind(this, viewer.innerTracker.scrollHandler);
-          viewer.innerTracker.scrollHandler = this.onViewerScroll.bind(this, viewer.innerTracker.scrollHandler);
+          this.viewer.innerTracker.keyDownHandler = this.onViewerKeyDown.bind(this, this.viewer.innerTracker.scrollHandler);
+          this.viewer.innerTracker.scrollHandler = this.onViewerScroll.bind(this, this.viewer.innerTracker.scrollHandler);
           // viewer.innerTracker.nonPrimaryPressHandler = null;
           // viewer.innerTracker.nonPrimaryReleaseHandler = null;
-          viewer.innerTracker.nonPrimaryPressHandler = event => {
+          this.viewer.innerTracker.nonPrimaryPressHandler = event => {
             // Middle mouse propagation hack
             if (event.button == 1) {
               
               // This prevents later preventDefault() by momentarily disabling handlers
-              const tracker = viewer.innerTracker;
+              const tracker = this.viewer.innerTracker;
               const clickHandler = tracker.clickHandler; tracker.clickHandler = null;
               const dblClickHandler = tracker.dblClickHandler; tracker.dblClickHandler = null;
               const pressHandler = tracker.pressHandler; tracker.pressHandler = null;
@@ -1059,7 +1112,7 @@
           console.log(region.data.path);
           console.log(region);
           
-          const viewerBounds = viewer.viewport.getBounds();
+          const viewerBounds = this.viewer.viewport.getBounds();
           const viewerArea = viewerBounds.width * viewerBounds.height;
           const regionArea = region.bounds.w * region.bounds.h;
           const areaDiff = viewerArea/regionArea;
@@ -1089,7 +1142,7 @@
 
         fitRect(rect, options) {
           function withSpeed(animationTime, callback) {
-            const viewport = viewer.viewport;
+            const viewport = this.viewer.viewport;
             const prevValues = {
               centerSpringX: viewport.centerSpringX.animationTime,
               centerSpringY: viewport.centerSpringY.animationTime,
@@ -1109,7 +1162,7 @@
           }
 
           let fitFunc = () => {
-            viewer.viewport.fitBounds(rect, options.immediate)
+            this.viewer.viewport.fitBounds(rect, options.immediate)
           }
 
           if (options && options.animationTime) {
@@ -1160,7 +1213,7 @@
           // overlays.push(overlay);
           // overlayById[overlay.poolId] = overlay;
           // console.log(this.getOverlayId(region))
-          viewer.addOverlay(
+          this.viewer.addOverlay(
             this.getOverlayId(region),
             new OpenSeadragon.Rect(
               region.bounds.x,
@@ -1190,6 +1243,7 @@
             ...region,
             poolId: poolRegion.poolId,
             marked: false,
+            active: false,
           });
           Vue.set(poolRegion, "data", region.data);
           this.regions.push(poolRegion);
@@ -1224,6 +1278,7 @@
           this.regionPoolInUse--;
           // console.log("release", this.regionPoolInUse);
           region.id = -1;
+          region.active = false,
           region.bounds.x = -10000;
           region.bounds.y = -10000;
           region.bounds.w = 0;
@@ -1240,7 +1295,7 @@
           //     region.bounds.h
           //   ),
           // );
-          const overlay = viewer.getOverlayById(this.getOverlayId(region));
+          const overlay = this.viewer.getOverlayById(this.getOverlayId(region));
           overlay.update(new OpenSeadragon.Rect(
             region.bounds.x,
             region.bounds.y,
@@ -1252,13 +1307,13 @@
         updateRegionsView() {
           for (let i = 0; i < this.regions.length; i++) {
             const region = this.regions[i];
-            const overlay = viewer.getOverlayById(this.getOverlayId(region));
+            const overlay = this.viewer.getOverlayById(this.getOverlayId(region));
             this.updateRegionViewFromOverlay(region, overlay);
           }
         },
         updateRegionViewFromOverlay(region, overlay) {
-          const overlayBounds = overlay.getBounds(viewer.viewport);
-          const viewerBounds = viewer.viewport.getBounds();
+          const overlayBounds = overlay.getBounds(this.viewer.viewport);
+          const viewerBounds = this.viewer.viewport.getBounds();
           const widthRatio = overlayBounds.width / viewerBounds.width;
           const heightRatio = overlayBounds.height / viewerBounds.height;
           region.viewRatio = Math.max(widthRatio, heightRatio);

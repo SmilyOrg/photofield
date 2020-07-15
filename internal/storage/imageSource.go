@@ -111,7 +111,8 @@ func NewImageSource() *ImageSource {
 		Metrics:     true,
 		Cost: func(value interface{}) int64 {
 			imageRef := value.(imageRef)
-			if imageRef.image == nil {
+			img := imageRef.image
+			if img == nil {
 				return 1
 			}
 			// config := source.GetImageConfig(imageRef.path)
@@ -122,7 +123,7 @@ func NewImageSource() *ImageSource {
 			// 	println("UNKNOWN")
 			// }
 			// return 1
-			switch img := (*imageRef.image).(type) {
+			switch img := (*img).(type) {
 
 			case *image.YCbCr:
 				return int64(unsafe.Sizeof(*img)) +
@@ -143,7 +144,7 @@ func NewImageSource() *ImageSource {
 					int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
 
 			default:
-				panic(fmt.Sprintf("Unable to compute cost, unsupported image format %v", reflect.TypeOf(img).String()))
+				panic(fmt.Sprintf("Unable to compute cost, unsupported image format %v", reflect.TypeOf(img)))
 			}
 			// ycbcr, ok := (*imageRef.image).(*image.YCbCr)
 			// if !ok {
@@ -261,7 +262,7 @@ func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan stri
 				log.Printf("listing %d\n", files)
 			}
 			paths <- path
-			if files >= maxPhotos {
+			if maxPhotos > 0 && files >= maxPhotos {
 				return errors.New("Skipping the rest")
 			}
 			return nil
@@ -500,15 +501,15 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 		if imageInfoDb.Path == "" {
 			valid = false
 		}
-		if imageInfoDb.ImageInfo.Width == 0 || imageInfoDb.ImageInfo.Height == 0 {
-			valid = false
-		}
+		// if imageInfoDb.ImageInfo.Width == 0 || imageInfoDb.ImageInfo.Height == 0 {
+		// 	valid = false
+		// }
 		// if imageInfoDb.ImageInfo.DateTime.IsZero() {
 		// 	valid = false
 		// }
-		if imageInfoDb.ImageInfo.Color == 0 {
-			valid = false
-		}
+		// if imageInfoDb.ImageInfo.Color == 0 {
+		// 	valid = false
+		// }
 		var info *ImageInfo
 		if valid {
 			info = &imageInfoDb.ImageInfo

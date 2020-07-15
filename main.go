@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io/ioutil"
 
 	// "image/png"
 	"io"
@@ -28,6 +29,7 @@ import (
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
 
+	"github.com/goccy/go-yaml"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
@@ -37,6 +39,7 @@ var mainSceneConfig SceneConfig
 
 var imageSource *ImageSource
 var sceneSource *SceneSource
+var collections []Collection
 
 type TileWriter func(w io.Writer) error
 
@@ -125,6 +128,46 @@ func scenesHandler(w http.ResponseWriter, r *http.Request) {
 
 	scenes := []*Scene{scene}
 	err = json.NewEncoder(w).Encode(scenes)
+	if err != nil {
+		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
+		return
+	}
+}
+
+func filterCollections(collections []Collection, f func(Collection) bool) []Collection {
+	filtered := make([]Collection, 0)
+	for _, collection := range collections {
+		if f(collection) {
+			filtered = append(filtered, collection)
+		}
+	}
+	return filtered
+}
+
+func getCollectionById(id int) *Collection {
+	for i := range collections {
+		if collections[i].Id == id {
+			return &collections[i]
+		}
+	}
+	return nil
+}
+
+func collectionsHandler(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+
+	w.Header().Set("Content-Type", "application/json")
+
+	name := query.Get("name")
+
+	filtered := filterCollections(collections, func(collection Collection) bool {
+		if name != "" && name != collection.Name {
+			return false
+		}
+		return true
+	})
+
+	err := json.NewEncoder(w).Encode(filtered)
 	if err != nil {
 		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
 		return
@@ -379,6 +422,19 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 		}
 	}
 
+	value = query.Get("collection")
+	if value != "" {
+		collectionId, err := strconv.Atoi(value)
+		if err != nil {
+			return nil, errors.New("Invalid collection id")
+		}
+		collection := getCollectionById(collectionId)
+		if collection == nil {
+			return nil, errors.New("Collection not found")
+		}
+		sceneConfig.Collection = *collection
+	}
+
 	// fmt.Printf("%.0f %.0f\n", sceneConfig.Layout.SceneWidth, sceneConfig.Layout.ImageHeight)
 
 	// return getScene(sceneConfig), nil
@@ -386,9 +442,89 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 	return sceneSource.GetScene(sceneConfig, imageSource), nil
 }
 
+type Configuration struct {
+	Collections []Collection `json:"collections"`
+	Layout      LayoutConfig `json:"layout"`
+	Render      RenderConfig `json:"render"`
+}
+
+func loadConfiguration(sceneConfig *SceneConfig, collections *[]Collection, imageSource *ImageSource, sceneSource *SceneSource) {
+	filename := "configuration.yaml"
+	bytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Printf("unable to open %s, using defaults: %s\n", filename, err.Error())
+		return
+	}
+
+	configuration := Configuration{
+		Layout: sceneConfig.Layout,
+		Render: sceneConfig.Config,
+	}
+
+	if err := yaml.Unmarshal(bytes, &configuration); err != nil {
+		log.Printf("unable to parse %s, using defaults: %s\n", filename, err.Error())
+		return
+	}
+
+	if len(configuration.Collections) > 0 {
+		sceneConfig.Collection = configuration.Collections[0]
+	}
+	*collections = configuration.Collections
+	sceneConfig.Layout = configuration.Layout
+	sceneConfig.Config = configuration.Render
+}
+
 func main() {
 
+	defaultSceneConfig.Collection = Collection{
+		// ListLimit: 1,
+		// ListLimit: 3,
+		// ListLimit: 10,
+		// ListLimit: 20,
+		// ListLimit: 100,
+		// ListLimit: 500,
+		// ListLimit: 1000,
+		// ListLimit: 2500,
+		// ListLimit: 5000,
+		// ListLimit: 10000,
+		// ListLimit: 15000,
+		// ListLimit: 20000,
+		// ListLimit: 50000,
+		// ListLimit: 60000,
+		// ListLimit: 75000,
+		// ListLimit: 100000,
+		// ListLimit: 200000,
+		Dirs: []string{
+			"photos",
+			// "P:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
+			// "P:/homes/Miha/Drive/Moments",
+			// "P:/photo/Moments",
+			// "P:/photo/Moments/2020 Tierpark",
+			// "P:/photo/Moments/Cuba 2019",
+			// "P:/photo/Moments/2020 Usedom",
+			// "P:/photo/Moments/USA 2018",
+		},
+	}
+
+	defaultSceneConfig.Config = RenderConfig{
+		TileSize:          256,
+		MaxSolidPixelArea: 1000,
+	}
+
+	defaultSceneConfig.Layout = LayoutConfig{
+		SceneWidth:  2000,
+		ImageHeight: 160,
+	}
+
 	imageSource = NewImageSource()
+	sceneSource = NewSceneSource()
+
+	loadConfiguration(&defaultSceneConfig, &collections, imageSource, sceneSource)
+
+	for i := range collections {
+		collections[i].Id = i
+	}
+
 	imageSource.Thumbnails = []Thumbnail{
 		NewThumbnail(
 			"S",
@@ -447,37 +583,6 @@ func main() {
 		),
 	}
 
-	sceneSource = NewSceneSource()
-
-	defaultSceneConfig.Collection = Collection{
-		// ListLimit: 1,
-		// ListLimit: 3,
-		// ListLimit: 10,
-		// ListLimit: 20,
-		// ListLimit: 100,
-		// ListLimit: 500,
-		// ListLimit: 1000,
-		// ListLimit: 2500,
-		// ListLimit: 5000,
-		// ListLimit: 10000,
-		// ListLimit: 15000,
-		// ListLimit: 20000,
-		// ListLimit: 50000,
-		// ListLimit: 60000,
-		// ListLimit: 75000,
-		// ListLimit: 100000,
-		ListLimit: 200000,
-		Dirs: []string{
-			// "P:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
-			"P:/homes/Miha/Drive/Moments",
-			"P:/photo/Moments",
-			// "P:/photo/Moments/2020 Tierpark",
-			// "P:/photo/Moments/Cuba 2019",
-			// "P:/photo/Moments/2020 Usedom",
-			// "P:/photo/Moments/USA 2018",
-		},
-	}
-
 	// var photoDirs = []string{
 	// var photoDirs = []string{
 	// "/mnt/d/photos/copy/USA 2018/Lumix/100_PANA",
@@ -512,6 +617,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	err = fontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
+	if err != nil {
+		panic(err)
+	}
 
 	defaultSceneConfig.Scene.Fonts = Fonts{
 		Header: fontFamily.Face(14.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
@@ -520,17 +629,7 @@ func main() {
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
-	defaultSceneConfig.Config = RenderConfig{
-		TileSize:          256,
-		MaxSolidPixelArea: 1000,
-	}
-
-	defaultSceneConfig.Layout = LayoutConfig{
-		SceneWidth:  2000,
-		ImageHeight: 160,
-	}
-
-	renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
+	// renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 
 	log.Println("serving")
 
@@ -539,6 +638,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/metrics", metricsHandler)
 	r.HandleFunc("/scenes", scenesHandler)
+	r.HandleFunc("/collections", collectionsHandler)
 	r.HandleFunc("/tiles", tilesHandler)
 	r.HandleFunc("/regions", regionsHandler)
 	r.HandleFunc("/regions/{id}", regionHandler)

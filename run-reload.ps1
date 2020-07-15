@@ -1,1 +1,1 @@
-CompileDaemon -command="./photofield" -log-prefix=false
+CompileDaemon -include="*.yaml" -command="./photofield" -log-prefix=false

@@ -8,8 +8,10 @@ import (
 )
 
 type Collection struct {
-	ListLimit int
-	Dirs      []string
+	Id        int      `json:"id"`
+	Name      string   `json:"name"`
+	ListLimit int      `json:"list_limit"`
+	Dirs      []string `json:"dirs"`
 }
 
 func (collection *Collection) GetIds(source *ImageSource) <-chan ImageId {

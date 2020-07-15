@@ -47,11 +47,21 @@ func NewSceneSource() *SceneSource {
 	return &source
 }
 
-func (source *SceneSource) getImageIds(collection Collection, imageSource *ImageSource) []ImageId {
+func getCollectionKey(collection Collection) string {
 	key := fmt.Sprintf("%v", collection.ListLimit)
 	for _, dir := range collection.Dirs {
 		key += " " + dir
 	}
+	return key
+}
+
+func getLayoutKey(layout LayoutConfig) string {
+	key := fmt.Sprintf("%v %v", layout.SceneWidth, layout.ImageHeight)
+	return key
+}
+
+func (source *SceneSource) getImageIds(collection Collection, imageSource *ImageSource) []ImageId {
+	key := getCollectionKey(collection)
 
 	value, found := source.imageIds.Get(key)
 	if found {
@@ -75,7 +85,7 @@ func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource
 	// 	source.scenes.Metrics.Hits(),
 	// 	source.scenes.Metrics.Misses())
 
-	key := fmt.Sprintf("%v %v", config.Layout.SceneWidth, config.Layout.ImageHeight)
+	key := fmt.Sprintf("%v %v", getCollectionKey(config.Collection), getLayoutKey(config.Layout))
 
 	value, found := source.scenes.Get(key)
 	if found {
@@ -88,7 +98,15 @@ func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource
 
 	layoutFinished := ElapsedWithCount("layout", len(ids))
 	LayoutTimelineEvents(config.Layout, &scene, imageSource)
+	// LayoutSquare(&scene, imageSource)
+	// LayoutWall(&config.Config, &scene, imageSource)
 	layoutFinished()
+
+	if scene.RegionSource == nil {
+		scene.RegionSource = &PhotoRegionSource{
+			imageSource: imageSource,
+		}
+	}
 
 	log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
 

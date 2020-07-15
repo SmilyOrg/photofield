@@ -14,6 +14,7 @@ import (
 )
 
 type LayoutConfig struct {
+	Limit       int `json:"limit"`
 	SceneWidth  float64
 	ImageHeight float64
 	FontFamily  *canvas.FontFamily

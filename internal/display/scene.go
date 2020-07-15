@@ -19,8 +19,8 @@ import (
 )
 
 type RenderConfig struct {
-	TileSize          int
-	MaxSolidPixelArea float64
+	TileSize          int     `json:"tile_size"`
+	MaxSolidPixelArea float64 `json:"max_solid_pixel_area"`
 	LogDraws          bool
 	DebugOverdraw     bool
 	DebugThumbnails   bool
@@ -87,6 +87,7 @@ type Scene struct {
 	Fonts        Fonts        `json:"-"`
 	Bounds       Rect         `json:"bounds"`
 	Photos       []Photo      `json:"-"`
+	PhotoCount   int          `json:"photoCount"`
 	Solids       []Solid      `json:"-"`
 	Texts        []Text       `json:"-"`
 	RegionSource RegionSource `json:"-"`
@@ -178,7 +179,7 @@ func NewTextFromRect(rect Rect, font *canvas.FontFace, txt string) Text {
 	return text
 }
 
-func drawPhotos(photos []Photo, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func drawPhotosSlice(photos []Photo, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	for i := range photos {
 		photo := &photos[i]
 		photo.Draw(config, scene, c, scales, source)
@@ -206,7 +207,7 @@ func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales,
 
 	index := make(chan int)
 
-	concurrent := 100
+	concurrent := 10
 	photoCount := len(scene.Photos)
 	if photoCount < concurrent {
 		concurrent = photoCount
@@ -220,17 +221,19 @@ func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales,
 	}
 
 	var lastLogTime time.Time
+	var logInterval time.Duration
 	lastLogIndex := 0
 	if config.LogDraws {
 		lastLogTime = time.Now()
+		logInterval = 1 * time.Second
 	}
 	for i := range scene.Photos {
 		index <- i
 		if config.LogDraws {
 			now := time.Now()
-			logInterval := 1 * time.Second
-			if now.Sub(lastLogTime) > logInterval {
-				perSec := float64(i-lastLogIndex) / logInterval.Seconds()
+			elapsed := now.Sub(lastLogTime)
+			if elapsed > logInterval {
+				perSec := float64(i-lastLogIndex) / elapsed.Seconds()
 				log.Printf("draw photo %d, %.2f / sec \n", i, perSec)
 				lastLogTime = now
 				lastLogIndex = i
@@ -252,6 +255,7 @@ func (scene *Scene) AddPhotosFromIds(ids <-chan storage.ImageId) {
 		photo.Id = id
 		scene.Photos = append(scene.Photos, photo)
 	}
+	scene.PhotoCount = len(scene.Photos)
 }
 
 func (scene *Scene) AddPhotosFromIdSlice(ids []storage.ImageId) {
@@ -260,6 +264,7 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []storage.ImageId) {
 		photo.Id = id
 		scene.Photos = append(scene.Photos, photo)
 	}
+	scene.PhotoCount = len(scene.Photos)
 }
 
 func (scene *Scene) GetVisiblePhotos(output chan PhotoRef, view Rect, maxCount int) {

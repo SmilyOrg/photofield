@@ -1,0 +1,45 @@
+
+collections:
+  # - name: Combined
+  #   # list_limit: 1000
+  #   # list_limit: 10000
+  #   list_limit: 100000
+  #   dirs:
+  #     - P:/homes/Miha/Drive/Moments
+  #     - P:/photo/Moments
+
+  - name: Anniversary Trip
+    list_limit: 100
+    dirs:
+      - P:/photo/Moments/2020 First Wedding Anniversary Trip
+
+
+  # - name: Magic Festival of Lights Garden
+  #   # list_limit: 100
+  #   # list_limit: 1000
+  #   # list_limit: 10000
+  #   list_limit: 100000
+  #   dirs:
+  #     - P:/photo/Moments/2019 Magic Festival of Lights Garden
+
+  # - name: Miha
+  #   # list_limit: 100
+  #   # list_limit: 1000
+  #   # list_limit: 10000
+  #   list_limit: 100000
+  #   dirs:
+  #     - P:/homes/Miha/Drive/Moments
+
+  # - name: Shared
+  #   # list_limit: 100
+  #   # list_limit: 1000
+  #   # list_limit: 10000
+  #   list_limit: 100000
+  #   dirs:
+  #     - P:/photo/Moments
+
+render:
+  max_solid_pixel_area: 1000
+    
+layout:
+  # limit: 100
