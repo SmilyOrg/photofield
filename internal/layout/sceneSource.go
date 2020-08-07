@@ -3,6 +3,8 @@ package photofield
 import (
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	"github.com/dgraph-io/ristretto"
 
@@ -15,8 +17,9 @@ import (
 type SceneSource struct {
 	DefaultScene Scene
 
-	imageIds *ristretto.Cache
-	scenes   *ristretto.Cache
+	imageIds      *ristretto.Cache
+	scenes        *ristretto.Cache
+	scenesLoading sync.Map
 }
 
 type SceneConfig struct {
@@ -87,30 +90,46 @@ func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource
 
 	key := fmt.Sprintf("%v %v", getCollectionKey(config.Collection), getLayoutKey(config.Layout))
 
-	value, found := source.scenes.Get(key)
-	if found {
-		return value.(*Scene)
-	}
-
-	scene := source.DefaultScene
-	ids := source.getImageIds(config.Collection, imageSource)
-	scene.AddPhotosFromIdSlice(ids)
-
-	layoutFinished := ElapsedWithCount("layout", len(ids))
-	LayoutTimelineEvents(config.Layout, &scene, imageSource)
-	// LayoutSquare(&scene, imageSource)
-	// LayoutWall(&config.Config, &scene, imageSource)
-	layoutFinished()
-
-	if scene.RegionSource == nil {
-		scene.RegionSource = &PhotoRegionSource{
-			imageSource: imageSource,
+	tries := 1000
+	for try := 0; try < tries; try++ {
+		value, found := source.scenes.Get(key)
+		if found {
+			return value.(*Scene)
 		}
+
+		active, loaded := source.scenesLoading.LoadOrStore(key, false)
+		if loaded {
+			if active == true {
+				time.Sleep(1 * time.Millisecond)
+			} else {
+				time.Sleep(10 * time.Millisecond)
+				try--
+			}
+			continue
+		}
+
+		scene := source.DefaultScene
+		ids := source.getImageIds(config.Collection, imageSource)
+		scene.AddPhotosFromIdSlice(ids)
+
+		layoutFinished := ElapsedWithCount("layout", len(ids))
+		// LayoutTimelineEvents(config.Layout, &scene, imageSource)
+		LayoutAlbum(config.Layout, &scene, imageSource)
+		// LayoutSquare(&scene, imageSource)
+		// LayoutWall(&config.Config, &scene, imageSource)
+		layoutFinished()
+
+		if scene.RegionSource == nil {
+			scene.RegionSource = &PhotoRegionSource{
+				imageSource: imageSource,
+			}
+		}
+
+		log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
+
+		source.scenes.Set(key, &scene, 1)
+		source.scenesLoading.LoadOrStore(key, true)
 	}
 
-	log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
-
-	source.scenes.Set(key, &scene, 1)
-
-	return &scene
+	panic(fmt.Sprintf("Unable to get scene after %v tries", tries))
 }

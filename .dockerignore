@@ -1,0 +1,9 @@
+photos/
+profiles/
+main
+photofield
+photofield.exe
+photofield.exe~
+*.cache.db
+out.png
+tmp

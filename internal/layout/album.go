@@ -1,24 +1,27 @@
 package photofield
 
 import (
+	// . "photofield/internal"
+
 	"log"
-	"time"
 
 	. "photofield/internal"
 	. "photofield/internal/display"
 	storage "photofield/internal/storage"
+	"time"
 
-	"github.com/hako/durafmt"
 	"github.com/tdewolff/canvas"
 )
 
-type Event struct {
-	StartTime time.Time
-	EndTime   time.Time
-	Section   Section
+type AlbumEvent struct {
+	StartTime  time.Time
+	EndTime    time.Time
+	FirstOnDay bool
+	LastOnDay  bool
+	Section    Section
 }
 
-func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Scene, source *storage.ImageSource) Rect {
+func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	imageHeight := config.ImageHeight
 	imageSpacing := 3.
@@ -26,42 +29,35 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Sc
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
-	textHeight := 30.
-	textBounds := Rect{
-		X: rect.X,
-		Y: rect.Y,
-		W: rect.W,
-		H: textHeight,
-	}
-
-	startTimeFormat := "Mon, Jan 2, 15:04"
-	if event.StartTime.Year() != time.Now().Year() {
-		startTimeFormat = "Mon, Jan 2, 2006, 15:04"
-	}
-
-	headerText := event.StartTime.Format(startTimeFormat)
-
-	if SameDay(event.StartTime, event.EndTime) {
-		// endTimeFormat = "15:04"
-		duration := event.EndTime.Sub(event.StartTime)
-		if duration >= 1*time.Minute {
-			dur := durafmt.Parse(duration)
-			headerText += "   " + dur.LimitFirstN(1).String()
-		}
-	} else {
-		headerText += " - " + event.EndTime.Format(startTimeFormat)
-	}
-
-	font := config.FontFamily.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
-
-	scene.Texts = append(scene.Texts,
-		NewTextFromRect(
-			textBounds,
+	if event.FirstOnDay {
+		font := config.FontFamily.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+		text := NewTextFromRect(
+			Rect{
+				X: rect.X,
+				Y: rect.Y,
+				W: rect.W,
+				H: 30,
+			},
 			&font,
-			headerText,
-		),
+			event.StartTime.Format("Monday, Jan 2"),
+		)
+		scene.Texts = append(scene.Texts, text)
+		rect.Y += text.Sprite.Rect.H + 15
+	}
+
+	font := config.FontFamily.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	text := NewTextFromRect(
+		Rect{
+			X: rect.X,
+			Y: rect.Y,
+			W: rect.W,
+			H: 30,
+		},
+		&font,
+		event.StartTime.Format("15:00"),
 	)
-	rect.Y += textHeight + 15
+	scene.Texts = append(scene.Texts, text)
+	rect.Y += text.Sprite.Rect.H + 10
 
 	photos := make(chan SectionPhoto, 1)
 	boundsOut := make(chan Rect)
@@ -70,15 +66,16 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Sc
 	newBounds := <-boundsOut
 
 	rect.Y = newBounds.Y + newBounds.H
-	rect.Y += 10
+	if event.LastOnDay {
+		rect.Y += 40
+	} else {
+		rect.Y += 6
+	}
 	return rect
 }
 
-func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
+func LayoutAlbum(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
 
-	// log.Println("layout")
-
-	// log.Println("layout load info")
 	layoutPhotos := getLayoutPhotos(scene.Photos, source)
 	sortOldestToNewest(layoutPhotos)
 
@@ -94,7 +91,7 @@ func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.Ima
 
 	scene.Bounds.W = config.SceneWidth
 
-	event := Event{}
+	event := AlbumEvent{}
 	eventCount := 0
 	var lastPhotoTime time.Time
 
@@ -137,13 +134,15 @@ func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.Ima
 		info := LayoutPhoto.Info
 
 		photoTime := info.DateTime
-		elapsed := lastPhotoTime.Sub(photoTime)
+		elapsed := photoTime.Sub(lastPhotoTime)
 		if elapsed > 10*time.Minute {
-			event.StartTime = lastPhotoTime
-			rect = LayoutTimelineEvent(config, rect, &event, scene, source)
+			event.EndTime = lastPhotoTime
+			event.LastOnDay = !SameDay(lastPhotoTime, photoTime)
+			rect = LayoutAlbumEvent(config, rect, &event, scene, source)
 			eventCount++
-			event = Event{}
-			event.EndTime = photoTime
+			event = AlbumEvent{}
+			event.StartTime = photoTime
+			event.FirstOnDay = !SameDay(lastPhotoTime, photoTime)
 		}
 		lastPhotoTime = photoTime
 
@@ -158,8 +157,9 @@ func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.Ima
 	layoutPlaced()
 
 	if len(event.Section.photos) > 0 {
-		event.StartTime = lastPhotoTime
-		rect = LayoutTimelineEvent(config, rect, &event, scene, source)
+		event.EndTime = lastPhotoTime
+		event.LastOnDay = true
+		rect = LayoutAlbumEvent(config, rect, &event, scene, source)
 		eventCount++
 	}
 

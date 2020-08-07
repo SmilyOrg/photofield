@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"image"
 	"io"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -28,15 +30,20 @@ func NewMediaDecoder(concurrent int) *MediaDecoder {
 		"-Rotation",
 		"-ImageWidth",
 		"-ImageHeight",
-		"-FileCreateDate", // This likely exists and contains timezone
-		"-DateTimeOriginal",
-		"-CreateDate",
+		// "-FileCreateDate", // This likely exists and contains timezone
+		// "-DateTimeOriginal",
+		// "-CreateDate",
+		// "-GPSDateTime",
+		"-EXIF:DateTimeOriginal",
+		"-XMP:CreateDate",
+		"-EXIF:CreateDate",
+		"-XMP:DateTimeOriginal",
 		"-Time:All",
 		"-n", // Machine-readable values
 		"-S", // Short tag names with no padding
 	)
 	if err != nil {
-		panic(err)
+		log.Printf("exiftool not found")
 	}
 	return &decoder
 }
@@ -81,6 +88,15 @@ func parseDateTime(value string) (time.Time, error) {
 	return t, err
 }
 
+func (decoder *MediaDecoder) DecodeInfo(path string, info *ImageInfo) error {
+	file, err := os.Open(path)
+	defer file.Close()
+	if err != nil {
+		return err
+	}
+	return decoder.DecodeInfoGoExif(file, info)
+}
+
 func (decoder *MediaDecoder) DecodeInfoExifTool(path string, info *ImageInfo) error {
 
 	bytes, err := decoder.exifTool.Extract(path)
@@ -92,6 +108,8 @@ func (decoder *MediaDecoder) DecodeInfoExifTool(path string, info *ImageInfo) er
 	rotation := ""
 	imageWidth := ""
 	imageHeight := ""
+
+	// var gpsTime time.Time
 
 	output := string(bytes)
 	scanner := bufio.NewScanner(strings.NewReader(output))
@@ -113,6 +131,8 @@ func (decoder *MediaDecoder) DecodeInfoExifTool(path string, info *ImageInfo) er
 			imageWidth = value
 		case "ImageHeight":
 			imageHeight = value
+		// case "GPSDateTime":
+		// 	gpsTime, _ = parseDateTime(value)
 		default:
 			if info.DateTime.IsZero() &&
 				(strings.Contains(name, "Date") || strings.Contains(name, "Time")) {
@@ -123,6 +143,12 @@ func (decoder *MediaDecoder) DecodeInfoExifTool(path string, info *ImageInfo) er
 	if err := scanner.Err(); err != nil {
 		return err
 	}
+
+	// println(gpsTime.String(), info.DateTime.String())
+
+	// if !gpsTime.IsZero() {
+	// time.FixedZone()
+	// }
 
 	if imageWidth != "" {
 		info.Width, err = strconv.Atoi(imageWidth)
@@ -154,7 +180,7 @@ func (decoder *MediaDecoder) DecodeInfoExifTool(path string, info *ImageInfo) er
 	return nil
 }
 
-func (decoder *MediaDecoder) DecodeInfo(reader io.ReadSeeker, info *ImageInfo) error {
+func (decoder *MediaDecoder) DecodeInfoGoExif(reader io.ReadSeeker, info *ImageInfo) error {
 
 	x, err := exif.Decode(reader)
 	if err == nil {

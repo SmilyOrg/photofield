@@ -97,7 +97,7 @@ type loadingImage struct {
 func NewImageSource() *ImageSource {
 	var err error
 	source := ImageSource{}
-	source.decoder = NewMediaDecoder(5)
+	source.decoder = NewMediaDecoder(20)
 	// source.ListExtensions = []string{".jpg"}
 	source.ListExtensions = []string{".jpg", ".mp4"}
 	// source.ListExtensions = []string{".mp4"}
@@ -195,7 +195,7 @@ func NewImageSource() *ImageSource {
 	// Migrate the schema
 	db.AutoMigrate(&ImageInfoDb{})
 
-	source.dbPendingInfos = make(chan *ImageInfoDb)
+	source.dbPendingInfos = make(chan *ImageInfoDb, 100)
 	go writePendingInfos(source.dbPendingInfos, db)
 
 	// // Create
@@ -294,12 +294,24 @@ func (source *ImageSource) GetSmallestThumbnail(path string) string {
 	return ""
 }
 
-func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {
-	colorPath := source.GetSmallestThumbnail(path)
-	if colorPath == "" {
-		colorPath = path
+func (source *ImageSource) LoadSmallestImage(path string) (*image.Image, error) {
+	for i := range source.Thumbnails {
+		thumbnail := &source.Thumbnails[i]
+		thumbnailPath := thumbnail.GetPath(path)
+		file, err := os.Open(thumbnailPath)
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+		image, _, err := source.decoder.Decode(file)
+		return &image, err
 	}
-	colorImage, err := source.LoadImage(colorPath)
+	image, err := source.LoadImage(path)
+	return image, err
+}
+
+func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {
+	colorImage, err := source.LoadSmallestImage(path)
 	if err != nil {
 		return color.RGBA{}, err
 	}
@@ -321,7 +333,7 @@ func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {
 
 func (source *ImageSource) LoadImageInfo(path string) (*ImageInfo, error) {
 	var info ImageInfo
-	err := source.decoder.DecodeInfoExifTool(path, &info)
+	err := source.decoder.DecodeInfo(path, &info)
 	if err != nil {
 		return nil, err
 	}
@@ -501,6 +513,14 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 		if imageInfoDb.Path == "" {
 			valid = false
 		}
+
+		valid = false
+
+		// if strings.Contains(imageInfoDb.Path, "USA 2018") {
+		// if strings.Contains(imageInfoDb.Path, "20180825_180816") {
+		// 	valid = false
+		// }
+
 		// if imageInfoDb.ImageInfo.Width == 0 || imageInfoDb.ImageInfo.Height == 0 {
 		// 	valid = false
 		// }

@@ -1,0 +1,14 @@
+version: '3.3'
+services:
+
+  photofield:
+    build: ./
+    container_name: photofield
+    ports:
+      - 8080:8080
+    labels:
+      - "traefik.http.services.photofield.loadbalancer.server.port=8080"
+    volumes:
+      - /photo:/photo:ro
+      - /go/src/photofield/configuration.docker.yaml:/app/configuration.yaml:ro
+    restart: "no"

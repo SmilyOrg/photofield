@@ -6,6 +6,7 @@ import (
 	. "photofield/internal"
 	. "photofield/internal/display"
 	storage "photofield/internal/storage"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,12 @@ type SectionPhoto struct {
 	Index int
 	Photo *Photo
 	Size  Size
+}
+
+type LayoutPhoto struct {
+	Index int
+	Photo Photo
+	Info  ImageInfo
 }
 
 type PhotoRegionSource struct {
@@ -304,4 +311,93 @@ func layoutSectionList(section *Section, bounds Rect, imageHeight float64, image
 		X: bounds.X + x,
 		Y: bounds.Y + y,
 	}
+}
+
+func getLayoutPhotosUnordered(id int, photos []Photo, indices chan int, output chan LayoutPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
+	for i := range indices {
+		photo := &photos[i]
+		path := source.GetImagePath(photo.Id)
+		info := source.GetImageInfo(path)
+		output <- LayoutPhoto{
+			Index: i,
+			Photo: *photo,
+			Info:  *info,
+		}
+	}
+	wg.Done()
+}
+
+func getLayoutPhotoChan(photos []Photo, source *storage.ImageSource) <-chan LayoutPhoto {
+	finished := ElapsedWithCount("layout load info", len(photos))
+
+	indices := make(chan int)
+	layoutPhotos := make(chan LayoutPhoto, 10)
+
+	concurrent := 20
+
+	wg := &sync.WaitGroup{}
+	wg.Add(concurrent)
+	for i := 0; i < concurrent; i++ {
+		go getLayoutPhotosUnordered(i, photos, indices, layoutPhotos, wg, source)
+	}
+
+	go func() {
+		for i := range photos {
+			indices <- i
+		}
+		close(indices)
+		wg.Wait()
+		finished()
+		close(layoutPhotos)
+	}()
+
+	// sort.Slice(scene.Photos, func(i, j int) bool {
+	// 	a := source.GetImageInfo(scene.Photos[i].Original.Path)
+	// 	b := source.GetImageInfo(scene.Photos[j].Original.Path)
+	// 	return a.DateTime.After(b.DateTime)
+	// })
+
+	return layoutPhotos
+}
+
+func layoutPhotoChanToSlice(input <-chan LayoutPhoto) []LayoutPhoto {
+	var layoutPhotos []LayoutPhoto
+	lastIndex := -1
+	lastLogTime := time.Now()
+	logInterval := 2 * time.Second
+	for photo := range input {
+		now := time.Now()
+		if now.Sub(lastLogTime) > logInterval {
+			perSec := float64(photo.Index-lastIndex) / logInterval.Seconds()
+			log.Printf("layout load info %d, %.2f / sec\n", photo.Index, perSec)
+			lastLogTime = now
+			lastIndex = photo.Index
+		}
+		layoutPhotos = append(layoutPhotos, photo)
+	}
+	return layoutPhotos
+}
+
+func getLayoutPhotos(photos []Photo, source *storage.ImageSource) []LayoutPhoto {
+	return layoutPhotoChanToSlice(getLayoutPhotoChan(photos, source))
+}
+
+func sortNewestToOldest(photos []LayoutPhoto) {
+	defer ElapsedWithCount("layout sort", len(photos))()
+
+	sort.Slice(photos, func(i, j int) bool {
+		a := photos[i]
+		b := photos[j]
+		return a.Info.DateTime.After(b.Info.DateTime)
+	})
+}
+
+func sortOldestToNewest(photos []LayoutPhoto) {
+	defer ElapsedWithCount("layout sort", len(photos))()
+
+	sort.Slice(photos, func(i, j int) bool {
+		a := photos[i]
+		b := photos[j]
+		return a.Info.DateTime.Before(b.Info.DateTime)
+	})
 }
