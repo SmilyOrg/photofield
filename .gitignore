@@ -5,5 +5,7 @@ photofield
 photofield.exe
 photofield.exe~
 *.cache.db
+*.cache.db-shm
+*.cache.db-wal
 out.png
 tmp

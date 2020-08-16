@@ -19,21 +19,12 @@ import (
 
 	"github.com/EdlinOrg/prominentcolor"
 	"github.com/dgraph-io/ristretto"
-	"github.com/jinzhu/gorm"
 	"github.com/karrick/godirwalk"
 )
 
 var NotAnImageError = errors.New("Not a supported image extension, might be video")
 
 type ImageId int
-
-type ImageInfoDb struct {
-	Path      string `gorm:"type:varchar(4096);primary_key;unique_index"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
-	ImageInfo
-}
 
 type ImageSource struct {
 	ListExtensions  []string
@@ -46,13 +37,12 @@ type ImageSource struct {
 	paths       []string
 	pathMutex   sync.RWMutex
 
-	decoder        *MediaDecoder
-	imagesLoading  sync.Map
-	images         *ristretto.Cache
-	infos          *ristretto.Cache
-	fileExists     *ristretto.Cache
-	db             *gorm.DB
-	dbPendingInfos chan *ImageInfoDb
+	decoder       *MediaDecoder
+	imagesLoading sync.Map
+	images        *ristretto.Cache
+	infoCache     *ImageInfoSourceCache
+	infoDatabase  *ImageInfoSourceSqlite
+	fileExists    *ristretto.Cache
 	// imageByPath       sync.Map
 	// imageConfigByPath sync.Map
 }
@@ -98,8 +88,8 @@ func NewImageSource() *ImageSource {
 	var err error
 	source := ImageSource{}
 	source.decoder = NewMediaDecoder(20)
-	// source.ListExtensions = []string{".jpg"}
-	source.ListExtensions = []string{".jpg", ".mp4"}
+	source.ListExtensions = []string{".jpg"}
+	// source.ListExtensions = []string{".jpg", ".mp4"}
 	// source.ListExtensions = []string{".mp4"}
 	source.ImageExtensions = []string{".jpg", ".jpeg", ".png", ".gif"}
 	source.VideoExtensions = []string{".mp4"}
@@ -166,15 +156,8 @@ func NewImageSource() *ImageSource {
 		panic(err)
 	}
 
-	source.infos, err = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,     // number of keys to track frequency of (10M).
-		MaxCost:     1 << 27, // maximum cost of cache (128MB).
-		BufferItems: 64,      // number of keys per Get buffer.
-		Metrics:     true,
-	})
-	if err != nil {
-		panic(err)
-	}
+	source.infoCache = NewImageInfoSourceCache()
+	source.infoDatabase = NewImageInfoSourceSqlite()
 
 	source.fileExists, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).
@@ -186,29 +169,6 @@ func NewImageSource() *ImageSource {
 		panic(err)
 	}
 
-	db, err := gorm.Open("sqlite3", "photofield.cache.db")
-	if err != nil {
-		panic("failed to connect database")
-	}
-	source.db = db
-
-	// Migrate the schema
-	db.AutoMigrate(&ImageInfoDb{})
-
-	source.dbPendingInfos = make(chan *ImageInfoDb, 100)
-	go writePendingInfos(source.dbPendingInfos, db)
-
-	// // Create
-	// db.Create(&Product{Code: "L1212", Price: 1000})
-
-	// // Read
-	// var product Product
-	// db.First(&product, 1)                   // find product with id 1
-	// db.First(&product, "code = ?", "L1212") // find product with code l1212
-
-	// // Update - update product's price to 2000
-	// db.Model(&product).Update("Price", 2000)
-
 	return &source
 }
 
@@ -216,7 +176,7 @@ func (source *ImageSource) GetMetrics() ImageSourceMetrics {
 	return ImageSourceMetrics{
 		Cache: ImageSourceMetricsCaches{
 			Images: source.GetCacheMetrics(source.images),
-			Infos:  source.GetCacheMetrics(source.infos),
+			// Infos:  source.GetCacheMetrics(source.infos),
 			Exists: source.GetCacheMetrics(source.fileExists),
 		},
 	}
@@ -342,8 +302,8 @@ func (source *ImageSource) LoadImageInfo(path string) (*ImageInfo, error) {
 	if err != nil {
 		return &info, err
 	}
-
 	info.SetColorRGBA(color)
+
 	return &info, nil
 }
 
@@ -485,15 +445,6 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	return nil, errors.New(fmt.Sprintf("Unable to get image after %v tries", tries))
 }
 
-func writePendingInfos(pendingInfos chan *ImageInfoDb, db *gorm.DB) {
-	for imageInfo := range pendingInfos {
-		db.Where("path = ?", imageInfo.Path).
-			Assign(imageInfo).
-			Assign(imageInfo.ImageInfo).
-			FirstOrCreate(imageInfo)
-	}
-}
-
 func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
 	// 	source.infos.Metrics.Ratio()*100,
@@ -502,50 +453,48 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 	// 	source.infos.Metrics.Hits(),
 	// 	source.infos.Metrics.Misses())
 
-	value, found := source.infos.Get(path)
-	if found {
-		return value.(*ImageInfo)
-	} else {
-		var imageInfoDb ImageInfoDb
-		source.db.First(&imageInfoDb, "path = ?", path)
+	var info *ImageInfo
+	var err error
 
-		valid := true
-		if imageInfoDb.Path == "" {
-			valid = false
-		}
+	logging := false
 
-		valid = false
-
-		// if strings.Contains(imageInfoDb.Path, "USA 2018") {
-		// if strings.Contains(imageInfoDb.Path, "20180825_180816") {
-		// 	valid = false
-		// }
-
-		// if imageInfoDb.ImageInfo.Width == 0 || imageInfoDb.ImageInfo.Height == 0 {
-		// 	valid = false
-		// }
-		// if imageInfoDb.ImageInfo.DateTime.IsZero() {
-		// 	valid = false
-		// }
-		// if imageInfoDb.ImageInfo.Color == 0 {
-		// 	valid = false
-		// }
-		var info *ImageInfo
-		if valid {
-			info = &imageInfoDb.ImageInfo
-		} else {
-			var err error
-			info, err = source.LoadImageInfo(path)
-			if err != nil {
-				// fmt.Println("Unable to load image info", err, path)
-				return &ImageInfo{}
-			}
-			source.dbPendingInfos <- &ImageInfoDb{
-				Path:      path,
-				ImageInfo: *info,
-			}
-		}
-		source.infos.Set(path, info, 1)
+	startTime := time.Now()
+	info, err = source.infoCache.Get(path)
+	cacheGetMs := time.Since(startTime).Milliseconds()
+	if info != nil {
+		// if (logging) log.Printf("image info %5d ms get cache\n", cacheGetMs)
 		return info
 	}
+
+	startTime = time.Now()
+	info, err = source.infoDatabase.Get(path)
+	dbGetMs := time.Since(startTime).Milliseconds()
+	if info != nil {
+		startTime = time.Now()
+		source.infoCache.Set(path, info)
+		cacheSetMs := time.Since(startTime).Milliseconds()
+		if logging {
+			log.Printf("image info %5d ms get cache, %5d ms get db, %5d ms set cache\n", cacheGetMs, dbGetMs, cacheSetMs)
+		}
+		return info
+	}
+
+	startTime = time.Now()
+	info, err = source.LoadImageInfo(path)
+	fileGetMs := time.Since(startTime).Milliseconds()
+	if err == nil {
+		startTime = time.Now()
+		source.infoDatabase.Set(path, info)
+		dbSetMs := time.Since(startTime).Milliseconds()
+		startTime := time.Now()
+		source.infoCache.Set(path, info)
+		cacheSetMs := time.Since(startTime).Milliseconds()
+		if logging {
+			log.Printf("image info %5d ms get cache, %5d ms get db, %5d ms get file, %5d ms set db, %5d ms set cache\n", cacheGetMs, dbGetMs, fileGetMs, dbSetMs, cacheSetMs)
+		}
+		return info
+	}
+
+	fmt.Println("Unable to load image info", err, path)
+	return &ImageInfo{}
 }

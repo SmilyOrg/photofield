@@ -30,7 +30,7 @@ import (
 	"github.com/tdewolff/canvas/rasterizer"
 
 	"github.com/goccy/go-yaml"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	// _ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
 var defaultSceneConfig SceneConfig
@@ -449,7 +449,7 @@ type Configuration struct {
 }
 
 func loadConfiguration(sceneConfig *SceneConfig, collections *[]Collection, imageSource *ImageSource, sceneSource *SceneSource) {
-	filename := "configuration.yaml"
+	filename := "data/configuration.yaml"
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Printf("unable to open %s, using defaults: %s\n", filename, err.Error())
