@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"log"
 	"math"
 	"sort"
 	"sync"
@@ -194,6 +193,16 @@ func drawPhotoChannel(id int, index chan int, config *RenderConfig, scene *Scene
 	wg.Done()
 }
 
+func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
+	count := 0
+	for photoRef := range photoRefs {
+		photoRef.Photo.Draw(config, scene, c, scales, source)
+		count++
+	}
+	wg.Done()
+	counts <- count
+}
+
 func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
@@ -205,43 +214,35 @@ func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales,
 	// 	photo.Draw(config, scene, c, scales, source)
 	// }
 
-	index := make(chan int)
-
 	concurrent := 10
 	photoCount := len(scene.Photos)
 	if photoCount < concurrent {
 		concurrent = photoCount
 	}
 
+	startTime := time.Now()
+
+	tileRect := Rect{X: 0, Y: 0, W: (float64)(config.TileSize), H: (float64)(config.TileSize)}
+	tileToCanvas := c.View().Inv()
+	tileCanvasRect := tileRect.Transform(tileToCanvas)
+	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
+
+	visiblePhotos := scene.GetVisiblePhotos(tileCanvasRect, math.MaxInt32)
+	visiblePhotoCount := 0
+
 	wg := &sync.WaitGroup{}
 	wg.Add(concurrent)
-
+	counts := make(chan int)
 	for i := 0; i < concurrent; i++ {
-		go drawPhotoChannel(i, index, config, scene, c, scales, wg, source)
+		go drawPhotoRefs(i, visiblePhotos, counts, config, scene, c, scales, wg, source)
+	}
+	wg.Wait()
+	for i := 0; i < concurrent; i++ {
+		visiblePhotoCount += <-counts
 	}
 
-	var lastLogTime time.Time
-	var logInterval time.Duration
-	lastLogIndex := 0
-	if config.LogDraws {
-		lastLogTime = time.Now()
-		logInterval = 1 * time.Second
-	}
-	for i := range scene.Photos {
-		index <- i
-		if config.LogDraws {
-			now := time.Now()
-			elapsed := now.Sub(lastLogTime)
-			if elapsed > logInterval {
-				perSec := float64(i-lastLogIndex) / elapsed.Seconds()
-				log.Printf("draw photo %d, %.2f / sec \n", i, perSec)
-				lastLogTime = now
-				lastLogIndex = i
-			}
-		}
-	}
-	close(index)
-	wg.Wait()
+	micros := time.Since(startTime).Microseconds()
+	// log.Printf("scene draw %5d / %5d photos, %6d μs all, %.2f μs / photo\n", visiblePhotoCount, photoCount, micros, float64(micros)/float64(visiblePhotoCount))
 
 	for i := range scene.Texts {
 		text := &scene.Texts[i]
@@ -267,22 +268,26 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []storage.ImageId) {
 	scene.PhotoCount = len(scene.Photos)
 }
 
-func (scene *Scene) GetVisiblePhotos(output chan PhotoRef, view Rect, maxCount int) {
-	count := 0
-	for i := range scene.Photos {
-		photo := &scene.Photos[i]
-		if photo.Sprite.Rect.IsVisible(view) {
-			output <- PhotoRef{
-				Index: i,
-				Photo: photo,
-			}
-			count++
-			if count >= maxCount {
-				break
+func (scene *Scene) GetVisiblePhotos(view Rect, maxCount int) <-chan PhotoRef {
+	out := make(chan PhotoRef)
+	go func() {
+		count := 0
+		for i := range scene.Photos {
+			photo := &scene.Photos[i]
+			if photo.Sprite.Rect.IsVisible(view) {
+				out <- PhotoRef{
+					Index: i,
+					Photo: photo,
+				}
+				count++
+				if count >= maxCount {
+					break
+				}
 			}
 		}
-	}
-	close(output)
+		close(out)
+	}()
+	return out
 }
 
 func RenderImageFast(rimg draw.Image, img image.Image, m canvas.Matrix) {
@@ -594,61 +599,57 @@ func (photo *Photo) getBestBitmaps(config *RenderConfig, scene *Scene, c *canvas
 
 func (photo *Photo) Draw(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 
-	if photo.Sprite.IsVisible(c, scales) {
+	pixelArea := photo.Sprite.Rect.GetPixelArea(c, Size{X: 1, Y: 1})
+	if pixelArea < config.MaxSolidPixelArea {
+		style := c.Style
 
-		pixelArea := photo.Sprite.Rect.GetPixelArea(c, Size{X: 1, Y: 1})
-		if pixelArea < config.MaxSolidPixelArea {
-			style := c.Style
+		info := source.GetImageInfo(source.GetImagePath(photo.Id))
+		style.FillColor = info.GetColor()
 
-			info := source.GetImageInfo(source.GetImagePath(photo.Id))
-			style.FillColor = info.GetColor()
+		photo.Sprite.DrawWithStyle(c, style)
+		return
+	}
 
-			photo.Sprite.DrawWithStyle(c, style)
-			return
-		}
+	drawn := false
+	bitmaps := photo.getBestBitmaps(config, scene, c, scales, source)
+	for _, bitmapAtZoom := range bitmaps {
+		bitmap := bitmapAtZoom.Bitmap
 
-		drawn := false
-		bitmaps := photo.getBestBitmaps(config, scene, c, scales, source)
-		for _, bitmapAtZoom := range bitmaps {
-			bitmap := bitmapAtZoom.Bitmap
+		// text := fmt.Sprintf("index %d zd %4.2f %s", index, bitmapAtZoom.ZoomDist, bitmap.Path)
+		// println(text)
 
-			// text := fmt.Sprintf("index %d zd %4.2f %s", index, bitmapAtZoom.ZoomDist, bitmap.Path)
-			// println(text)
+		err := bitmap.Draw(config.CanvasImage, c, scales, source)
+		if err == nil {
+			drawn = true
 
-			err := bitmap.Draw(config.CanvasImage, c, scales, source)
-			if err == nil {
-				drawn = true
-
-				if config.DebugOverdraw {
-					bitmap.DrawOverdraw(c, source)
-				}
-
-				if config.DebugThumbnails {
-					text := ""
-
-					for i := range source.Thumbnails {
-						thumbnail := &source.Thumbnails[i]
-						thumbnailPath := thumbnail.GetPath(source.GetImagePath(photo.Id))
-						if source.Exists(thumbnailPath) {
-							text += thumbnail.Name + " "
-						}
-					}
-
-					bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
-				}
-
-				break
+			if config.DebugOverdraw {
+				bitmap.DrawOverdraw(c, source)
 			}
 
-			// bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
+			if config.DebugThumbnails {
+				text := ""
+
+				for i := range source.Thumbnails {
+					thumbnail := &source.Thumbnails[i]
+					thumbnailPath := thumbnail.GetPath(source.GetImagePath(photo.Id))
+					if source.Exists(thumbnailPath) {
+						text += thumbnail.Name + " "
+					}
+				}
+
+				bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
+			}
+
+			break
 		}
 
-		if !drawn {
-			style := c.Style
-			style.FillColor = canvas.Red
-			photo.Sprite.DrawWithStyle(c, style)
-		}
+		// bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
+	}
 
+	if !drawn {
+		style := c.Style
+		style.FillColor = canvas.Red
+		photo.Sprite.DrawWithStyle(c, style)
 	}
 
 }

@@ -53,9 +53,8 @@ type PhotoRegionData struct {
 
 func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect Rect, scene *Scene, regionConfig RegionConfig) []Region {
 	regions := make([]Region, 0)
-	photos := make(chan PhotoRef)
 	source := regionSource.imageSource
-	go scene.GetVisiblePhotos(photos, rect, regionConfig.Limit)
+	photos := scene.GetVisiblePhotos(rect, regionConfig.Limit)
 	for photo := range photos {
 		originalPath := source.GetImagePath(photo.Photo.Id)
 		regions = append(regions, Region{

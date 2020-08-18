@@ -222,6 +222,10 @@ func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan stri
 				log.Printf("listing %d\n", files)
 			}
 			paths <- path
+			// Duplicate photos for testing
+			// for i := 0; i < 50-1; i++ {
+			// 	paths <- path
+			// }
 			if maxPhotos > 0 && files >= maxPhotos {
 				return errors.New("Skipping the rest")
 			}
