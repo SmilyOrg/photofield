@@ -486,19 +486,19 @@ func (source *ImageSource) GetImageInfo(path string) *ImageInfo {
 	startTime = time.Now()
 	info, err = source.LoadImageInfo(path)
 	fileGetMs := time.Since(startTime).Milliseconds()
-	if err == nil {
-		startTime = time.Now()
-		source.infoDatabase.Set(path, info)
-		dbSetMs := time.Since(startTime).Milliseconds()
-		startTime := time.Now()
-		source.infoCache.Set(path, info)
-		cacheSetMs := time.Since(startTime).Milliseconds()
-		if logging {
-			log.Printf("image info %5d ms get cache, %5d ms get db, %5d ms get file, %5d ms set db, %5d ms set cache\n", cacheGetMs, dbGetMs, fileGetMs, dbSetMs, cacheSetMs)
-		}
-		return info
+
+	if err != nil {
+		fmt.Println("Unable to load image info", err, path)
 	}
 
-	fmt.Println("Unable to load image info", err, path)
-	return &ImageInfo{}
+	startTime = time.Now()
+	source.infoDatabase.Set(path, info)
+	dbSetMs := time.Since(startTime).Milliseconds()
+	startTime = time.Now()
+	source.infoCache.Set(path, info)
+	cacheSetMs := time.Since(startTime).Milliseconds()
+	if logging {
+		log.Printf("image info %5d ms get cache, %5d ms get db, %5d ms get file, %5d ms set db, %5d ms set cache\n", cacheGetMs, dbGetMs, fileGetMs, dbSetMs, cacheSetMs)
+	}
+	return info
 }

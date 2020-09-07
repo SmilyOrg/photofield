@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
-  <title>PhotoField</title>
+  <title>Photos</title>
+  <link rel="manifest" href="/manifest.json">
   <link href="vendor/vuetify/css/fonts.css" rel="stylesheet">
   <link href="vendor/vuetify/css/materialdesignicons.min.css" rel="stylesheet">
   <link href="vendor/vuetify/vuetify-v2.2.19.min.css" rel="stylesheet">
@@ -163,24 +164,15 @@
   <div id="vue">
 
     <v-app class="v-app">
-
       <v-app-bar
         fixed
         flat
         color="white"
-        :value="!fullscreenRegion"
+        :value="nativeInteraction"
       >
         <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
         <v-toolbar-title>Photos</v-toolbar-title>
         <v-spacer></v-spacer>
-  
-
-        <v-btn-toggle borderless class="mx-1" v-model="collectionSelectedId">
-          <v-btn v-for="collection in collections" :key="collection.id" :value="collection.id">
-            {{ collection.name }}
-          </v-btn>
-        </v-btn-toggle>
-        
 
         <v-btn-toggle borderless class="mx-1" v-model="imageHeight">
           <v-btn value="30">
@@ -196,8 +188,7 @@
           </v-btn>
           
         </v-btn-toggle>
-
-
+  
       </v-app-bar>
       
       <v-navigation-drawer
@@ -235,6 +226,18 @@
             </v-list-item-content>
           </v-list-item> -->
 
+          <v-list-item>
+            
+            <v-select
+              v-model="collectionSelectedId"
+              :items="collections"
+              item-text="name"
+              item-value="id"
+              solo
+            >
+            </v-select>
+
+          </v-list-item>
 
           <v-list-item>
             <v-list-item-content>
@@ -257,6 +260,7 @@
   
 
         </v-list>
+
       </v-navigation-drawer>
 
       <div
@@ -310,10 +314,6 @@
             postfix=" MB"
           ></realtime-chart>
         </v-card>
-  
-        <v-btn class="config-toggle mx-2" @click="showConfig = !showConfig" fab dark small color="primary">
-          <v-icon dark>mdi-tune</v-icon>
-        </v-btn>
 
       </div>
       
@@ -576,6 +576,7 @@
       vuetify: new Vuetify(),
       data: {
         drawer: false,
+        nativeInteraction: null,
         timestamp: 0,
         imageHeight: 100,
         collections: [],
@@ -625,10 +626,14 @@
 
         this.view.width = document.getElementById("viewer").clientWidth;
 
+        window.addEventListener('wheel', this.onWheel);
         window.addEventListener('scroll', this.onScroll);
+        window.addEventListener('touchstart', this.onTouchStart);
+        window.addEventListener("click", this.onCanvasClick);
         await this.updateCollections();
         await this.updateScene();
         this.initSeadragon();
+        this.nativeInteraction = true;
         this.initRegionPool();
         this.updateRegions();
         // setTimeout(this.onScroll, 0);
@@ -697,6 +702,18 @@
           //     document.documentElement.classList.remove("hide-scrollbar");
           //   }
           // }, 1000);
+        },
+        nativeInteraction(nativeInteraction) {
+          const captureTouch = !nativeInteraction;
+          this.viewer.setMouseNavEnabled(captureTouch);
+          const touchAction = captureTouch ? 'none' : 'auto';
+          
+          const element = OpenSeadragon.getElement(this.viewer.canvas);
+          if (typeof element.style.touchAction !== 'undefined') {
+            element.style.touchAction = touchAction;
+          } else if (typeof element.style.msTouchAction !== 'undefined') {
+            element.style.msTouchAction = touchAction;
+          }
         }
       },
       computed: {
@@ -767,12 +784,12 @@
             datasets,
           }
         },
-        onScroll() {
+        onScroll(event) {
 
           const now = Date.now();
           const elapsedSincePan = now - this.lastPanTime;
           if (elapsedSincePan < 50) return;
-          // console.log("onScroll")
+          // console.log("onScroll", event)
 
           if (this.scrollDebounce) {
             if (this.scrollDebounceTimer) {
@@ -780,11 +797,32 @@
               return;
             }
             this.onScrollNoDebounce();
-            this.scrollDebounceTimer = setTimeout(this.onScrollTimeout, 100);
+            this.scrollDebounceTimer = setTimeout(this.onScrollTimeout, 10);
           } else {
             this.onScrollNoDebounce();
           }
 
+        },
+        async onWheel(event) {
+          if (event.ctrlKey && this.nativeInteraction) {
+            event.preventDefault();
+            if (event.deltaY < 0) {
+              this.nativeInteraction = false;
+              await Vue.nextTick();
+              const newEvent = new event.constructor(event.type, event);
+              event.target.dispatchEvent(newEvent);
+            }
+          }
+        },
+        async onTouchStart(event) {
+          event.preventDefault();
+          if (event.touches.length >= 2 && this.nativeInteraction) {
+            this.nativeInteraction = false;
+            await Vue.nextTick();
+            const newEvent = new event.constructor(event.type, event);
+            newEvent.preventDefault();
+            event.target.dispatchEvent(newEvent);
+          }
         },
         onScrollTimeout() {
           this.scrollDebounceTimer = null;
@@ -799,6 +837,7 @@
             this.scrollDebounceTimer = setTimeout(this.onScrollTimeout, 100);
             return;
           }
+          
           const viewport = this.viewer.viewport;
           const canvasAspectRatio = this.canvasSize.width / this.canvasSize.height;
           const viewerAspectRatio = this.view.width / this.view.height;
@@ -810,6 +849,7 @@
           const scrollMaxY = document.body.scrollHeight - window.innerHeight;
           const scrollRatio = scrollMaxY ? window.scrollY / scrollMaxY : 0;
           const viewportOffset = scrollRatio * viewportScrollHeight;
+          
           // const point = this.tempPoint;
           // point.x = viewportViewWidth * 0.5;
           // point.y = viewportViewHeight * 0.5 + viewportOffset;
@@ -831,10 +871,8 @@
         onViewerScroll(originalHandler, event) {
           // console.log("onViewerScroll")
           const originalEvent = event.originalEvent;
-          if (originalEvent.ctrlKey) {
-            originalEvent.preventDefault();
-            originalHandler(event);
-          }
+          originalEvent.preventDefault();
+          originalHandler(event);
         },
         onViewerKeyDown(originalHandler, event) {
           switch (event.originalEvent.key) {
@@ -848,6 +886,9 @@
         onViewerPan(event) {
           // console.log("onViewerPan")
           // return;
+
+          if (this.nativeInteraction) return;
+
           const now = Date.now();
           const elapsedSinceScroll = now - this.lastScrollTime;
           if (elapsedSinceScroll < 50) return;
@@ -948,6 +989,7 @@
           }
         },
         initSeadragon() {
+
           this.viewer = OpenSeadragon({
             id: "viewer",
             prefixUrl: "/vendor/openseadragon/images/",
@@ -963,7 +1005,7 @@
               left: 0,
               right: 0,
             },
-            springStiffness: 4,
+            springStiffness: 10,
             // springStiffness: 3,
             gestureSettingsMouse: {
               // scrollToZoom: false,
@@ -977,10 +1019,11 @@
             gestureSettingsTouch: {
               clickToZoom: false,
               flickMomentum: 0.2,
+              flickEnabled: false,
             },
-            animationTime: 0.5,
+            animationTime: 0.1,
             zoomPerSecond: 1.0,
-            zoomPerScroll: 1.2,
+            zoomPerScroll: 1.5,
             // blendTime: 0.1,
             blendTime: 0.3,
             // debugMode: true,
@@ -990,7 +1033,7 @@
             // mouseNavEnabled: false,
           });
 
-          // console.log(viewer)
+          // console.log(this.viewer)
 
           // viewer.smartScrollZoom({
           //   enabled: true,
@@ -998,6 +1041,8 @@
           //   zoomIncrement: 0.2,
           //   timeThreshold: 500,
           // });
+
+
 
           this.viewer.addHandler("viewport-change", event => {
             // console.log("viewport-change")
@@ -1036,7 +1081,12 @@
           });
 
           this.viewer.addHandler("zoom", event => {
-            this.view.zoom = event.zoom;
+            const { zoom } = event;
+            this.view.zoom = zoom;
+            if (zoom < 0.9 && !this.nativeInteraction) {
+              this.nativeInteraction = true;
+              this.onScrollNoDebounce();
+            }
           });
 
           this.viewer.innerTracker.keyDownHandler = this.onViewerKeyDown.bind(this, this.viewer.innerTracker.scrollHandler);
@@ -1068,6 +1118,7 @@
               return true;
             }
           }
+
         },
         async initRegionPool() {
           this.regionPoolInUse = this.regionPoolCount;
@@ -1103,15 +1154,26 @@
           //   region.bounds.w,
           //   region.bounds.h,
           // ))
+          if (!this.nativeInteraction) return;
+          this.flyToRegion(region);
         },
 
-        async onViewportClick(pos) {
-          const regions = await this.getRegions(pos.x, pos.y, 0, 0);
-          if (regions.length < 1) return;
-          const region = regions[0];
-          console.log(region.data.path);
-          console.log(region);
-          
+        onCanvasClick(event) {
+          if (!this.nativeInteraction) return;
+          if (event.target != this.viewer.drawer.canvas) {
+            return;
+          }
+          this.tempPoint.x = event.clientX;
+          this.tempPoint.y = event.clientY;
+          this.onViewportClick(this.viewer.viewport.viewerElementToViewportCoordinates(this.tempPoint));
+        },
+
+        async flyToRegion(region) {
+          if (this.nativeInteraction) {
+            this.nativeInteraction = false;
+            await Vue.nextTick();
+          }
+
           const viewerBounds = this.viewer.viewport.getBounds();
           const viewerArea = viewerBounds.width * viewerBounds.height;
           const regionArea = region.bounds.w * region.bounds.h;
@@ -1123,6 +1185,15 @@
           this.fitRegion(region, {
             animationTime,
           });
+        },
+
+        async onViewportClick(pos) {
+          const regions = await this.getRegions(pos.x, pos.y, 0, 0);
+          if (regions.length < 1) return;
+          const region = regions[0];
+          console.log(region.data.path);
+          console.log(region);
+          this.flyToRegion(region);
         },
 
         onNavigationMouseDown(event) {
@@ -1197,6 +1268,8 @@
           const region = this.fullscreenRegion;
           if (!region) return;
           this.fullscreenRegion = null;
+          this.nativeInteraction = true;
+          await Vue.nextTick();
           this.fitRect(new OpenSeadragon.Rect(
             0, region.bounds.y,
             1, region.bounds.h,
@@ -1442,7 +1515,7 @@
               this.regionUpdatePending = false;
               this.regionUpdateRunning = false;
               this.updateRegions();
-            }, 100);
+            }, 250);
           } else {
             this.regionUpdateRunning = false;
           }

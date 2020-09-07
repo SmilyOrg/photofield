@@ -7,7 +7,6 @@ import (
 	"math"
 	"sort"
 	"sync"
-	"time"
 
 	. "photofield/internal"
 	storage "photofield/internal/storage"
@@ -220,7 +219,7 @@ func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales,
 		concurrent = photoCount
 	}
 
-	startTime := time.Now()
+	// startTime := time.Now()
 
 	tileRect := Rect{X: 0, Y: 0, W: (float64)(config.TileSize), H: (float64)(config.TileSize)}
 	tileToCanvas := c.View().Inv()
@@ -241,7 +240,7 @@ func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales,
 		visiblePhotoCount += <-counts
 	}
 
-	micros := time.Since(startTime).Microseconds()
+	// micros := time.Since(startTime).Microseconds()
 	// log.Printf("scene draw %5d / %5d photos, %6d μs all, %.2f μs / photo\n", visiblePhotoCount, photoCount, micros, float64(micros)/float64(visiblePhotoCount))
 
 	for i := range scene.Texts {

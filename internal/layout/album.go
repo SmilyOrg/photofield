@@ -24,8 +24,10 @@ type AlbumEvent struct {
 func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	imageHeight := config.ImageHeight
-	imageSpacing := 3.
-	lineSpacing := 3.
+	// imageSpacing := 3.
+	// lineSpacing := 3.
+	imageSpacing := 0.03 * imageHeight
+	lineSpacing := 0.03 * imageHeight
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
