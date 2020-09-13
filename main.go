@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io/ioutil"
+	"sync"
 
 	// "image/png"
 	"io"
@@ -37,6 +38,7 @@ var defaultSceneConfig SceneConfig
 
 var mainSceneConfig SceneConfig
 
+var tilePools sync.Map
 var imageSource *ImageSource
 var sceneSource *SceneSource
 var collections []Collection
@@ -76,8 +78,11 @@ func drawTile(c *canvas.Context, config *RenderConfig, scene *Scene, zoom int, x
 	}
 
 	c.ResetView()
-	c.SetFillColor(canvas.White)
-	c.DrawPath(0, 0, canvas.Rectangle(tileSize, tileSize))
+
+	backgroundStyle := canvas.Style{
+		FillColor: canvas.White,
+	}
+	c.RenderPath(canvas.Rectangle(tileSize, tileSize), backgroundStyle, c.View())
 
 	matrix := canvas.Identity.
 		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
@@ -91,10 +96,30 @@ func drawTile(c *canvas.Context, config *RenderConfig, scene *Scene, zoom int, x
 
 }
 
+func getTilePool(config *RenderConfig) *sync.Pool {
+	stored, ok := tilePools.Load(config.TileSize)
+	if ok {
+		return stored.(*sync.Pool)
+	}
+	pool := sync.Pool{
+		New: func() interface{} {
+			return image.NewRGBA(image.Rect(0, 0, config.TileSize, config.TileSize))
+		},
+	}
+	stored, _ = tilePools.LoadOrStore(config.TileSize, &pool)
+	return stored.(*sync.Pool)
+}
+
 func getTileImage(config *RenderConfig) (*image.RGBA, *canvas.Context) {
-	img := image.NewRGBA(image.Rect(0, 0, config.TileSize, config.TileSize))
+	pool := getTilePool(config)
+	img := pool.Get().(*image.RGBA)
 	renderer := rasterizer.New(img, 1.0)
 	return img, canvas.NewContext(renderer)
+}
+
+func putTileImage(config *RenderConfig, img *image.RGBA) {
+	pool := getTilePool(config)
+	pool.Put(img)
 }
 
 func getTileSize(config *RenderConfig, query *url.Values) int {
@@ -208,6 +233,7 @@ func tilesHandler(w http.ResponseWriter, r *http.Request) {
 	config.DebugThumbnails = query.Get("debugThumbnails") == "true"
 
 	image, context := getTileImage(&config)
+	defer putTileImage(&config, image)
 	config.CanvasImage = image
 	config.Zoom = zoom
 	drawTile(context, &config, scene, zoom, x, y)
@@ -384,6 +410,7 @@ func renderSample(config RenderConfig, scene *Scene) {
 	config.LogDraws = true
 
 	image, context := getTileImage(&config)
+	defer putTileImage(&config, image)
 	config.CanvasImage = image
 
 	drawFinished := ElapsedWithCount("draw", len(scene.Photos))
@@ -435,11 +462,13 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 		sceneConfig.Collection = *collection
 	}
 
+	cacheKey := query.Get("cacheKey")
+
 	// fmt.Printf("%.0f %.0f\n", sceneConfig.Layout.SceneWidth, sceneConfig.Layout.ImageHeight)
 
 	// return getScene(sceneConfig), nil
 
-	return sceneSource.GetScene(sceneConfig, imageSource), nil
+	return sceneSource.GetScene(sceneConfig, imageSource, cacheKey), nil
 }
 
 type Configuration struct {

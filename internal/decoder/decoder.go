@@ -24,24 +24,25 @@ type MediaDecoder struct {
 func NewMediaDecoder(concurrent int) *MediaDecoder {
 	var err error
 	decoder := MediaDecoder{}
-	decoder.exifTool, err = exiftool.NewPool(
-		"exiftool", concurrent,
-		"-Orientation",
-		"-Rotation",
-		"-ImageWidth",
-		"-ImageHeight",
-		// "-FileCreateDate", // This likely exists and contains timezone
-		// "-DateTimeOriginal",
-		// "-CreateDate",
-		// "-GPSDateTime",
-		"-EXIF:DateTimeOriginal",
-		"-XMP:CreateDate",
-		"-EXIF:CreateDate",
-		"-XMP:DateTimeOriginal",
-		"-Time:All",
-		"-n", // Machine-readable values
-		"-S", // Short tag names with no padding
-	)
+	// decoder.exifTool, err = exiftool.NewPool(
+	// 	"exiftool", concurrent,
+	// 	"-Orientation",
+	// 	"-Rotation",
+	// 	"-ImageWidth",
+	// 	"-ImageHeight",
+	// 	// "-FileCreateDate", // This likely exists and contains timezone
+	// 	// "-DateTimeOriginal",
+	// 	// "-CreateDate",
+	// 	// "-GPSDateTime",
+	// 	"-EXIF:DateTimeOriginal",
+	// 	"-XMP:CreateDate",
+	// 	"-EXIF:CreateDate",
+	// 	"-XMP:DateTimeOriginal",
+	// 	"-Time:All",
+	// 	"-n", // Machine-readable values
+	// 	"-S", // Short tag names with no padding
+	// )
+	decoder.exifTool = nil
 	if err != nil {
 		log.Printf("exiftool not found")
 	}

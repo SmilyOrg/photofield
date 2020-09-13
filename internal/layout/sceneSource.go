@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
+	"unsafe"
 
 	"github.com/dgraph-io/ristretto"
 
@@ -22,6 +22,11 @@ type SceneSource struct {
 	scenesLoading sync.Map
 }
 
+type loadingScene struct {
+	scene  *Scene
+	loaded chan struct{}
+}
+
 type SceneConfig struct {
 	Config     RenderConfig
 	Collection Collection
@@ -33,14 +38,14 @@ func NewSceneSource() *SceneSource {
 	var err error
 	source := SceneSource{}
 	source.imageIds, err = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,     // number of keys to track frequency of (10M).
-		MaxCost:     1 << 27, // maximum cost of cache (128MB).
+		NumCounters: 1e4,     // number of keys to track frequency of, 10x max expected key count
+		MaxCost:     1 << 24, // maximum cost of cache (16MB).
 		BufferItems: 64,      // number of keys per Get buffer.
 		Metrics:     true,
 	})
 	source.scenes, err = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,     // number of keys to track frequency of (10M).
-		MaxCost:     1 << 27, // maximum cost of cache (128MB).
+		NumCounters: 1e4,     // number of keys to track frequency of, 10x max expected key count
+		MaxCost:     1 << 24, // maximum cost of cache (16MB).
 		BufferItems: 64,      // number of keys per Get buffer.
 		Metrics:     true,
 	})
@@ -76,19 +81,30 @@ func (source *SceneSource) getImageIds(collection Collection, imageSource *Image
 		ids = append(ids, id)
 	}
 
-	source.imageIds.Set(key, ids, 1)
+	cost := (int64)(len(ids)) * (int64)(unsafe.Sizeof(ids[0]))
+
+	source.imageIds.Set(key, ids, cost)
 	return ids
 }
 
-func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource) *Scene {
-	// fmt.Printf("%3.0f%% hit ratio, added %d MB, evicted %d MB, hits %d, misses %d\n",
+func getSceneCost(scene *Scene) int64 {
+	structCost := (int64)(unsafe.Sizeof(*scene))
+	photosCost := (int64)(len(scene.Photos)) * (int64)(unsafe.Sizeof(scene.Photos[0]))
+	solidsCost := (int64)(len(scene.Solids)) * (int64)(unsafe.Sizeof(scene.Solids[0]))
+	textsCost := (int64)(len(scene.Texts)) * ((int64)(unsafe.Sizeof(scene.Solids[0])) + (int64)(100))
+	return structCost + photosCost + solidsCost + textsCost
+}
+
+func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource, cacheKey string) *Scene {
+	// fmt.Printf("scenes %3.0f%% hit ratio, cached %3d MiB, added %d MiB, evicted %d MiB, hits %d, misses %d\n",
 	// 	source.scenes.Metrics.Ratio()*100,
+	// 	(source.scenes.Metrics.CostAdded()-source.scenes.Metrics.CostEvicted())/1024/1024,
 	// 	source.scenes.Metrics.CostAdded()/1024/1024,
 	// 	source.scenes.Metrics.CostEvicted()/1024/1024,
 	// 	source.scenes.Metrics.Hits(),
 	// 	source.scenes.Metrics.Misses())
 
-	key := fmt.Sprintf("%v %v", getCollectionKey(config.Collection), getLayoutKey(config.Layout))
+	key := fmt.Sprintf("%v %v %v", getCollectionKey(config.Collection), getLayoutKey(config.Layout), cacheKey)
 
 	tries := 1000
 	for try := 0; try < tries; try++ {
@@ -97,15 +113,14 @@ func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource
 			return value.(*Scene)
 		}
 
-		active, loaded := source.scenesLoading.LoadOrStore(key, false)
+		loading := &loadingScene{}
+		loading.loaded = make(chan struct{})
+
+		stored, loaded := source.scenesLoading.LoadOrStore(key, loading)
 		if loaded {
-			if active == true {
-				time.Sleep(1 * time.Millisecond)
-			} else {
-				time.Sleep(10 * time.Millisecond)
-				try--
-			}
-			continue
+			loading = stored.(*loadingScene)
+			<-loading.loaded
+			return loading.scene
 		}
 
 		scene := source.DefaultScene
@@ -127,8 +142,10 @@ func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource
 
 		log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
 
-		source.scenes.Set(key, &scene, 1)
-		source.scenesLoading.LoadOrStore(key, true)
+		source.scenes.Set(key, &scene, getSceneCost(&scene))
+		loading.scene = &scene
+		close(loading.loaded)
+		source.scenesLoading.Delete(key)
 	}
 
 	panic(fmt.Sprintf("Unable to get scene after %v tries", tries))

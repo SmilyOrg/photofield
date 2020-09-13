@@ -26,8 +26,8 @@ func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *
 	imageHeight := config.ImageHeight
 	// imageSpacing := 3.
 	// lineSpacing := 3.
-	imageSpacing := 0.03 * imageHeight
-	lineSpacing := 0.03 * imageHeight
+	imageSpacing := 0.02 * imageHeight
+	lineSpacing := 0.02 * imageHeight
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
@@ -137,7 +137,7 @@ func LayoutAlbum(config LayoutConfig, scene *Scene, source *storage.ImageSource)
 
 		photoTime := info.DateTime
 		elapsed := photoTime.Sub(lastPhotoTime)
-		if elapsed > 10*time.Minute {
+		if elapsed > 1*time.Hour {
 			event.EndTime = lastPhotoTime
 			event.LastOnDay = !SameDay(lastPhotoTime, photoTime)
 			rect = LayoutAlbumEvent(config, rect, &event, scene, source)

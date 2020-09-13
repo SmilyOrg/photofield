@@ -320,7 +320,7 @@ func getLayoutPhotosUnordered(id int, photos []Photo, indices chan int, output c
 		output <- LayoutPhoto{
 			Index: i,
 			Photo: *photo,
-			Info:  *info,
+			Info:  info,
 		}
 	}
 	wg.Done()

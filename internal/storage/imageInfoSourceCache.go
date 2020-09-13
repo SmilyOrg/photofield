@@ -2,20 +2,21 @@ package photofield
 
 import (
 	. "photofield/internal"
+	"unsafe"
 
 	"github.com/dgraph-io/ristretto"
 )
 
 type ImageInfoSourceCache struct {
-	cache *ristretto.Cache
+	Cache *ristretto.Cache
 }
 
 func NewImageInfoSourceCache() *ImageInfoSourceCache {
 	var err error
 	source := ImageInfoSourceCache{}
-	source.cache, err = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,     // number of keys to track frequency of (10M).
-		MaxCost:     1 << 27, // maximum cost of cache (128MB).
+	source.Cache, err = ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1e6,     // number of keys to track frequency of (1M).
+		MaxCost:     1 << 24, // maximum cost of cache (16MB).
 		BufferItems: 64,      // number of keys per Get buffer.
 		Metrics:     true,
 	})
@@ -25,15 +26,15 @@ func NewImageInfoSourceCache() *ImageInfoSourceCache {
 	return &source
 }
 
-func (source *ImageInfoSourceCache) Get(path string) (*ImageInfo, error) {
-	value, found := source.cache.Get(path)
+func (source *ImageInfoSourceCache) Get(path string) (ImageInfo, bool) {
+	value, found := source.Cache.Get(path)
 	if found {
-		return value.(*ImageInfo), nil
+		return value.(ImageInfo), true
 	}
-	return nil, nil
+	return ImageInfo{}, false
 }
 
-func (source *ImageInfoSourceCache) Set(path string, info *ImageInfo) error {
-	source.cache.Set(path, info, 1)
+func (source *ImageInfoSourceCache) Set(path string, info ImageInfo) error {
+	source.Cache.Set(path, info, (int64)(unsafe.Sizeof(info)))
 	return nil
 }

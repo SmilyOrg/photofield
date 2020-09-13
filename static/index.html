@@ -173,6 +173,10 @@
         <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
         <v-toolbar-title>Photos</v-toolbar-title>
         <v-spacer></v-spacer>
+        
+        <v-btn icon @click="refreshCache()">
+          <v-icon>mdi-refresh</v-icon>
+        </v-btn>
 
         <v-btn-toggle borderless class="mx-1" v-model="imageHeight">
           <v-btn value="30">
@@ -581,6 +585,7 @@
         imageHeight: 100,
         collections: [],
         collectionSelectedId: -1,
+        cacheKey: null,
         scene: {
           bounds: {
             w: 0,
@@ -606,6 +611,7 @@
         regionsUpdateTime: 0,
         regionsUpdateTimer: null,
         fullscreenRegion: null,
+        fullscreenControls: false,
         viewportBounds: {
           x: 0,
           y: 0,
@@ -621,6 +627,8 @@
         },
       },
       async created() {
+
+        this.refreshCache();
 
         this.viewer = null;
 
@@ -735,6 +743,7 @@
             collection: this.collection ? this.collection.id : null,
             imageHeight: this.imageHeight,
             sceneWidth: this.view.width,
+            cacheKey: this.cacheKey,
           };
           return Object.entries(params).map(([key, value]) => `${key}=${value}`).join("&");
         },
@@ -758,6 +767,10 @@
         },
       },
       methods: {
+
+        refreshCache() {
+          this.cacheKey = Date.now();
+        },
 
         getMetricsChartConfig() {
           if (!this.metrics) return [];

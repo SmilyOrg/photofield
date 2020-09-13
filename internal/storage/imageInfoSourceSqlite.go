@@ -84,6 +84,13 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 	lastCommit := time.Now()
 	inTransaction := false
 
+	defer func() {
+		err := sqlitex.Exec(conn, "COMMIT;", nil)
+		if err != nil {
+			panic(err)
+		}
+	}()
+
 	for imageInfo := range source.pending {
 		if !inTransaction {
 			err := sqlitex.Exec(conn, "BEGIN TRANSACTION;", nil)
@@ -120,7 +127,7 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 	}
 }
 
-func (source *ImageInfoSourceSqlite) Get(path string) (*ImageInfo, error) {
+func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfo, bool) {
 
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
@@ -132,37 +139,24 @@ func (source *ImageInfoSourceSqlite) Get(path string) (*ImageInfo, error) {
 
 	stmt.BindText(1, path)
 
-	exists, err := stmt.Step()
+	var imageInfo ImageInfo
+
+	exists, _ := stmt.Step()
 	if !exists {
-		return nil, err
+		return imageInfo, false
 	}
 
-	var imageInfo ImageInfo
 	imageInfo.Width = stmt.ColumnInt(0)
 	imageInfo.Height = stmt.ColumnInt(1)
-	imageInfo.DateTime, err = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(2))
-	if err != nil {
-		return &imageInfo, err
-	}
+	imageInfo.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(2))
 	imageInfo.Color = (uint32)(stmt.ColumnInt64(3))
-
-	if imageInfo.Width == 0 || imageInfo.Height == 0 {
-		return nil, nil
-	}
-	if imageInfo.DateTime.IsZero() {
-		return nil, nil
-	}
-	// if imageInfo.Color == 0 {
-	// 	return nil, nil
-	// }
-
-	return &imageInfo, nil
+	return imageInfo, true
 }
 
-func (source *ImageInfoSourceSqlite) Set(path string, info *ImageInfo) error {
+func (source *ImageInfoSourceSqlite) Set(path string, info ImageInfo) error {
 	source.pending <- &ImageInfoSqlite{
 		Path:      path,
-		ImageInfo: *info,
+		ImageInfo: info,
 	}
 	return nil
 }
