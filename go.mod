@@ -2,10 +2,13 @@ module photofield
 
 go 1.13
 
+replace github.com/barasher/go-exiftool => ./vendor/github.com/barasher/go-exiftool@v1.3.1
+
 require (
 	crawshaw.io/sqlite v0.3.2
 	github.com/EdlinOrg/prominentcolor v1.0.0
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
+	github.com/barasher/go-exiftool v1.3.1
 	github.com/buger/jsonparser v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto v0.0.2
