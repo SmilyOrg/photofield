@@ -1,52 +1,35 @@
 package photofield
 
 import (
-	"bufio"
 	"image"
 	"io"
-	"log"
-	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	. "photofield/internal"
 
 	"github.com/disintegration/imaging"
-	"github.com/mostlygeek/go-exiftool"
 	"github.com/rwcarlsen/goexif/exif"
 )
 
 type MediaDecoder struct {
-	exifTool *exiftool.Pool
+	infoDecoder ImageInfoDecoder
 }
 
-func NewMediaDecoder(concurrent int) *MediaDecoder {
-	var err error
+type ImageInfoDecoder interface {
+	DecodeInfo(path string, info *ImageInfo) error
+	Close()
+}
+
+func NewMediaDecoder(exifToolCount int) *MediaDecoder {
 	decoder := MediaDecoder{}
-	// decoder.exifTool, err = exiftool.NewPool(
-	// 	"exiftool", concurrent,
-	// 	"-Orientation",
-	// 	"-Rotation",
-	// 	"-ImageWidth",
-	// 	"-ImageHeight",
-	// 	// "-FileCreateDate", // This likely exists and contains timezone
-	// 	// "-DateTimeOriginal",
-	// 	// "-CreateDate",
-	// 	// "-GPSDateTime",
-	// 	"-EXIF:DateTimeOriginal",
-	// 	"-XMP:CreateDate",
-	// 	"-EXIF:CreateDate",
-	// 	"-XMP:DateTimeOriginal",
-	// 	"-Time:All",
-	// 	"-n", // Machine-readable values
-	// 	"-S", // Short tag names with no padding
-	// )
-	decoder.exifTool = nil
-	if err != nil {
-		log.Printf("exiftool not found")
-	}
+	decoder.infoDecoder = NewGoExifRwcarlsenDecoder()
+	// decoder.infoDecoder = NewExifToolBarasherDecoder(exifToolCount)
+	// decoder.infoDecoder = NewExifToolMostlyGeekDecoder(exifToolCount)
 	return &decoder
+}
+
+func (decoder *MediaDecoder) Close() {
+	decoder.infoDecoder.Close()
 }
 
 func (decoder *MediaDecoder) Decode(reader io.ReadSeeker) (image.Image, string, error) {
@@ -90,124 +73,9 @@ func parseDateTime(value string) (time.Time, error) {
 }
 
 func (decoder *MediaDecoder) DecodeInfo(path string, info *ImageInfo) error {
-	file, err := os.Open(path)
-	defer file.Close()
-	if err != nil {
-		return err
-	}
-	return decoder.DecodeInfoGoExif(file, info)
-}
-
-func (decoder *MediaDecoder) DecodeInfoExifTool(path string, info *ImageInfo) error {
-
-	bytes, err := decoder.exifTool.Extract(path)
-	if err != nil {
-		return err
-	}
-
-	orientation := ""
-	rotation := ""
-	imageWidth := ""
-	imageHeight := ""
-
-	// var gpsTime time.Time
-
-	output := string(bytes)
-	scanner := bufio.NewScanner(strings.NewReader(output))
-	for scanner.Scan() {
-		line := scanner.Text()
-		nameValueSplit := strings.SplitN(line, ":", 2)
-		if len(nameValueSplit) < 2 {
-			continue
-		}
-		name := strings.TrimSpace(nameValueSplit[0])
-		value := strings.TrimSpace(nameValueSplit[1])
-		// println(name, value)
-		switch name {
-		case "Orientation":
-			orientation = value
-		case "Rotation":
-			rotation = value
-		case "ImageWidth":
-			imageWidth = value
-		case "ImageHeight":
-			imageHeight = value
-		// case "GPSDateTime":
-		// 	gpsTime, _ = parseDateTime(value)
-		default:
-			if info.DateTime.IsZero() &&
-				(strings.Contains(name, "Date") || strings.Contains(name, "Time")) {
-				info.DateTime, _ = parseDateTime(value)
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	// println(gpsTime.String(), info.DateTime.String())
-
-	// if !gpsTime.IsZero() {
-	// time.FixedZone()
-	// }
-
-	if imageWidth != "" {
-		info.Width, err = strconv.Atoi(imageWidth)
-		if err != nil {
-			info.Width = 0
-		}
-	}
-
-	if imageHeight != "" {
-		info.Height, err = strconv.Atoi(imageHeight)
-		if err != nil {
-			info.Height = 0
-		}
-	}
-
-	portrait := false
-	if orientation != "" {
-		portrait = getPortraitFromOrientation(orientation)
-	} else if rotation != "" {
-		portrait = getPortraitFromRotation(rotation)
-	}
-
-	if portrait {
-		info.Width, info.Height = info.Height, info.Width
-	}
-
-	// println(path, info.Width, info.Height, info.DateTime.String())
-
-	return nil
-}
-
-func (decoder *MediaDecoder) DecodeInfoGoExif(reader io.ReadSeeker, info *ImageInfo) error {
-
-	x, err := exif.Decode(reader)
-	if err == nil {
-		info.DateTime, _ = x.DateTime()
-	}
-
-	portrait := getPortraitFromExif(x)
-	reader.Seek(0, io.SeekStart)
-	conf, _, err := image.DecodeConfig(reader)
-	if err != nil {
-		return err
-	}
-	if portrait {
-		conf.Width, conf.Height = conf.Height, conf.Width
-	}
-
-	if err != nil {
-		return err
-	}
-	info.Width, info.Height = conf.Width, conf.Height
-
-	return nil
-}
-
-func getPortraitFromExif(x *exif.Exif) bool {
-	return getPortraitFromOrientation(getOrientationFromExif(x))
+	err := decoder.infoDecoder.DecodeInfo(path, info)
+	println(path, info.Width, info.Height, info.DateTime.String())
+	return err
 }
 
 func getPortraitFromRotation(rotation string) bool {
