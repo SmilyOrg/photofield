@@ -13,10 +13,12 @@ COPY internal ./internal
 RUN go install .
 
 FROM alpine:3.12
+RUN apk add --no-cache exiftool>12.06-r0
+
 COPY --from=builder /go/bin/ /app
 
 WORKDIR /app
-RUN touch ./configuration.yaml
+RUN mkdir ./data && touch ./data/configuration.yaml
 COPY fonts ./fonts
 COPY static ./static
 

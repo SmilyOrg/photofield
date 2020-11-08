@@ -47,12 +47,21 @@
       height: 0;
     }
 
+    .collections-nav {
+      width: 100%;
+    }
+
+    .collections-nav a {
+      text-decoration: none;
+      color: unset;
+    }
+
     .region {
       /* border: 10px solid rgba(65, 255, 81, 0.8); */
       color: white;
       pointer-events: all;
-      /* width: 100%;
-      height: 100%; */
+      width: 100%;
+      height: 100%;
     }
 
     .config {
@@ -76,6 +85,23 @@
       position: absolute;
       top: 10px;
       right: 5px;
+    }
+
+    .controls {
+      position: fixed;
+      width: 100%;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      background:rgba(255, 255, 255, 1);
+      padding: 4px;
+    }
+
+    .controls .top-bar {
+      display: flex;
+      justify-content: end;
+      width: 100%;
+      /* height: 60px; */
     }
 
     .navigation {
@@ -121,6 +147,12 @@
     .navigation .hitarea.right .button {
       left: calc(100% - 64px - 10px);
     }
+    
+    .video-icon {
+      position: absolute;
+      right: 5px;
+      top: 5px;
+    }
 
     .circle.button {
       background-color: rgba(0, 0, 0, 0.2);
@@ -146,7 +178,8 @@
 </head>
 <body>
 
-  <div id="vue">
+  <div id="vue" style="visibility: hidden;">
+    <page-title :title="pageTitle"></page-title>
 
     <v-app class="v-app">
       <v-app-bar
@@ -217,15 +250,31 @@
           </v-list-item> -->
 
           <v-list-item>
+
+            <v-list class="collections-nav">
+              <v-list-item-group>
+                <router-link
+                v-for="collection in collections"
+                :key="collection.id" :to="'/collections/' + collection.id">
+                  <v-list-item
+                  >
+                    <v-list-item-content>
+                        <v-list-item-title v-text="collection.name">
+                        </v-list-item-title>
+                    </v-list-item-content>
+                  </v-list-item>
+                </router-link>
+              </v-list-item-group>
+            </v-list>
             
-            <v-select
+            <!-- <v-select
               v-model="collectionSelectedId"
               :items="collections"
               item-text="name"
               item-value="id"
               solo
             >
-            </v-select>
+            </v-select> -->
 
           </v-list-item>
 
@@ -258,7 +307,23 @@
         :style="{ height: canvasSize.height + 'px' }">
       </div>
 
-      <div v-if="fullscreenRegion" class="navigation">
+      <div v-if="fullscreenControls" class="controls">
+        
+        <div class="top-bar">
+          <v-btn
+            icon
+            v-if="focusRegion && focusRegion.data" 
+            :href="`files/${focusRegion.data.id}/file/${focusRegion.data.filename}?${sceneParams}`"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <v-icon>mdi-open-in-new</v-icon>
+          </v-btn>
+        </div>
+  
+      </div>
+
+      <div v-if="focusRegion" class="navigation">
 
         <div class="hitarea left" @click="navigate(-1)" @wheel="onNavigationWheel" @mousedown="onNavigationMouseDown">
           <div class="circle button">
@@ -315,27 +380,37 @@
           class="region"
           @click="onRegionClick(region)">
 
+          <div
+            v-if="region.data && region.data.video"
+            class="video-icon"
+          >
+            <v-icon color="#eee">
+              mdi-play-circle-outline
+            </v-icon>
+          </div>
+
           <!-- {{ region.poolId }} {{ region.active }} -->
 
-          <!-- <div class="video" v-if="region.data && region.data.video">
-            <video-player
-              :size="fullscreenRegion == region ? 'full' : 'thumb'"
-              :region="region"
-              :params="sceneParams"
-            ></video-player>
-          </div> -->
+          <!-- v-if="region.data && region.data.video" -->
+          <video-player
+            v-if="region.data && region.data.video && focusRegion == region"
+            :size="focusRegion == region ? 'full' : 'thumb'"
+            :region="region"
+            :params="sceneParams"
+          ></video-player>
 
         </div>
       </div>
 
     </v-app>
     <div id="viewer"></div>
-
   </div>
+
   <!-- <div id="image-ruler"> </div> -->
   <script src="/vendor/openseadragon/openseadragon.js"></script>
   <script src="/vendor/openseadragon/openseadragon-smartScrollZoom.js"></script>
   <script src="/vendor/vue.js"></script>
+  <script src="/vendor/vue-router.js"></script>
   <script src="/vendor/httpVueLoader.js"></script>
   <script src="/vendor/vuetify/vuetify-v2.2.19.js"></script>
   <script src="/vendor/moment.min.js"></script>
@@ -346,7 +421,7 @@
   <!-- <script src="/vendor/chartjs/chartjs-plugin-datalabels.js"></script> -->
   <script type="module">
   
-    function debounce(callback, delay) {
+  function debounce(callback, delay) {
       let timer = null;
       let pending = false;
       let pendingThis = null;
@@ -371,17 +446,53 @@
       };
     }
 
+    function debounceWait(callback, delay) {
+      let timer = null;
+      let pending = false;
+      let pendingThis = null;
+      let pendingArgs = null;
+      function timeout() {
+        timer = null;
+        if (pending) {
+          pending = false;
+          timer = setTimeout(timeout, delay);
+          callback.apply(pendingThis, pendingArgs);
+        }
+      }
+      return function() {
+        if (timer) {
+          pending = true;
+          pendingThis = this;
+          pendingArgs = arguments;
+          clearTimeout(timer);
+          timer = setTimeout(timeout, delay);
+          return;
+        }
+        callback.apply(this, arguments);
+        timer = setTimeout(timeout, delay);
+      };
+    }
+
     const overlays = [];
     const overlayById = {};
     const regionsById = {};
     
     Vue.use(httpVueLoader);
+
+    const router = new VueRouter({
+      routes: [
+        { name: "collection", path: "/collections/:collection" },
+        { name: "region", path: "/collections/:collection/:region" },
+      ]
+    })
     
     window.app = new Vue({
       el: '#vue',
+      router,
       vuetify: new Vuetify(),
       components: {
         "video-player": "url:/components/VideoPlayer.vue",
+        "page-title": "url:/components/PageTitle.vue",
       },
       data: {
         drawer: false,
@@ -389,7 +500,7 @@
         timestamp: 0,
         imageHeight: 100,
         collections: [],
-        collectionSelectedId: -1,
+        collectionSelectedId: null,
         cacheKey: null,
         scene: {
           bounds: {
@@ -415,7 +526,12 @@
         regions: [],
         regionsUpdateTime: 0,
         regionsUpdateTimer: null,
-        fullscreenRegion: null,
+        regionNavigationPendingId: 0,
+        regionNavigationLoadedId: 0,
+        focusRegion: null,
+        focusRegionId: -1,
+        focusRegionSetTime: null,
+        focusRegionLoadIdOffset: 0,
         fullscreenControls: false,
         viewportBounds: {
           x: 0,
@@ -451,6 +567,8 @@
         this.updateRegions();
       },
       async mounted() {
+
+        this.$el.style.visibility = "visible";
         
         this.tempRect = new OpenSeadragon.Rect();
         this.tempPoint = new OpenSeadragon.Point();
@@ -497,9 +615,26 @@
             this.metricsTimer = setInterval(() => this.updateMetrics(), 1000);
           }
         },
-        fullscreenRegion(fullscreenRegion) {
+        async routeRegionId(routeRegionId) {
+          // console.log("routeRegionId", routeRegionId)
+          if (Date.now() - this.focusRegionSetTime < 200) return;
+          this.focusRegion = routeRegionId == null ? null : await this.getOrFetchRegion(routeRegionId);
+          // console.log("focusRegion", this.focusRegion)
+        },
+        focusRegion(focusRegion, prevFocusRegion) {
+          // console.log("watch", focusRegion && focusRegion.id);
+          if (!focusRegion && this.fullscreenControls) {
+            this.fullscreenControls = false;
+          }
+          // if (focusRegion) {
+          //   // if (prevFocusRegion && prevFocusRegion.id == focusRegion.id) return;
+          //   this.fitRegion(focusRegion, {
+          //     animationTime: 0.1,
+          //     immediate: true,
+          //   });
+          // }
           // setTimeout(() => {
-          //   if (fullscreenRegion) {
+          //   if (focusRegion) {
           //     document.documentElement.classList.add("hide-scrollbar");
           //   } else {
           //     document.documentElement.classList.remove("hide-scrollbar");
@@ -520,11 +655,30 @@
         }
       },
       computed: {
-        collection() {
-          if (this.collectionSelectedId < 0 || this.collectionSelectedId >= this.collections.length) {
-            return { id: 0 };
+        pageTitle() {
+          if (!this.collection) {
+            return "Photos";
           }
-          return this.collections[this.collectionSelectedId];
+          if (!this.focusRegion) {
+            return `${this.collection.name} - Photos`;
+          }
+          return `#${this.focusRegionId} - ${this.collection.name} - Photos`;
+        },
+        routeRegionId() {
+          return this.$route.params.region;
+        },
+        collection() {
+          const id = this.$route.params.collection;
+          // console.log("collection", id)
+          return this.collections.find(
+            collection => collection.id == id
+          );
+          // if (!this.collectionSelectedId) {
+          //   return { id: null };
+          // }
+          // return this.collections.find(
+          //   collection => collection.id == this.collectionSelectedId
+          // );
         },
         canvasSize() {
           const aspectRatio = this.scene.bounds.w / this.scene.bounds.h;
@@ -751,11 +905,16 @@
           const url = `collections`;
           const collections = await (await fetch(url)).json();
           this.collections = collections;
-          this.collectionSelectedId = 0;
+          this.collectionSelectedId = collections.length > 0 ? collections[0].id : null;
         },
         async updateScene() {
           const url = `scenes?${this.sceneParams}`;
-          const scenes = await (await fetch(url)).json();
+          const response = await fetch(url);
+          if (!response.ok) {
+            console.warn("Unable to update scene", response);
+            return;
+          }
+          const scenes = await response.json();
           if (!scenes || scenes.length < 1) {
             throw new Error("Scene not found");
           }
@@ -956,6 +1115,9 @@
           }
         },
         onRegionClick(region) {
+          if (region == this.focusRegion) {
+            this.fullscreenControls = !this.fullscreenControls;
+          }
           if (this.nativeInteraction) {
             this.flyToRegion(region);
           }
@@ -976,6 +1138,8 @@
             this.nativeInteraction = false;
             await Vue.nextTick();
           }
+
+          this.setFocusRegion(region);
 
           const viewerBounds = this.viewer.viewport.getBounds();
           const viewerArea = viewerBounds.width * viewerBounds.height;
@@ -1056,29 +1220,45 @@
         },
 
         async navigate(offset) {
-          const region = this.fullscreenRegion;
+          const region = this.focusRegion;
           if (!region) return;
-          const nextId = region.id + offset;
+          if (this.focusRegionId == -1) {
+            this.focusRegionId = region.id;
+          }
+          // this.focusRegionLoadIdOffset += offset;
+          const nextId = this.focusRegionId + offset;
+          this.focusRegionId = nextId;
+          // console.log(region.id, offset, this.focusRegionLoadIdOffset, nextId);
+          // this.focusRegion = {
+          //   id: nextId,
+          // }
+          const loadId = this.regionNavigationPendingId++;
+          // console.log("loading", loadId, this.regionNavigationPendingId, this.regionNavigationLoadedId);
           const nextRegion = await this.getOrFetchRegion(nextId);
+          // console.log("loaded", loadId, loadId >= this.regionNavigationLoadedId, this.regionNavigationPendingId, this.regionNavigationLoadedId);
+          if (loadId < this.regionNavigationLoadedId) return;
+          this.regionNavigationLoadedId = loadId;
           if (!nextRegion) return;
-          this.fullscreenRegion = nextRegion;
+          // this.setFocusRegion(nextRegion);
+          console.log(nextId, nextRegion.id);
           this.fitRegion(nextRegion, {
             animationTime: 0.1,
             immediate: true,
           });
         },
         async navigateExit() {
-          const region = this.fullscreenRegion;
+          const region = this.focusRegion;
           if (!region) return;
-          this.fullscreenRegion = null;
-          this.nativeInteraction = true;
-          await Vue.nextTick();
-          this.fitRect(new OpenSeadragon.Rect(
-            0, region.bounds.y,
-            1, region.bounds.h,
-          ), {
-            animationTime: 1
-          });
+          // this.focusRegion = null;
+          this.setFocusRegion(null);
+          // this.nativeInteraction = true;
+          // await Vue.nextTick();
+          // this.fitRect(new OpenSeadragon.Rect(
+          //   0, region.bounds.y,
+          //   1, region.bounds.h,
+          // ), {
+          //   animationTime: 1
+          // });
         },
         addOverlay(region) {
           // const overlay = {
@@ -1109,10 +1289,12 @@
           let region = this.getRegion(id);
           if (!region) {
             region = await this.fetchRegion(id);
+            this.addRegion(region);
           }
           return region;
         },
         addRegion(region) {
+          if (!region) return;
           const poolRegion = this.acquireRegion();
           if (!poolRegion) return;
           Object.assign(poolRegion, {
@@ -1201,12 +1383,48 @@
             Math.pow(overlayCenterX - viewerCenterX, 2) +
             Math.pow(overlayCenterY - viewerCenterY, 2)
           );
-          if (region.viewRatio > 0.75 && region.viewRatio < 1.25 && region.distFromCenter < 0.03) {
-            this.fullscreenRegion = region;
+          
+          const inView =
+            viewerCenterX > overlayBounds.x && 
+            viewerCenterY > overlayBounds.y && 
+            viewerCenterX < overlayBounds.x + overlayBounds.width && 
+            viewerCenterY < overlayBounds.y + overlayBounds.height; 
+          
+          // if (region.viewRatio > 0.75 && region.viewRatio < 1.25 && region.distFromCenter < 0.03) {
+          // console.log(region.viewRatio, inView)
+          if (region.viewRatio > 0.5 && inView) {
+            this.setFocusRegion(region);
           } else {
-            if (this.fullscreenRegion == region) this.fullscreenRegion = null;
+            // if (this.focusRegion == region) this.setFocusRegion(null);
           }
         },
+        setFocusRegion(region) {
+          console.log("set", region && region.id);
+          this.focusRegionSetTime = Date.now();
+          if (region === null) {
+            this.focusRegionId = -1;
+            this.focusRegion = region;
+            this.focusRegionLoadIdOffset = 0;
+            if (!this.$route.params.region) return;
+            // this.pushRegionDelayed(this.collection, null);
+          } else {
+            this.focusRegionId = region.id;
+            if (this.focusRegion && this.focusRegion.id == region.id) return;
+            this.focusRegion = region;
+            this.focusRegionLoadIdOffset = 0;
+            // this.pushRegionDelayed(this.collection, region);
+          }
+        },
+        pushRegionDelayed: debounceWait(async function(collection, region) {
+          console.log("push", region && region.id);
+          this.$router.push({
+            name: region ? "region" : "collection",
+            params: {
+              collection: collection.id,
+              region: region?.id,
+            },
+          })
+        }, 500),
         async updateRegionPool() {
 
           // const addedRegions = [];

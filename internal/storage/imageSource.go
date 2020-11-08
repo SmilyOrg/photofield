@@ -53,6 +53,10 @@ type ImageSource struct {
 	// imageConfigByPath sync.Map
 }
 
+type ImageSourceConfig struct {
+	ExifToolCount int `json:"exif_tool_count"`
+}
+
 type ImageSourceMetrics struct {
 	Cache ImageSourceMetricsCaches `json:"cache"`
 }
@@ -88,10 +92,10 @@ type loadingImage struct {
 	loaded   chan struct{}
 }
 
-func NewImageSource() *ImageSource {
+func NewImageSource(config ImageSourceConfig) *ImageSource {
 	var err error
 	source := ImageSource{}
-	source.decoder = NewMediaDecoder(20)
+	source.decoder = NewMediaDecoder(config.ExifToolCount)
 	source.ListExtensions = []string{".jpg"}
 	// source.ListExtensions = []string{".jpg", ".mp4"}
 	// source.ListExtensions = []string{".mp4"}
@@ -136,6 +140,9 @@ func NewImageSource() *ImageSource {
 			case *image.RGBA:
 				return int64(unsafe.Sizeof(*img)) +
 					int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
+
+			case nil:
+				return 1
 
 			default:
 				panic(fmt.Sprintf("Unable to compute cost, unsupported image format %v", reflect.TypeOf(img)))
@@ -183,6 +190,10 @@ func NewImageSource() *ImageSource {
 	go source.loadPendingImageInfos()
 
 	return &source
+}
+
+func (source *ImageSource) Close() {
+	source.decoder.Close()
 }
 
 func (source *ImageSource) GetMetrics() ImageSourceMetrics {
@@ -540,7 +551,11 @@ func (source *ImageSource) loadPendingImageInfos() {
 			if elapsed > logInterval || len(backlog) == 0 {
 				perSec := float64(loadCount-lastLoadCount) / elapsed.Seconds()
 				pendingCount := len(backlog)
-				log.Printf("load info %4d%% completed, %5d loaded, %5d pending, %.2f / sec\n", loadCount*100/(loadCount+pendingCount), loadCount, pendingCount, perSec)
+				percent := 100
+				if loadCount+pendingCount > 0 {
+					percent = loadCount * 100 / (loadCount + pendingCount)
+				}
+				log.Printf("load info %4d%% completed, %5d loaded, %5d pending, %.2f / sec\n", percent, loadCount, pendingCount, perSec)
 				lastLoadCount = loadCount
 				lastLogTime = now
 			}

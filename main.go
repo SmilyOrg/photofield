@@ -169,7 +169,7 @@ func filterCollections(collections []Collection, f func(Collection) bool) []Coll
 	return filtered
 }
 
-func getCollectionById(id int) *Collection {
+func getCollectionById(id string) *Collection {
 	for i := range collections {
 		if collections[i].Id == id {
 			return &collections[i]
@@ -451,11 +451,7 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 
 	value = query.Get("collection")
 	if value != "" {
-		collectionId, err := strconv.Atoi(value)
-		if err != nil {
-			return nil, errors.New("Invalid collection id")
-		}
-		collection := getCollectionById(collectionId)
+		collection := getCollectionById(value)
 		if collection == nil {
 			return nil, errors.New("Collection not found")
 		}
@@ -472,12 +468,13 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 }
 
 type Configuration struct {
-	Collections []Collection `json:"collections"`
-	Layout      LayoutConfig `json:"layout"`
-	Render      RenderConfig `json:"render"`
+	Collections []Collection      `json:"collections"`
+	Layout      LayoutConfig      `json:"layout"`
+	Render      RenderConfig      `json:"render"`
+	System      ImageSourceConfig `json:"system"`
 }
 
-func loadConfiguration(sceneConfig *SceneConfig, collections *[]Collection, imageSource *ImageSource, sceneSource *SceneSource) {
+func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceConfig, collections *[]Collection) {
 	filename := "data/configuration.yaml"
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -488,6 +485,7 @@ func loadConfiguration(sceneConfig *SceneConfig, collections *[]Collection, imag
 	configuration := Configuration{
 		Layout: sceneConfig.Layout,
 		Render: sceneConfig.Config,
+		System: *imageSourceConfig,
 	}
 
 	if err := yaml.Unmarshal(bytes, &configuration); err != nil {
@@ -501,6 +499,7 @@ func loadConfiguration(sceneConfig *SceneConfig, collections *[]Collection, imag
 	*collections = configuration.Collections
 	sceneConfig.Layout = configuration.Layout
 	sceneConfig.Config = configuration.Render
+	*imageSourceConfig = configuration.System
 }
 
 func main() {
@@ -545,13 +544,15 @@ func main() {
 		ImageHeight: 160,
 	}
 
-	imageSource = NewImageSource()
+	var imageSourceConfig ImageSourceConfig
+	loadConfiguration(&defaultSceneConfig, &imageSourceConfig, &collections)
+
+	imageSource = NewImageSource(imageSourceConfig)
+	defer imageSource.Close()
 	sceneSource = NewSceneSource()
 
-	loadConfiguration(&defaultSceneConfig, &collections, imageSource, sceneSource)
-
 	for i := range collections {
-		collections[i].Id = i
+		collections[i].GenerateId()
 	}
 
 	imageSource.Thumbnails = []Thumbnail{
@@ -672,6 +673,7 @@ func main() {
 	r.HandleFunc("/regions", regionsHandler)
 	r.HandleFunc("/regions/{id}", regionHandler)
 	r.HandleFunc("/files/{id}", fileHandler)
+	r.HandleFunc("/files/{id}/file/{filename}", fileHandler)
 	r.HandleFunc("/files/{id}/video/{size}/{filename}", fileVideoHandler)
 	r.PathPrefix("/").Handler(fs)
 	http.Handle("/", r)

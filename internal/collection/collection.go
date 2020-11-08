@@ -3,15 +3,21 @@ package photofield
 import (
 	"sync"
 
+	"github.com/gosimple/slug"
+
 	. "photofield/internal"
 	. "photofield/internal/storage"
 )
 
 type Collection struct {
-	Id        int      `json:"id"`
+	Id        string   `json:"id"`
 	Name      string   `json:"name"`
 	ListLimit int      `json:"list_limit"`
 	Dirs      []string `json:"dirs"`
+}
+
+func (collection *Collection) GenerateId() {
+	collection.Id = slug.Make(collection.Name)
 }
 
 func (collection *Collection) GetIds(source *ImageSource) <-chan ImageId {

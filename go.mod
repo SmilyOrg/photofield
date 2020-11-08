@@ -16,6 +16,7 @@ require (
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/goccy/go-yaml v1.7.17
 	github.com/gorilla/mux v1.7.4
+	github.com/gosimple/slug v1.9.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/karrick/godirwalk v1.15.6
 	github.com/kr/pretty v0.1.0 // indirect

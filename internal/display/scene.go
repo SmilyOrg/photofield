@@ -507,7 +507,13 @@ func (rect *Rect) GetPixelZoom(c *canvas.Context, size Size) float64 {
 }
 
 func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size Size) float64 {
-	return math.Abs(rect.GetPixelZoom(c, size))
+	// return math.Abs(rect.GetPixelZoom(c, size))
+	zoom := rect.GetPixelZoom(c, size)
+	if zoom > 0 {
+		return zoom * 4
+	} else {
+		return -zoom
+	}
 }
 
 func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) (Bitmap, float64) {

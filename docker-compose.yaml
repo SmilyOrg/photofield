@@ -10,5 +10,5 @@ services:
       - "traefik.http.services.photofield.loadbalancer.server.port=8080"
     volumes:
       - /photo:/photo:ro
-      - /go/src/photofield/configuration.docker.yaml:/app/configuration.yaml:ro
+      - /go/src/photofield/data/configuration.docker.yaml:/app/data/configuration.yaml:ro
     restart: "no"
