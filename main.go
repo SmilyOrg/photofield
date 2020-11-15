@@ -474,6 +474,18 @@ type Configuration struct {
 	System      ImageSourceConfig `json:"system"`
 }
 
+func expandCollections(collections *[]Collection) {
+	expanded := make([]Collection, 0)
+	for _, collection := range *collections {
+		if collection.ExpandSubdirs {
+			expanded = append(expanded, collection.Expand()...)
+		} else {
+			expanded = append(expanded, collection)
+		}
+	}
+	*collections = expanded
+}
+
 func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceConfig, collections *[]Collection) {
 	filename := "data/configuration.yaml"
 	bytes, err := ioutil.ReadFile(filename)
@@ -492,6 +504,8 @@ func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceC
 		log.Printf("unable to parse %s, using defaults: %s\n", filename, err.Error())
 		return
 	}
+
+	expandCollections(&configuration.Collections)
 
 	if len(configuration.Collections) > 0 {
 		sceneConfig.Collection = configuration.Collections[0]
@@ -661,7 +675,9 @@ func main() {
 
 	// renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 
-	log.Println("serving")
+	addr := ":8080"
+
+	log.Println("listening on", addr)
 
 	fs := http.FileServer(http.Dir("./static"))
 
@@ -678,5 +694,5 @@ func main() {
 	r.PathPrefix("/").Handler(fs)
 	http.Handle("/", r)
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(addr, nil))
 }

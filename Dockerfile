@@ -10,6 +10,7 @@ RUN go mod download
 # build
 COPY *.go ./
 COPY internal ./internal
+COPY vendor ./vendor
 RUN go install .
 
 FROM alpine:3.12

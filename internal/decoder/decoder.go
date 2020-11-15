@@ -22,9 +22,9 @@ type ImageInfoDecoder interface {
 
 func NewMediaDecoder(exifToolCount int) *MediaDecoder {
 	decoder := MediaDecoder{}
-	decoder.infoDecoder = NewGoExifRwcarlsenDecoder()
+	// decoder.infoDecoder = NewGoExifRwcarlsenDecoder()
 	// decoder.infoDecoder = NewExifToolBarasherDecoder(exifToolCount)
-	// decoder.infoDecoder = NewExifToolMostlyGeekDecoder(exifToolCount)
+	decoder.infoDecoder = NewExifToolMostlyGeekDecoder(exifToolCount)
 	return &decoder
 }
 
@@ -74,7 +74,7 @@ func parseDateTime(value string) (time.Time, error) {
 
 func (decoder *MediaDecoder) DecodeInfo(path string, info *ImageInfo) error {
 	err := decoder.infoDecoder.DecodeInfo(path, info)
-	println(path, info.Width, info.Height, info.DateTime.String())
+	// println(path, info.Width, info.Height, info.DateTime.String())
 	return err
 }
 

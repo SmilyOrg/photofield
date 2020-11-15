@@ -99,7 +99,7 @@
 
     .controls .top-bar {
       display: flex;
-      justify-content: end;
+      /* justify-content: end; */
       width: 100%;
       /* height: 60px; */
     }
@@ -310,6 +310,9 @@
       <div v-if="fullscreenControls" class="controls">
         
         <div class="top-bar">
+          <h2>
+            {{ collection.name }} #{{ focusRegion.data.id }}
+          </h2>
           <v-btn
             icon
             v-if="focusRegion && focusRegion.data" 
@@ -509,6 +512,7 @@
           },
           photoCount: 0,
         },
+        sceneParamsLoaded: null,
         view: {
           zoom: 0,
           width: 0,
@@ -562,9 +566,22 @@
         await this.updateCollections();
         await this.updateScene();
         this.initSeadragon();
-        this.nativeInteraction = true;
-        this.initRegionPool();
-        this.updateRegions();
+        await this.initRegionPool();
+        await this.updateRegions();
+        
+        if (this.routeRegionId != null) {
+          this.nativeInteraction = false;
+          const region = await this.getOrFetchRegion(this.routeRegionId);
+          // this.setFocusRegion(region);
+          this.fitRegion(region, { immediate: true });
+        } else {
+          this.nativeInteraction = true;
+        }
+
+        if (!this.collection) {
+          this.drawer = true;
+        }
+
       },
       async mounted() {
 
@@ -623,9 +640,9 @@
         },
         focusRegion(focusRegion, prevFocusRegion) {
           // console.log("watch", focusRegion && focusRegion.id);
-          if (!focusRegion && this.fullscreenControls) {
-            this.fullscreenControls = false;
-          }
+          // if (!focusRegion && this.fullscreenControls) {
+          //   this.fullscreenControls = false;
+          // }
           // if (focusRegion) {
           //   // if (prevFocusRegion && prevFocusRegion.id == focusRegion.id) return;
           //   this.fitRegion(focusRegion, {
@@ -642,6 +659,10 @@
           // }, 1000);
         },
         nativeInteraction(nativeInteraction) {
+          if (nativeInteraction && this.fullscreenControls) {
+            this.fullscreenControls = false;
+          }
+
           const captureTouch = !nativeInteraction;
           this.viewer.setMouseNavEnabled(captureTouch);
           const touchAction = captureTouch ? 'none' : 'auto';
@@ -828,6 +849,7 @@
           }
           // immediate = true;
           this.lastScrollTime = Date.now();
+          // console.log("onScrollNoDebounce", rect, scrollMaxY)
           viewport.fitBounds(rect, immediate);
         },
         onViewerScroll(originalHandler, event) {
@@ -908,6 +930,13 @@
           this.collectionSelectedId = collections.length > 0 ? collections[0].id : null;
         },
         async updateScene() {
+          if (this.collection == null) {
+            return;
+          }
+          if (this.sceneParams == this.sceneParamsLoaded) {
+            return;
+          }
+          this.sceneParamsLoaded = this.sceneParams;
           const url = `scenes?${this.sceneParams}`;
           const response = await fetch(url);
           if (!response.ok) {
@@ -993,6 +1022,7 @@
             zoomPerScroll: 1.5,
             // blendTime: 0.1,
             blendTime: 0.3,
+            imageLoaderLimit: 10,
             // debugMode: true,
             // immediateRender: true,
             // zoomPerScroll: 2,
@@ -1226,6 +1256,7 @@
             this.focusRegionId = region.id;
           }
           // this.focusRegionLoadIdOffset += offset;
+          const beforeNavId = this.focusRegionId;
           const nextId = this.focusRegionId + offset;
           this.focusRegionId = nextId;
           // console.log(region.id, offset, this.focusRegionLoadIdOffset, nextId);
@@ -1238,7 +1269,10 @@
           // console.log("loaded", loadId, loadId >= this.regionNavigationLoadedId, this.regionNavigationPendingId, this.regionNavigationLoadedId);
           if (loadId < this.regionNavigationLoadedId) return;
           this.regionNavigationLoadedId = loadId;
-          if (!nextRegion) return;
+          if (!nextRegion) {
+            this.focusRegionId = beforeNavId;
+            return;
+          }
           // this.setFocusRegion(nextRegion);
           console.log(nextId, nextRegion.id);
           this.fitRegion(nextRegion, {
@@ -1406,17 +1440,18 @@
             this.focusRegion = region;
             this.focusRegionLoadIdOffset = 0;
             if (!this.$route.params.region) return;
-            // this.pushRegionDelayed(this.collection, null);
+            this.pushRegionDelayed(this.collection, null);
           } else {
             this.focusRegionId = region.id;
             if (this.focusRegion && this.focusRegion.id == region.id) return;
             this.focusRegion = region;
             this.focusRegionLoadIdOffset = 0;
-            // this.pushRegionDelayed(this.collection, region);
+            this.pushRegionDelayed(this.collection, region);
           }
         },
         pushRegionDelayed: debounceWait(async function(collection, region) {
           console.log("push", region && region.id);
+          if (region && this.routeRegionId == region.id) return;
           this.$router.push({
             name: region ? "region" : "collection",
             params: {
@@ -1424,7 +1459,7 @@
               region: region?.id,
             },
           })
-        }, 500),
+        }, 1000),
         async updateRegionPool() {
 
           // const addedRegions = [];
@@ -1478,7 +1513,9 @@
         },
         async getRegions(x, y, w, h) {
           const url = `regions?${this.sceneParams}&x=${x}&y=${y}&w=${w}&h=${h}`;
-          return await (await fetch(url)).json();
+          const response = await fetch(url);
+          if (!response.ok) return [];
+          return await response.json();
         },
         async fetchRegion(id) {
           const url = `regions/${id}?${this.sceneParams}`;
