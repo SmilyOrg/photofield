@@ -2,13 +2,47 @@
   <div class="app">
     <ui-top-app-bar
       class="top-bar"
+      nav-id="menu"
       :fixed="true"
       contentSelector="#content"
+      @nav="drawer = !drawer"
     >
-      Photos
-      <!-- <template #toolbar>
-      </template> -->
+      {{ collection ? collection.name : "Photos" }}
+      <template #toolbar="{ toolbarItemClass }">
+        <ui-spinner
+          active
+          :closed="load.image.inProgress == 0"
+          size="small"
+          class="small-spinner"
+          :class="toolbarItemClass"
+        ></ui-spinner>
+      </template>
     </ui-top-app-bar>
+    <ui-drawer type="modal" nav-id="menu" v-model="drawer">
+      <ui-drawer-header>
+        <ui-drawer-title>Photos</ui-drawer-title>
+        <ui-drawer-subtitle>
+          {{ fileCount }} files
+        </ui-drawer-subtitle>
+      </ui-drawer-header>
+      <ui-drawer-content>
+        <ui-list>
+          <ui-item
+            v-for="collection in collections"
+            :key="collection.id"
+            :href="'/collections/' + collection.id"
+          >
+            {{ collection.name }}
+          </ui-item>
+          <ui-item>
+            <ui-button @click="simulate()">
+              Simulate
+            </ui-button>
+          </ui-item>
+        </ui-list>
+      </ui-drawer-content>
+    </ui-drawer>
+    <ui-drawer-backdrop></ui-drawer-backdrop>
     <div id="content">
       <div class="loading-overlay" :class="{ active: loading }">
         <ui-spinner
@@ -18,15 +52,21 @@
         ></ui-spinner>
       </div>
       <natural-viewer
+        v-if="collections.length > 0"
         class="viewer"
+        :class="{ simulating }"
+        ref="viewer"
         :api="api"
+        :collection="collection"
         @load="onLoad"
+        @scene="onScene"
       ></natural-viewer>
     </div>
   </div>
 </template>
 
 <script>
+import { getCollections, host } from './api';
 import NaturalViewer from './components/NaturalViewer.vue'
 
 export default {
@@ -36,17 +76,47 @@ export default {
   },
   data() {
     return {
-      api: "https://photos.pelun.net",
+      api: host,
       load: {
         scene: false,
+        image: 0,
       },
       loading: false,
+      drawer: false,
+      simulating: false,
+      collections: [],
+      scene: {},
+    }
+  },
+  async mounted() {
+    this.collections = await getCollections();
+  },
+  computed: {
+    collection() {
+      const id = this.$route.params.collection;
+      return this.collections.find(
+        collection => collection.id == id
+      );
+    },
+    fileCount() {
+      return this.scene.photoCount !== undefined ?
+        this.scene.photoCount.toLocaleString() : 
+        "No";
     }
   },
   methods: {
     onLoad(load) {
       this.load = { ...this.load, ...load };
       this.loading = this.load.scene;
+    },
+    onScene(scene) {
+      this.scene = scene;
+    },
+    async simulate() {
+      this.drawer = false;
+      this.simulating = true;
+      await this.$refs.viewer.simulate();
+      this.simulating = false;
     }
   }
 }
@@ -61,6 +131,10 @@ export default {
 
 .spinner {
   --mdc-theme-primary: white;
+}
+
+.small-spinner {
+  --mdc-theme-primary: var(--mdc-theme-on-primary);
 }
 
 .loading-overlay {
@@ -85,4 +159,10 @@ export default {
   /* width: 100%;
   height: 100%; */
 }
+
+.viewer.simulating {
+  width: 1280px;
+  height: 720px;
+}
+
 </style>
