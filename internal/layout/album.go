@@ -126,14 +126,16 @@ func LayoutAlbum(config LayoutConfig, scene *Scene, source *storage.ImageSource)
 	// log.Println("layout placing")
 	layoutPlaced := ElapsedWithCount("layout placing", count)
 	lastLogTime := time.Now()
-	for i := range scene.Photos {
+
+	scene.Photos = scene.Photos[:0]
+	for i := range layoutPhotos {
 		if i >= count {
 			break
 		}
 		LayoutPhoto := &layoutPhotos[i]
-		scene.Photos[i] = LayoutPhoto.Photo
-		photo := &scene.Photos[i]
 		info := LayoutPhoto.Info
+		scene.Photos = append(scene.Photos, LayoutPhoto.Photo)
+		photo := &scene.Photos[len(scene.Photos)-1]
 
 		photoTime := info.DateTime
 		elapsed := photoTime.Sub(lastPhotoTime)

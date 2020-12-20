@@ -11,33 +11,32 @@ import (
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-type MediaDecoder struct {
-	infoDecoder ImageInfoDecoder
+type MediaCoder struct {
+	infoCoder MediaInfoCoder
 }
 
-type ImageInfoDecoder interface {
+type MediaInfoCoder interface {
 	DecodeInfo(path string, info *ImageInfo) error
 	Close()
 }
 
-func NewMediaDecoder(exifToolCount int) *MediaDecoder {
-	decoder := MediaDecoder{}
-	// decoder.infoDecoder = NewGoExifRwcarlsenDecoder()
-	// decoder.infoDecoder = NewExifToolBarasherDecoder(exifToolCount)
-	decoder.infoDecoder = NewExifToolMostlyGeekDecoder(exifToolCount)
-	return &decoder
+func NewMediaCoder(exifToolCount int) *MediaCoder {
+	coder := MediaCoder{}
+	// coder.infocoder = NewGoExifRwcarlsencoder()
+	// coder.infocoder = NewExifToolBarashercoder(exifToolCount)
+	coder.infoCoder = NewExifToolMostlyGeekDecoder(exifToolCount)
+	return &coder
 }
 
-func (decoder *MediaDecoder) Close() {
-	decoder.infoDecoder.Close()
+func (coder *MediaCoder) Close() {
+	coder.infoCoder.Close()
 }
 
-func (decoder *MediaDecoder) Decode(reader io.ReadSeeker) (image.Image, string, error) {
-	img, fmt, err := image.Decode(reader)
+func (coder *MediaCoder) decodePostProcess(reader io.ReadSeeker, img image.Image) (image.Image, error) {
+	_, err := reader.Seek(0, io.SeekStart)
 	if err != nil {
-		return img, fmt, err
+		return img, err
 	}
-	reader.Seek(0, io.SeekStart)
 	orientation := getOrientation(reader)
 	switch orientation {
 	case "1":
@@ -56,7 +55,27 @@ func (decoder *MediaDecoder) Decode(reader io.ReadSeeker) (image.Image, string, 
 	case "8":
 		img = imaging.Rotate90(img)
 	}
+	return img, nil
+}
 
+func (coder *MediaCoder) DecodeJpeg(reader io.ReadSeeker) (image.Image, error) {
+	img, err := DecodeJpeg(reader)
+	if err != nil {
+		return img, err
+	}
+	return coder.decodePostProcess(reader, img)
+}
+
+func (coder *MediaCoder) EncodeJpeg(w io.Writer, image image.Image) error {
+	return EncodeJpeg(w, image)
+}
+
+func (coder *MediaCoder) Decode(reader io.ReadSeeker) (image.Image, string, error) {
+	img, fmt, err := image.Decode(reader)
+	if err != nil {
+		return img, fmt, err
+	}
+	img, err = coder.decodePostProcess(reader, img)
 	return img, fmt, err
 }
 
@@ -72,8 +91,8 @@ func parseDateTime(value string) (time.Time, error) {
 	return t, err
 }
 
-func (decoder *MediaDecoder) DecodeInfo(path string, info *ImageInfo) error {
-	err := decoder.infoDecoder.DecodeInfo(path, info)
+func (coder *MediaCoder) DecodeInfo(path string, info *ImageInfo) error {
+	err := coder.infoCoder.DecodeInfo(path, info)
 	// println(path, info.Width, info.Height, info.DateTime.String())
 	return err
 }
@@ -126,7 +145,7 @@ func getOrientationFromExif(x *exif.Exif) string {
 	return "1"
 }
 
-func (decoder *MediaDecoder) DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
+func (coder *MediaCoder) DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
 	conf, fmt, err := image.DecodeConfig(reader)
 	if err != nil {
 		return conf, fmt, err

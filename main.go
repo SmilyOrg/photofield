@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"image"
-	"image/jpeg"
 	"image/png"
 	"io/ioutil"
 	"sync"
@@ -24,6 +23,7 @@ import (
 	. "photofield/internal/layout"
 	. "photofield/internal/storage"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/mkevac/debugcharts"
 
@@ -237,10 +237,7 @@ func tilesHandler(w http.ResponseWriter, r *http.Request) {
 	config.CanvasImage = image
 	config.Zoom = zoom
 	drawTile(context, &config, scene, zoom, x, y)
-	// png.Encode(w, image)
-	jpeg.Encode(w, image, &jpeg.Options{
-		Quality: 80,
-	})
+	imageSource.Coder.EncodeJpeg(w, image)
 }
 
 func regionsHandler(w http.ResponseWriter, r *http.Request) {
@@ -436,7 +433,7 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 	value = query.Get("sceneWidth")
 	if value != "" {
 		sceneConfig.Layout.SceneWidth, err = strconv.ParseFloat(value, 64)
-		if err != nil {
+		if err != nil || sceneConfig.Layout.SceneWidth <= 0 {
 			return nil, errors.New("Invalid sceneWidth")
 		}
 	}
@@ -692,7 +689,7 @@ func main() {
 	r.HandleFunc("/files/{id}/file/{filename}", fileHandler)
 	r.HandleFunc("/files/{id}/video/{size}/{filename}", fileVideoHandler)
 	r.PathPrefix("/").Handler(fs)
-	http.Handle("/", r)
+	http.Handle("/", handlers.CORS()(r))
 
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

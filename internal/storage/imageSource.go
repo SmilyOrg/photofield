@@ -15,7 +15,7 @@ import (
 	"unsafe"
 
 	. "photofield/internal"
-	. "photofield/internal/decoder"
+	. "photofield/internal/codec"
 
 	"github.com/EdlinOrg/prominentcolor"
 	"github.com/dgraph-io/ristretto"
@@ -39,7 +39,7 @@ type ImageSource struct {
 	paths       []string
 	pathMutex   sync.RWMutex
 
-	decoder            *MediaDecoder
+	Coder              *MediaCoder
 	imagesLoading      sync.Map
 	imagesLoadingCount int
 	images             *ristretto.Cache
@@ -95,7 +95,7 @@ type loadingImage struct {
 func NewImageSource(config ImageSourceConfig) *ImageSource {
 	var err error
 	source := ImageSource{}
-	source.decoder = NewMediaDecoder(config.ExifToolCount)
+	source.Coder = NewMediaCoder(config.ExifToolCount)
 	source.ListExtensions = []string{".jpg"}
 	// source.ListExtensions = []string{".jpg", ".mp4"}
 	// source.ListExtensions = []string{".mp4"}
@@ -193,7 +193,7 @@ func NewImageSource(config ImageSourceConfig) *ImageSource {
 }
 
 func (source *ImageSource) Close() {
-	source.decoder.Close()
+	source.Coder.Close()
 }
 
 func (source *ImageSource) GetMetrics() ImageSourceMetrics {
@@ -267,7 +267,7 @@ func (source *ImageSource) LoadImage(path string) (*image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	image, _, err := source.decoder.Decode(file)
+	image, _, err := source.Coder.Decode(file)
 	return &image, err
 }
 
@@ -291,7 +291,7 @@ func (source *ImageSource) LoadSmallestImage(path string) (*image.Image, error) 
 			continue
 		}
 		defer file.Close()
-		image, _, err := source.decoder.Decode(file)
+		image, _, err := source.Coder.Decode(file)
 		return &image, err
 	}
 	image, err := source.LoadImage(path)
@@ -321,7 +321,7 @@ func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {
 
 func (source *ImageSource) LoadImageInfo(path string) (ImageInfo, error) {
 	var info ImageInfo
-	err := source.decoder.DecodeInfo(path, &info)
+	err := source.Coder.DecodeInfo(path, &info)
 	if err != nil {
 		return info, err
 	}
