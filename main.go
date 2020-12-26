@@ -199,6 +199,30 @@ func collectionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func collectionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+
+	id := vars["id"]
+	if id == "" {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
+	}
+
+	collection := getCollectionById(id)
+	if collection == nil {
+		http.Error(w, "Collection not found", http.StatusNotFound)
+		return
+	}
+
+	err := json.NewEncoder(w).Encode(collection)
+	if err != nil {
+		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
+		return
+	}
+}
+
 func tilesHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
@@ -682,6 +706,7 @@ func main() {
 	r.HandleFunc("/metrics", metricsHandler)
 	r.HandleFunc("/scenes", scenesHandler)
 	r.HandleFunc("/collections", collectionsHandler)
+	r.HandleFunc("/collections/{id}", collectionHandler)
 	r.HandleFunc("/tiles", tilesHandler)
 	r.HandleFunc("/regions", regionsHandler)
 	r.HandleFunc("/regions/{id}", regionHandler)

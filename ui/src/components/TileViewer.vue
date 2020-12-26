@@ -5,7 +5,7 @@
 <script>
 import OpenSeadragon from "openseadragon";
 import { throttle, waitDebounce } from "../utils.js";
-import { getRegions } from "../api.js";
+import { getRegions, getTileUrl } from "../api.js";
 
 export default {
   
@@ -16,7 +16,7 @@ export default {
     view: Object,
   },
 
-  emits: ["zoom-out", "pan", "load"],
+  emits: ["zoom", "click", "pan", "view", "load", "key-down"],
 
   data() {
     return {}
@@ -42,6 +42,7 @@ export default {
 
     view(view) {
       if (!this.viewer) return;
+      if (view == this.emittedView) return;
       this.setView(view);
     },
 
@@ -109,40 +110,37 @@ export default {
       });
       this.viewer.addHandler("tile-loaded", this.onTileLoad);
 
+      this.viewer.innerTracker.keyDownHandler = null;
+
     },
 
     async onCanvasClick(event) {
+      if (!this.interactive) return;
       if (!event.quick) return;
       const viewportPos = this.viewer.viewport.viewerElementToViewportCoordinates(event.position);
-      const regions = await getRegions(viewportPos.x, viewportPos.y, 0, 0, this.scene.params);
-      if (regions && regions.length > 0) {
-        const region = regions[0];
-        const scale = this.scene.width;
-        this.setView({
-          x: region.bounds.x * scale,
-          y: region.bounds.y * scale,
-          width: region.bounds.w * scale,
-          height: region.bounds.h * scale,
-        }, {
-          animationTime: 2,
-        })
-      }
+      const scale = this.scene.width;
+      this.$emit("click", {
+        x: viewportPos.x * scale,
+        y: viewportPos.y * scale,
+      });
     },
 
     onZoom(event) {
       if (!this.interactive) return;
-      const { zoom } = event;
-      if (zoom < 0.9) {
-        this.$emit("zoom-out");
-      }
+      this.$emit("zoom", event.zoom);
     },
 
     onPan(event) {
+      if (!this.interactive) return;
       const scale = this.scene.width;
-      this.$emit("pan", {
-        x: event.center.x * scale,
-        y: event.center.y * scale,
-      });
+      const bounds = this.viewer.viewport.getBounds();
+      this.emittedView = {
+        x: bounds.x * scale,
+        y: bounds.y * scale,
+        w: bounds.width * scale,
+        h: bounds.height * scale,
+      };
+      this.$emit("view", this.emittedView);
     },
 
     onTileLoad() {
@@ -165,12 +163,23 @@ export default {
     },
 
     setView(view, options) {
+      if (!this.viewer) {
+        this.pendingView = { view, options };
+        return;
+      }
+
+      if (this.pendingView) {
+        view = this.pendingView.view;
+        options = this.pendingView.options;
+        this.pendingView = null;
+      }
+
       const scale = 1 / this.scene.width;
       const rect = this.tempRect;
       rect.x = view.x * scale;
       rect.y = view.y * scale;
-      rect.width = view.width * scale;
-      rect.height = view.height * scale;
+      rect.width = view.w * scale;
+      rect.height = view.h * scale;
 
       if (rect.width == 0 || rect.height == 0) return;
 
@@ -240,16 +249,7 @@ export default {
         minLevel,
         maxLevel,
         getTileUrl: (level, x, y) => {
-          let url = this.api + "/tiles";
-          url += "?" + this.scene.params;
-          url += "&tileSize=" + tileSize;
-          url += "&zoom=" + level;
-          url += "&x=" + x;
-          url += "&y=" + y;
-          // for (const [key, value] of Object.entries(this.debug)) {
-          //   url += "&debug" + key.slice(0, 1).toUpperCase() + key.slice(1) + "=" + (value ? "true" : "false");
-          // }
-          return url;
+          return getTileUrl(level, x, y, tileSize, this.scene.params);
         }
       }
     },

@@ -4,13 +4,15 @@ import NaturalViewer from "../components/NaturalViewer.vue";
 const routes = [
   {
     name: "collection",
-    path: "/collections/:collection",
+    path: "/collections/:collectionId",
     component: NaturalViewer,
+    props: true,
   },
   {
     name: "region",
-    path: "/collections/:collection/:region",
+    path: "/collections/:collectionId/:regionId",
     component: NaturalViewer,
+    props: true,
   },
 ];
 

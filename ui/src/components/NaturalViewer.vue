@@ -4,12 +4,14 @@
       class="viewer"
       ref="viewer"
       :interactive="!nativeScroll"
-      :api="api"
       :scene="viewer.scene"
       :view="view"
-      @zoom-out="onZoomOut"
+      @zoom="onZoom"
       @pan="onPan"
+      @view="onView"
+      @click="onClick"
       @load="onLoad"
+      @key-down="onKeyDown"
     ></tile-viewer>
     <div
       class="scroller"
@@ -17,6 +19,9 @@
       ref="scroller"
       @pointerDown="onPointerDown"
       @pointerUp="onPointerUp"
+      @touchStart="onTouchStart"
+      @touchEnd="onTouchEnd"
+      @wheel="onWheel"
     >
       <div
         class="virtual-canvas"
@@ -28,15 +33,16 @@
 </template>
 
 <script>
-import { nextTick } from 'vue';
-import { debounce, LatestFetcher, throttle, waitDebounce } from '../utils';
+import { nextTick, toRef, watch, watchEffect } from 'vue';
+import { debounce, throttle, waitDebounce } from '../utils';
 import TileViewer from './TileViewer.vue';
+import { getCollection, getRegion, getRegions, getScene } from '../api';
 
 export default {
 
   props: [
-    "api",
-    "collection",
+    "collectionId",
+    "regionId",
   ],
 
   emits: {
@@ -50,6 +56,8 @@ export default {
 
   data() {
     return {
+      collection: null,
+      region: null,
       loadProgress: 0,
       imageHeight: 30,
       cacheKey: "",
@@ -81,15 +89,10 @@ export default {
       nativeScroll: true,
     }
   },
+
   async mounted() {
     this.addResizeObserver();
     this.$refs.scroller.addEventListener("scroll", this.onScroll);
-
-    this.fetchScene = LatestFetcher();
-    await this.updateScene();
-    this.updateScrollToView();
-
-    // this.demoScroll();
   },
   unmounted() {
     clearInterval(this.demoInterval);
@@ -103,6 +106,9 @@ export default {
         sceneWidth: this.window.width,
         cacheKey: this.cacheKey,
       };
+      if (params.collection == null) {
+        return null;
+      }
       if (params.sceneWidth == 0) {
         return null;
       }
@@ -121,13 +127,59 @@ export default {
     pointerTimeThreshold() {
       return this.$refs.viewer.pointerTimeThreshold;
     },
+    scrollFromView() {
+      const scroller = this.$refs.scroller;
+      if (scroller == undefined) return;
+      if (this.viewer.scene.height == 0) return;
+      if (this.window.height == 0) return;
+      const viewMaxY = this.viewer.scene.height - this.window.height;
+      const scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
+      const panY = view.y;
+      const scrollRatio = panY / viewMaxY;
+      const scrollTop = scrollRatio * scrollMaxY;
+      return scrollTop;
+    }
   },
   watch: {
     sceneParams(sceneParams) {
       this.debouncedUpdateScene();
+      this.updateRegion();
+    },
+    collectionId: {
+      immediate: true,
+      async handler(collectionId) {
+        this.collection = await getCollection(collectionId);
+      },
+    },
+    collection: {
+      async handler(collection) {
+        this.updateScene();
+      },
+    },
+    regionId: {
+      immediate: true,
+      async handler(regionId) {
+        if (!this.sceneParams) return;
+        if (this.focusRegionTime !== undefined && Date.now() - this.focusRegionTime < 200) {
+          return;
+        }
+        this.updateRegion();
+      },
     },
   },
   methods: {
+
+    async updateRegion() {
+      if (this.regionId !== undefined) {
+        this.nativeScroll = false;
+        await nextTick();
+        this.region = await getRegion(this.regionId, this.sceneParams);
+        this.view = this.region.bounds;
+        this.onView(this.view);
+      } else {
+        this.region = null;
+      }
+    },
 
     addResizeObserver() {
       this.removeResizeObserver();
@@ -178,12 +230,12 @@ export default {
     onResize(rect) {
       if (rect.width == 0 || rect.height == 0) return;
       this.window = rect;
-      this.updateScrollToView();
+      this.pushScrollToView();
     },
 
     onScroll() {
       if (!this.nativeScroll) return;
-      this.updateScrollToView();
+      this.pushScrollToView();
     },
 
     onLoad(event) {
@@ -195,6 +247,17 @@ export default {
       const target = this.$refs.viewer.pointerTarget;
       const redirected = new event.constructor(event.type, event);
       target.dispatchEvent(redirected);
+    },
+
+    async onWheel(event) {
+      if (event.ctrlKey && this.nativeScroll) {
+        event.preventDefault();
+        if (event.deltaY < 0) {
+          this.nativeScroll = false;
+          await nextTick();
+          this.redispatchEventToViewer(event);
+        }
+      }
     },
 
     async onPointerDown(event) {
@@ -224,38 +287,123 @@ export default {
       }
     },
 
-    async onZoomOut(event) {
-      this.nativeScroll = true;
-      this.updateScrollToView();
+    async onTouchStart(event) {
+      if (!this.nativeScroll) {
+        return;
+      }
+      console.log(event);
+      if (this.nativeScroll && event.touches.length >= 2) {
+        this.nativeScroll = false;
+        await Vue.nextTick();
+        this.redispatchEventToViewer(this.lastTouchStartEvent);
+        this.redispatchEventToViewer(event);
+     }
+      this.lastTouchStartEvent = event;
+    },
+
+    async onTouchEnd(event) {
+      if (!this.nativeScroll) {
+        return;
+      }
+      this.lastTouchStartEvent = null;
+      console.log(event);
+    },
+
+    async onZoom(zoom) {
+      if (zoom < 1) {
+        this.nativeScroll = true;
+        this.pushScrollToView();
+      }
     },
 
     async onPan(event) {
       if (this.nativeScroll) return;
-      const scroller = this.$refs.scroller;
-      const viewMaxY = this.viewer.scene.height - this.window.height;
-      const scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
-      const panY = event.y - this.window.height * 0.5;
-      const scrollRatio = panY / viewMaxY;
-      const scrollTop = scrollRatio * scrollMaxY;
-      scroller.scroll({
-        top: scrollTop,
-      })
+      this.region = null;
+      this.pushViewToScroll(event);
+    },
+
+    async onView(view) {
+      this.pushViewToScroll(view);
     },
 
     async onClick(event) {
-      if (!this.nativeScroll) {
-        return;
+      const regions = await getRegions(event.x, event.y, 0, 0, this.sceneParams);
+      if (regions && regions.length > 0) {
+        const region = regions[0];
+        console.log(region);
+        this.focusRegion(region, 2);
+      }
+    },
+
+    async focusRegion(region, transition) {
+      this.viewRegion(region, transition);
+      this.focusRegionTime = Date.now();
+      this.$router.push({
+        name: "region",
+        params: {
+          collectionId: this.collection.id,
+          regionId: region?.id,
+        },
+      })
+    },
+
+    async viewRegion(region, transition) {
+      this.$refs.viewer.setView(
+        region.bounds,
+        transition && { animationTime: transition }
+      )
+      this.onView(region.bounds);
+    },
+
+    onKeyDown(event) {
+      if (this.nativeScroll) return;
+      switch (event.key) {
+        // case "ArrowLeft": this.navigate(-1); return;
+        // case "ArrowRight": this.navigate(1); return;
+        case "Escape": this.navigateExit(); return;
+      }
+    },
+
+    navigateExit() {
+      this.nativeScroll = true;
+      this.pushScrollToView(1);
+    },
+
+    pushViewToScroll(view) {
+
+      if (this.nativeScroll) {
+        console.warn("Pushing view to scroll while in native scrolling mode");
       }
 
-      this.nativeScroll = false;
-      await nextTick();
 
-      this.redispatchEventToViewer(this.lastPointerDownEvent);
-      this.redispatchEventToViewer(this.lastPointerUpEvent);
+      const scroller = this.$refs.scroller;
+      
+      if (!scroller || this.viewer.scene.height == 0) {
+        this.pendingViewToScroll = view;
+        return;
+      }
+      if (this.pendingViewToScroll) {
+        view = this.pendingViewToScroll;
+        this.pendingViewToScroll = null;
+      }
+
+      const viewMaxY = this.viewer.scene.height - this.window.height;
+      const scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
+      const panY = (view.y + view.h/2) - this.window.height/2;
+      const scrollRatio = panY / viewMaxY;
+      const scrollTop = scrollRatio * scrollMaxY;
+
+      scroller.scroll({
+        top: scrollTop,
+      })
 
     },
 
-    updateScrollToView() {
+    pushScrollToView(transition) {
+
+      if (!this.nativeScroll) {
+        console.warn("Pushing scroll to view while not in native scrolling mode");
+      }
 
       if (!this.$refs.scroller) return;
       
@@ -267,12 +415,27 @@ export default {
       const scrollRatio = scrollMaxY ? scroller.scrollTop / scrollMaxY : 0;
       const viewY = scrollRatio * viewMaxY;
 
-      this.view = {
-        x: 0,
-        y: viewY,
-        width: this.window.width,
-        height: this.window.height,
+      const options = {}
+
+      if (transition !== undefined) {
+        this.$refs.viewer.setView({
+          x: 0,
+          y: viewY,
+          w: this.window.width,
+          h: this.window.height,
+        }, {
+          animationTime: transition,
+        });
+      } else {
+        this.view = {
+          x: 0,
+          y: viewY,
+          w: this.window.width,
+          h: this.window.height,
+        }
       }
+
+
     },
 
     
@@ -282,19 +445,21 @@ export default {
 
     async updateScene() {
       if (this.collection == null) {
+        console.warn("Unable to update scene, missing collection");
         return;
       }
       if (!this.sceneParams) {
+        console.warn("Unable to update scene, missing scene params");
         return;
       }
       if (this.sceneParams == this.sceneParamsLoaded) {
+        console.warn("Unable to update scene, scene params unchanged");
         return;
       }
       this.sceneParamsLoaded = this.sceneParams;
-      const url = `${this.api}/scenes?${this.sceneParams}`;
       try {
         this.$emit("load", { scene: true });
-        const scenes = await this.fetchScene(url);
+        const scenes = await getScene(this.sceneParams);
         this.$emit("load", { scene: false });
         if (!scenes || scenes.length < 1) {
           throw new Error("Scene not found");

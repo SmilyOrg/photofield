@@ -26,20 +26,20 @@
         </ui-drawer-subtitle>
       </ui-drawer-header>
       <ui-drawer-content>
-        <ui-list>
-          <ui-item
+        <ui-nav>
+          <ui-nav-item
             v-for="collection in collections"
             :key="collection.id"
             :href="'/collections/' + collection.id"
           >
             {{ collection.name }}
-          </ui-item>
+          </ui-nav-item>
           <ui-item>
             <ui-button @click="simulate()">
               Simulate
             </ui-button>
           </ui-item>
-        </ui-list>
+        </ui-nav>
       </ui-drawer-content>
     </ui-drawer>
     <ui-drawer-backdrop></ui-drawer-backdrop>
@@ -51,22 +51,20 @@
           size="large"
         ></ui-spinner>
       </div>
-      <natural-viewer
-        v-if="collections.length > 0"
+      <router-view
         class="viewer"
-        :class="{ simulating }"
         ref="viewer"
-        :api="api"
-        :collection="collection"
+        :class="{ simulating }"
         @load="onLoad"
         @scene="onScene"
-      ></natural-viewer>
+      >
+      </router-view>
     </div>
   </div>
 </template>
 
 <script>
-import { getCollections, host } from './api';
+import { getCollections } from './api';
 import NaturalViewer from './components/NaturalViewer.vue'
 
 export default {
@@ -76,7 +74,6 @@ export default {
   },
   data() {
     return {
-      api: host,
       load: {
         scene: false,
         image: 0,
@@ -93,7 +90,8 @@ export default {
   },
   computed: {
     collection() {
-      const id = this.$route.params.collection;
+      const id = this.$route.params.collectionId;
+      if (!this.collections) return null;
       return this.collections.find(
         collection => collection.id == id
       );

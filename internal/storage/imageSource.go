@@ -141,6 +141,10 @@ func NewImageSource(config ImageSourceConfig) *ImageSource {
 				return int64(unsafe.Sizeof(*img)) +
 					int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
 
+			case *image.CMYK:
+				return int64(unsafe.Sizeof(*img)) +
+					int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
+
 			case nil:
 				return 1
 

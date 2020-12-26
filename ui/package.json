@@ -6,7 +6,7 @@
     "build": "vite build"
   },
   "dependencies": {
-    "balm-ui": "^9.0.2",
+    "balm-ui": "^9.4.1",
     "openseadragon": "^2.4.2",
     "vue": "^3.0.2",
     "vue-router": "^4.0.1"

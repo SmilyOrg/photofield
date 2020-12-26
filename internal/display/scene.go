@@ -673,25 +673,15 @@ func (scene *Scene) getRegionScale() float64 {
 }
 
 func (scene *Scene) GetRegions(config *RenderConfig, bounds Rect) []Region {
-	scale := scene.getRegionScale()
-	rect := bounds.Scale(scale)
-	regions := scene.RegionSource.GetRegionsFromBounds(
-		rect,
+	return scene.RegionSource.GetRegionsFromBounds(
+		bounds,
 		scene,
 		RegionConfig{
 			Limit: 100,
 		},
 	)
-	for i := range regions {
-		region := &regions[i]
-		region.Bounds = region.Bounds.Scale(1 / scale)
-	}
-	return regions
 }
 
 func (scene *Scene) GetRegion(id int) Region {
-	scale := scene.getRegionScale()
-	region := scene.RegionSource.GetRegionById(id, scene, RegionConfig{})
-	region.Bounds = region.Bounds.Scale(1 / scale)
-	return region
+	return scene.RegionSource.GetRegionById(id, scene, RegionConfig{})
 }
