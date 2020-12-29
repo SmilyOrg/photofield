@@ -1,4 +1,5 @@
 import { LatestFetcher } from "./utils";
+import { useTask } from "vue-concurrency";
 
 export const host = "http://localhost:8080";
 
@@ -10,7 +11,8 @@ export async function get(endpoint, def) {
     if (def !== undefined) {
       return def;
     }
-    throw new Error(response);
+    console.error(response);
+    throw new Error(response.statusText);
   }
   return await response.json();
 }
@@ -45,8 +47,35 @@ export function getTileUrl(level, x, y, tileSize, params) {
 }
 
 export async function getScene(params) {
-  return fetchScene(host + "/scenes?" + params);
+  return get("/scenes?" + params);
 }
+
+export function useSceneTask() {
+  return useTask(function*(_, params) {
+    const scenes = yield get("/scenes?" + params);
+    if (!scenes || scenes.length < 1) {
+      throw new Error("Scene not found");
+    }
+    return scenes[0];
+  });
+}
+
+export function useCollectionTask() {
+  return useTask(function*(_, id) {
+    return get("/collections/" + id);
+  });
+}
+
+export function useRegionTask() {
+  return useTask(function*(_, regionId, sceneParams) {
+    if (sceneParams == null || regionId == null) {
+      return null;
+    }
+    return getRegion(regionId, sceneParams);
+  })
+}
+
+
 
 export default {
   get,

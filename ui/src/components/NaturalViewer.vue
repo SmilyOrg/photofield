@@ -1,5 +1,20 @@
 <template>
   <div class="container">
+
+    <page-title :title="pageTitle"></page-title>
+    
+    <!-- <div>
+      <div v-if="collectionTask.isRunning">Loading...</div>
+      <div v-else-if="collectionTask.isError">
+        <p>{{ collectionTask.last.error.message }}</p>
+        <button @click="collectionTask.perform">Try again</button>
+      </div>
+      <h2>Collection</h2><pre>{{ collection }}</pre>
+      <h2>Scene Params</h2><pre>{{ sceneParams }}</pre>
+      <h2>Scene</h2><pre>{{ scene }}</pre>
+      <h2>Region</h2><pre>{{ region }}</pre>
+    </div> -->
+    
     <tile-viewer
       class="viewer"
       ref="viewer"
@@ -11,7 +26,7 @@
       @view="onView"
       @click="onClick"
       @load="onLoad"
-      @key-down="onKeyDown"
+      @keydown="onKeyDown"
     ></tile-viewer>
     <div
       class="scroller"
@@ -33,40 +48,36 @@
 </template>
 
 <script>
-import { nextTick, toRef, watch, watchEffect } from 'vue';
+import { computed, nextTick, ref, toRef, watch, watchEffect } from 'vue';
 import { debounce, throttle, waitDebounce } from '../utils';
 import TileViewer from './TileViewer.vue';
-import { getCollection, getRegion, getRegions, getScene } from '../api';
+import { getCollection, getRegion, getRegions, getScene, useCollectionTask, useRegionTask, useSceneTask } from '../api';
+import { timeout, useTask, useTaskGroup } from "vue-concurrency";
+import PageTitle from './PageTitle.vue';
 
 export default {
 
   props: [
     "collectionId",
     "regionId",
+    "options",
   ],
 
   emits: {
     load: null,
     scene: null,
+    tasks: null,
   },
 
   components: {
     TileViewer,
+    PageTitle,
   },
 
   data() {
     return {
-      collection: null,
-      region: null,
       loadProgress: 0,
-      imageHeight: 30,
       cacheKey: "",
-      scene: {
-        bounds: {
-          w: 0,
-          h: 0
-        }
-      },
       window: {
         x: 0,
         y: 0,
@@ -79,30 +90,96 @@ export default {
         width: 0,
         height: 0,
       },
-      viewer: {
-        scene: {
-          width: 0,
-          height: 0,
-          params: null,
-        }
-      },
       nativeScroll: true,
     }
   },
 
+  setup(props) {
+    const collectionId = toRef(props, "collectionId");
+
+    const collectionTask = useCollectionTask();
+    const collection = computed(() => collectionTask.last?.value);
+    watch(collectionId, id => {
+      collectionTask.perform(id);
+    })
+    collectionTask.perform(collectionId.value);
+
+    const sceneTask = useSceneTask().restartable();
+    const scene = computed(() => sceneTask.last?.value);
+
+    const regionTask = useRegionTask().restartable();
+    const region = computed(() => {
+      if (regionTask.isRunning) return undefined;
+      return regionTask.last.value;
+    });
+
+    const regionSeekId = ref(null);
+    const regionSeekApplyTask = useTask(function*(_, router) {
+      yield timeout(1000);
+
+      const seekId = regionSeekId.value;
+      regionSeekId.value = null;
+      router.push({
+        name: "region",
+        params: {
+          collectionId: collectionId.value,
+          regionId: seekId,
+        },
+      });
+    }).restartable();
+
+    const tasks = useTaskGroup({ collectionTask, sceneTask, regionTask })
+    
+    return {
+      collectionTask,
+      collection,
+      sceneTask,
+      scene,
+      regionTask,
+      region,
+      regionSeekId,
+      regionSeekApplyTask,
+      tasks,
+    }
+  },
+
   async mounted() {
+    if (this.regionId != null) {
+      this.regionFocusPending = true;
+      this.nativeScroll = false;
+    }
     this.addResizeObserver();
     this.$refs.scroller.addEventListener("scroll", this.onScroll);
+    this.$emit("tasks", this.tasks);
   },
   unmounted() {
     clearInterval(this.demoInterval);
     this.removeResizeObserver();
   },
   computed: {
+    pageTitle() {
+      if (!this.collection) {
+        return "Photos";
+      }
+      const regionId = this.regionSeekId || this.regionId;
+      if (this.regionId == null) {
+        return `${this.collection.name} - Photos`;
+      }
+      return `#${regionId} - ${this.collection.name} - Photos`;
+    },
+    viewer() {
+      return {
+        scene: {
+          width: this.scene?.bounds.w || 0,
+          height: this.scene?.bounds.h || 0,
+          params: this.sceneParams,
+        }
+      }
+    },
     sceneParams() {
       const params = {
-        collection: this.collection ? this.collection.id : null,
-        imageHeight: this.imageHeight,
+        collection: this.collectionId,
+        imageHeight: this.options.image.height,
         sceneWidth: this.window.width,
         cacheKey: this.cacheKey,
       };
@@ -126,60 +203,34 @@ export default {
     },
     pointerTimeThreshold() {
       return this.$refs.viewer.pointerTimeThreshold;
-    },
-    scrollFromView() {
-      const scroller = this.$refs.scroller;
-      if (scroller == undefined) return;
-      if (this.viewer.scene.height == 0) return;
-      if (this.window.height == 0) return;
-      const viewMaxY = this.viewer.scene.height - this.window.height;
-      const scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
-      const panY = view.y;
-      const scrollRatio = panY / viewMaxY;
-      const scrollTop = scrollRatio * scrollMaxY;
-      return scrollTop;
     }
   },
   watch: {
     sceneParams(sceneParams) {
-      this.debouncedUpdateScene();
-      this.updateRegion();
-    },
-    collectionId: {
-      immediate: true,
-      async handler(collectionId) {
-        this.collection = await getCollection(collectionId);
-      },
-    },
-    collection: {
-      async handler(collection) {
-        this.updateScene();
-      },
+      this.sceneTask.perform(sceneParams);
+      this.regionTask.perform(this.regionId, sceneParams);
     },
     regionId: {
       immediate: true,
       async handler(regionId) {
-        if (!this.sceneParams) return;
-        if (this.focusRegionTime !== undefined && Date.now() - this.focusRegionTime < 200) {
-          return;
+        // console.log("regionId", regionId)
+        const recentlyFocused = this.focusRegionTime !== undefined && Date.now() - this.focusRegionTime < 200;
+        if (this.regionId != null && !recentlyFocused) {
+          this.nativeScroll = false;
+          this.regionFocusPending = true;
         }
-        this.updateRegion();
+        this.regionTask.perform(regionId, this.sceneParams);
       },
+    },
+    region(region) {
+      if (this.region && this.regionFocusPending) {
+        this.view = this.region.bounds;
+        this.onView(this.view);
+        this.regionFocusPending = null;
+      }
     },
   },
   methods: {
-
-    async updateRegion() {
-      if (this.regionId !== undefined) {
-        this.nativeScroll = false;
-        await nextTick();
-        this.region = await getRegion(this.regionId, this.sceneParams);
-        this.view = this.region.bounds;
-        this.onView(this.view);
-      } else {
-        this.region = null;
-      }
-    },
 
     addResizeObserver() {
       this.removeResizeObserver();
@@ -230,10 +281,12 @@ export default {
     onResize(rect) {
       if (rect.width == 0 || rect.height == 0) return;
       this.window = rect;
-      this.pushScrollToView();
+      if (this.nativeScroll) {
+        this.pushScrollToView();
+      }
     },
 
-    onScroll() {
+    onScroll(event) {
       if (!this.nativeScroll) return;
       this.pushScrollToView();
     },
@@ -310,7 +363,7 @@ export default {
     },
 
     async onZoom(zoom) {
-      if (zoom < 1) {
+      if (zoom < 0.99) {
         this.nativeScroll = true;
         this.pushScrollToView();
       }
@@ -358,23 +411,48 @@ export default {
     onKeyDown(event) {
       if (this.nativeScroll) return;
       switch (event.key) {
-        // case "ArrowLeft": this.navigate(-1); return;
-        // case "ArrowRight": this.navigate(1); return;
+        case "ArrowLeft": this.navigate(-1); return;
+        case "ArrowRight": this.navigate(1); return;
         case "Escape": this.navigateExit(); return;
       }
     },
 
-    navigateExit() {
+    async navigate(offset) {
+      let prevId;
+      if (this.regionSeekId != null) {
+        prevId = this.regionSeekId;
+      } else {
+        prevId = parseInt(this.regionId, 10);
+      }
+      const nextId = prevId + offset;
+      if (nextId < 0 || nextId >= this.scene.photoCount-1) {
+        return;
+      }
+      this.regionFocusPending = true;
+      this.regionSeekId = nextId;
+      this.regionTask.perform(nextId, this.sceneParams);
+      this.regionSeekApplyTask.perform(this.$router);
+    },
+
+    async navigateExit() {
       this.nativeScroll = true;
       this.pushScrollToView(1);
+      // Firefox fires an onScroll event when you make the scrollbar
+      // visible again, which breaks the smooth transition. This ignores scroll
+      // events until a short time after exiting navigation to prevent this.
+      this.ignoreScrollToViewUntil = Date.now() + 200;
+      this.$router.push({
+        name: "collection",
+        params: {
+          collectionId: this.collectionId,
+        },
+      });
     },
 
     pushViewToScroll(view) {
-
       if (this.nativeScroll) {
         console.warn("Pushing view to scroll while in native scrolling mode");
       }
-
 
       const scroller = this.$refs.scroller;
       
@@ -396,10 +474,14 @@ export default {
       scroller.scroll({
         top: scrollTop,
       })
-
     },
 
     pushScrollToView(transition) {
+
+      if (this.ignoreScrollToViewUntil != null && Date.now() < this.ignoreScrollToViewUntil) {
+        return;
+      }
+      this.ignoreScrollToViewUntil = null;
 
       if (!this.nativeScroll) {
         console.warn("Pushing scroll to view while not in native scrolling mode");
@@ -417,65 +499,21 @@ export default {
 
       const options = {}
 
+      const view = {
+        x: 0,
+        y: viewY,
+        w: this.window.width,
+        h: this.window.height,
+      }
+
       if (transition !== undefined) {
-        this.$refs.viewer.setView({
-          x: 0,
-          y: viewY,
-          w: this.window.width,
-          h: this.window.height,
-        }, {
-          animationTime: transition,
-        });
+        this.$refs.viewer.setView(view, { animationTime: transition });
       } else {
-        this.view = {
-          x: 0,
-          y: viewY,
-          w: this.window.width,
-          h: this.window.height,
-        }
+        this.view = view;
       }
-
 
     },
 
-    
-    debouncedUpdateScene: waitDebounce(function() {
-      this.updateScene();
-    }, 200),
-
-    async updateScene() {
-      if (this.collection == null) {
-        console.warn("Unable to update scene, missing collection");
-        return;
-      }
-      if (!this.sceneParams) {
-        console.warn("Unable to update scene, missing scene params");
-        return;
-      }
-      if (this.sceneParams == this.sceneParamsLoaded) {
-        console.warn("Unable to update scene, scene params unchanged");
-        return;
-      }
-      this.sceneParamsLoaded = this.sceneParams;
-      try {
-        this.$emit("load", { scene: true });
-        const scenes = await getScene(this.sceneParams);
-        this.$emit("load", { scene: false });
-        if (!scenes || scenes.length < 1) {
-          throw new Error("Scene not found");
-        }
-        this.scene = scenes[0];
-        this.$emit("scene", this.scene);
-        this.viewer.scene = {
-          width: this.scene.bounds.w,
-          height: this.scene.bounds.h,
-          params: this.sceneParams,
-        }
-      } catch (error) {
-        if (error.name == "AbortError") return;
-        throw error;
-      }
-    },
   }
 };
 </script>
@@ -497,6 +535,7 @@ export default {
 
 .container .scroller.disabled {
   pointer-events: none;
+  overflow-y: hidden;
 }
 
 .container .viewer {

@@ -7,13 +7,37 @@
       contentSelector="#content"
       @nav="drawer = !drawer"
     >
-      {{ collection ? collection.name : "Photos" }}
+      {{ tasks?.collectionTask.last?.value?.name || "Photos" }}
+
       <template #toolbar="{ toolbarItemClass }">
+        <div class="size-icons">
+          <ui-icon-button
+            icon="photo_size_select_small"
+            :class="{ active: options.image.height == 30, toolbarItemClass }"
+            @click="options.image.height = 30"
+            outlined
+          >
+          </ui-icon-button>
+          <ui-icon-button
+            icon="photo_size_select_large"
+            :class="{ active: options.image.height == 100, toolbarItemClass }"
+            @click="options.image.height = 100"
+            outlined
+          >
+          </ui-icon-button>
+          <ui-icon-button
+            icon="photo_size_select_actual"
+            :class="{ active: options.image.height == 300, toolbarItemClass }"
+            @click="options.image.height = 300"
+            outlined
+          >
+          </ui-icon-button>
+        </div>
         <ui-spinner
+          class="small-spinner"
+          size="small"
           active
           :closed="load.image.inProgress == 0"
-          size="small"
-          class="small-spinner"
           :class="toolbarItemClass"
         ></ui-spinner>
       </template>
@@ -54,9 +78,11 @@
       <router-view
         class="viewer"
         ref="viewer"
+        :options="options"
         :class="{ simulating }"
         @load="onLoad"
         @scene="onScene"
+        @tasks="onTasks"
       >
       </router-view>
     </div>
@@ -74,11 +100,15 @@ export default {
   },
   data() {
     return {
+      options: {
+        image: {
+          height: 100,
+        },
+      },
       load: {
-        scene: false,
         image: 0,
       },
-      loading: false,
+      tasks: null,
       drawer: false,
       simulating: false,
       collections: [],
@@ -89,11 +119,11 @@ export default {
     this.collections = await getCollections();
   },
   computed: {
-    collection() {
-      const id = this.$route.params.collectionId;
-      if (!this.collections) return null;
-      return this.collections.find(
-        collection => collection.id == id
+    loading() {
+      if (!this.tasks) return false;
+      return (
+        this.tasks.sceneTask.isRunning ||
+        this.tasks.collectionTask.isRunning
       );
     },
     fileCount() {
@@ -105,10 +135,12 @@ export default {
   methods: {
     onLoad(load) {
       this.load = { ...this.load, ...load };
-      this.loading = this.load.scene;
     },
     onScene(scene) {
       this.scene = scene;
+    },
+    onTasks(tasks) {
+      this.tasks = tasks;
     },
     async simulate() {
       this.drawer = false;
@@ -126,6 +158,31 @@ export default {
   --mdc-theme-primary: white;
   --mdc-theme-on-primary: rgba(0,0,0,.87); 
 }
+
+.size-icons {
+  margin: 10px;
+}
+
+.size-icons button:before {
+  border-radius: 0;
+  opacity: 0.03;
+}
+
+.size-icons button.active::before {
+  opacity: var(--mdc-ripple-focus-opacity,0.24);
+}
+
+.size-icons button:first-child::before {
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+}
+
+.size-icons button:last-child::before {
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+
+
 
 .spinner {
   --mdc-theme-primary: white;

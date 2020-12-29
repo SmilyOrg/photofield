@@ -59,6 +59,7 @@ export default {
     },
   },
   methods: {
+
     initOpenSeadragon(element) {
 
       this.viewer = OpenSeadragon({
@@ -160,6 +161,9 @@ export default {
       } else if (typeof element.style.msTouchAction !== 'undefined') {
         element.style.msTouchAction = touchAction;
       }
+      if (interactive) {
+        element.focus();
+      }
     },
 
     setView(view, options) {
@@ -174,6 +178,11 @@ export default {
         this.pendingView = null;
       }
 
+      if (this.scene.width == 0) {
+        console.warn("Scene has zero width, ignoring", this.scene);
+        return;
+      }
+
       const scale = 1 / this.scene.width;
       const rect = this.tempRect;
       rect.x = view.x * scale;
@@ -181,7 +190,10 @@ export default {
       rect.width = view.w * scale;
       rect.height = view.h * scale;
 
-      if (rect.width == 0 || rect.height == 0) return;
+      if (rect.width == 0 || rect.height == 0) {
+        console.warn("View has zero area, ignoring", rect);
+        return;
+      }
 
       function withSpeed(viewport, animationTime, callback) {
         const prevValues = {
