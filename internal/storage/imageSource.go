@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -264,6 +265,17 @@ func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan stri
 	return error
 }
 
+func (source *ImageSource) decode(path string, reader io.ReadSeeker) (*image.Image, error) {
+	lower := strings.ToLower(path)
+	if strings.HasSuffix(lower, "jpg") || strings.HasSuffix(lower, "jpeg") {
+		image, err := source.Coder.DecodeJpeg(reader)
+		return &image, err
+	}
+
+	image, _, err := source.Coder.Decode(reader)
+	return &image, err
+}
+
 func (source *ImageSource) LoadImage(path string) (*image.Image, error) {
 	// fmt.Printf("loading %s\n", path)
 	file, err := os.Open(path)
@@ -271,8 +283,7 @@ func (source *ImageSource) LoadImage(path string) (*image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	image, _, err := source.Coder.Decode(file)
-	return &image, err
+	return source.decode(path, file)
 }
 
 func (source *ImageSource) GetSmallestThumbnail(path string) string {
@@ -295,11 +306,9 @@ func (source *ImageSource) LoadSmallestImage(path string) (*image.Image, error) 
 			continue
 		}
 		defer file.Close()
-		image, _, err := source.Coder.Decode(file)
-		return &image, err
+		return source.decode(thumbnailPath, file)
 	}
-	image, err := source.LoadImage(path)
-	return image, err
+	return source.LoadImage(path)
 }
 
 func (source *ImageSource) LoadImageColor(path string) (color.RGBA, error) {

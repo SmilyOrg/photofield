@@ -3,6 +3,7 @@ services:
 
   photofield:
     build: ./
+    image: photofield
     container_name: photofield
     ports:
       - 8080:8080

@@ -23,7 +23,6 @@ type MediaInfoCoder interface {
 func NewMediaCoder(exifToolCount int) *MediaCoder {
 	coder := MediaCoder{}
 	// coder.infocoder = NewGoExifRwcarlsencoder()
-	// coder.infocoder = NewExifToolBarashercoder(exifToolCount)
 	coder.infoCoder = NewExifToolMostlyGeekDecoder(exifToolCount)
 	return &coder
 }

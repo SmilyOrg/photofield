@@ -1,9 +1,7 @@
 import { LatestFetcher } from "./utils";
 import { useTask } from "vue-concurrency";
 
-export const host = "http://localhost:8080";
-
-const fetchScene = LatestFetcher();
+const host = import.meta.env.VITE_API_HOST || "/api";
 
 export async function get(endpoint, def) {
   const response = await fetch(host + endpoint);

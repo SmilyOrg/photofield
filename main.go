@@ -17,6 +17,8 @@ import (
 	"os"
 	"strconv"
 
+	_ "github.com/joho/godotenv/autoload"
+
 	. "photofield/internal"
 	. "photofield/internal/collection"
 	. "photofield/internal/display"
@@ -26,6 +28,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/mkevac/debugcharts"
+	spa "github.com/roberthodgen/spa-server"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
@@ -537,6 +540,13 @@ func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceC
 	*imageSourceConfig = configuration.System
 }
 
+func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request) {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, entrypoint)
+	}
+	return http.HandlerFunc(fn)
+}
+
 func main() {
 
 	defaultSceneConfig.Collection = Collection{
@@ -698,23 +708,29 @@ func main() {
 
 	addr := ":8080"
 
-	log.Println("listening on", addr)
-
-	fs := http.FileServer(http.Dir("./static"))
+	apiPrefix, exists := os.LookupEnv("API_PREFIX")
+	if !exists {
+		apiPrefix = "/"
+	}
 
 	r := mux.NewRouter()
-	r.HandleFunc("/metrics", metricsHandler)
-	r.HandleFunc("/scenes", scenesHandler)
-	r.HandleFunc("/collections", collectionsHandler)
-	r.HandleFunc("/collections/{id}", collectionHandler)
-	r.HandleFunc("/tiles", tilesHandler)
-	r.HandleFunc("/regions", regionsHandler)
-	r.HandleFunc("/regions/{id}", regionHandler)
-	r.HandleFunc("/files/{id}", fileHandler)
-	r.HandleFunc("/files/{id}/file/{filename}", fileHandler)
-	r.HandleFunc("/files/{id}/video/{size}/{filename}", fileVideoHandler)
-	r.PathPrefix("/").Handler(fs)
+
+	api := r.PathPrefix(apiPrefix).Subrouter()
+	api.HandleFunc("/metrics", metricsHandler)
+	api.HandleFunc("/scenes", scenesHandler)
+	api.HandleFunc("/collections", collectionsHandler)
+	api.HandleFunc("/collections/{id}", collectionHandler)
+	api.HandleFunc("/tiles", tilesHandler)
+	api.HandleFunc("/regions", regionsHandler)
+	api.HandleFunc("/regions/{id}", regionHandler)
+	api.HandleFunc("/files/{id}", fileHandler)
+	api.HandleFunc("/files/{id}/file/{filename}", fileHandler)
+	api.HandleFunc("/files/{id}/video/{size}/{filename}", fileVideoHandler)
+
+	r.PathPrefix("/").Handler(spa.SpaHandler("static", "index.html"))
+
 	http.Handle("/", handlers.CORS()(r))
 
+	log.Println("listening on", addr+", "+addr+apiPrefix)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

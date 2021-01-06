@@ -2,13 +2,10 @@ module photofield
 
 go 1.13
 
-replace github.com/barasher/go-exiftool => ./vendor/github.com/barasher/go-exiftool@v1.3.1
-
 require (
 	crawshaw.io/sqlite v0.3.2
 	github.com/EdlinOrg/prominentcolor v1.0.0
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
-	github.com/barasher/go-exiftool v1.3.1
 	github.com/buger/jsonparser v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto v0.0.2
@@ -19,6 +16,7 @@ require (
 	github.com/gorilla/mux v1.7.4
 	github.com/gosimple/slug v1.9.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
+	github.com/joho/godotenv v1.3.0
 	github.com/karrick/godirwalk v1.15.6
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
@@ -29,6 +27,7 @@ require (
 	github.com/oliamb/cutter v0.2.2 // indirect
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/roberthodgen/spa-server v0.0.0-20171007154335-bb87b4ff3253
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52

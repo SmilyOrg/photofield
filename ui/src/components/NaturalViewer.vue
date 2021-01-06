@@ -21,6 +21,7 @@
       :interactive="!nativeScroll"
       :scene="viewer.scene"
       :view="view"
+      :tileSize="tileSize"
       @zoom="onZoom"
       @pan="onPan"
       @view="onView"
@@ -54,6 +55,7 @@ import TileViewer from './TileViewer.vue';
 import { getCollection, getRegion, getRegions, getScene, useCollectionTask, useRegionTask, useSceneTask } from '../api';
 import { timeout, useTask, useTaskGroup } from "vue-concurrency";
 import PageTitle from './PageTitle.vue';
+import Simulation from '../simulation';
 
 export default {
 
@@ -61,11 +63,11 @@ export default {
     "collectionId",
     "regionId",
     "options",
+    "cacheKey",
   ],
 
   emits: {
     load: null,
-    scene: null,
     tasks: null,
   },
 
@@ -76,8 +78,8 @@ export default {
 
   data() {
     return {
+      tileSize: 256,
       loadProgress: 0,
-      cacheKey: "",
       window: {
         x: 0,
         y: 0,
@@ -151,10 +153,15 @@ export default {
     this.addResizeObserver();
     this.$refs.scroller.addEventListener("scroll", this.onScroll);
     this.$emit("tasks", this.tasks);
+    this.$bus.on("home", this.navigateExit);
+    this.$bus.on("simulate", this.simulate);
+    // this.simulate();
   },
   unmounted() {
     clearInterval(this.demoInterval);
     this.removeResizeObserver();
+    this.$bus.off("home", this.navigateExit);
+    this.$bus.off("simulate", this.simulate);
   },
   computed: {
     pageTitle() {
@@ -248,28 +255,48 @@ export default {
     },
     
     async simulate() {
-      this.simulationStart = Date.now();
-      this.simulationPrewait = 3000;
-      this.simulationPostwait = 3000;
-      this.simulationDuration = 10000;
-      const promise = new Promise(resolve => {
-        this.simulateNext(resolve);
+      this.navigateExit();
+      this.simulation = new Simulation({
+        runs: [
+          { tileSize: 50 },
+          { tileSize: 100 },
+          { tileSize: 150 },
+          { tileSize: 200 },
+          { tileSize: 250 },
+          { tileSize: 300 },
+          { tileSize: 350 },
+          { tileSize: 400 },
+          { tileSize: 450 },
+          { tileSize: 500 },
+          { tileSize: 550 },
+          { tileSize: 600 },
+          { tileSize: 650 },
+          { tileSize: 700 },
+          { tileSize: 750 },
+          { tileSize: 800 },
+          { tileSize: 850 },
+          { tileSize: 900 },
+          { tileSize: 950 },
+          { tileSize: 1000 },
+          { tileSize: 1050 },
+          { tileSize: 1100 },
+          { tileSize: 1150 },
+          { tileSize: 1200 },
+          { tileSize: 1250 },
+          { tileSize: 1300 },
+        ],
+        actions: [
+          { duration: 500, scroll: { from: 1000-10 } },
+          { duration: 1000, scroll: { from: 1000 } },
+          { duration: 5000, scroll: { from: 1000, to: 2000 } },
+          { duration: 5000, scroll: { from: 2000, to: 12000  } },
+          { duration: 5000, scroll: { from: 12000, to: 62000  } },
+          { duration: 3000 },
+        ],
       });
-      await promise;
-    },
-
-    simulateNext(resolve) {
-      const now = Date.now();
-      const elapsed = now - this.simulationStart;
-      const ratio = Math.max(0, Math.min(1, (elapsed - this.simulationPrewait) / this.simulationDuration));
-      if (elapsed >= this.simulationDuration + this.simulationPrewait + this.simulationPostwait) {
-        resolve();
-        return;
-      }
-      const height = this.viewer.scene.height - this.window.height;
-      const y = ratio * height;
-      this.$refs.scroller.scroll(0, y);
-      window.requestAnimationFrame(this.simulateNext.bind(this, resolve));
+      const results = await this.simulation.run(this);
+      console.log(JSON.stringify(results, null, 2));
+      this.$bus.emit("simulate-done");
     },
 
     demoScroll() {
@@ -434,7 +461,7 @@ export default {
       this.regionSeekApplyTask.perform(this.$router);
     },
 
-    async navigateExit() {
+    navigateExit() {
       this.nativeScroll = true;
       this.pushScrollToView(1);
       // Firefox fires an onScroll event when you make the scrollbar
@@ -496,8 +523,6 @@ export default {
       const scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
       const scrollRatio = scrollMaxY ? scroller.scrollTop / scrollMaxY : 0;
       const viewY = scrollRatio * viewMaxY;
-
-      const options = {}
 
       const view = {
         x: 0,

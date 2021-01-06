@@ -1,3 +1,7 @@
+.git
+.vs
+.vscode
+.history
 photos/
 profiles/
 data/
@@ -8,3 +12,5 @@ photofield.exe~
 *.cache.db
 out.png
 tmp
+ui/dist/
+ui/node_modules/

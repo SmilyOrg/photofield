@@ -9,3 +9,4 @@ photofield.exe~
 *.cache.db-wal
 out.png
 tmp
+.ipynb_checkpoints

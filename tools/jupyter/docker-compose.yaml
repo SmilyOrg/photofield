@@ -1,0 +1,14 @@
+version: '3.3'
+services:
+
+  jupyter:
+    image: jupyter/datascience-notebook
+    container_name: jupyter
+    ports:
+      - 8888:8888
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    labels:
+      - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
+    volumes:
+      - ./data:/home/jovyan/work

@@ -7,7 +7,15 @@
       contentSelector="#content"
       @nav="drawer = !drawer"
     >
-      {{ tasks?.collectionTask.last?.value?.name || "Photos" }}
+      <span class="title" @click="onTitleClick()">
+        {{ tasks?.collectionTask.last?.value?.name || "Photos" }}
+      </span>
+      <span
+        class="files"
+        v-if="fileCount != null"
+      >
+        {{ fileCount }} files
+      </span>
 
       <template #toolbar="{ toolbarItemClass }">
         <div class="size-icons">
@@ -46,9 +54,10 @@
       <ui-drawer-header>
         <ui-drawer-title>Photos</ui-drawer-title>
         <ui-drawer-subtitle>
-          {{ fileCount }} files
+          {{ collections.length }} collections
         </ui-drawer-subtitle>
       </ui-drawer-header>
+      <ui-divider></ui-divider>
       <ui-drawer-content>
         <ui-nav>
           <ui-nav-item
@@ -61,6 +70,11 @@
           <ui-item>
             <ui-button @click="simulate()">
               Simulate
+            </ui-button>
+          </ui-item>
+          <ui-item>
+            <ui-button @click="refreshCache()">
+              Refresh Cache
             </ui-button>
           </ui-item>
         </ui-nav>
@@ -79,9 +93,9 @@
         class="viewer"
         ref="viewer"
         :options="options"
+        :cacheKey="cacheKey"
         :class="{ simulating }"
         @load="onLoad"
-        @scene="onScene"
         @tasks="onTasks"
       >
       </router-view>
@@ -105,6 +119,7 @@ export default {
           height: 100,
         },
       },
+      cacheKey: "",
       load: {
         image: 0,
       },
@@ -112,13 +127,19 @@ export default {
       drawer: false,
       simulating: false,
       collections: [],
-      scene: {},
     }
   },
   async mounted() {
+    this.cacheKey = localStorage.cacheKey || "";
     this.collections = await getCollections();
+    if (!this.$route.params.collectionId) {
+      this.drawer = true;
+    }
   },
   computed: {
+    scene() {
+      return this.tasks?.sceneTask.last?.value;
+    },
     loading() {
       if (!this.tasks) return false;
       return (
@@ -127,17 +148,21 @@ export default {
       );
     },
     fileCount() {
-      return this.scene.photoCount !== undefined ?
+      return this.scene?.photoCount !== undefined ?
         this.scene.photoCount.toLocaleString() : 
-        "No";
+        null;
     }
   },
   methods: {
+    refreshCache() {
+      this.cacheKey = Date.now();
+      localStorage.cacheKey = this.cacheKey;
+    },
+    onTitleClick() {
+      this.$bus.emit("home");
+    },
     onLoad(load) {
       this.load = { ...this.load, ...load };
-    },
-    onScene(scene) {
-      this.scene = scene;
     },
     onTasks(tasks) {
       this.tasks = tasks;
@@ -145,8 +170,12 @@ export default {
     async simulate() {
       this.drawer = false;
       this.simulating = true;
-      await this.$refs.viewer.simulate();
-      this.simulating = false;
+      const done = () => {
+        this.simulating = false;
+        this.$bus.off("simulate-done", done);
+      }
+      this.$bus.on("simulate-done", done);
+      this.$bus.emit("simulate");
     }
   }
 }
@@ -157,6 +186,16 @@ export default {
 .top-bar {
   --mdc-theme-primary: white;
   --mdc-theme-on-primary: rgba(0,0,0,.87); 
+}
+
+.title {
+  cursor: pointer;
+}
+
+.files {
+  font-size: 0.8em;
+  margin-left: 12px;
+  color: var(--mdc-theme-text-hint-on-background);
 }
 
 .size-icons {

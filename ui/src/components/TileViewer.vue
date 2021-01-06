@@ -14,6 +14,7 @@ export default {
     scene: Object,
     interactive: Boolean,
     view: Object,
+    tileSize: Number,
   },
 
   emits: ["zoom", "click", "pan", "view", "load", "key-down"],
@@ -32,6 +33,10 @@ export default {
   watch: {
 
     scene() {
+      this.reset();
+    },
+
+    tileSize() {
       this.reset();
     },
 
@@ -86,11 +91,16 @@ export default {
         animationTime: 0.1,
         zoomPerSecond: 1.0,
         zoomPerScroll: 1.5,
-        blendTime: 0.3,
+        // blendTime: 0.3,
         imageLoaderLimit: 10,
         mouseNavEnabled: this.interactive,
+        // preload: true,
+        // autoResize: false,
+        // smoothTileEdgesMinZoom: Infinity,
+        // placeholderFillStyle: "#FF8800"
         // debugMode: true,
         // immediateRender: true,
+        // imageSmoothingEnabled: false,
         // alwaysBlend: true,
         // autoResize: false,
       });
@@ -240,7 +250,7 @@ export default {
     },
     
     getTiledImage() {
-      const tileSize = 256;
+      const tileSize = this.tileSize;
       const minLevel = 0;
       const maxLevel = 30;
       const power = 1 << maxLevel;
