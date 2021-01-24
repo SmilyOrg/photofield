@@ -8,7 +8,7 @@
       @nav="drawer = !drawer"
     >
       <span class="title" @click="onTitleClick()">
-        {{ tasks?.collectionTask.last?.value?.name || "Photos" }}
+        {{ collection?.name || "Photos" }}
       </span>
       <span
         class="files"
@@ -18,29 +18,44 @@
       </span>
 
       <template #toolbar="{ toolbarItemClass }">
-        <div class="size-icons">
-          <ui-icon-button
-            icon="photo_size_select_small"
-            :class="{ active: options.image.height == 30, toolbarItemClass }"
-            @click="options.image.height = 30"
-            outlined
+        <div class="settings" :class="{ hidden: !settingsExpanded, toolbarItemClass }">
+          <ui-select
+            v-model="settings.layout"
+            :options="layoutOptions"
           >
-          </ui-icon-button>
-          <ui-icon-button
-            icon="photo_size_select_large"
-            :class="{ active: options.image.height == 100, toolbarItemClass }"
-            @click="options.image.height = 100"
-            outlined
-          >
-          </ui-icon-button>
-          <ui-icon-button
-            icon="photo_size_select_actual"
-            :class="{ active: options.image.height == 300, toolbarItemClass }"
-            @click="options.image.height = 300"
-            outlined
-          >
-          </ui-icon-button>
+            Layout
+          </ui-select>
+          <div class="size-icons">
+            <ui-icon-button
+              icon="photo_size_select_small"
+              :class="{ active: settings.image.height == 30 }"
+              @click="settings.image.height = 30"
+              outlined
+            >
+            </ui-icon-button>
+            <ui-icon-button
+              icon="photo_size_select_large"
+              :class="{ active: settings.image.height == 100 }"
+              @click="settings.image.height = 100"
+              outlined
+            >
+            </ui-icon-button>
+            <ui-icon-button
+              icon="photo_size_select_actual"
+              :class="{ active: settings.image.height == 300 }"
+              @click="settings.image.height = 300"
+              outlined
+            >
+            </ui-icon-button>
+          </div>
         </div>
+        <ui-icon-button
+          icon="settings"
+          class="settings-toggle"
+          :class="{ expanded: settingsExpanded, toolbarItemClass }"
+          @click="settingsExpanded = !settingsExpanded"
+        >
+        </ui-icon-button>
         <ui-spinner
           class="small-spinner"
           size="small"
@@ -92,9 +107,10 @@
       <router-view
         class="viewer"
         ref="viewer"
-        :options="options"
+        :settings="settings"
         :cacheKey="cacheKey"
         :class="{ simulating }"
+        :fullpage="true"
         @load="onLoad"
         @tasks="onTasks"
       >
@@ -114,11 +130,19 @@ export default {
   },
   data() {
     return {
-      options: {
+      settings: {
         image: {
           height: 100,
         },
+        layout: "",
       },
+      layoutOptions: [
+        { label: "Default", value: "default" },
+        { label: "Album", value: "album" },
+        { label: "Timeline", value: "timeline" },
+        { label: "Wall", value: "wall" },
+      ],
+      settingsExpanded: false,
       cacheKey: "",
       load: {
         image: 0,
@@ -139,6 +163,9 @@ export default {
   computed: {
     scene() {
       return this.tasks?.sceneTask.last?.value;
+    },
+    collection() {
+      return this.tasks?.collectionTask.last?.value;
     },
     loading() {
       if (!this.tasks) return false;
@@ -198,8 +225,38 @@ export default {
   color: var(--mdc-theme-text-hint-on-background);
 }
 
+.settings-toggle {
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.settings-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.settings {
+  transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  align-self: start;
+  background: var(--mdc-theme-background);
+  border-radius: 10px;
+  justify-content: center;
+  margin-top: -8px;
+}
+
+.settings > * {
+  margin: 4px 10px 0 10px;
+}
+
+.settings.hidden {
+  opacity: 0;
+  transform: translateX(40px);
+}
+
 .size-icons {
-  margin: 10px;
+  display: flex;
 }
 
 .size-icons button:before {

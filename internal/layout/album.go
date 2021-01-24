@@ -16,6 +16,7 @@ import (
 type AlbumEvent struct {
 	StartTime  time.Time
 	EndTime    time.Time
+	First      bool
 	FirstOnDay bool
 	LastOnDay  bool
 	Section    Section
@@ -23,16 +24,14 @@ type AlbumEvent struct {
 
 func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
 
-	imageHeight := config.ImageHeight
-	// imageSpacing := 3.
-	// lineSpacing := 3.
-	imageSpacing := 0.02 * imageHeight
-	lineSpacing := 0.02 * imageHeight
-
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
 	if event.FirstOnDay {
 		font := config.FontFamily.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+		dateFormat := "Monday, Jan 2"
+		if event.First {
+			dateFormat = "Monday, Jan 2, 2006"
+		}
 		text := NewTextFromRect(
 			Rect{
 				X: rect.X,
@@ -41,7 +40,7 @@ func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *
 				H: 30,
 			},
 			&font,
-			event.StartTime.Format("Monday, Jan 2"),
+			event.StartTime.Format(dateFormat),
 		)
 		scene.Texts = append(scene.Texts, text)
 		rect.Y += text.Sprite.Rect.H + 15
@@ -63,7 +62,7 @@ func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *
 
 	photos := make(chan SectionPhoto, 1)
 	boundsOut := make(chan Rect)
-	go layoutSectionPhotos(photos, rect, boundsOut, imageHeight, imageSpacing, lineSpacing, scene, source)
+	go layoutSectionPhotos(photos, rect, boundsOut, config, scene, source)
 	go getSectionPhotos(&event.Section, photos, source)
 	newBounds := <-boundsOut
 
@@ -86,6 +85,9 @@ func LayoutAlbum(config LayoutConfig, scene *Scene, source *storage.ImageSource)
 		count = config.Limit
 	}
 
+	config.ImageSpacing = 0.02 * config.ImageHeight
+	config.LineSpacing = 0.02 * config.ImageHeight
+
 	scene.Photos = scene.Photos[0:count]
 	layoutPhotos = layoutPhotos[0:count]
 
@@ -93,7 +95,9 @@ func LayoutAlbum(config LayoutConfig, scene *Scene, source *storage.ImageSource)
 
 	scene.Bounds.W = config.SceneWidth
 
-	event := AlbumEvent{}
+	event := AlbumEvent{
+		First: true,
+	}
 	eventCount := 0
 	var lastPhotoTime time.Time
 
@@ -144,9 +148,11 @@ func LayoutAlbum(config LayoutConfig, scene *Scene, source *storage.ImageSource)
 			event.LastOnDay = !SameDay(lastPhotoTime, photoTime)
 			rect = LayoutAlbumEvent(config, rect, &event, scene, source)
 			eventCount++
-			event = AlbumEvent{}
-			event.StartTime = photoTime
-			event.FirstOnDay = !SameDay(lastPhotoTime, photoTime)
+			event = AlbumEvent{
+				First:      eventCount == 1,
+				StartTime:  photoTime,
+				FirstOnDay: !SameDay(lastPhotoTime, photoTime),
+			}
 		}
 		lastPhotoTime = photoTime
 

@@ -15,15 +15,19 @@ import (
 )
 
 type LayoutConfig struct {
-	Limit       int `json:"limit"`
-	SceneWidth  float64
-	ImageHeight float64
-	FontFamily  *canvas.FontFamily
-	HeaderFont  *canvas.FontFace
+	Limit        int    `json:"limit"`
+	Type         string `json:"type"`
+	FontFamily   *canvas.FontFamily
+	HeaderFont   *canvas.FontFace
+	SceneWidth   float64
+	ImageHeight  float64
+	ImageSpacing float64
+	LineSpacing  float64
 }
 
 type Section struct {
-	photos []*Photo
+	photos   []*Photo
+	Inverted bool
 }
 
 type SectionPhoto struct {
@@ -121,9 +125,12 @@ func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64
 	return scale
 }
 
-func orderSectionPhotoStream(input chan SectionPhoto, output chan SectionPhoto) {
+func orderSectionPhotoStream(section *Section, input chan SectionPhoto, output chan SectionPhoto) {
 	var buffer []SectionPhoto
 	index := 0
+	if section.Inverted {
+		index = len(section.photos) - 1
+	}
 	for photo := range input {
 
 		if photo.Index != index {
@@ -134,7 +141,11 @@ func orderSectionPhotoStream(input chan SectionPhoto, output chan SectionPhoto) 
 
 		// log.Println("order", index, photo.Index)
 		output <- photo
-		index++
+		if section.Inverted {
+			index--
+		} else {
+			index++
+		}
 
 		found := true
 		for found == true {
@@ -147,7 +158,11 @@ func orderSectionPhotoStream(input chan SectionPhoto, output chan SectionPhoto) 
 					// log.Println("order search", index, "found")
 					// log.Println("order", index, bphoto.Index)
 					output <- bphoto
-					index++
+					if section.Inverted {
+						index--
+					} else {
+						index++
+					}
 					lastIndex := len(buffer) - 1
 					// log.Println("order replace", buffer[i].Index, "at", i, "with", buffer[lastIndex].Index, "at", lastIndex)
 					buffer[i] = buffer[lastIndex]
@@ -192,17 +207,24 @@ func getSectionPhotos(section *Section, output chan SectionPhoto, source *storag
 	for i := 0; i < concurrent; i++ {
 		go getSectionPhotosUnordered(i, section, index, unordered, wg, source)
 	}
-	go orderSectionPhotoStream(unordered, output)
+	go orderSectionPhotoStream(section, unordered, output)
 
-	for i := range section.photos {
-		index <- i
+	if section.Inverted {
+		for i := range section.photos {
+			index <- (len(section.photos) - 1 - i)
+		}
+	} else {
+		for i := range section.photos {
+			index <- i
+		}
 	}
+
 	close(index)
 	wg.Wait()
 	close(unordered)
 }
 
-func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, scene *Scene, source *storage.ImageSource) {
+func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, config LayoutConfig, scene *Scene, source *storage.ImageSource) {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()
@@ -215,13 +237,13 @@ func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan R
 		// log.Println("layout", photo.Index)
 
 		aspectRatio := float64(photo.Size.X) / float64(photo.Size.Y)
-		imageWidth := float64(imageHeight) * aspectRatio
+		imageWidth := float64(config.ImageHeight) * aspectRatio
 
 		if x+imageWidth > bounds.W {
-			scale := layoutFitRow(row, bounds, imageSpacing)
+			scale := layoutFitRow(row, bounds, config.ImageSpacing)
 			row = nil
 			x = 0
-			y += imageHeight*scale + lineSpacing
+			y += config.ImageHeight*scale + config.LineSpacing
 		}
 
 		// fmt.Printf("%4.0f %4.0f %4.0f %4.0f %4.0f %4.0f %4.0f\n", bounds.X, bounds.Y, x, y, imageHeight, photo.Size.Width, photo.Size.Height)
@@ -229,7 +251,7 @@ func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan R
 		photo.Photo.Sprite.PlaceFitHeight(
 			bounds.X+x,
 			bounds.Y+y,
-			imageHeight,
+			config.ImageHeight,
 			float64(photo.Size.X),
 			float64(photo.Size.Y),
 		)
@@ -249,7 +271,7 @@ func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan R
 
 		// fmt.Printf("%d %f %f %f\n", i, x, imageWidth, bounds.W)
 
-		x += imageWidth + imageSpacing
+		x += imageWidth + config.ImageSpacing
 
 		now := time.Now()
 		if now.Sub(lastLogTime) > 1*time.Second {
@@ -259,7 +281,7 @@ func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan R
 		i++
 	}
 	x = 0
-	y += imageHeight + lineSpacing
+	y += config.ImageHeight + config.LineSpacing
 	boundsOut <- Rect{
 		X: bounds.X,
 		Y: bounds.Y,

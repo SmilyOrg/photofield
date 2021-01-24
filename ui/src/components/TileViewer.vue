@@ -1,5 +1,7 @@
 <template>
-  <div class="tileViewer" ref="viewer"></div>
+  <div class="container">
+    <div class="tileViewer" ref="viewer"></div>
+  </div>
 </template>
 
 <script>
@@ -13,14 +15,20 @@ export default {
     api: String,
     scene: Object,
     interactive: Boolean,
-    view: Object,
     tileSize: Number,
   },
 
-  emits: ["zoom", "click", "pan", "view", "load", "key-down"],
+  emits: ["zoom", "click", "view", "load", "key-down"],
 
   data() {
-    return {}
+    return {
+      view: {
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 0,
+      }
+    }
   },
   async created() {
     this.tempRect = new OpenSeadragon.Rect();
@@ -45,11 +53,6 @@ export default {
       this.setInteractive(interactive);
     },
 
-    view(view) {
-      if (!this.viewer) return;
-      if (view == this.emittedView) return;
-      this.setView(view);
-    },
 
   },
   computed: {
@@ -139,9 +142,10 @@ export default {
     onZoom(event) {
       if (!this.interactive) return;
       this.$emit("zoom", event.zoom);
+      this.onPan();
     },
 
-    onPan(event) {
+    onPan() {
       if (!this.interactive) return;
       const scale = this.scene.width;
       const bounds = this.viewer.viewport.getBounds();
@@ -177,8 +181,15 @@ export default {
     },
 
     setView(view, options) {
+
       if (!this.viewer) {
+        console.warn("Viewer not initialized yet, setting pending view", view);
         this.pendingView = { view, options };
+        return;
+      }
+
+      if (this.scene.width == 0) {
+        console.warn("Scene has zero width, ignoring", this.scene);
         return;
       }
 
@@ -186,12 +197,10 @@ export default {
         view = this.pendingView.view;
         options = this.pendingView.options;
         this.pendingView = null;
+        console.warn("Using pending view", view);
       }
 
-      if (this.scene.width == 0) {
-        console.warn("Scene has zero width, ignoring", this.scene);
-        return;
-      }
+      this.view = view;
 
       const scale = 1 / this.scene.width;
       const rect = this.tempRect;
@@ -281,8 +290,10 @@ export default {
 </script>
 
 <style scoped>
-.tileViewer {
+
+.container, .tileViewer {
   width: 100%;
   height: 100%;
 }
+
 </style>

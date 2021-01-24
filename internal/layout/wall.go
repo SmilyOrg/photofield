@@ -7,32 +7,34 @@ import (
 	storage "photofield/internal/storage"
 )
 
-func LayoutWall(config *RenderConfig, scene *Scene, source *storage.ImageSource) {
+func LayoutWall(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
 
 	photoCount := len(scene.Photos)
 
-	imageHeight := 100.
-	imageWidth := imageHeight * 3 / 2 * 0.8
-
 	edgeCount := int(math.Sqrt(float64(photoCount)))
 
-	margin := 1.
-
+	scene.Bounds.W = config.SceneWidth
 	cols := edgeCount
+
+	layoutConfig := LayoutConfig{}
+	layoutConfig.ImageSpacing = config.SceneWidth / float64(edgeCount) * 0.02
+	layoutConfig.LineSpacing = layoutConfig.ImageSpacing
+
+	fmt.Printf("scene width %v cols %v\n", scene.Bounds.W, cols)
+
+	imageWidth := scene.Bounds.W / (float64(cols) - layoutConfig.ImageSpacing)
+	imageHeight := imageWidth * 2 / 3 * 1.2
+
+	fmt.Printf("image %f %f\n", imageWidth, imageHeight)
+
 	rows := int(math.Ceil(float64(photoCount) / float64(cols)))
 
-	scene.Bounds = Rect{
-		X: 0,
-		Y: 0,
-		W: float64(cols+2) * (imageWidth + margin),
-		H: math.Ceil(float64(rows+2)) * (imageHeight + margin),
-	}
+	scene.Bounds.H = math.Ceil(float64(rows)) * (imageHeight + layoutConfig.LineSpacing)
 
-	fmt.Printf("%f %f\n", scene.Bounds.W, scene.Bounds.H)
+	fmt.Printf("scene %f %f\n", scene.Bounds.W, scene.Bounds.H)
 
-	imageSpacing := 3.
-	lineSpacing := 3.
 	sceneMargin := 10.
+	layoutConfig.ImageHeight = imageHeight
 
 	section := Section{}
 	for i := range scene.Photos {
@@ -50,7 +52,8 @@ func LayoutWall(config *RenderConfig, scene *Scene, source *storage.ImageSource)
 		Y: y,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: scene.Bounds.H - sceneMargin*2,
-	}, boundsOut, imageHeight, imageSpacing, lineSpacing, scene, source)
+	}, boundsOut, layoutConfig, scene, source)
+	go getSectionPhotos(&section, photos, source)
 
 	newBounds := <-boundsOut
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="container" :class="{ fullpage }">
 
     <page-title :title="pageTitle"></page-title>
     
@@ -20,10 +20,8 @@
       ref="viewer"
       :interactive="!nativeScroll"
       :scene="viewer.scene"
-      :view="view"
       :tileSize="tileSize"
       @zoom="onZoom"
-      @pan="onPan"
       @view="onView"
       @click="onClick"
       @load="onLoad"
@@ -38,6 +36,7 @@
       @touchStart="onTouchStart"
       @touchEnd="onTouchEnd"
       @wheel="onWheel"
+      @scroll="onScroll"
     >
       <div
         class="virtual-canvas"
@@ -62,8 +61,9 @@ export default {
   props: [
     "collectionId",
     "regionId",
-    "options",
     "cacheKey",
+    "settings",
+    "fullpage",
   ],
 
   emits: {
@@ -78,7 +78,7 @@ export default {
 
   data() {
     return {
-      tileSize: 256,
+      tileSize: 512,
       loadProgress: 0,
       window: {
         x: 0,
@@ -151,10 +151,11 @@ export default {
       this.nativeScroll = false;
     }
     this.addResizeObserver();
-    this.$refs.scroller.addEventListener("scroll", this.onScroll);
+    // this.$refs.scroller.addEventListener("scroll", this.onScroll);
     this.$emit("tasks", this.tasks);
     this.$bus.on("home", this.navigateExit);
     this.$bus.on("simulate", this.simulate);
+    if (this.fullpage) this.addFullpageListeners();
     // this.simulate();
   },
   unmounted() {
@@ -162,6 +163,7 @@ export default {
     this.removeResizeObserver();
     this.$bus.off("home", this.navigateExit);
     this.$bus.off("simulate", this.simulate);
+    if (this.fullpage) this.removeFullpageListeners();
   },
   computed: {
     pageTitle() {
@@ -186,8 +188,9 @@ export default {
     sceneParams() {
       const params = {
         collection: this.collectionId,
-        imageHeight: this.options.image.height,
+        imageHeight: this.settings.image.height,
         sceneWidth: this.window.width,
+        layout: this.settings.layout == "default" ? undefined : this.settings.layout,
         cacheKey: this.cacheKey,
       };
       if (params.collection == null) {
@@ -213,6 +216,13 @@ export default {
     }
   },
   watch: {
+    fullpage(fullpage) {
+      if (fullpage) {
+        addFullpageListeners();
+      } else {
+        removeFullpageListeners();
+      }
+    },
     sceneParams(sceneParams) {
       this.sceneTask.perform(sceneParams);
       this.regionTask.perform(this.regionId, sceneParams);
@@ -230,9 +240,9 @@ export default {
       },
     },
     region(region) {
+      // console.log("region", this.regionFocusPending, this.region)
       if (this.region && this.regionFocusPending) {
-        this.view = this.region.bounds;
-        this.onView(this.view);
+        this.viewRegion(this.region);
         this.regionFocusPending = null;
       }
     },
@@ -252,6 +262,14 @@ export default {
         this.resizeObserver.disconnect();
         this.resizeObserver = null;
       }
+    },
+
+    addFullpageListeners() {
+      window.addEventListener('scroll', this.onScroll);
+    },
+
+    removeFullpageListeners() {
+      window.removeEventListener('scroll', this.onScroll);
     },
     
     async simulate() {
@@ -345,6 +363,7 @@ export default {
         return;
       }
       this.lastPointerDownEvent = event;
+      // console.log("DOWN", event);
     },
 
     async onPointerUp(event) {
@@ -352,6 +371,7 @@ export default {
         return;
       }
       this.lastPointerUpEvent = event;
+      // console.log("UP", event);
       const down = this.lastPointerDownEvent;
       const up = this.lastPointerUpEvent;
       const duration = up.timeStamp - down.timeStamp;
@@ -362,31 +382,32 @@ export default {
       if (quick) {
         this.nativeScroll = false;
         await nextTick();
+        // console.log("redisp", down, up)
         this.redispatchEventToViewer(down);
         this.redispatchEventToViewer(up);
       }
     },
 
     async onTouchStart(event) {
-      if (!this.nativeScroll) {
-        return;
-      }
-      console.log(event);
-      if (this.nativeScroll && event.touches.length >= 2) {
-        this.nativeScroll = false;
-        await Vue.nextTick();
-        this.redispatchEventToViewer(this.lastTouchStartEvent);
-        this.redispatchEventToViewer(event);
-     }
-      this.lastTouchStartEvent = event;
+    //   if (!this.nativeScroll) {
+    //     return;
+    //   }
+    //   console.log("TOUCH START", event);
+    //   if (this.nativeScroll && event.touches.length >= 2) {
+    //     this.nativeScroll = false;
+    //     await nextTick();
+    //     this.redispatchEventToViewer(this.lastTouchStartEvent);
+    //     this.redispatchEventToViewer(event);
+    //  }
+    //   this.lastTouchStartEvent = event;
     },
 
     async onTouchEnd(event) {
-      if (!this.nativeScroll) {
-        return;
-      }
-      this.lastTouchStartEvent = null;
-      console.log(event);
+      // if (!this.nativeScroll) {
+      //   return;
+      // }
+      // console.log("TOUCH END", event);
+      // this.lastTouchStartEvent = null;
     },
 
     async onZoom(zoom) {
@@ -396,13 +417,16 @@ export default {
       }
     },
 
-    async onPan(event) {
-      if (this.nativeScroll) return;
-      this.region = null;
-      this.pushViewToScroll(event);
-    },
+    // async onPan(view) {
+    //   if (this.nativeScroll) return;
+    //   this.region = null;
+    //   this.view = view;
+    //   this.pushViewToScroll(view);
+    // },
 
     async onView(view) {
+      this.view = view;
+      if (this.nativeScroll) return;
       this.pushViewToScroll(view);
     },
 
@@ -411,7 +435,15 @@ export default {
       if (regions && regions.length > 0) {
         const region = regions[0];
         console.log(region);
-        this.focusRegion(region, 2);
+
+        const viewerArea = this.view.w * this.view.h;
+        const regionArea = region.bounds.w * region.bounds.h;
+        const areaDiff = viewerArea/regionArea;
+        // const animationTime = Math.abs(Math.log(areaDiff) / 2);
+        const animationTime = Math.pow(areaDiff, 0.2);
+        console.log(viewerArea, regionArea, areaDiff, animationTime)
+        
+        this.focusRegion(region, animationTime);
       }
     },
 
@@ -428,11 +460,17 @@ export default {
     },
 
     async viewRegion(region, transition) {
+      this.setView(region.bounds, transition);
+      this.onView(region.bounds);
+    },
+
+    setView(view, transition) {
+      // console.log(view, transition);
       this.$refs.viewer.setView(
-        region.bounds,
+        view,
         transition && { animationTime: transition }
       )
-      this.onView(region.bounds);
+      this.view = view;
     },
 
     onKeyDown(event) {
@@ -520,8 +558,18 @@ export default {
 
       const viewMaxY = this.viewer.scene.height - this.window.height;
 
-      const scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
-      const scrollRatio = scrollMaxY ? scroller.scrollTop / scrollMaxY : 0;
+
+      const scrollMaxY = 
+        this.fullpage ?
+          document.body.scrollHeight - window.innerHeight :
+          scroller.scrollHeight - scroller.clientHeight;
+
+      const scrollTop =
+        this.fullpage ?
+          window.scrollY :
+          scroller.scrollTop;
+      
+      const scrollRatio = scrollMaxY ? scrollTop / scrollMaxY : 0;
       const viewY = scrollRatio * viewMaxY;
 
       const view = {
@@ -531,11 +579,7 @@ export default {
         h: this.window.height,
       }
 
-      if (transition !== undefined) {
-        this.$refs.viewer.setView(view, { animationTime: transition });
-      } else {
-        this.view = view;
-      }
+      this.$refs.viewer.setView(view, transition && { animationTime: transition });
 
     },
 
@@ -553,20 +597,30 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
-  overflow-y: auto;
   width: 100%;
   height: 100%;
+  overflow-y: auto;
+}
+
+.container.fullpage .scroller {
+  /* overflow-x: hidden; */
+  overflow-y: visible;
+  /* width: 100vw; */
 }
 
 .container .scroller.disabled {
   pointer-events: none;
-  overflow-y: hidden;
+  /* overflow-y: hidden; */
 }
 
 .container .viewer {
   position: absolute;
   top: 0;
   left: 0;
+}
+
+.container.fullpage .viewer {
+  position: fixed;
 }
 
 </style>

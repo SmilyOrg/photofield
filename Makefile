@@ -12,6 +12,11 @@ dev:
 	CompileDaemon -exclude=ui/* -exclude=.git/* -include=*.yaml -command=./photofield -log-prefix=false
 .PHONY: dev
 
+ui:
+	cd ui && \
+	npm run dev
+.PHONY: ui
+
 build:
 	go build -tags libjpeg
 .PHONY: build

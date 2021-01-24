@@ -12,17 +12,16 @@ import (
 	"github.com/tdewolff/canvas"
 )
 
-type Event struct {
-	StartTime time.Time
-	EndTime   time.Time
-	Section   Section
+type TimelineEvent struct {
+	StartTime  time.Time
+	EndTime    time.Time
+	First      bool
+	FirstOnDay bool
+	LastOnDay  bool
+	Section    Section
 }
 
-func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Scene, source *storage.ImageSource) Rect {
-
-	imageHeight := config.ImageHeight
-	imageSpacing := 3.
-	lineSpacing := 3.
+func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *TimelineEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
@@ -34,22 +33,19 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Sc
 		H: textHeight,
 	}
 
-	startTimeFormat := "Mon, Jan 2, 15:04"
+	startTimeFormat := "Mon, Jan 2"
 	if event.StartTime.Year() != time.Now().Year() {
-		startTimeFormat = "Mon, Jan 2, 2006, 15:04"
+		startTimeFormat += ", 2006"
 	}
+
+	startTimeFormat += "   15:04"
 
 	headerText := event.StartTime.Format(startTimeFormat)
 
-	if SameDay(event.StartTime, event.EndTime) {
-		// endTimeFormat = "15:04"
-		duration := event.EndTime.Sub(event.StartTime)
-		if duration >= 1*time.Minute {
-			dur := durafmt.Parse(duration)
-			headerText += "   " + dur.LimitFirstN(1).String()
-		}
-	} else {
-		headerText += " - " + event.EndTime.Format(startTimeFormat)
+	duration := event.EndTime.Sub(event.StartTime)
+	if duration >= 1*time.Minute {
+		dur := durafmt.Parse(duration)
+		headerText += "   " + dur.LimitFirstN(1).String()
 	}
 
 	font := config.FontFamily.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
@@ -65,7 +61,8 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Sc
 
 	photos := make(chan SectionPhoto, 1)
 	boundsOut := make(chan Rect)
-	go layoutSectionPhotos(photos, rect, boundsOut, imageHeight, imageSpacing, lineSpacing, scene, source)
+	// event.Section.Inverted = true
+	go layoutSectionPhotos(photos, rect, boundsOut, config, scene, source)
 	go getSectionPhotos(&event.Section, photos, source)
 	newBounds := <-boundsOut
 
@@ -74,18 +71,21 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *Event, scene *Sc
 	return rect
 }
 
-func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
+func LayoutTimeline(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
 
 	// log.Println("layout")
 
 	// log.Println("layout load info")
 	layoutPhotos := getLayoutPhotos(scene.Photos, source)
-	sortOldestToNewest(layoutPhotos)
+	sortNewestToOldest(layoutPhotos)
 
 	count := len(layoutPhotos)
 	if config.Limit > 0 && config.Limit < count {
 		count = config.Limit
 	}
+
+	config.ImageSpacing = 0.02 * config.ImageHeight
+	config.LineSpacing = 0.02 * config.ImageHeight
 
 	scene.Photos = scene.Photos[0:count]
 	layoutPhotos = layoutPhotos[0:count]
@@ -94,7 +94,7 @@ func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.Ima
 
 	scene.Bounds.W = config.SceneWidth
 
-	event := Event{}
+	event := TimelineEvent{}
 	eventCount := 0
 	var lastPhotoTime time.Time
 
@@ -127,23 +127,26 @@ func LayoutTimelineEvents(config LayoutConfig, scene *Scene, source *storage.Ima
 	// log.Println("layout placing")
 	layoutPlaced := ElapsedWithCount("layout placing", count)
 	lastLogTime := time.Now()
-	for i := range scene.Photos {
+
+	scene.Photos = scene.Photos[:0]
+	for i := range layoutPhotos {
 		if i >= count {
 			break
 		}
 		LayoutPhoto := &layoutPhotos[i]
-		scene.Photos[i] = LayoutPhoto.Photo
-		photo := &scene.Photos[i]
 		info := LayoutPhoto.Info
+		scene.Photos = append(scene.Photos, LayoutPhoto.Photo)
+		photo := &scene.Photos[len(scene.Photos)-1]
 
 		photoTime := info.DateTime
 		elapsed := lastPhotoTime.Sub(photoTime)
-		if elapsed > 10*time.Minute {
+		if elapsed > 30*time.Minute {
 			event.StartTime = lastPhotoTime
 			rect = LayoutTimelineEvent(config, rect, &event, scene, source)
 			eventCount++
-			event = Event{}
-			event.EndTime = photoTime
+			event = TimelineEvent{
+				EndTime: photoTime,
+			}
 		}
 		lastPhotoTime = photoTime
 

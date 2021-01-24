@@ -16,6 +16,7 @@ import (
 type Collection struct {
 	Id            string   `json:"id"`
 	Name          string   `json:"name"`
+	Layout        string   `json:"layout"`
 	ListLimit     int      `json:"list_limit"`
 	ExpandSubdirs bool     `json:"expand_subdirs"`
 	ExpandSort    string   `json:"expand_sort"`

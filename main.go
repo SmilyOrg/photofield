@@ -473,6 +473,8 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 		}
 	}
 
+	sceneConfig.Layout.Type = query.Get("layout")
+
 	value = query.Get("collection")
 	if value != "" {
 		collection := getCollectionById(value)
@@ -480,6 +482,10 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 			return nil, errors.New("Collection not found")
 		}
 		sceneConfig.Collection = *collection
+	}
+
+	if sceneConfig.Layout.Type == "" {
+		sceneConfig.Layout.Type = sceneConfig.Collection.Layout
 	}
 
 	cacheKey := query.Get("cacheKey")

@@ -64,7 +64,7 @@ func getCollectionKey(collection Collection) string {
 }
 
 func getLayoutKey(layout LayoutConfig) string {
-	key := fmt.Sprintf("%v %v", layout.SceneWidth, layout.ImageHeight)
+	key := fmt.Sprintf("%v %v %v", layout.SceneWidth, layout.ImageHeight, layout.Type)
 	return key
 }
 
@@ -128,10 +128,22 @@ func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource
 		scene.AddPhotosFromIdSlice(ids)
 
 		layoutFinished := ElapsedWithCount("layout", len(ids))
-		// LayoutTimelineEvents(config.Layout, &scene, imageSource)
-		LayoutAlbum(config.Layout, &scene, imageSource)
-		// LayoutSquare(&scene, imageSource)
-		// LayoutWall(&config.Config, &scene, imageSource)
+		switch config.Layout.Type {
+		case "timeline":
+			LayoutTimeline(config.Layout, &scene, imageSource)
+
+		case "album":
+			LayoutAlbum(config.Layout, &scene, imageSource)
+
+		case "square":
+			LayoutSquare(&scene, imageSource)
+
+		case "wall":
+			LayoutWall(config.Layout, &scene, imageSource)
+
+		default:
+			LayoutAlbum(config.Layout, &scene, imageSource)
+		}
 		layoutFinished()
 
 		if scene.RegionSource == nil {
