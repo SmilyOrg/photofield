@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/png"
 	"io/ioutil"
+	"math"
 	"sync"
 
 	// "image/png"
@@ -46,6 +47,14 @@ var imageSource *ImageSource
 var sceneSource *SceneSource
 var collections []Collection
 
+var tileRequestConcurrency = 4
+var tileRequestsByPriority []chan TileRequest
+var tileRequestsOut chan struct{}
+var tileRequests []TileRequest
+var tileRequestsMutex sync.Mutex
+
+// var tileRequestTriggers chan struct{}
+
 type TileWriter func(w io.Writer) error
 
 type ImageConfigRef struct {
@@ -54,6 +63,18 @@ type ImageConfigRef struct {
 
 type Metrics struct {
 	ImageSource ImageSourceMetrics `json:"imageSource"`
+}
+
+const MAX_PRIORITY = math.MaxInt8
+
+type TileRequest struct {
+	Request  *http.Request
+	Response http.ResponseWriter
+	// 0 - highest priority
+	// 127 - lowest priority
+	Priority int8
+	Process  chan struct{}
+	Done     chan struct{}
 }
 
 func drawTile(c *canvas.Context, config *RenderConfig, scene *Scene, zoom int, x int, y int) {
@@ -227,6 +248,122 @@ func collectionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func tilesHandler(w http.ResponseWriter, r *http.Request) {
+	request := TileRequest{
+		Request:  r,
+		Response: w,
+		Priority: getTileRequestPriority(r),
+		Process:  make(chan struct{}),
+		Done:     make(chan struct{}),
+	}
+
+	// log.Println("", request.Priority)
+
+	// lane := request.Priority
+	// maxLane := int8(len(tileRequestsByPriority) - 1)
+	// if lane > maxLane {
+	// 	lane = maxLane
+	// }
+	// tileRequestsByPriority[lane] <- request
+
+	// query := r.URL.Query()
+	// zoom, _ := strconv.Atoi(query.Get("zoom"))
+	pushTileRequest(request)
+	<-request.Process
+	tilesHandlerImpl(w, r)
+	request.Done <- struct{}{}
+
+	// log.Println("    ", request.Priority)
+}
+
+func getTileRequestPriority(r *http.Request) int8 {
+	query := r.URL.Query()
+	// score := 0.
+	zoom, err := strconv.Atoi(query.Get("zoom"))
+	if err == nil && zoom >= 0 && zoom < 100 {
+		return int8(zoom)
+		// score += 1 / (1 + (float64)(zoom))
+	}
+	return 100
+}
+
+func pushTileRequest(request TileRequest) {
+	tileRequestsMutex.Lock()
+	tileRequests = append(tileRequests, request)
+	tileRequestsMutex.Unlock()
+	tileRequestsOut <- struct{}{}
+}
+
+func popBestTileRequest() (bool, TileRequest) {
+	<-tileRequestsOut
+
+	var bestRequest TileRequest
+	bestRequest.Priority = MAX_PRIORITY
+
+	tileRequestsMutex.Lock()
+	var bestIndex = -1
+	for index, request := range tileRequests {
+		if request.Priority < bestRequest.Priority {
+			bestRequest = request
+			bestIndex = index
+		}
+	}
+
+	if bestIndex == -1 {
+		tileRequestsMutex.Unlock()
+		return false, bestRequest
+	}
+
+	tileRequests = append(tileRequests[:bestIndex], tileRequests[bestIndex+1:]...)
+	tileRequestsMutex.Unlock()
+	return true, bestRequest
+}
+
+func processTileRequests() {
+
+	// for _, tileRequests := range tileRequestsByPriority {
+	// 	go func(tileRequests chan TileRequest) {
+	// 		for request := range tileRequests {
+	// 			request.Process <- struct{}{}
+	// 			<-request.Done
+	// 		}
+	// 	}(tileRequests)
+	// }
+
+	// processTileRequestsWorker(0)
+	// processTileRequestsWorker(1)
+	// processTileRequestsWorker(2)
+	// processTileRequestsWorker(3)
+	// processTileRequestsWorker(MAX_PRIORITY)
+
+	for i := 0; i < tileRequestConcurrency; i++ {
+		go func() {
+			for {
+				ok, request := popBestTileRequest()
+				if !ok {
+					panic("Mismatching tileRequestsIn and tileRequestsOut")
+				}
+				request.Process <- struct{}{}
+				<-request.Done
+			}
+		}()
+	}
+}
+
+// func processTileRequestsWorker(maxPriority int8) {
+// 	for {
+// 		ok, request := popBestTileRequest(maxPriority)
+// 		if !ok {
+// 			panic("Mismatching tileRequestsIn and tileRequestsOut")
+// 		}
+// 		request.Process <- struct{}{}
+// 		<-request.Done
+// 	}
+// }
+
+func tilesHandlerImpl(w http.ResponseWriter, r *http.Request) {
+
+	// time.Sleep(2 * time.Second)
+
 	query := r.URL.Query()
 
 	scene, err := getSceneFromRequest(r)
@@ -729,6 +866,10 @@ func main() {
 	if !exists {
 		apiPrefix = "/"
 	}
+
+	tileRequestsByPriority = make([]chan TileRequest, 10)
+	tileRequestsOut = make(chan struct{}, 10000)
+	go processTileRequests()
 
 	r := mux.NewRouter()
 
