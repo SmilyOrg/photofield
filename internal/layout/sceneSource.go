@@ -17,7 +17,6 @@ import (
 type SceneSource struct {
 	DefaultScene Scene
 
-	imageIds      *ristretto.Cache
 	scenes        *ristretto.Cache
 	scenesLoading sync.Map
 }
@@ -37,12 +36,6 @@ type SceneConfig struct {
 func NewSceneSource() *SceneSource {
 	var err error
 	source := SceneSource{}
-	source.imageIds, err = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e4,     // number of keys to track frequency of, 10x max expected key count
-		MaxCost:     1 << 27, // maximum size/cost of cache (128MiB)
-		BufferItems: 64,      // number of keys per Get buffer.
-		Metrics:     true,
-	})
 	source.scenes, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e4,     // number of keys to track frequency of, 10x max expected key count
 		MaxCost:     1 << 27, // maximum size/cost of cache (128MiB)
@@ -69,21 +62,10 @@ func getLayoutKey(layout LayoutConfig) string {
 }
 
 func (source *SceneSource) getImageIds(collection Collection, imageSource *ImageSource) []ImageId {
-	key := getCollectionKey(collection)
-
-	value, found := source.imageIds.Get(key)
-	if found {
-		return value.([]ImageId)
-	}
-
 	ids := make([]ImageId, 0)
 	for id := range collection.GetIds(imageSource) {
 		ids = append(ids, id)
 	}
-
-	cost := (int64)(len(ids)) * (int64)(unsafe.Sizeof(ids[0]))
-
-	source.imageIds.Set(key, ids, cost)
 	return ids
 }
 

@@ -516,6 +516,16 @@ func expandCollections(collections *[]Collection) {
 	*collections = expanded
 }
 
+func indexCollections(collections *[]Collection) {
+	go func() {
+		for _, collection := range *collections {
+			for _, dir := range collection.Dirs {
+				imageSource.IndexImages(dir, collection.ListLimit)
+			}
+		}
+	}()
+}
+
 func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceConfig, collections *[]Collection) {
 	filename := "data/configuration.yaml"
 	bytes, err := ioutil.ReadFile(filename)
@@ -605,6 +615,7 @@ func main() {
 	for i := range collections {
 		collections[i].GenerateId()
 	}
+	indexCollections(&collections)
 
 	imageSource.Thumbnails = []Thumbnail{
 		NewThumbnail(

@@ -7,7 +7,7 @@
 
 [build]
 # Just plain old shell command. You could use `make` as well.
-cmd = "go build -o photofield.exe ."
+cmd = "go build -buildmode=exe -o photofield.exe ."
 # Binary file yields from `cmd`.
 bin = "photofield.exe"
 # Customize binary.
@@ -15,7 +15,7 @@ bin = "photofield.exe"
 # Watch these filename extensions.
 include_ext = ["go"]
 # Ignore these filename extensions or directories.
-exclude_dir = ["tmp", "photos", "static", ".history"]
+exclude_dir = ["tmp", "photos", "static", ".history", "ui", ".git"]
 # Watch these directories if you specified.
 # include_dir = []
 # Exclude files.

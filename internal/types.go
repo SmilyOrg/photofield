@@ -18,6 +18,13 @@ type ImageInfo struct {
 	Color         uint32
 }
 
+func (info *ImageInfo) IsZero() bool {
+	return info.Width == 0 &&
+		info.Height == 0 &&
+		info.DateTime.IsZero() &&
+		info.Color == 0
+}
+
 func (info *ImageInfo) GetColor() color.RGBA {
 	return color.RGBA{
 		A: uint8((info.Color >> 24) & 0xFF),

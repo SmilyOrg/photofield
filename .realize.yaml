@@ -1,0 +1,35 @@
+settings:
+  legacy:
+    force: false
+    interval: 0s
+server:
+    status: false
+    open: false
+    host: localhost
+    port: 8000
+schema:
+- name: photofield
+  path: .
+  commands:
+    build:
+      status: true
+    run:
+      status: true
+  watcher:
+    extensions:
+    - go
+    paths:
+    - /
+    ignore:
+      paths:
+      - .git
+      - .realize
+      - .history
+      - .vs
+      - .vscode
+      - data
+      - photos
+      - profiles
+      - tools
+      - vendor
+      - ui

@@ -24,6 +24,7 @@ import (
 )
 
 var NotAnImageError = errors.New("Not a supported image extension, might be video")
+var SkipError = errors.New("Skipping the rest")
 
 type ImageId uint32
 
@@ -55,7 +56,8 @@ type ImageSource struct {
 }
 
 type ImageSourceConfig struct {
-	ExifToolCount int `json:"exif_tool_count"`
+	ExifToolCount int  `json:"exif_tool_count"`
+	SkipLoadInfo  bool `json:"skip_load_info"`
 }
 
 type ImageSourceMetrics struct {
@@ -192,7 +194,12 @@ func NewImageSource(config ImageSourceConfig) *ImageSource {
 
 	source.pendingImageInfoIds = make(chan ImageId, 10000)
 
-	go source.loadPendingImageInfos()
+	if config.SkipLoadInfo {
+		log.Printf("skipping load info")
+		go source.discardPendingImageInfos()
+	} else {
+		go source.loadPendingImageInfos()
+	}
 
 	return &source
 }
@@ -224,45 +231,69 @@ func (source *ImageSource) GetCacheMetrics(cache *ristretto.Cache) ImageSourceMe
 }
 
 func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan string, wg *sync.WaitGroup) error {
-	lastLogTime := time.Now()
-	files := 0
-	error := godirwalk.Walk(dir, &godirwalk.Options{
-		Unsorted: true,
-		Callback: func(path string, dir *godirwalk.Dirent) error {
-			if strings.Contains(path, "@eaDir") {
-				return filepath.SkipDir
-			}
-
-			suffix := ""
-			for _, ext := range source.ListExtensions {
-				if strings.HasSuffix(strings.ToLower(path), ext) {
-					suffix = ext
-					break
-				}
-			}
-			if suffix == "" {
-				return nil
-			}
-
-			files++
-			now := time.Now()
-			if now.Sub(lastLogTime) > 1*time.Second {
-				lastLogTime = now
-				log.Printf("listing %d\n", files)
-			}
-			paths <- path
-			// Duplicate photos for testing
-			// for i := 0; i < 50-1; i++ {
-			// 	paths <- path
-			// }
-			if maxPhotos > 0 && files >= maxPhotos {
-				return errors.New("Skipping the rest")
-			}
-			return nil
-		},
-	})
+	abs_path, error := filepath.Abs(dir)
+	if error != nil {
+		return error
+	}
+	for path := range source.infoDatabase.List(abs_path, maxPhotos) {
+		paths <- path
+	}
 	wg.Done()
-	return error
+	return nil
+}
+
+func (source *ImageSource) IndexImages(dir string, maxPhotos int) {
+	for path := range source.walkImages(dir, maxPhotos) {
+		source.infoDatabase.Add(path)
+	}
+}
+
+func (source *ImageSource) walkImages(dir string, maxPhotos int) <-chan string {
+	out := make(chan string)
+	go func() {
+		finished := Elapsed(fmt.Sprintf("index %s", dir))
+		defer finished()
+
+		lastLogTime := time.Now()
+		files := 0
+		err := godirwalk.Walk(dir, &godirwalk.Options{
+			Unsorted: true,
+			Callback: func(path string, walk_dir *godirwalk.Dirent) error {
+				if strings.Contains(path, "@eaDir") {
+					return filepath.SkipDir
+				}
+
+				suffix := ""
+				for _, ext := range source.ListExtensions {
+					if strings.HasSuffix(strings.ToLower(path), ext) {
+						suffix = ext
+						break
+					}
+				}
+				if suffix == "" {
+					return nil
+				}
+
+				files++
+				now := time.Now()
+				if now.Sub(lastLogTime) > 1*time.Second {
+					lastLogTime = now
+					log.Printf("indexing %s %d\n", dir, files)
+				}
+				out <- path
+				if maxPhotos > 0 && files >= maxPhotos {
+					return SkipError
+				}
+				return nil
+			},
+		})
+		if err != nil && err != SkipError {
+			log.Printf("Error indexing files: %s\n", err.Error())
+		}
+
+		close(out)
+	}()
+	return out
 }
 
 func (source *ImageSource) decode(path string, reader io.ReadSeeker) (*image.Image, error) {
@@ -521,6 +552,12 @@ func (source *ImageSource) GetImage(path string) (*image.Image, error) {
 	return nil, errors.New(fmt.Sprintf("Unable to get image after %v tries", tries))
 }
 
+func (source *ImageSource) discardPendingImageInfos() {
+	for {
+		<-source.pendingImageInfoIds
+	}
+}
+
 func (source *ImageSource) loadPendingImageInfos() {
 
 	loadCount := 0
@@ -627,7 +664,7 @@ func (source *ImageSource) GetImageInfo(path string) ImageInfo {
 	startTime = time.Now()
 	info, found = source.infoDatabase.Get(path)
 	dbGetMs := time.Since(startTime).Milliseconds()
-	if found {
+	if found && !info.IsZero() {
 		startTime = time.Now()
 		source.infoCache.Set(path, info)
 		cacheSetMs := time.Since(startTime).Milliseconds()

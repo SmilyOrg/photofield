@@ -8,7 +8,6 @@ endif
 all: build
 
 dev:
-	echo $(detected_OS)
 	CompileDaemon -exclude=ui/* -exclude=.git/* -include=*.yaml -command=./photofield -log-prefix=false
 .PHONY: dev
 
@@ -18,7 +17,8 @@ ui:
 .PHONY: ui
 
 build:
-	go build -tags libjpeg
+# go build -tags libjpeg
+	go build -buildmode=exe
 .PHONY: build
 
 run: build
