@@ -69,6 +69,7 @@ export default {
   emits: {
     load: null,
     tasks: null,
+    immersive: Boolean,
   },
 
   components: {
@@ -223,7 +224,7 @@ export default {
         removeFullpageListeners();
       }
     },
-    sceneParams(sceneParams) {
+    async sceneParams(sceneParams) {
       this.sceneTask.perform(sceneParams);
       this.regionTask.perform(this.regionId, sceneParams);
     },
@@ -246,6 +247,9 @@ export default {
         this.regionFocusPending = null;
       }
     },
+    nativeScroll(nativeScroll) {
+      this.$emit("immersive", !nativeScroll);
+    }
   },
   methods: {
 
@@ -440,7 +444,8 @@ export default {
         const regionArea = region.bounds.w * region.bounds.h;
         const areaDiff = viewerArea/regionArea;
         // const animationTime = Math.abs(Math.log(areaDiff) / 2);
-        const animationTime = Math.pow(areaDiff, 0.2);
+        // const animationTime = Math.pow(areaDiff, 0.2);
+        const animationTime = Math.pow(areaDiff, 0.4)*0.08;
         console.log(viewerArea, regionArea, areaDiff, animationTime)
         
         this.focusRegion(region, animationTime);
@@ -519,26 +524,42 @@ export default {
         console.warn("Pushing view to scroll while in native scrolling mode");
       }
 
-      const scroller = this.$refs.scroller;
-      
-      if (!scroller || this.viewer.scene.height == 0) {
+      if (this.viewer.scene.height == 0) {
+        console.warn("Scene has zero height, view to scroll pending", view);
         this.pendingViewToScroll = view;
         return;
       }
+
+      const scroller = this.$refs.scroller;
+      let scrollMaxY;
+      if (this.fullpage) {
+        scrollMaxY = document.body.scrollHeight - window.innerHeight;
+      } else {
+        if (!scroller) {
+          console.warn("Scroller not found, view to scroll pending", view);
+          this.pendingViewToScroll = view;
+          return;
+        }
+        scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
+      }
+      
       if (this.pendingViewToScroll) {
         view = this.pendingViewToScroll;
         this.pendingViewToScroll = null;
       }
 
       const viewMaxY = this.viewer.scene.height - this.window.height;
-      const scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
       const panY = (view.y + view.h/2) - this.window.height/2;
       const scrollRatio = panY / viewMaxY;
       const scrollTop = scrollRatio * scrollMaxY;
 
-      scroller.scroll({
-        top: scrollTop,
-      })
+      if (this.fullpage) {
+        window.scrollTo(window.scrollX, scrollTop);
+      } else {
+        scroller.scroll({
+          top: scrollTop,
+        })
+      }
     },
 
     pushScrollToView(transition) {
@@ -557,7 +578,6 @@ export default {
       const scroller = this.$refs.scroller;
 
       const viewMaxY = this.viewer.scene.height - this.window.height;
-
 
       const scrollMaxY = 
         this.fullpage ?
@@ -621,6 +641,7 @@ export default {
 
 .container.fullpage .viewer {
   position: fixed;
+  width: 100vw;
 }
 
 </style>

@@ -1,3 +1,4 @@
 {
-  "local-history.enabled": 0
+  "local-history.enabled": 0,
+  "cmake.configureOnOpen": false
 }

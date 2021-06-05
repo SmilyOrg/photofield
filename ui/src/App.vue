@@ -2,6 +2,7 @@
   <div class="app">
     <ui-top-app-bar
       class="top-bar"
+      :class="{ immersive }"
       nav-id="menu"
       :fixed="true"
       contentSelector="#content"
@@ -113,6 +114,7 @@
         :fullpage="true"
         @load="onLoad"
         @tasks="onTasks"
+        @immersive="onImmersive"
       >
       </router-view>
     </div>
@@ -150,6 +152,7 @@ export default {
       tasks: null,
       drawer: false,
       simulating: false,
+      immersive: false,
       collections: [],
     }
   },
@@ -191,6 +194,9 @@ export default {
     onLoad(load) {
       this.load = { ...this.load, ...load };
     },
+    onImmersive(immersive) {
+      this.immersive = immersive;
+    },
     onTasks(tasks) {
       this.tasks = tasks;
     },
@@ -212,7 +218,13 @@ export default {
 
 .top-bar {
   --mdc-theme-primary: white;
-  --mdc-theme-on-primary: rgba(0,0,0,.87); 
+  --mdc-theme-on-primary: rgba(0,0,0,.87);
+  transition: transform 0.2s ease-out;
+  transform: translateY(0);
+}
+
+.top-bar.immersive {
+  transform: translateY(-80px);
 }
 
 .title {

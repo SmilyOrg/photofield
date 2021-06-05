@@ -2,6 +2,23 @@ html, body {
   margin: 0;
 }
 
+html {
+  overflow-y: scroll;
+}
+
+/* 
+html {
+  scrollbar-width: none;
+}
+::-webkit-scrollbar {
+  width: 0px;
+}
+
+::-webkit-scrollbar-track-piece {
+  background-color: transparent;
+  -webkit-border-radius: 6px;
+} */
+
 /* #app {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
