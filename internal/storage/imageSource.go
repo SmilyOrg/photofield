@@ -55,11 +55,6 @@ type ImageSource struct {
 	// imageConfigByPath sync.Map
 }
 
-type ImageSourceConfig struct {
-	ExifToolCount int  `json:"exif_tool_count"`
-	SkipLoadInfo  bool `json:"skip_load_info"`
-}
-
 type ImageSourceMetrics struct {
 	Cache ImageSourceMetricsCaches `json:"cache"`
 }
@@ -95,7 +90,7 @@ type loadingImage struct {
 	loaded   chan struct{}
 }
 
-func NewImageSource(config ImageSourceConfig) *ImageSource {
+func NewImageSource(config SystemConfig) *ImageSource {
 	var err error
 	source := ImageSource{}
 	source.Coder = NewMediaCoder(config.ExifToolCount)
@@ -278,7 +273,7 @@ func (source *ImageSource) walkImages(dir string, maxPhotos int) <-chan string {
 				now := time.Now()
 				if now.Sub(lastLogTime) > 1*time.Second {
 					lastLogTime = now
-					log.Printf("indexing %s %d\n", dir, files)
+					log.Printf("indexing %s %d files\n", dir, files)
 				}
 				out <- path
 				if maxPhotos > 0 && files >= maxPhotos {

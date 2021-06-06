@@ -11,6 +11,7 @@ require (
 	github.com/dgraph-io/ristretto v0.0.2
 	github.com/disintegration/imaging v1.6.2
 	github.com/fatih/color v1.9.0 // indirect
+	github.com/felixge/fgprof v0.9.1
 	github.com/githubnemo/CompileDaemon v1.3.0 // indirect
 	github.com/goccy/go-yaml v1.7.17
 	github.com/gorilla/handlers v1.4.2

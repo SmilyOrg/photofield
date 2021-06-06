@@ -44,6 +44,7 @@ export default class Simulation {
         this.target[name] = value;
       }
     }
+    console.log("run", this.runIndex);
     this.runStartTime = performance.now();
     this.frameStartTime = this.runStartTime;
     this.frames = [];
@@ -87,7 +88,8 @@ export default class Simulation {
         speed = distance * 1000 / action.duration;
         y = scroll.from + t * distance;
       }
-      this.target.$refs.scroller.scroll(0, y);
+      // this.target.$refs.scroller.scroll(0, y);
+      window.scrollTo(window.scrollX, y);
     }
     this.frames.push([ elapsed, frameTime, t, speed ]);
   }

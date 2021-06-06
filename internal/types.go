@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+type TileRequestConfig struct {
+	Concurrency int  `json:"concurrency"`
+	LogStats    bool `json:"log_stats"`
+}
+
+type SystemConfig struct {
+	ExifToolCount int  `json:"exif_tool_count"`
+	SkipLoadInfo  bool `json:"skip_load_info"`
+}
+
 type Size image.Point
 
 type ImageInfo struct {

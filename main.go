@@ -3,20 +3,25 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"io/ioutil"
 	"math"
 	"sync"
+	"time"
 
 	// "image/png"
 	"io"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"strconv"
+
+	_ "net/http/pprof"
+
+	"github.com/felixge/fgprof"
 
 	_ "github.com/joho/godotenv/autoload"
 
@@ -38,17 +43,17 @@ import (
 	// _ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
-var defaultSceneConfig SceneConfig
+var startupTime time.Time
 
-var mainSceneConfig SceneConfig
+var defaultSceneConfig SceneConfig
+var systemConfig SystemConfig
+var tileRequestConfig TileRequestConfig
 
 var tilePools sync.Map
 var imageSource *ImageSource
 var sceneSource *SceneSource
 var collections []Collection
 
-var tileRequestConcurrency = 4
-var tileRequestsByPriority []chan TileRequest
 var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
 var tileRequestsMutex sync.Mutex
@@ -56,10 +61,6 @@ var tileRequestsMutex sync.Mutex
 // var tileRequestTriggers chan struct{}
 
 type TileWriter func(w io.Writer) error
-
-type ImageConfigRef struct {
-	config image.Config
-}
 
 type Metrics struct {
 	ImageSource ImageSourceMetrics `json:"imageSource"`
@@ -86,7 +87,7 @@ func drawTile(c *canvas.Context, config *RenderConfig, scene *Scene, zoom int, x
 	ty := float64(zoomPower-1-y) * tileSize
 
 	var scale float64
-	if tileSize/tileSize < scene.Bounds.W/scene.Bounds.H {
+	if 1 < scene.Bounds.W/scene.Bounds.H {
 		scale = tileSize / scene.Bounds.W
 		tx += (scale*scene.Bounds.W - tileSize) * 0.5
 	} else {
@@ -248,6 +249,7 @@ func collectionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func tilesHandler(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	request := TileRequest{
 		Request:  r,
 		Response: w,
@@ -255,24 +257,19 @@ func tilesHandler(w http.ResponseWriter, r *http.Request) {
 		Process:  make(chan struct{}),
 		Done:     make(chan struct{}),
 	}
-
-	// log.Println("", request.Priority)
-
-	// lane := request.Priority
-	// maxLane := int8(len(tileRequestsByPriority) - 1)
-	// if lane > maxLane {
-	// 	lane = maxLane
-	// }
-	// tileRequestsByPriority[lane] <- request
-
-	// query := r.URL.Query()
-	// zoom, _ := strconv.Atoi(query.Get("zoom"))
-	pushTileRequest(request)
-	<-request.Process
-	tilesHandlerImpl(w, r)
-	request.Done <- struct{}{}
-
-	// log.Println("    ", request.Priority)
+	if tileRequestConfig.Concurrency == 0 {
+		tilesHandlerImpl(w, r)
+	} else {
+		pushTileRequest(request)
+		<-request.Process
+		tilesHandlerImpl(w, r)
+		request.Done <- struct{}{}
+	}
+	endTime := time.Now()
+	if tileRequestConfig.LogStats {
+		millis := endTime.Sub(startTime).Milliseconds()
+		fmt.Printf("%4d, %4d, %4d, %4d\n", request.Priority, startTime.Sub(startupTime).Milliseconds(), endTime.Sub(startupTime).Milliseconds(), millis)
+	}
 }
 
 func getTileRequestPriority(r *http.Request) int8 {
@@ -318,24 +315,8 @@ func popBestTileRequest() (bool, TileRequest) {
 	return true, bestRequest
 }
 
-func processTileRequests() {
-
-	// for _, tileRequests := range tileRequestsByPriority {
-	// 	go func(tileRequests chan TileRequest) {
-	// 		for request := range tileRequests {
-	// 			request.Process <- struct{}{}
-	// 			<-request.Done
-	// 		}
-	// 	}(tileRequests)
-	// }
-
-	// processTileRequestsWorker(0)
-	// processTileRequestsWorker(1)
-	// processTileRequestsWorker(2)
-	// processTileRequestsWorker(3)
-	// processTileRequestsWorker(MAX_PRIORITY)
-
-	for i := 0; i < tileRequestConcurrency; i++ {
+func processTileRequests(concurrency int) {
+	for i := 0; i < concurrency; i++ {
 		go func() {
 			for {
 				ok, request := popBestTileRequest()
@@ -349,20 +330,7 @@ func processTileRequests() {
 	}
 }
 
-// func processTileRequestsWorker(maxPriority int8) {
-// 	for {
-// 		ok, request := popBestTileRequest(maxPriority)
-// 		if !ok {
-// 			panic("Mismatching tileRequestsIn and tileRequestsOut")
-// 		}
-// 		request.Process <- struct{}{}
-// 		<-request.Done
-// 	}
-// }
-
 func tilesHandlerImpl(w http.ResponseWriter, r *http.Request) {
-
-	// time.Sleep(2 * time.Second)
 
 	query := r.URL.Query()
 
@@ -452,8 +420,6 @@ func regionsHandler(w http.ResponseWriter, r *http.Request) {
 	regions := scene.GetRegions(&config, bounds)
 
 	json.NewEncoder(w).Encode(regions)
-
-	return
 }
 
 func regionHandler(w http.ResponseWriter, r *http.Request) {
@@ -481,8 +447,6 @@ func regionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(region)
-
-	return
 }
 
 func fileHandler(w http.ResponseWriter, r *http.Request) {
@@ -598,7 +562,7 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 	if value != "" {
 		sceneConfig.Layout.SceneWidth, err = strconv.ParseFloat(value, 64)
 		if err != nil || sceneConfig.Layout.SceneWidth <= 0 {
-			return nil, errors.New("Invalid sceneWidth")
+			return nil, errors.New("invalid sceneWidth")
 		}
 	}
 
@@ -606,7 +570,7 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 	if value != "" {
 		sceneConfig.Layout.ImageHeight, err = strconv.ParseFloat(value, 64)
 		if err != nil {
-			return nil, errors.New("Invalid imageHeight")
+			return nil, errors.New("invalid imageHeight")
 		}
 	}
 
@@ -616,7 +580,7 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 	if value != "" {
 		collection := getCollectionById(value)
 		if collection == nil {
-			return nil, errors.New("Collection not found")
+			return nil, errors.New("collection not found")
 		}
 		sceneConfig.Collection = *collection
 	}
@@ -635,10 +599,11 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 }
 
 type Configuration struct {
-	Collections []Collection      `json:"collections"`
-	Layout      LayoutConfig      `json:"layout"`
-	Render      RenderConfig      `json:"render"`
-	System      ImageSourceConfig `json:"system"`
+	Collections  []Collection      `json:"collections"`
+	Layout       LayoutConfig      `json:"layout"`
+	Render       RenderConfig      `json:"render"`
+	System       SystemConfig      `json:"system"`
+	TileRequests TileRequestConfig `json:"tile_requests"`
 }
 
 func expandCollections(collections *[]Collection) {
@@ -663,7 +628,12 @@ func indexCollections(collections *[]Collection) {
 	}()
 }
 
-func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceConfig, collections *[]Collection) {
+func loadConfiguration(
+	sceneConfig *SceneConfig,
+	systemConfig *SystemConfig,
+	collections *[]Collection,
+	tileRequestConfig *TileRequestConfig,
+) {
 	filename := "data/configuration.yaml"
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -672,9 +642,10 @@ func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceC
 	}
 
 	configuration := Configuration{
-		Layout: sceneConfig.Layout,
-		Render: sceneConfig.Config,
-		System: *imageSourceConfig,
+		Layout:       sceneConfig.Layout,
+		Render:       sceneConfig.Config,
+		System:       *systemConfig,
+		TileRequests: *tileRequestConfig,
 	}
 
 	if err := yaml.Unmarshal(bytes, &configuration); err != nil {
@@ -690,7 +661,8 @@ func loadConfiguration(sceneConfig *SceneConfig, imageSourceConfig *ImageSourceC
 	*collections = configuration.Collections
 	sceneConfig.Layout = configuration.Layout
 	sceneConfig.Config = configuration.Render
-	*imageSourceConfig = configuration.System
+	*systemConfig = configuration.System
+	*tileRequestConfig = configuration.TileRequests
 }
 
 func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request) {
@@ -701,6 +673,8 @@ func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request
 }
 
 func main() {
+
+	startupTime = time.Now()
 
 	defaultSceneConfig.Collection = Collection{
 		// ListLimit: 1,
@@ -742,10 +716,9 @@ func main() {
 		ImageHeight: 160,
 	}
 
-	var imageSourceConfig ImageSourceConfig
-	loadConfiguration(&defaultSceneConfig, &imageSourceConfig, &collections)
+	loadConfiguration(&defaultSceneConfig, &systemConfig, &collections, &tileRequestConfig)
 
-	imageSource = NewImageSource(imageSourceConfig)
+	imageSource = NewImageSource(systemConfig)
 	defer imageSource.Close()
 	sceneSource = NewSceneSource()
 
@@ -867,9 +840,16 @@ func main() {
 		apiPrefix = "/"
 	}
 
-	tileRequestsByPriority = make([]chan TileRequest, 10)
+	if tileRequestConfig.LogStats {
+		log.Printf("logging tile request stats")
+		fmt.Printf("priority,start,end,latency\n")
+	}
+
 	tileRequestsOut = make(chan struct{}, 10000)
-	go processTileRequests()
+	if tileRequestConfig.Concurrency > 0 {
+		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
+		processTileRequests(tileRequestConfig.Concurrency)
+	}
 
 	r := mux.NewRouter()
 
@@ -888,6 +868,8 @@ func main() {
 	r.PathPrefix("/").Handler(spa.SpaHandler("static", "index.html"))
 
 	http.Handle("/", handlers.CORS()(r))
+
+	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
 
 	log.Println("listening on", addr+", "+addr+apiPrefix)
 	log.Fatal(http.ListenAndServe(addr, nil))

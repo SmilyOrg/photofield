@@ -278,7 +278,8 @@ export default {
     
     async simulate() {
       this.navigateExit();
-      this.simulation = new Simulation({
+
+      const tileEvaluation = {
         runs: [
           { tileSize: 50 },
           { tileSize: 100 },
@@ -315,7 +316,42 @@ export default {
           { duration: 5000, scroll: { from: 12000, to: 62000  } },
           { duration: 3000 },
         ],
-      });
+      }
+
+      const stopAndGo = {
+        runs: [{ tileSize: this.tileSize }],
+        actions: [
+          { duration: 500, scroll: { from: 1000-10 } },
+          { duration: 1000, scroll: { from: 1000 } },
+          { duration: 5000, scroll: { from: 1000, to: 2000 } },
+          { duration: 5000, scroll: { from: 2000, to: 12000 } },
+          { duration: 5000, scroll: { from: 12000, to: 62000 } },
+          { duration: 3000 },
+          { duration: 3000, scroll: { from: 62000, to: 100000 } },
+          { duration: 500 },
+          { duration: 2000, scroll: { from: 100000, to: 12000 } },
+        ]
+      }
+
+      const fast = {
+        runs: [{ tileSize: this.tileSize }],
+        actions: [
+          { duration: 500, scroll: { from: 1000-10 } },
+          { duration: 1000, scroll: { from: 1000 } },
+          { duration: 5000, scroll: { from: 1000, to: 50000 } },
+          { duration: 4000, scroll: { from: 50000, to: 1000 } },
+          { duration: 3000, scroll: { from: 1000, to: 50000 } },
+          { duration: 2000, scroll: { from: 50000, to: 1000 } },
+          { duration: 1000, scroll: { from: 1000, to: 50000 } },
+          { duration: 750, scroll: { from: 50000, to: 1000 } },
+          { duration: 500, scroll: { from: 1000, to: 50000 } },
+          { duration: 250, scroll: { from: 50000, to: 1000 } },
+          { duration: 100, scroll: { from: 1000, to: 50000 } },
+          { duration: 50, scroll: { from: 50000, to: 1000 } },
+        ]
+      }
+
+      this.simulation = new Simulation(tileEvaluation);
       const results = await this.simulation.run(this);
       console.log(JSON.stringify(results, null, 2));
       this.$bus.emit("simulate-done");
