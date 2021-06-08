@@ -451,12 +451,6 @@ func regionHandler(w http.ResponseWriter, r *http.Request) {
 
 func fileHandler(w http.ResponseWriter, r *http.Request) {
 
-	scene, err := getSceneFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	vars := mux.Vars(r)
 
 	id, err := strconv.Atoi(vars["id"])
@@ -465,13 +459,11 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if id < 0 || id >= len(scene.Photos) {
-		http.Error(w, "Id out of bounds", http.StatusBadRequest)
+	path, err := imageSource.GetImagePath(ImageId(id))
+	if err == NotFoundError {
+		http.Error(w, "Id not found", http.StatusNotFound)
 		return
 	}
-
-	photo := &scene.Photos[id]
-	path := imageSource.GetImagePath(photo.Id)
 	http.ServeFile(w, r, path)
 
 }
@@ -511,7 +503,7 @@ func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
 	path := ""
 	for i := range imageSource.Videos {
 		video := imageSource.Videos[i]
-		candidatePath := video.GetPath(imageSource.GetImagePath(photo.Id))
+		candidatePath := video.GetPath(photo.GetPath(imageSource))
 		if !imageSource.Exists(candidatePath) {
 			continue
 		}
@@ -528,6 +520,49 @@ func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
 
 	http.ServeFile(w, r, path)
 
+}
+
+func fileThumbHandler(w http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
+	}
+
+	size := vars["size"]
+	if size == "" {
+		http.Error(w, "Invalid size", http.StatusBadRequest)
+		return
+	}
+
+	photoPath, err := imageSource.GetImagePath(ImageId(id))
+	if err == NotFoundError {
+		http.Error(w, "Id not found", http.StatusNotFound)
+		return
+	}
+
+	path := ""
+	for i := range imageSource.Thumbnails {
+		thumbnail := imageSource.Thumbnails[i]
+		candidatePath := thumbnail.GetPath(photoPath)
+		if !imageSource.Exists(candidatePath) {
+			continue
+		}
+		if thumbnail.Name != size {
+			continue
+		}
+		path = candidatePath
+	}
+
+	if path == "" || !imageSource.Exists(path) {
+		http.Error(w, "Thumbnail not found", http.StatusNotFound)
+		return
+	}
+
+	http.ServeFile(w, r, path)
 }
 
 func renderSample(config RenderConfig, scene *Scene) {
@@ -863,6 +898,7 @@ func main() {
 	api.HandleFunc("/regions/{id}", regionHandler)
 	api.HandleFunc("/files/{id}", fileHandler)
 	api.HandleFunc("/files/{id}/file/{filename}", fileHandler)
+	api.HandleFunc("/files/{id}/thumb/{size}/{filename}", fileThumbHandler)
 	api.HandleFunc("/files/{id}/video/{size}/{filename}", fileVideoHandler)
 
 	r.PathPrefix("/").Handler(spa.SpaHandler("static", "index.html"))

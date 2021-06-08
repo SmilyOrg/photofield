@@ -24,6 +24,7 @@ import (
 )
 
 var NotAnImageError = errors.New("Not a supported image extension, might be video")
+var NotFoundError = errors.New("Not found")
 var SkipError = errors.New("Skipping the rest")
 
 type ImageId uint32
@@ -457,16 +458,15 @@ func (source *ImageSource) IsSupportedVideo(path string) bool {
 	return false
 }
 
-func (source *ImageSource) GetImagePath(id ImageId) string {
+func (source *ImageSource) GetImagePath(id ImageId) (string, error) {
 	index := int(id) - 1
 	source.pathMutex.RLock()
 	if index < 0 || index >= len(source.paths) {
-		log.Printf("Unable to get image path, id not found: %v\n", index)
-		panic("Unable to get image path")
+		return "", NotFoundError
 	}
 	path := source.paths[index]
 	source.pathMutex.RUnlock()
-	return path
+	return path, nil
 }
 
 func (source *ImageSource) GetImageId(path string) ImageId {
@@ -588,7 +588,10 @@ func (source *ImageSource) loadPendingImageInfos() {
 			var id ImageId
 
 			id, backlog = backlog[len(backlog)-1], backlog[:len(backlog)-1]
-			path := source.GetImagePath(id)
+			path, err := source.GetImagePath(id)
+			if err != nil {
+				panic("Unable to load image info for non-existing image id")
+			}
 			paths <- path
 
 			now := time.Now()

@@ -46,33 +46,70 @@ type PhotoRegionSource struct {
 	imageSource *storage.ImageSource
 }
 
+type RegionThumbnail struct {
+	Name   string `json:"name"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
 type PhotoRegionData struct {
-	Id        int    `json:"id"`
-	Path      string `json:"path"`
-	Filename  string `json:"filename"`
-	Extension string `json:"extension"`
-	Video     bool   `json:"video"`
+	Id         int               `json:"id"`
+	Path       string            `json:"path"`
+	Filename   string            `json:"filename"`
+	Extension  string            `json:"extension"`
+	Video      bool              `json:"video"`
+	Width      int               `json:"width"`
+	Height     int               `json:"height"`
+	Thumbnails []RegionThumbnail `json:"thumbnails"`
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
+}
+
+func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, scene *Scene, regionConfig RegionConfig) Region {
+
+	source := regionSource.imageSource
+
+	originalPath := photo.GetPath(source)
+
+	var thumbnails []RegionThumbnail
+	for i := range source.Thumbnails {
+		thumbnail := &source.Thumbnails[i]
+		thumbnailPath := thumbnail.GetPath(originalPath)
+		if source.Exists(thumbnailPath) {
+			thumbnails = append(thumbnails, RegionThumbnail{
+				Name:   thumbnail.Name,
+				Width:  thumbnail.Size.X,
+				Height: thumbnail.Size.Y,
+			})
+		}
+	}
+
+	size := photo.GetSize(source)
+
+	return Region{
+		Id:     id,
+		Bounds: photo.Sprite.Rect,
+		Data: PhotoRegionData{
+			Id:         int(photo.Id),
+			Path:       originalPath,
+			Filename:   filepath.Base(originalPath),
+			Extension:  strings.ToLower(filepath.Ext(originalPath)),
+			Video:      source.IsSupportedVideo(originalPath),
+			Width:      size.X,
+			Height:     size.Y,
+			Thumbnails: thumbnails,
+		},
+	}
 }
 
 func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect Rect, scene *Scene, regionConfig RegionConfig) []Region {
 	regions := make([]Region, 0)
-	source := regionSource.imageSource
 	photos := scene.GetVisiblePhotos(rect, regionConfig.Limit)
 	for photo := range photos {
-		originalPath := source.GetImagePath(photo.Photo.Id)
-		regions = append(regions, Region{
-			Id:     photo.Index,
-			Bounds: photo.Photo.Sprite.Rect,
-			Data: PhotoRegionData{
-				Id:        photo.Index,
-				Path:      originalPath,
-				Filename:  filepath.Base(originalPath),
-				Extension: strings.ToLower(filepath.Ext(originalPath)),
-				Video:     source.IsSupportedVideo(originalPath),
-				// SmallestThumbnail: source.GetSmallestThumbnail(photo.Photo.Original.Path),
-			},
-		})
+		regions = append(regions, regionSource.getRegionFromPhoto(
+			photo.Index,
+			photo.Photo,
+			scene, regionConfig,
+		))
 	}
 	return regions
 }
@@ -82,15 +119,7 @@ func (regionSource PhotoRegionSource) GetRegionById(id int, scene *Scene, region
 		return Region{Id: -1}
 	}
 	photo := scene.Photos[id]
-	originalPath := regionSource.imageSource.GetImagePath(photo.Id)
-	return Region{
-		Id:     id,
-		Bounds: photo.Sprite.Rect,
-		Data: PhotoRegionData{
-			Path:     originalPath,
-			Filename: filepath.Base(originalPath),
-		},
-	}
+	return regionSource.getRegionFromPhoto(id, &photo, scene, regionConfig)
 }
 
 func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64 {
@@ -337,7 +366,7 @@ func layoutSectionList(section *Section, bounds Rect, imageHeight float64, image
 func getLayoutPhotosUnordered(id int, photos []Photo, indices chan int, output chan LayoutPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
 	for i := range indices {
 		photo := &photos[i]
-		path := source.GetImagePath(photo.Id)
+		path := photo.GetPath(source)
 		info := source.GetImageInfo(path)
 		output <- LayoutPhoto{
 			Index: i,

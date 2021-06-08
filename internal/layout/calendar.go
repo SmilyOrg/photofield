@@ -54,8 +54,8 @@ func LayoutCalendar(config *RenderConfig, scene *Scene, source *storage.ImageSou
 	photoCount := len(scene.Photos)
 
 	sort.Slice(scene.Photos, func(i, j int) bool {
-		a := source.GetImageInfo(source.GetImagePath(scene.Photos[i].Id))
-		b := source.GetImageInfo(source.GetImagePath(scene.Photos[i].Id))
+		a := source.GetImageInfo(scene.Photos[i].GetPath(source))
+		b := source.GetImageInfo(scene.Photos[i].GetPath(source))
 		return a.DateTime.Before(b.DateTime)
 	})
 
@@ -86,7 +86,7 @@ func LayoutCalendar(config *RenderConfig, scene *Scene, source *storage.ImageSou
 	y := sceneMargin
 	for i := range scene.Photos {
 		photo := &scene.Photos[i]
-		info := source.GetImageInfo(source.GetImagePath(scene.Photos[i].Id))
+		info := source.GetImageInfo(scene.Photos[i].GetPath(source))
 		dateTime := info.DateTime
 		size := Size{X: info.Width, Y: info.Height}
 

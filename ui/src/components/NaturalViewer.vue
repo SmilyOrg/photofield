@@ -26,6 +26,7 @@
       @click="onClick"
       @load="onLoad"
       @keydown="onKeyDown"
+      @contextmenu.prevent="onContext"
     ></tile-viewer>
     <div
       class="scroller"
@@ -37,6 +38,7 @@
       @touchEnd="onTouchEnd"
       @wheel="onWheel"
       @scroll="onScroll"
+      @contextmenu.prevent="onContext"
     >
       <div
         class="virtual-canvas"
@@ -44,6 +46,20 @@
         :style="{ height: canvas.height + 'px' }">
       </div>
     </div>
+
+    <ContextMenu
+      class="context-menu"
+      ref="contextMenu"
+    >
+      <region-menu
+        :region="contextRegion"
+        :scene="viewer.scene"
+        :sceneParams="sceneParams"
+        :flipX="contextFlipX"
+        :flipY="contextFlipY"
+        @close="$refs.contextMenu.close()"
+      ></region-menu>
+    </ContextMenu>
   </div>
 </template>
 
@@ -55,6 +71,8 @@ import { getCollection, getRegion, getRegions, getScene, useCollectionTask, useR
 import { timeout, useTask, useTaskGroup } from "vue-concurrency";
 import PageTitle from './PageTitle.vue';
 import Simulation from '../simulation';
+import ContextMenu from '@overcoder/vue-context-menu';
+import RegionMenu from './RegionMenu.vue';
 
 export default {
 
@@ -75,6 +93,8 @@ export default {
   components: {
     TileViewer,
     PageTitle,
+    ContextMenu,
+    RegionMenu,
   },
 
   data() {
@@ -94,6 +114,10 @@ export default {
         height: 0,
       },
       nativeScroll: true,
+      contextRegion: null,
+      contextAnchor: "",
+      contextFlipX: false,
+      contextFlipY: false,
     }
   },
 
@@ -402,12 +426,21 @@ export default {
       if (!this.nativeScroll) {
         return;
       }
+      if (event.button != 0) {
+        return;
+      }
       this.lastPointerDownEvent = event;
       // console.log("DOWN", event);
     },
 
     async onPointerUp(event) {
       if (!this.nativeScroll) {
+        return;
+      }
+      if (event.button != 0) {
+        return;
+      }
+      if (!this.lastPointerDownEvent) {
         return;
       }
       this.lastPointerUpEvent = event;
@@ -474,7 +507,7 @@ export default {
       const regions = await getRegions(event.x, event.y, 0, 0, this.sceneParams);
       if (regions && regions.length > 0) {
         const region = regions[0];
-        console.log(region);
+        // console.log(region);
 
         const viewerArea = this.view.w * this.view.h;
         const regionArea = region.bounds.w * region.bounds.h;
@@ -482,9 +515,25 @@ export default {
         // const animationTime = Math.abs(Math.log(areaDiff) / 2);
         // const animationTime = Math.pow(areaDiff, 0.2);
         const animationTime = Math.pow(areaDiff, 0.4)*0.08;
-        console.log(viewerArea, regionArea, areaDiff, animationTime)
+        // console.log(viewerArea, regionArea, areaDiff, animationTime)
         
         this.focusRegion(region, animationTime);
+      }
+    },
+
+    async onContext(event) {
+      this.contextRegion = null;
+      this.$refs.contextMenu.open(event);
+      const menuWidth = 250;
+      const menuHeight = 300;
+      const right = event.x + menuWidth;
+      const bottom = event.y + menuHeight;
+      this.contextFlipX = right > window.innerWidth;
+      this.contextFlipY = bottom > window.innerHeight;
+      const pos = this.$refs.viewer.elementToViewportCoordinates(event);
+      const regions = await getRegions(pos.x, pos.y, 0, 0, this.sceneParams);
+      if (regions && regions.length > 0) {
+        this.contextRegion = regions[0];
       }
     },
 
@@ -678,6 +727,12 @@ export default {
 .container.fullpage .viewer {
   position: fixed;
   width: 100vw;
+}
+
+.context-menu {
+  position: absolute;
+  margin-top: -60px;
+  width: fit-content;
 }
 
 </style>

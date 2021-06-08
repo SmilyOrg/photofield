@@ -350,8 +350,16 @@ func (bitmap *Bitmap) GetSize(source *storage.ImageSource) Size {
 }
 
 func (photo *Photo) GetSize(source *storage.ImageSource) Size {
-	info := source.GetImageInfo(source.GetImagePath(photo.Id))
+	info := source.GetImageInfo(photo.GetPath(source))
 	return Size{X: info.Width, Y: info.Height}
+}
+
+func (photo *Photo) GetPath(source *storage.ImageSource) string {
+	path, err := source.GetImagePath(photo.Id)
+	if err != nil {
+		panic("Unable to get photo path")
+	}
+	return path
 }
 
 func (sprite *Sprite) PlaceFitHeight(
@@ -519,7 +527,7 @@ func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size Size) float64 {
 func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) (Bitmap, float64) {
 	var best *Thumbnail
 	originalSize := photo.GetSize(source)
-	originalPath := source.GetImagePath(photo.Id)
+	originalPath := photo.GetPath(source)
 	originalZoomDist := math.Inf(1)
 	if source.IsSupportedImage(originalPath) {
 		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
@@ -563,7 +571,7 @@ type BitmapAtZoom struct {
 func (photo *Photo) getBestBitmaps(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) []BitmapAtZoom {
 
 	originalSize := photo.GetSize(source)
-	originalPath := source.GetImagePath(photo.Id)
+	originalPath := photo.GetPath(source)
 	originalZoomDist := math.Inf(1)
 	if source.IsSupportedImage(originalPath) {
 		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
@@ -608,7 +616,7 @@ func (photo *Photo) Draw(config *RenderConfig, scene *Scene, c *canvas.Context, 
 	if pixelArea < config.MaxSolidPixelArea {
 		style := c.Style
 
-		info := source.GetImageInfo(source.GetImagePath(photo.Id))
+		info := source.GetImageInfo(photo.GetPath(source))
 		style.FillColor = info.GetColor()
 
 		photo.Sprite.DrawWithStyle(c, style)
@@ -636,7 +644,7 @@ func (photo *Photo) Draw(config *RenderConfig, scene *Scene, c *canvas.Context, 
 
 				for i := range source.Thumbnails {
 					thumbnail := &source.Thumbnails[i]
-					thumbnailPath := thumbnail.GetPath(source.GetImagePath(photo.Id))
+					thumbnailPath := thumbnail.GetPath(photo.GetPath(source))
 					if source.Exists(thumbnailPath) {
 						text += thumbnail.Name + " "
 					}

@@ -6,8 +6,7 @@
 
 <script>
 import OpenSeadragon from "openseadragon";
-import { throttle, waitDebounce } from "../utils.js";
-import { getRegions, getTileUrl } from "../api.js";
+import { getTileUrl } from "../api.js";
 
 export default {
   
@@ -16,13 +15,15 @@ export default {
     scene: Object,
     interactive: Boolean,
     tileSize: Number,
+    view: Object,
+    immediate: Boolean,
   },
 
   emits: ["zoom", "click", "view", "load", "key-down"],
 
   data() {
     return {
-      view: {
+      latestView: {
         x: 0,
         y: 0,
         w: 0,
@@ -48,11 +49,18 @@ export default {
       this.reset();
     },
 
+    immediate() {
+      this.reset();
+    },
+
     interactive(interactive) {
       if (!this.viewer) return;
       this.setInteractive(interactive);
     },
 
+    view(view) {
+      this.setView(view);
+    },
 
   },
   computed: {
@@ -102,7 +110,7 @@ export default {
         // smoothTileEdgesMinZoom: Infinity,
         // placeholderFillStyle: "#FF8800"
         // debugMode: true,
-        // immediateRender: true,
+        immediateRender: this.immediate,
         // imageSmoothingEnabled: false,
         // alwaysBlend: true,
         // autoResize: false,
@@ -111,8 +119,7 @@ export default {
       this.setInteractive(this.interactive);
 
       this.viewer.addHandler("open", () => {
-        // console.log("on open view", this.view);
-        this.setView(this.view);
+        this.setView(this.view || this.latestView);
       });
 
       this.viewer.addHandler("canvas-click", event => this.onCanvasClick(event));
@@ -131,12 +138,20 @@ export default {
     async onCanvasClick(event) {
       if (!this.interactive) return;
       if (!event.quick) return;
-      const viewportPos = this.viewer.viewport.viewerElementToViewportCoordinates(event.position);
+      const coords = this.elementToViewportCoordinates(event.position);
+      this.$emit("click", coords);
+    },
+
+    elementToViewportCoordinates(eventOrPoint) {
+      const point =
+        eventOrPoint instanceof OpenSeadragon.Point ? eventOrPoint :
+        new OpenSeadragon.Point(eventOrPoint.x, eventOrPoint.y);
+      const viewportPos = this.viewer.viewport.viewerElementToViewportCoordinates(point);
       const scale = this.scene.width;
-      this.$emit("click", {
+      return {
         x: viewportPos.x * scale,
         y: viewportPos.y * scale,
-      });
+      }
     },
 
     onZoom(event) {
@@ -200,7 +215,7 @@ export default {
         console.warn("Using pending view", view);
       }
 
-      this.view = view;
+      this.latestView = view;
 
       const scale = 1 / this.scene.width;
       const rect = this.tempRect;

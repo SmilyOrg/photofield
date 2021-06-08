@@ -44,6 +44,21 @@ export function getTileUrl(level, x, y, tileSize, params) {
   return url;
 }
 
+export function getFileUrl(id, filename) {
+  if (!filename) {
+    return `${host}/files/${id}`;
+  }
+  return `${host}/files/${id}/file/${filename}`;
+}
+
+export async function getFileBlob(id) {
+  return getBlob(`/files/` + id);
+}
+
+export function getThumbnailUrl(id, thumb, filename) {
+  return `${host}/files/${id}/thumb/${thumb}/${filename}`;
+}
+
 export async function getScene(params) {
   return get("/scenes?" + params);
 }
