@@ -15,6 +15,21 @@ export async function get(endpoint, def) {
   return await response.json();
 }
 
+export async function post(endpoint, body, def) {
+  const response = await fetch(host + endpoint, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    if (def !== undefined) {
+      return def;
+    }
+    console.error(response);
+    throw new Error(response.statusText);
+  }
+  return await response.json();
+}
+
 export async function getRegions(x, y, w, h, sceneParams) {
   return get(`/regions?${sceneParams}&x=${x}&y=${y}&w=${w}&h=${h}`);
 }
@@ -29,6 +44,12 @@ export async function getCollections() {
 
 export async function getCollection(id) {
   return get(`/collections/` + id);
+}
+
+export async function reindexCollection(id) {
+  return post(`/index-tasks`, {
+    collection_id: id
+  });
 }
 
 export function getTileUrl(level, x, y, tileSize, params) {

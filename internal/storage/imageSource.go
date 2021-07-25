@@ -238,9 +238,12 @@ func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan stri
 	return nil
 }
 
-func (source *ImageSource) IndexImages(dir string, maxPhotos int) {
+func (source *ImageSource) IndexImages(dir string, maxPhotos int, counter chan<- int) {
 	for path := range source.walkImages(dir, maxPhotos) {
 		source.infoDatabase.Add(path)
+		// Uncomment to test slow indexing
+		// time.Sleep(100 * time.Millisecond)
+		counter <- 1
 	}
 }
 

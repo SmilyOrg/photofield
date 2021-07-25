@@ -54,11 +54,18 @@ var imageSource *ImageSource
 var sceneSource *SceneSource
 var collections []Collection
 
+var indexTasks sync.Map
+
 var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
 var tileRequestsMutex sync.Mutex
 
 // var tileRequestTriggers chan struct{}
+
+type IndexTask struct {
+	CollectionId string `json:"collection_id"`
+	Count        int    `json:"count"`
+}
 
 type TileWriter func(w io.Writer) error
 
@@ -164,6 +171,60 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
 		return
+	}
+}
+
+func indexTasksHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "GET" {
+		tasks := make([]IndexTask, 0)
+		indexTasks.Range(func(key, value interface{}) bool {
+			tasks = append(tasks, value.(IndexTask))
+			return true
+		})
+		err := json.NewEncoder(w).Encode(struct {
+			Items []IndexTask `json:"items"`
+		}{
+			Items: tasks,
+		})
+		if err != nil {
+			http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
+			return
+		}
+	} else if r.Method == "POST" {
+		decoder := json.NewDecoder(r.Body)
+		var request struct {
+			CollectionId string `json:"collection_id"`
+		}
+		var err error
+		err = decoder.Decode(&request)
+		if err != nil {
+			http.Error(w, "Unable to decode body as JSON", http.StatusBadRequest)
+			return
+		}
+		collection := getCollectionById(request.CollectionId)
+		if collection == nil {
+			http.Error(w, "Invalid collection_id", http.StatusBadRequest)
+			return
+		}
+		task := IndexTask{
+			CollectionId: request.CollectionId,
+			Count:        0,
+		}
+		stored, loaded := indexTasks.LoadOrStore(collection.Id, task)
+		task = stored.(IndexTask)
+		if loaded {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusAccepted)
+			indexCollection(collection)
+		}
+		err = json.NewEncoder(w).Encode(task)
+		if err != nil {
+			http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -653,13 +714,39 @@ func expandCollections(collections *[]Collection) {
 	*collections = expanded
 }
 
-func indexCollections(collections *[]Collection) {
+func indexCollections(collections *[]Collection) (ok bool) {
+	var counter chan int
 	go func() {
 		for _, collection := range *collections {
 			for _, dir := range collection.Dirs {
-				imageSource.IndexImages(dir, collection.ListLimit)
+				imageSource.IndexImages(dir, collection.ListLimit, counter)
 			}
 		}
+		close(counter)
+	}()
+	return true
+}
+
+func indexCollection(collection *Collection) {
+	counter := make(chan int, 10)
+	go func() {
+		task := IndexTask{
+			CollectionId: collection.Id,
+			Count:        0,
+		}
+		for add := range counter {
+			task.Count += add
+			indexTasks.Store(collection.Id, task)
+		}
+		indexTasks.Delete(collection.Id)
+	}()
+	go func() {
+		log.Printf("indexing %s\n", collection.Id)
+		for _, dir := range collection.Dirs {
+			log.Printf("indexing %s %s\n", collection.Id, dir)
+			imageSource.IndexImages(dir, collection.ListLimit, counter)
+		}
+		close(counter)
 	}()
 }
 
@@ -890,6 +977,7 @@ func main() {
 
 	api := r.PathPrefix(apiPrefix).Subrouter()
 	api.HandleFunc("/metrics", metricsHandler)
+	api.HandleFunc("/index-tasks", indexTasksHandler)
 	api.HandleFunc("/scenes", scenesHandler)
 	api.HandleFunc("/collections", collectionsHandler)
 	api.HandleFunc("/collections/{id}", collectionHandler)

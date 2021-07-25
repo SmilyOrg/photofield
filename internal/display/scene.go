@@ -518,7 +518,7 @@ func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size Size) float64 {
 	// return math.Abs(rect.GetPixelZoom(c, size))
 	zoom := rect.GetPixelZoom(c, size)
 	if zoom > 0 {
-		return zoom * 2
+		return zoom * 3
 	} else {
 		return -zoom
 	}

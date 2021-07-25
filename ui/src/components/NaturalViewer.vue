@@ -155,7 +155,11 @@ export default {
       });
     }).restartable();
 
-    const tasks = useTaskGroup({ collectionTask, sceneTask, regionTask })
+    const tasks = useTaskGroup({
+      collectionTask,
+      sceneTask,
+      regionTask,
+    })
     
     return {
       collectionTask,
@@ -456,8 +460,8 @@ export default {
         this.nativeScroll = false;
         await nextTick();
         // console.log("redisp", down, up)
-        this.redispatchEventToViewer(down);
-        this.redispatchEventToViewer(up);
+        // this.redispatchEventToViewer(down);
+        // this.redispatchEventToViewer(up);
       }
     },
 
