@@ -1,7 +1,16 @@
-import { LatestFetcher } from "./utils";
 import { useTask } from "vue-concurrency";
+import useSWRV from "swrv";
 
 const host = import.meta.env.VITE_API_HOST || "/api";
+
+async function fetcher(endpoint) {
+  const response = await fetch(host + endpoint);
+  if (!response.ok) {
+    console.error(response);
+    throw new Error(response.statusText);
+  }
+  return await response.json();
+}
 
 export async function get(endpoint, def) {
   const response = await fetch(host + endpoint);
@@ -47,7 +56,7 @@ export async function getCollection(id) {
 }
 
 export async function reindexCollection(id) {
-  return post(`/index-tasks`, {
+  return await post(`/index-tasks`, {
     collection_id: id
   });
 }
@@ -59,6 +68,7 @@ export function getTileUrl(level, x, y, tileSize, params) {
   url += "&zoom=" + level;
   url += "&x=" + x;
   url += "&y=" + y;
+  // url += "&debugThumbnails=true";
   // for (const [key, value] of Object.entries(this.debug)) {
   //   url += "&debug" + key.slice(0, 1).toUpperCase() + key.slice(1) + "=" + (value ? "true" : "false");
   // }
@@ -107,6 +117,12 @@ export function useRegionTask() {
     }
     return getRegion(regionId, sceneParams);
   })
+}
+
+
+
+export function useIndexTasks(collectionId) {
+  return useSWRV(() => `/index-tasks?collection_id=${collectionId()}`, fetcher);
 }
 
 

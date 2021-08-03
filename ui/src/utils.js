@@ -1,3 +1,13 @@
+export function updateUntilDone(updateFn, continueFn, intervalMs) {
+  if (intervalMs === undefined) intervalMs = 1000;
+  async function update() {
+    await updateFn();
+    if (!continueFn()) return;
+    setTimeout(update, intervalMs);
+  }
+  update();
+}
+
 export function throttle(callback, delay) {
   let timer = null;
   let pending = false;

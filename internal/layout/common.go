@@ -14,7 +14,7 @@ import (
 	"github.com/tdewolff/canvas"
 )
 
-type LayoutConfig struct {
+type Layout struct {
 	Limit        int    `json:"limit"`
 	Type         string `json:"type"`
 	FontFamily   *canvas.FontFamily
@@ -71,14 +71,14 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, s
 	originalPath := photo.GetPath(source)
 
 	var thumbnails []RegionThumbnail
-	for i := range source.Thumbnails {
-		thumbnail := &source.Thumbnails[i]
+	for i := range source.Images.Thumbnails {
+		thumbnail := &source.Images.Thumbnails[i]
 		thumbnailPath := thumbnail.GetPath(originalPath)
 		if source.Exists(thumbnailPath) {
 			thumbnails = append(thumbnails, RegionThumbnail{
 				Name:   thumbnail.Name,
-				Width:  thumbnail.Size.X,
-				Height: thumbnail.Size.Y,
+				Width:  thumbnail.Width,
+				Height: thumbnail.Height,
 			})
 		}
 	}
@@ -253,7 +253,7 @@ func getSectionPhotos(section *Section, output chan SectionPhoto, source *storag
 	close(unordered)
 }
 
-func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, config LayoutConfig, scene *Scene, source *storage.ImageSource) {
+func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, config Layout, scene *Scene, source *storage.ImageSource) {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()

@@ -22,7 +22,7 @@ type AlbumEvent struct {
 	Section    Section
 }
 
-func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
+func LayoutAlbumEvent(config Layout, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
@@ -75,7 +75,7 @@ func LayoutAlbumEvent(config LayoutConfig, rect Rect, event *AlbumEvent, scene *
 	return rect
 }
 
-func LayoutAlbum(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
+func LayoutAlbum(config Layout, scene *Scene, source *storage.ImageSource) {
 
 	layoutPhotos := getLayoutPhotos(scene.Photos, source)
 	sortOldestToNewest(layoutPhotos)

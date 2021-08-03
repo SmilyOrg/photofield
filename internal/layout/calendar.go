@@ -48,7 +48,7 @@ func getRowBounds(value int, total int, spacing float64, bounds Rect) Rect {
 	}
 }
 
-func LayoutCalendar(config *RenderConfig, scene *Scene, source *storage.ImageSource) {
+func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 
 	// imageWidth := 120.
 	photoCount := len(scene.Photos)

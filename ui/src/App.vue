@@ -11,11 +11,23 @@
       <span class="title" @click="onTitleClick()">
         {{ collection?.name || "Photos" }}
       </span>
-      <span
-        class="files"
-        v-if="fileCount != null"
-      >
-        {{ fileCount }} files
+      
+      <span class="collection-menu">
+        <ui-button
+          class="files"
+          v-if="fileCount != null"
+          @click="collectionMenuOpen = !collectionMenuOpen"
+        >
+          {{ indexTasks?.items[0]?.count || fileCount }} files
+          <template #after>
+            <ui-icon>expand_more</ui-icon>
+          </template>
+        </ui-button>
+          <ui-menu
+            v-model="collectionMenuOpen"
+          >
+            <ui-menuitem @click="reindex()">Reindex Collection</ui-menuitem>
+          </ui-menu>
       </span>
 
       <template #toolbar="{ toolbarItemClass }">
@@ -122,8 +134,11 @@
 </template>
 
 <script>
-import { getCollections } from './api';
+import { getCollections, reindexCollection, useIndexTasks } from './api';
+import { useRouter, useRoute } from 'vue-router'
 import NaturalViewer from './components/NaturalViewer.vue'
+import { updateUntilDone } from './utils';
+import { computed, watch } from '@vue/runtime-core';
 
 export default {
   name: 'App',
@@ -154,6 +169,17 @@ export default {
       simulating: false,
       immersive: false,
       collections: [],
+      collectionMenuOpen: false,
+    }
+  },
+  setup(props) {
+    const route = useRoute()
+    const { data: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useIndexTasks(() => route.params.collectionId);
+
+    return {
+      indexTasks,
+      indexTasksError,
+      indexTasksMutate,
     }
   },
   async mounted() {
@@ -187,6 +213,14 @@ export default {
     refreshCache() {
       this.cacheKey = Date.now();
       localStorage.cacheKey = this.cacheKey;
+    },
+    async reindex() {
+      await reindexCollection(this.collection?.id);
+      updateUntilDone(
+        this.indexTasksMutate,
+        () => this.indexTasks?.items?.length > 0,
+        100
+      )
     },
     onTitleClick() {
       this.$bus.emit("home");
@@ -223,6 +257,10 @@ export default {
   transform: translateY(0);
 }
 
+button {
+  --mdc-theme-primary: black;
+}
+
 .top-bar.immersive {
   transform: translateY(-80px);
 }
@@ -243,6 +281,10 @@ export default {
 
 .settings-toggle.expanded {
   transform: rotate(90deg);
+}
+
+.collection-menu {
+  position: fixed;
 }
 
 .settings {
@@ -316,11 +358,7 @@ export default {
 }
 
 .viewer {
-  /* width: 400px;
-  height: 400px; */
   height: calc(100vh - 64px);
-  /* width: 100%;
-  height: 100%; */
 }
 
 .viewer.simulating {

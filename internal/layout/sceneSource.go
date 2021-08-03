@@ -27,9 +27,9 @@ type loadingScene struct {
 }
 
 type SceneConfig struct {
-	Config     RenderConfig
+	Render     Render
 	Collection Collection
-	Layout     LayoutConfig
+	Layout     Layout
 	Scene      Scene
 }
 
@@ -45,6 +45,7 @@ func NewSceneSource() *SceneSource {
 	if err != nil {
 		panic(err)
 	}
+	AddRistrettoMetrics("scene_cache", source.scenes)
 	return &source
 }
 
@@ -56,7 +57,7 @@ func getCollectionKey(collection Collection) string {
 	return key
 }
 
-func getLayoutKey(layout LayoutConfig) string {
+func getLayoutKey(layout Layout) string {
 	key := fmt.Sprintf("%v %v %v", layout.SceneWidth, layout.ImageHeight, layout.Type)
 	return key
 }

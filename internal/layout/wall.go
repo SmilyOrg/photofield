@@ -7,7 +7,7 @@ import (
 	storage "photofield/internal/storage"
 )
 
-func LayoutWall(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
+func LayoutWall(config Layout, scene *Scene, source *storage.ImageSource) {
 
 	photoCount := len(scene.Photos)
 
@@ -16,7 +16,7 @@ func LayoutWall(config LayoutConfig, scene *Scene, source *storage.ImageSource) 
 	scene.Bounds.W = config.SceneWidth
 	cols := edgeCount
 
-	layoutConfig := LayoutConfig{}
+	layoutConfig := Layout{}
 	layoutConfig.ImageSpacing = config.SceneWidth / float64(edgeCount) * 0.02
 	layoutConfig.LineSpacing = layoutConfig.ImageSpacing
 

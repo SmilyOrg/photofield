@@ -4,12 +4,29 @@ services:
   photofield:
     build: ./
     image: photofield
-    container_name: photofield
     ports:
       - 8080:8080
     labels:
       - "traefik.http.services.photofield.loadbalancer.server.port=8080"
     volumes:
-      - /photo:/photo:ro
-      - /go/src/photofield/data/configuration.docker.yaml:/app/data/configuration.yaml:ro
+      - ./data/configuration.docker.yaml:/app/data/configuration.yaml:ro
     restart: "no"
+
+  prometheus:
+    build: ./docker/prometheus/
+    ports:
+      - 9090:9090
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    build: ./docker/grafana/
+    environment:
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=1s
+      - GF_PATHS_PROVISIONING=/provisioning
+    ports:
+      - 9091:3000
+    volumes:
+      - ./docker/grafana/provisioning:/provisioning
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./data/grafana:/var/lib/grafana

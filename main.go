@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	// "image/png"
 	"io"
 	"log"
 	"net/http"
@@ -19,9 +18,11 @@ import (
 	"os"
 	"strconv"
 
+	_ "embed"
 	_ "net/http/pprof"
 
 	"github.com/felixge/fgprof"
+	"github.com/imdario/mergo"
 
 	_ "github.com/joho/godotenv/autoload"
 
@@ -40,13 +41,17 @@ import (
 	"github.com/tdewolff/canvas/rasterizer"
 
 	"github.com/goccy/go-yaml"
-	// _ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+//go:embed defaults.yaml
+var defaultsYaml []byte
+var defaults AppConfig
 
 var startupTime time.Time
 
 var defaultSceneConfig SceneConfig
-var systemConfig SystemConfig
+
 var tileRequestConfig TileRequestConfig
 
 var tilePools sync.Map
@@ -60,18 +65,12 @@ var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
 var tileRequestsMutex sync.Mutex
 
-// var tileRequestTriggers chan struct{}
-
 type IndexTask struct {
 	CollectionId string `json:"collection_id"`
 	Count        int    `json:"count"`
 }
 
 type TileWriter func(w io.Writer) error
-
-type Metrics struct {
-	ImageSource ImageSourceMetrics `json:"imageSource"`
-}
 
 const MAX_PRIORITY = math.MaxInt8
 
@@ -85,7 +84,7 @@ type TileRequest struct {
 	Done     chan struct{}
 }
 
-func drawTile(c *canvas.Context, config *RenderConfig, scene *Scene, zoom int, x int, y int) {
+func drawTile(c *canvas.Context, config *Render, scene *Scene, zoom int, x int, y int) {
 
 	tileSize := float64(config.TileSize)
 	zoomPower := 1 << zoom
@@ -128,7 +127,7 @@ func drawTile(c *canvas.Context, config *RenderConfig, scene *Scene, zoom int, x
 
 }
 
-func getTilePool(config *RenderConfig) *sync.Pool {
+func getTilePool(config *Render) *sync.Pool {
 	stored, ok := tilePools.Load(config.TileSize)
 	if ok {
 		return stored.(*sync.Pool)
@@ -142,19 +141,19 @@ func getTilePool(config *RenderConfig) *sync.Pool {
 	return stored.(*sync.Pool)
 }
 
-func getTileImage(config *RenderConfig) (*image.RGBA, *canvas.Context) {
+func getTileImage(config *Render) (*image.RGBA, *canvas.Context) {
 	pool := getTilePool(config)
 	img := pool.Get().(*image.RGBA)
 	renderer := rasterizer.New(img, 1.0)
 	return img, canvas.NewContext(renderer)
 }
 
-func putTileImage(config *RenderConfig, img *image.RGBA) {
+func putTileImage(config *Render, img *image.RGBA) {
 	pool := getTilePool(config)
 	pool.Put(img)
 }
 
-func getTileSize(config *RenderConfig, query *url.Values) int {
+func getTileSize(config *Render, query *url.Values) int {
 	tileSizeQuery, err := strconv.Atoi(query.Get("tileSize"))
 	if err == nil && tileSizeQuery > 0 {
 		return tileSizeQuery
@@ -162,25 +161,18 @@ func getTileSize(config *RenderConfig, query *url.Values) int {
 	return config.TileSize
 }
 
-func metricsHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	metrics := Metrics{
-		ImageSource: imageSource.GetMetrics(),
-	}
-	err := json.NewEncoder(w).Encode(metrics)
-	if err != nil {
-		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
-		return
-	}
-}
-
 func indexTasksHandler(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
 	w.Header().Set("Content-Type", "application/json")
-
 	if r.Method == "GET" {
+		collectionId := query.Get("collection_id")
+
 		tasks := make([]IndexTask, 0)
 		indexTasks.Range(func(key, value interface{}) bool {
-			tasks = append(tasks, value.(IndexTask))
+			task := value.(IndexTask)
+			if task.CollectionId == collectionId {
+				tasks = append(tasks, task)
+			}
 			return true
 		})
 		err := json.NewEncoder(w).Encode(struct {
@@ -401,8 +393,8 @@ func tilesHandlerImpl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	config := defaultSceneConfig.Config
-	config.TileSize = getTileSize(&config, &query)
+	render := defaultSceneConfig.Render
+	render.TileSize = getTileSize(&render, &query)
 
 	zoom, err := strconv.Atoi(query.Get("zoom"))
 	if err != nil {
@@ -422,14 +414,14 @@ func tilesHandlerImpl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	config.DebugOverdraw = query.Get("debugOverdraw") == "true"
-	config.DebugThumbnails = query.Get("debugThumbnails") == "true"
+	render.DebugOverdraw = query.Get("debugOverdraw") == "true"
+	render.DebugThumbnails = query.Get("debugThumbnails") == "true"
 
-	image, context := getTileImage(&config)
-	defer putTileImage(&config, image)
-	config.CanvasImage = image
-	config.Zoom = zoom
-	drawTile(context, &config, scene, zoom, x, y)
+	image, context := getTileImage(&render)
+	defer putTileImage(&render, image)
+	render.CanvasImage = image
+	render.Zoom = zoom
+	drawTile(context, &render, scene, zoom, x, y)
 	imageSource.Coder.EncodeJpeg(w, image)
 }
 
@@ -442,8 +434,8 @@ func regionsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	config := defaultSceneConfig.Config
-	config.TileSize = getTileSize(&config, &query)
+	render := defaultSceneConfig.Render
+	render.TileSize = getTileSize(&render, &query)
 
 	x, err := strconv.ParseFloat(query.Get("x"), 64)
 	if err != nil {
@@ -478,7 +470,7 @@ func regionsHandler(w http.ResponseWriter, r *http.Request) {
 		H: height,
 	}
 
-	regions := scene.GetRegions(&config, bounds)
+	regions := scene.GetRegions(&render, bounds)
 
 	json.NewEncoder(w).Encode(regions)
 }
@@ -562,8 +554,8 @@ func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
 
 	photo := &scene.Photos[id]
 	path := ""
-	for i := range imageSource.Videos {
-		video := imageSource.Videos[i]
+	for i := range imageSource.Videos.Thumbnails {
+		video := imageSource.Videos.Thumbnails[i]
 		candidatePath := video.GetPath(photo.GetPath(imageSource))
 		if !imageSource.Exists(candidatePath) {
 			continue
@@ -606,8 +598,8 @@ func fileThumbHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := ""
-	for i := range imageSource.Thumbnails {
-		thumbnail := imageSource.Thumbnails[i]
+	for i := range imageSource.Images.Thumbnails {
+		thumbnail := imageSource.Images.Thumbnails[i]
 		candidatePath := thumbnail.GetPath(photoPath)
 		if !imageSource.Exists(candidatePath) {
 			continue
@@ -626,7 +618,7 @@ func fileThumbHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-func renderSample(config RenderConfig, scene *Scene) {
+func renderSample(config Render, scene *Scene) {
 	log.Println("rendering sample")
 	config.LogDraws = true
 
@@ -694,11 +686,12 @@ func getSceneFromRequest(r *http.Request) (*Scene, error) {
 	return sceneSource.GetScene(sceneConfig, imageSource, cacheKey), nil
 }
 
-type Configuration struct {
+type AppConfig struct {
 	Collections  []Collection      `json:"collections"`
-	Layout       LayoutConfig      `json:"layout"`
-	Render       RenderConfig      `json:"render"`
-	System       SystemConfig      `json:"system"`
+	Layout       Layout            `json:"layout"`
+	Render       Render            `json:"render"`
+	System       System            `json:"system"`
+	Media        ImageSourceConfig `json:"media"`
 	TileRequests TileRequestConfig `json:"tile_requests"`
 }
 
@@ -715,7 +708,18 @@ func expandCollections(collections *[]Collection) {
 }
 
 func indexCollections(collections *[]Collection) (ok bool) {
-	var counter chan int
+	counter := make(chan int, 10)
+	go func() {
+		task := IndexTask{
+			CollectionId: "[all]",
+			Count:        0,
+		}
+		for add := range counter {
+			task.Count += add
+			indexTasks.Store("[all]", task)
+		}
+		indexTasks.Delete("[all]")
+	}()
 	go func() {
 		for _, collection := range *collections {
 			for _, dir := range collection.Dirs {
@@ -750,41 +754,39 @@ func indexCollection(collection *Collection) {
 	}()
 }
 
-func loadConfiguration(
-	sceneConfig *SceneConfig,
-	systemConfig *SystemConfig,
-	collections *[]Collection,
-	tileRequestConfig *TileRequestConfig,
-) {
+func loadConfiguration() AppConfig {
+
+	var appConfig AppConfig
+
 	filename := "data/configuration.yaml"
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Printf("unable to open %s, using defaults: %s\n", filename, err.Error())
-		return
+		return defaults
 	}
 
-	configuration := Configuration{
-		Layout:       sceneConfig.Layout,
-		Render:       sceneConfig.Config,
-		System:       *systemConfig,
-		TileRequests: *tileRequestConfig,
-	}
-
-	if err := yaml.Unmarshal(bytes, &configuration); err != nil {
+	if err := yaml.Unmarshal(bytes, &appConfig); err != nil {
 		log.Printf("unable to parse %s, using defaults: %s\n", filename, err.Error())
-		return
+		return defaults
 	}
 
-	expandCollections(&configuration.Collections)
-
-	if len(configuration.Collections) > 0 {
-		sceneConfig.Collection = configuration.Collections[0]
+	if err := mergo.Merge(&appConfig, defaults); err != nil {
+		panic("unable to merge configuration with defaults")
 	}
-	*collections = configuration.Collections
-	sceneConfig.Layout = configuration.Layout
-	sceneConfig.Config = configuration.Render
-	*systemConfig = configuration.System
-	*tileRequestConfig = configuration.TileRequests
+
+	expandCollections(&appConfig.Collections)
+	for i := range appConfig.Collections {
+		appConfig.Collections[i].GenerateId()
+	}
+
+	for i := range appConfig.Media.Images.Thumbnails {
+		appConfig.Media.Images.Thumbnails[i].Init()
+	}
+	for i := range appConfig.Media.Videos.Thumbnails {
+		appConfig.Media.Videos.Thumbnails[i].Init()
+	}
+
+	return appConfig
 }
 
 func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request) {
@@ -797,143 +799,25 @@ func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request
 func main() {
 
 	startupTime = time.Now()
-
-	defaultSceneConfig.Collection = Collection{
-		// ListLimit: 1,
-		// ListLimit: 3,
-		// ListLimit: 10,
-		// ListLimit: 20,
-		// ListLimit: 100,
-		// ListLimit: 500,
-		// ListLimit: 1000,
-		// ListLimit: 2500,
-		// ListLimit: 5000,
-		// ListLimit: 10000,
-		// ListLimit: 15000,
-		// ListLimit: 20000,
-		// ListLimit: 50000,
-		// ListLimit: 60000,
-		// ListLimit: 75000,
-		// ListLimit: 100000,
-		// ListLimit: 200000,
-		Dirs: []string{
-			"photos",
-			// "P:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
-			// "P:/homes/Miha/Drive/Moments",
-			// "P:/photo/Moments",
-			// "P:/photo/Moments/2020 Tierpark",
-			// "P:/photo/Moments/Cuba 2019",
-			// "P:/photo/Moments/2020 Usedom",
-			// "P:/photo/Moments/USA 2018",
-		},
+	if err := yaml.Unmarshal(defaultsYaml, &defaults); err != nil {
+		panic(err)
 	}
 
-	defaultSceneConfig.Config = RenderConfig{
-		TileSize:          256,
-		MaxSolidPixelArea: 1000,
+	appConfig := loadConfiguration()
+
+	if len(appConfig.Collections) > 0 {
+		defaultSceneConfig.Collection = appConfig.Collections[0]
 	}
+	collections = appConfig.Collections
+	defaultSceneConfig.Layout = appConfig.Layout
+	defaultSceneConfig.Render = appConfig.Render
+	tileRequestConfig = appConfig.TileRequests
 
-	defaultSceneConfig.Layout = LayoutConfig{
-		SceneWidth:  2000,
-		ImageHeight: 160,
-	}
-
-	loadConfiguration(&defaultSceneConfig, &systemConfig, &collections, &tileRequestConfig)
-
-	imageSource = NewImageSource(systemConfig)
+	imageSource = NewImageSource(appConfig.System, appConfig.Media)
 	defer imageSource.Close()
 	sceneSource = NewSceneSource()
 
-	for i := range collections {
-		collections[i].GenerateId()
-	}
 	indexCollections(&collections)
-
-	imageSource.Thumbnails = []Thumbnail{
-		NewThumbnail(
-			"S",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg",
-			FitInside,
-			Size{X: 120, Y: 120},
-		),
-		NewThumbnail(
-			"SM",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg",
-			FitOutside,
-			Size{X: 240, Y: 240},
-		),
-		// NewThumbnail(
-		// 	"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_PREVIEW.jpg",
-		// 	// Size{X: 480, Y: 320},
-		// 	// Size{X: 480, Y: 480},
-		// 	Size{X: 160, Y: 160},
-		// ),
-		NewThumbnail(
-			"M",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg",
-			FitOutside,
-			Size{X: 320, Y: 320},
-		),
-		NewThumbnail(
-			"B",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg",
-			FitInside,
-			Size{X: 640, Y: 640},
-		),
-		// NewThumbnail(
-		// 	"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_L.jpg",
-		// 	// Size{X: 640, Y: 427},
-		// 	Size{X: 800, Y: 800},
-		// ),
-		NewThumbnail(
-			"XL",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg",
-			FitOutside,
-			Size{X: 1280, Y: 1280},
-		),
-	}
-	imageSource.Videos = []Thumbnail{
-		NewThumbnail(
-			"M",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4",
-			FitInside,
-			Size{X: 120, Y: 120},
-		),
-		NewThumbnail(
-			"H264",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4",
-			OriginalSize,
-			Size{},
-		),
-	}
-
-	// var photoDirs = []string{
-	// var photoDirs = []string{
-	// "/mnt/d/photos/copy/USA 2018/Lumix/100_PANA",
-	// "/mnt/d/photos/copy/USA 2018/Lumix/101_PANA",
-	// "/mnt/d/photos/copy/USA 2018/Lumix/102_PANA",
-	// "/mnt/d/photos/copy/USA 2018/Lumix/103_PANA",
-	// "/mnt/d/photos/copy/USA 2018/Lumix/104_PANA",
-	// "/mnt/d/photos/copy/USA 2018/Lumix/105_PANA",
-	// "/mnt/d/photos/copy/USA 2018/Lumix/106_PANA",
-	// "/mnt/d/photos/copy/USA 2018/",
-	// "D:/photos/copy/USA 2018/",
-	// "P:/Moments/USA 2018",
-	// "P:/Moments/Cuba 2019",
-	// "P:/Moments",
-	// "V:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
-	// "V:/photo/Moments",
-	// "P:/homes/Miha/Drive/Moments/Mobile/Samsung SM-G950F/Camera",
-	// "P:/homes/Miha/Drive/Moments",
-	// "P:/photo/Moments",
-	// "P:/photo/Moments/2020 Tierpark",
-	// "P:/photo/Moments/Cuba 2019",
-	// "P:/photo/Moments/2020 Usedom",
-	// "P:/photo/Moments/USA 2018",
-	// "\\\\Denkarium/photo/Moments",
-	// }
-
-	// scene := &mainScene
 
 	fontFamily := canvas.NewFontFamily("Roboto")
 	// fontFamily.Use(canvas.CommonLigatures)
@@ -976,7 +860,7 @@ func main() {
 	r := mux.NewRouter()
 
 	api := r.PathPrefix(apiPrefix).Subrouter()
-	api.HandleFunc("/metrics", metricsHandler)
+	api.Handle("/metrics", promhttp.Handler())
 	api.HandleFunc("/index-tasks", indexTasksHandler)
 	api.HandleFunc("/scenes", scenesHandler)
 	api.HandleFunc("/collections", collectionsHandler)

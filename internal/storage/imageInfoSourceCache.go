@@ -23,6 +23,7 @@ func NewImageInfoSourceCache() *ImageInfoSourceCache {
 	if err != nil {
 		panic(err)
 	}
+	AddRistrettoMetrics("image_info_cache", source.Cache)
 	return &source
 }
 
@@ -37,4 +38,8 @@ func (source *ImageInfoSourceCache) Get(path string) (ImageInfo, bool) {
 func (source *ImageInfoSourceCache) Set(path string, info ImageInfo) error {
 	source.Cache.Set(path, info, (int64)(unsafe.Sizeof(info)))
 	return nil
+}
+
+func (source *ImageInfoSourceCache) Delete(path string) {
+	source.Cache.Del(path)
 }

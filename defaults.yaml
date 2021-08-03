@@ -1,0 +1,66 @@
+collections:
+  - name: photos
+    dirs:
+      - photos
+
+layout:
+  limit: 0
+
+render:
+  tile_size: 256
+  max_solid_pixel_area: 1000
+
+system:
+  exif_tool_count: 4
+  skip_load_info: false
+  caches:
+    image:
+      max_size: 256Mi
+    
+media:
+  extensions: [".jpg"]
+  date_formats: ["20060201_150405"]
+  images:
+    extensions: [".jpg", ".jpeg", ".png", ".gif"]
+    thumbnails:
+      - name: S
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
+        fit: INSIDE
+        width: 120
+        height: 120
+        
+      - name: SM
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg"
+        fit: OUTSIDE
+        width: 240
+        height: 240
+        
+      - name: M
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg"
+        fit: OUTSIDE
+        width: 320
+        height: 320
+        
+      - name: B
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg"
+        fit: INSIDE
+        width: 640
+        height: 640
+        
+      - name: XL
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg"
+        fit: OUTSIDE
+        width: 1280
+        height: 1280
+  
+  videos:
+    extensions: [".mp4"]
+    thumbnails:
+      - name: M
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
+        fit: INSIDE
+        width: 120
+        height: 120
+        
+      - name: H264
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4"

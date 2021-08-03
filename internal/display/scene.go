@@ -16,7 +16,7 @@ import (
 	"golang.org/x/image/math/f64"
 )
 
-type RenderConfig struct {
+type Render struct {
 	TileSize          int     `json:"tile_size"`
 	MaxSolidPixelArea float64 `json:"max_solid_pixel_area"`
 	LogDraws          bool
@@ -177,14 +177,14 @@ func NewTextFromRect(rect Rect, font *canvas.FontFace, txt string) Text {
 	return text
 }
 
-func drawPhotosSlice(photos []Photo, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func drawPhotosSlice(photos []Photo, config *Render, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	for i := range photos {
 		photo := &photos[i]
 		photo.Draw(config, scene, c, scales, source)
 	}
 }
 
-func drawPhotoChannel(id int, index chan int, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
+func drawPhotoChannel(id int, index chan int, config *Render, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
 	for i := range index {
 		photo := &scene.Photos[i]
 		photo.Draw(config, scene, c, scales, source)
@@ -192,7 +192,7 @@ func drawPhotoChannel(id int, index chan int, config *RenderConfig, scene *Scene
 	wg.Done()
 }
 
-func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
+func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *Render, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *storage.ImageSource) {
 	count := 0
 	for photoRef := range photoRefs {
 		photoRef.Photo.Draw(config, scene, c, scales, source)
@@ -202,7 +202,7 @@ func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *R
 	counts <- count
 }
 
-func (scene *Scene) Draw(config *RenderConfig, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
 		solid.Draw(c, scales)
@@ -524,7 +524,7 @@ func (rect *Rect) GetPixelZoomDist(c *canvas.Context, size Size) float64 {
 	}
 }
 
-func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) (Bitmap, float64) {
+func (photo *Photo) getBestBitmap(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) (Bitmap, float64) {
 	var best *Thumbnail
 	originalSize := photo.GetSize(source)
 	originalPath := photo.GetPath(source)
@@ -534,8 +534,8 @@ func (photo *Photo) getBestBitmap(config *RenderConfig, scene *Scene, c *canvas.
 	}
 	// fmt.Printf("%4.0f %4.0f\n", photo.Original.Sprite.Rect.W, photo.Original.Sprite.Rect.H)
 	bestZoomDist := originalZoomDist
-	for i := range source.Thumbnails {
-		thumbnail := &source.Thumbnails[i]
+	for i := range source.Images.Thumbnails {
+		thumbnail := &source.Images.Thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
 		zoomDist := photo.Sprite.Rect.GetPixelZoomDist(c, thumbSize)
 		if zoomDist < bestZoomDist {
@@ -568,7 +568,7 @@ type BitmapAtZoom struct {
 	ZoomDist float64
 }
 
-func (photo *Photo) getBestBitmaps(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) []BitmapAtZoom {
+func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) []BitmapAtZoom {
 
 	originalSize := photo.GetSize(source)
 	originalPath := photo.GetPath(source)
@@ -577,7 +577,7 @@ func (photo *Photo) getBestBitmaps(config *RenderConfig, scene *Scene, c *canvas
 		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
 	}
 
-	bitmaps := make([]BitmapAtZoom, 1+len(source.Thumbnails))
+	bitmaps := make([]BitmapAtZoom, 1+len(source.Images.Thumbnails))
 	bitmaps[0] = BitmapAtZoom{
 		Bitmap: Bitmap{
 			Path:   originalPath,
@@ -586,8 +586,8 @@ func (photo *Photo) getBestBitmaps(config *RenderConfig, scene *Scene, c *canvas
 		ZoomDist: originalZoomDist,
 	}
 
-	for i := range source.Thumbnails {
-		thumbnail := &source.Thumbnails[i]
+	for i := range source.Images.Thumbnails {
+		thumbnail := &source.Images.Thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
 		bitmaps[1+i] = BitmapAtZoom{
 			Bitmap: Bitmap{
@@ -610,7 +610,7 @@ func (photo *Photo) getBestBitmaps(config *RenderConfig, scene *Scene, c *canvas
 	return bitmaps
 }
 
-func (photo *Photo) Draw(config *RenderConfig, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
+func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, Size{X: 1, Y: 1})
 	if pixelArea < config.MaxSolidPixelArea {
@@ -642,8 +642,8 @@ func (photo *Photo) Draw(config *RenderConfig, scene *Scene, c *canvas.Context, 
 			if config.DebugThumbnails {
 				text := ""
 
-				for i := range source.Thumbnails {
-					thumbnail := &source.Thumbnails[i]
+				for i := range source.Images.Thumbnails {
+					thumbnail := &source.Images.Thumbnails[i]
 					thumbnailPath := thumbnail.GetPath(photo.GetPath(source))
 					if source.Exists(thumbnailPath) {
 						text += thumbnail.Name + " "
@@ -680,7 +680,7 @@ func (scene *Scene) getRegionScale() float64 {
 	return scene.Bounds.W
 }
 
-func (scene *Scene) GetRegions(config *RenderConfig, bounds Rect) []Region {
+func (scene *Scene) GetRegions(config *Render, bounds Rect) []Region {
 	return scene.RegionSource.GetRegionsFromBounds(
 		bounds,
 		scene,

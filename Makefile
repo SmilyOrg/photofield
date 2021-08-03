@@ -11,6 +11,10 @@ dev:
 	CompileDaemon -exclude=ui/* -exclude=.git/* -include=*.yaml -command=./photofield -log-prefix=false
 .PHONY: dev
 
+export_grafana:
+	@hamara export --host=localhost:9091 --key=${GRAFANA_API_KEY} > docker/grafana/provisioning/datasources/default.yaml
+.PHONY: export_grafana
+
 ui:
 	cd ui && \
 	npm run dev

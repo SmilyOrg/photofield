@@ -21,7 +21,7 @@ type TimelineEvent struct {
 	Section    Section
 }
 
-func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *TimelineEvent, scene *Scene, source *storage.ImageSource) Rect {
+func LayoutTimelineEvent(config Layout, rect Rect, event *TimelineEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
@@ -71,7 +71,7 @@ func LayoutTimelineEvent(config LayoutConfig, rect Rect, event *TimelineEvent, s
 	return rect
 }
 
-func LayoutTimeline(config LayoutConfig, scene *Scene, source *storage.ImageSource) {
+func LayoutTimeline(config Layout, scene *Scene, source *storage.ImageSource) {
 
 	// log.Println("layout")
 

@@ -12,12 +12,20 @@ import (
 type ImageInfoSourceSqlite struct {
 	path    string
 	pool    *sqlitex.Pool
-	pending chan *ImageInfoSqlite
+	pending chan *ImageInfoWrite
 }
 
-type ImageInfoSqlite struct {
-	Path       string
-	AppendOnly bool
+type ImageInfoWriteType int32
+
+const (
+	AppendPath  ImageInfoWriteType = iota
+	UpdateMeta  ImageInfoWriteType = iota
+	UpdateColor ImageInfoWriteType = iota
+)
+
+type ImageInfoWrite struct {
+	Path string
+	Type ImageInfoWriteType
 	ImageInfo
 }
 
@@ -33,7 +41,7 @@ func NewImageInfoSourceSqlite() *ImageInfoSourceSqlite {
 		panic(err)
 	}
 
-	source.pending = make(chan *ImageInfoSqlite, 100)
+	source.pending = make(chan *ImageInfoWrite, 100)
 	go source.writePendingInfosSqlite()
 
 	return &source
@@ -72,15 +80,21 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 	conn := source.open()
 	defer conn.Close()
 
-	update := conn.Prep(`
-		INSERT INTO infos(path, width, height, datetime, color)
-		VALUES (?, ?, ?, ?, ?)
+	updateMeta := conn.Prep(`
+		INSERT INTO infos(path, width, height, datetime)
+		VALUES (?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			width=excluded.width,
 			height=excluded.height,
-			datetime=excluded.datetime,
+			datetime=excluded.datetime;`)
+	defer updateMeta.Finalize()
+
+	updateColor := conn.Prep(`
+		INSERT INTO infos(path, color)
+		VALUES (?, ?)
+		ON CONFLICT(path) DO UPDATE SET
 			color=excluded.color;`)
-	defer update.Finalize()
+	defer updateColor.Finalize()
 
 	insert := conn.Prep(`
 		INSERT OR IGNORE INTO infos(path)
@@ -107,7 +121,8 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 			inTransaction = true
 		}
 
-		if imageInfo.AppendOnly {
+		switch imageInfo.Type {
+		case AppendPath:
 			insert.BindText(1, imageInfo.Path)
 			_, err := insert.Step()
 			if err != nil {
@@ -118,18 +133,29 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 			if err != nil {
 				panic(err)
 			}
-		} else {
-			update.BindText(1, imageInfo.Path)
-			update.BindInt64(2, (int64)(imageInfo.Width))
-			update.BindInt64(3, (int64)(imageInfo.Height))
-			update.BindText(4, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
-			update.BindInt64(5, (int64)(imageInfo.Color))
-			_, err := update.Step()
+		case UpdateMeta:
+			updateMeta.BindText(1, imageInfo.Path)
+			updateMeta.BindInt64(2, (int64)(imageInfo.Width))
+			updateMeta.BindInt64(3, (int64)(imageInfo.Height))
+			updateMeta.BindText(4, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
+			_, err := updateMeta.Step()
 			if err != nil {
-				log.Printf("Unable to insert image info for %s: %s\n", imageInfo.Path, err.Error())
+				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
 				continue
 			}
-			err = update.Reset()
+			err = updateMeta.Reset()
+			if err != nil {
+				panic(err)
+			}
+		case UpdateColor:
+			updateColor.BindText(1, imageInfo.Path)
+			updateColor.BindInt64(2, (int64)(imageInfo.Color))
+			_, err := updateColor.Step()
+			if err != nil {
+				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
+				continue
+			}
+			err = updateColor.Reset()
 			if err != nil {
 				panic(err)
 			}
@@ -173,18 +199,11 @@ func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfo, bool) {
 	return imageInfo, true
 }
 
-func (source *ImageInfoSourceSqlite) Set(path string, info ImageInfo) error {
-	source.pending <- &ImageInfoSqlite{
+func (source *ImageInfoSourceSqlite) Write(path string, info ImageInfo, writeType ImageInfoWriteType) error {
+	source.pending <- &ImageInfoWrite{
 		Path:      path,
 		ImageInfo: info,
-	}
-	return nil
-}
-
-func (source *ImageInfoSourceSqlite) Add(path string) error {
-	source.pending <- &ImageInfoSqlite{
-		Path:       path,
-		AppendOnly: true,
+		Type:      writeType,
 	}
 	return nil
 }

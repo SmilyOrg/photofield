@@ -8,16 +8,37 @@ import (
 	"path/filepath"
 	"text/template"
 	"time"
+
+	"github.com/docker/go-units"
 )
+
+var MetricsNamespace = "pf"
 
 type TileRequestConfig struct {
 	Concurrency int  `json:"concurrency"`
 	LogStats    bool `json:"log_stats"`
 }
 
-type SystemConfig struct {
-	ExifToolCount int  `json:"exif_tool_count"`
-	SkipLoadInfo  bool `json:"skip_load_info"`
+type CacheConfig struct {
+	MaxSize string `json:"max_size"`
+}
+
+func (config *CacheConfig) MaxSizeBytes() int64 {
+	value, err := units.FromHumanSize(config.MaxSize)
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+type Caches struct {
+	Image CacheConfig
+}
+
+type System struct {
+	ExifToolCount int    `json:"exif_tool_count"`
+	SkipLoadInfo  bool   `json:"skip_load_info"`
+	Caches        Caches `json:"caches"`
 }
 
 type Size image.Point
@@ -33,6 +54,22 @@ func (info *ImageInfo) IsZero() bool {
 		info.Height == 0 &&
 		info.DateTime.IsZero() &&
 		info.Color == 0
+}
+
+func (info *ImageInfo) HasMeta() bool {
+	return info.Width != 0 ||
+		info.Height != 0 ||
+		!info.DateTime.IsZero()
+}
+
+func (info *ImageInfo) NeedsMeta() bool {
+	return info.Width == 0 ||
+		info.Height == 0 ||
+		info.DateTime.IsZero()
+}
+
+func (info *ImageInfo) NeedsColor() bool {
+	return info.Color == 0
 }
 
 func (info *ImageInfo) GetColor() color.RGBA {
@@ -66,23 +103,35 @@ const (
 	OriginalSize ThumbnailSizeType = iota
 )
 
-type Thumbnail struct {
-	Name         string
-	PathTemplate *template.Template
-	SizeType     ThumbnailSizeType
-	Size         Size
+type ThumbnailSize struct {
 }
 
-func NewThumbnail(name string, pathTemplate string, sizeType ThumbnailSizeType, size Size) Thumbnail {
-	template, err := template.New("").Parse(pathTemplate)
+type Thumbnail struct {
+	Name            string `json:"name"`
+	PathTemplateRaw string `json:"path"`
+	PathTemplate    *template.Template
+
+	SizeTypeRaw string `json:"fit"`
+	SizeType    ThumbnailSizeType
+
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+func (thumbnail *Thumbnail) Init() {
+	var err error
+	thumbnail.PathTemplate, err = template.New("").Parse(thumbnail.PathTemplateRaw)
 	if err != nil {
 		panic(err)
 	}
-	return Thumbnail{
-		Name:         name,
-		PathTemplate: template,
-		SizeType:     sizeType,
-		Size:         size,
+
+	switch thumbnail.SizeTypeRaw {
+	case "INSIDE":
+		thumbnail.SizeType = FitInside
+	case "OUTSIDE":
+		thumbnail.SizeType = FitOutside
+	default:
+		thumbnail.SizeType = OriginalSize
 	}
 }
 
@@ -105,7 +154,7 @@ func (thumbnail *Thumbnail) GetPath(originalPath string) string {
 }
 
 func (thumbnail *Thumbnail) Fit(originalSize Size) Size {
-	thumbWidth, thumbHeight := float64(thumbnail.Size.X), float64(thumbnail.Size.Y)
+	thumbWidth, thumbHeight := float64(thumbnail.Width), float64(thumbnail.Height)
 	thumbRatio := thumbWidth / thumbHeight
 	originalWidth, originalHeight := float64(originalSize.X), float64(originalSize.Y)
 	originalRatio := originalWidth / originalHeight
