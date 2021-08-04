@@ -3,7 +3,6 @@ module photofield
 go 1.16
 
 require (
-	crawshaw.io/sqlite v0.3.2
 	github.com/EdlinOrg/prominentcolor v1.0.0
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
 	github.com/buger/jsonparser v1.0.0 // indirect
@@ -13,8 +12,7 @@ require (
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/felixge/fgprof v0.9.1
 	github.com/goccy/go-yaml v1.7.17
-	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/pprof v0.0.0-20210226084205-cbba55b83ad5 // indirect
+	github.com/golang-migrate/migrate/v4 v4.15.0-beta.1
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/mux v1.8.0
 	github.com/gosimple/slug v1.10.0
@@ -36,8 +34,6 @@ require (
 	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52
-	golang.org/x/text v0.3.5 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	zombiezen.com/go/sqlite v0.5.0
 )

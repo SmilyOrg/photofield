@@ -1,6 +1,7 @@
 package photofield
 
 import (
+	"embed"
 	"errors"
 	"fmt"
 	"image"
@@ -76,7 +77,7 @@ type loadingImage struct {
 	loaded   chan struct{}
 }
 
-func NewImageSource(system System, config ImageSourceConfig) *ImageSource {
+func NewImageSource(system System, config ImageSourceConfig, migrations embed.FS) *ImageSource {
 	var err error
 	source := ImageSource{}
 	source.ImageSourceConfig = &config
@@ -130,7 +131,7 @@ func NewImageSource(system System, config ImageSourceConfig) *ImageSource {
 	AddRistrettoMetrics("image_cache", source.images)
 
 	source.infoCache = NewImageInfoSourceCache()
-	source.infoDatabase = NewImageInfoSourceSqlite()
+	source.infoDatabase = NewImageInfoSourceSqlite(migrations)
 
 	source.fileExists, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).

@@ -1,12 +1,19 @@
 package photofield
 
 import (
+	"embed"
+	"fmt"
 	"log"
+	"net/http"
 	. "photofield/internal"
 	"time"
 
-	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
+	"zombiezen.com/go/sqlite"
+	"zombiezen.com/go/sqlite/sqlitex"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
+	"github.com/golang-migrate/migrate/v4/source/httpfs"
 )
 
 type ImageInfoSourceSqlite struct {
@@ -29,13 +36,14 @@ type ImageInfoWrite struct {
 	ImageInfo
 }
 
-func NewImageInfoSourceSqlite() *ImageInfoSourceSqlite {
+func NewImageInfoSourceSqlite(migrations embed.FS) *ImageInfoSourceSqlite {
 
 	var err error
 
 	source := ImageInfoSourceSqlite{}
 	source.path = "data/photofield.cache.db"
-	source.ensureTable()
+	source.migrate(migrations)
+
 	source.pool, err = sqlitex.Open(source.path, 0, 10)
 	if err != nil {
 		panic(err)
@@ -55,25 +63,32 @@ func (source *ImageInfoSourceSqlite) open() *sqlite.Conn {
 	return conn
 }
 
-func (source *ImageInfoSourceSqlite) ensureTable() {
-	conn := source.open()
-	defer conn.Close()
+func (source *ImageInfoSourceSqlite) migrate(migrations embed.FS) {
 
-	err := sqlitex.ExecScript(conn, `
-		CREATE TABLE IF NOT EXISTS "infos" (
-			"path" text,
-			"width" integer,
-			"height" integer,
-			"datetime" datetime,
-			"color" integer,
-			PRIMARY KEY ("path")
-		);
-	`)
+	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations")
 	if err != nil {
 		panic(err)
 	}
+	m, err := migrate.NewWithSourceInstance(
+		"migrations",
+		dbsource,
+		fmt.Sprintf("sqlite://%v", source.path),
+	)
+	if err != nil {
+		panic(err)
+	}
+	err = m.Up()
+	if err != migrate.ErrNoChange {
+		panic(err)
+	}
 
-	// CREATE UNIQUE INDEX uix_infos_path ON infos(path);
+	serr, derr := m.Close()
+	if serr != nil {
+		panic(serr)
+	}
+	if derr != nil {
+		panic(derr)
+	}
 }
 
 func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {

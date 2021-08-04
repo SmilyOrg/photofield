@@ -15,6 +15,18 @@ export_grafana:
 	@hamara export --host=localhost:9091 --key=${GRAFANA_API_KEY} > docker/grafana/provisioning/datasources/default.yaml
 .PHONY: export_grafana
 
+db_new:
+	migrate create -ext sql -dir db/migrations -seq $(name)
+.PHONY: db_new
+
+db_up:
+	migrate -database sqlite://data/photofield.cache.db -path db/migrations up
+.PHONY: db_new
+
+db_down:
+	migrate -database sqlite://data/photofield.cache.db -path db/migrations down
+.PHONY: db_new
+
 ui:
 	cd ui && \
 	npm run dev

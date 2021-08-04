@@ -1,10 +1,12 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/png"
 	"io/ioutil"
 	"math"
@@ -41,12 +43,17 @@ import (
 	"github.com/tdewolff/canvas/rasterizer"
 
 	"github.com/goccy/go-yaml"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 //go:embed defaults.yaml
 var defaultsYaml []byte
 var defaults AppConfig
+
+//go:embed db/migrations
+var migrations embed.FS
 
 var startupTime time.Time
 
@@ -64,6 +71,21 @@ var indexTasks sync.Map
 var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
 var tileRequestsMutex sync.Mutex
+
+var httpLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	Namespace: MetricsNamespace,
+	Name:      "http_latency",
+}, []string{"path"})
+
+func instrumentationMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		route := mux.CurrentRoute(r)
+		path, _ := route.GetPathTemplate()
+		timer := prometheus.NewTimer(httpLatency.WithLabelValues(path))
+		next.ServeHTTP(rw, r)
+		timer.ObserveDuration()
+	})
+}
 
 type IndexTask struct {
 	CollectionId string `json:"collection_id"`
@@ -84,9 +106,9 @@ type TileRequest struct {
 	Done     chan struct{}
 }
 
-func drawTile(c *canvas.Context, config *Render, scene *Scene, zoom int, x int, y int) {
+func drawTile(c *canvas.Context, render *Render, scene *Scene, zoom int, x int, y int) {
 
-	tileSize := float64(config.TileSize)
+	tileSize := float64(render.TileSize)
 	zoomPower := 1 << zoom
 
 	tx := float64(x) * tileSize
@@ -110,10 +132,8 @@ func drawTile(c *canvas.Context, config *Render, scene *Scene, zoom int, x int, 
 
 	c.ResetView()
 
-	backgroundStyle := canvas.Style{
-		FillColor: canvas.White,
-	}
-	c.RenderPath(canvas.Rectangle(tileSize, tileSize), backgroundStyle, c.View())
+	img := render.CanvasImage
+	draw.Draw(img, img.Bounds(), &image.Uniform{canvas.White}, image.Point{}, draw.Src)
 
 	matrix := canvas.Identity.
 		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
@@ -123,7 +143,7 @@ func drawTile(c *canvas.Context, config *Render, scene *Scene, zoom int, x int, 
 
 	c.SetFillColor(canvas.Black)
 
-	scene.Draw(config, c, scales, imageSource)
+	scene.Draw(render, c, scales, imageSource)
 
 }
 
@@ -799,6 +819,7 @@ func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request
 func main() {
 
 	startupTime = time.Now()
+
 	if err := yaml.Unmarshal(defaultsYaml, &defaults); err != nil {
 		panic(err)
 	}
@@ -813,7 +834,7 @@ func main() {
 	defaultSceneConfig.Render = appConfig.Render
 	tileRequestConfig = appConfig.TileRequests
 
-	imageSource = NewImageSource(appConfig.System, appConfig.Media)
+	imageSource = NewImageSource(appConfig.System, appConfig.Media, migrations)
 	defer imageSource.Close()
 	sceneSource = NewSceneSource()
 
@@ -860,6 +881,7 @@ func main() {
 	r := mux.NewRouter()
 
 	api := r.PathPrefix(apiPrefix).Subrouter()
+	api.Use(instrumentationMiddleware)
 	api.Handle("/metrics", promhttp.Handler())
 	api.HandleFunc("/index-tasks", indexTasksHandler)
 	api.HandleFunc("/scenes", scenesHandler)

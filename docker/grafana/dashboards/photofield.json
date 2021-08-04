@@ -15,10 +15,86 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
-  "iteration": 1628020885863,
+  "iteration": 1628090892247,
   "links": [],
   "panels": [
+    {
+      "cards": {
+        "cardPadding": 0,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "#FADE2A",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.5,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": null,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 145,
+      "legend": {
+        "show": false
+      },
+      "maxDataPoints": 100,
+      "pluginVersion": "8.0.6",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(increase(pf_http_latency_bucket{path=\"$path\"}[10s])) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Latency for $path",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "s",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 143,
+      "title": "Loading",
+      "type": "row"
+    },
     {
       "datasource": null,
       "fieldConfig": {
@@ -48,7 +124,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 9
       },
       "id": 93,
       "options": {
@@ -106,7 +182,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 0
+        "y": 9
       },
       "id": 109,
       "options": {
@@ -165,7 +241,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 0
+        "y": 9
       },
       "id": 126,
       "options": {
@@ -204,7 +280,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 14
       },
       "id": 56,
       "title": "System",
@@ -239,7 +315,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 6
+        "y": 15
       },
       "id": 38,
       "options": {
@@ -299,7 +375,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 6
+        "y": 15
       },
       "id": 25,
       "options": {
@@ -355,7 +431,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 15
       },
       "id": 33,
       "options": {
@@ -424,7 +500,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 11
+        "y": 20
       },
       "id": 37,
       "options": {
@@ -492,7 +568,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 11
+        "y": 20
       },
       "id": 35,
       "options": {
@@ -556,7 +632,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 25
       },
       "id": 75,
       "options": {
@@ -624,7 +700,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 25
       },
       "id": 92,
       "options": {
@@ -665,7 +741,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 31
       },
       "id": 12,
       "panels": [
@@ -1116,7 +1192,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": [
             "All"
           ],
@@ -1166,7 +1242,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": [
             "All"
           ],
@@ -1202,6 +1278,33 @@
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "/tiles",
+          "value": "/tiles"
+        },
+        "datasource": null,
+        "definition": "label_values(path)",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "",
+        "multi": false,
+        "name": "path",
+        "options": [],
+        "query": {
+          "query": "label_values(path)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
       }
     ]
   },
@@ -1228,5 +1331,5 @@
   "timezone": "",
   "title": "Photofield",
   "uid": "9sQ5hGGnk",
-  "version": 41
+  "version": 2
 }
