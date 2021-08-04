@@ -594,7 +594,8 @@ func (source *ImageSource) GetImageInfo(path string) ImageInfo {
 	startTime = time.Now()
 	info, found = source.infoDatabase.Get(path)
 	dbGetMs := time.Since(startTime).Milliseconds()
-	if found {
+	needsMeta := info.NeedsMeta()
+	if found && !needsMeta {
 		startTime = time.Now()
 		source.infoCache.Set(path, info)
 		cacheSetMs := time.Since(startTime).Milliseconds()
@@ -604,12 +605,10 @@ func (source *ImageSource) GetImageInfo(path string) ImageInfo {
 	}
 
 	startTime = time.Now()
-	needsMeta := info.NeedsMeta()
 	needsColor := info.NeedsColor()
 	if needsMeta || needsColor {
 		id := source.GetImageId(path)
 		if info.NeedsMeta() {
-			log.Printf("needs meta %v %v %v\n", info.Width, info.Height, info.DateTime)
 			if source.loadQueueMeta != nil {
 				source.loadQueueMeta.Append(id)
 			}
@@ -622,7 +621,7 @@ func (source *ImageSource) GetImageInfo(path string) ImageInfo {
 	}
 	addPendingMs := time.Since(startTime).Milliseconds()
 
-	if found {
+	if found && !needsMeta {
 		return info
 	}
 

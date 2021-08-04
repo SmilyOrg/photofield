@@ -78,7 +78,7 @@ func (source *ImageInfoSourceSqlite) migrate(migrations embed.FS) {
 		panic(err)
 	}
 	err = m.Up()
-	if err != migrate.ErrNoChange {
+	if err != nil && err != migrate.ErrNoChange {
 		panic(err)
 	}
 
