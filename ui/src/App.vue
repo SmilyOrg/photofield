@@ -11,24 +11,6 @@
       <span class="title" @click="onTitleClick()">
         {{ collection?.name || "Photos" }}
       </span>
-      
-      <span class="collection-menu">
-        <ui-button
-          class="files"
-          v-if="fileCount != null"
-          @click="collectionMenuOpen = !collectionMenuOpen"
-        >
-          {{ indexTasks?.items[0]?.count || fileCount }} files
-          <template #after>
-            <ui-icon>expand_more</ui-icon>
-          </template>
-        </ui-button>
-          <ui-menu
-            v-model="collectionMenuOpen"
-          >
-            <ui-menuitem @click="reindex()">Reindex Collection</ui-menuitem>
-          </ui-menu>
-      </span>
 
       <template #toolbar="{ toolbarItemClass }">
         <div class="settings" :class="{ hidden: !settingsExpanded, toolbarItemClass }">
@@ -78,37 +60,42 @@
         ></ui-spinner>
       </template>
     </ui-top-app-bar>
-    <ui-drawer type="modal" nav-id="menu" v-model="drawer">
+    <ui-drawer class="sidebar" type="modal" nav-id="menu" v-model="drawer">
+      <template v-if="collection">
+        <ui-drawer-header>
+          <ui-drawer-title>{{ collection.name }}</ui-drawer-title>
+          <ui-drawer-subtitle>
+            {{ indexTasks?.items[0]?.count || fileCount }} files
+          </ui-drawer-subtitle>
+        </ui-drawer-header>
+        <ui-button @click="reindex()">Reindex Collection</ui-button>
+        <ui-button @click="simulate()">
+          Simulate
+        </ui-button>
+        <ui-button @click="refreshCache()">
+          Refresh Cache
+        </ui-button>
+      </template>
+      <ui-divider></ui-divider>
       <ui-drawer-header>
         <ui-drawer-title>Photos</ui-drawer-title>
         <ui-drawer-subtitle>
           {{ collections.length }} collections
         </ui-drawer-subtitle>
       </ui-drawer-header>
-      <ui-divider></ui-divider>
-      <ui-drawer-content>
+      <ui-drawer-content v-if="collections.length > 0">
         <ui-nav>
           <ui-nav-item
-            v-for="collection in collections"
-            :key="collection.id"
-            :href="'/collections/' + collection.id"
+            v-for="c in collections"
+            :key="c.id"
+            :href="'/collections/' + c.id"
+            :active="c.id == collection?.id"
           >
-            {{ collection.name }}
+            {{ c.name }}
           </ui-nav-item>
-          <ui-item>
-            <ui-button @click="simulate()">
-              Simulate
-            </ui-button>
-          </ui-item>
-          <ui-item>
-            <ui-button @click="refreshCache()">
-              Refresh Cache
-            </ui-button>
-          </ui-item>
         </ui-nav>
       </ui-drawer-content>
     </ui-drawer>
-    <ui-drawer-backdrop></ui-drawer-backdrop>
     <div id="content">
       <div class="loading-overlay" :class="{ active: loading }">
         <ui-spinner
@@ -230,6 +217,9 @@ export default {
     },
     onImmersive(immersive) {
       this.immersive = immersive;
+      if (immersive) {
+        this.settingsExpanded = false;
+      }
     },
     onTasks(tasks) {
       this.tasks = tasks;
@@ -242,13 +232,18 @@ export default {
         this.$bus.off("simulate-done", done);
       }
       this.$bus.on("simulate-done", done);
-      this.$bus.emit("simulate");
+      this.$bus.emit("simulate-run");
     }
   }
 }
 </script>
 
 <style scoped>
+
+.sidebar button {
+    padding: 20px 0;
+    margin: 2px 0;
+}
 
 .top-bar {
   --mdc-theme-primary: white;
@@ -281,15 +276,14 @@ button {
 
 .settings-toggle.expanded {
   transform: rotate(90deg);
-}
-
-.collection-menu {
-  position: fixed;
+  width: max-content;
 }
 
 .settings {
   transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   opacity: 1;
+  position: absolute;
+  width: min-content;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -298,6 +292,8 @@ button {
   border-radius: 10px;
   justify-content: center;
   margin-top: -8px;
+  margin-right: 80px;
+  padding-bottom: 4px;
 }
 
 .settings > * {
@@ -306,6 +302,7 @@ button {
 
 .settings.hidden {
   opacity: 0;
+  pointer-events: none;
   transform: translateX(40px);
 }
 

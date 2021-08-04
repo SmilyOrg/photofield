@@ -183,7 +183,7 @@ export default {
     // this.$refs.scroller.addEventListener("scroll", this.onScroll);
     this.$emit("tasks", this.tasks);
     this.$bus.on("home", this.navigateExit);
-    this.$bus.on("simulate", this.simulate);
+    this.$bus.on("simulate-run", this.simulate);
     if (this.fullpage) this.addFullpageListeners();
     // this.simulate();
   },
@@ -191,7 +191,7 @@ export default {
     clearInterval(this.demoInterval);
     this.removeResizeObserver();
     this.$bus.off("home", this.navigateExit);
-    this.$bus.off("simulate", this.simulate);
+    this.$bus.off("simulate-run", this.simulate);
     if (this.fullpage) this.removeFullpageListeners();
   },
   computed: {
@@ -459,6 +459,8 @@ export default {
       if (quick) {
         this.nativeScroll = false;
         await nextTick();
+        const pos = this.$refs.viewer.elementToViewportCoordinates(down);
+        this.onClick(pos);
         // console.log("redisp", down, up)
         // this.redispatchEventToViewer(down);
         // this.redispatchEventToViewer(up);
