@@ -1,7 +1,7 @@
 ###
 # Server
 ###
-FROM golang:1.14-alpine AS go-builder
+FROM golang:1.16-alpine AS go-builder
 RUN apk add --no-cache gcc libffi-dev musl-dev libjpeg-turbo-dev
 
 WORKDIR /go/src/app
@@ -12,7 +12,9 @@ RUN go mod download
 
 # build
 COPY *.go ./
+COPY defaults.yaml ./
 COPY internal ./internal
+COPY db ./db
 # RUN go install -tags libjpeg .
 RUN go install .
 
@@ -21,7 +23,7 @@ RUN go install .
 ###
 # Client
 ###
-FROM node:14-alpine3.12 as node-builder
+FROM node:14-alpine3.14 as node-builder
 WORKDIR /ui
 
 # install deps
@@ -37,7 +39,7 @@ RUN npm run build
 ###
 # Runtime
 ###
-FROM alpine:3.12
+FROM alpine:3.14
 RUN apk add --no-cache exiftool>12.06-r0 libjpeg-turbo
 
 COPY --from=go-builder /go/bin/ /app
