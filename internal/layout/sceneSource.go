@@ -78,70 +78,63 @@ func getSceneCost(scene *Scene) int64 {
 	return structCost + photosCost + solidsCost + textsCost
 }
 
-func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource, cacheKey string) *Scene {
-	// fmt.Printf("scenes %3.0f%% hit ratio, cached %3d MiB, added %d MiB, evicted %d MiB, hits %d, misses %d\n",
-	// 	source.scenes.Metrics.Ratio()*100,
-	// 	(source.scenes.Metrics.CostAdded()-source.scenes.Metrics.CostEvicted())/1024/1024,
-	// 	source.scenes.Metrics.CostAdded()/1024/1024,
-	// 	source.scenes.Metrics.CostEvicted()/1024/1024,
-	// 	source.scenes.Metrics.Hits(),
-	// 	source.scenes.Metrics.Misses())
+func (source *SceneSource) loadScene(config SceneConfig, imageSource *ImageSource) Scene {
+	scene := source.DefaultScene
+	ids := source.getImageIds(config.Collection, imageSource)
+	scene.AddPhotosFromIdSlice(ids)
 
-	key := fmt.Sprintf("%v %v %v", getCollectionKey(config.Collection), getLayoutKey(config.Layout), cacheKey)
+	layoutFinished := ElapsedWithCount("layout", len(ids))
+	switch config.Layout.Type {
+	case "timeline":
+		LayoutTimeline(config.Layout, &scene, imageSource)
 
-	tries := 1000
-	for try := 0; try < tries; try++ {
-		value, found := source.scenes.Get(key)
-		if found {
-			return value.(*Scene)
+	case "album":
+		LayoutAlbum(config.Layout, &scene, imageSource)
+
+	case "square":
+		LayoutSquare(&scene, imageSource)
+
+	case "wall":
+		LayoutWall(config.Layout, &scene, imageSource)
+
+	default:
+		LayoutAlbum(config.Layout, &scene, imageSource)
+	}
+	layoutFinished()
+
+	if scene.RegionSource == nil {
+		scene.RegionSource = &PhotoRegionSource{
+			imageSource: imageSource,
 		}
-
-		loading := &loadingScene{}
-		loading.loaded = make(chan struct{})
-
-		stored, loaded := source.scenesLoading.LoadOrStore(key, loading)
-		if loaded {
-			loading = stored.(*loadingScene)
-			<-loading.loaded
-			return loading.scene
-		}
-
-		scene := source.DefaultScene
-		ids := source.getImageIds(config.Collection, imageSource)
-		scene.AddPhotosFromIdSlice(ids)
-
-		layoutFinished := ElapsedWithCount("layout", len(ids))
-		switch config.Layout.Type {
-		case "timeline":
-			LayoutTimeline(config.Layout, &scene, imageSource)
-
-		case "album":
-			LayoutAlbum(config.Layout, &scene, imageSource)
-
-		case "square":
-			LayoutSquare(&scene, imageSource)
-
-		case "wall":
-			LayoutWall(config.Layout, &scene, imageSource)
-
-		default:
-			LayoutAlbum(config.Layout, &scene, imageSource)
-		}
-		layoutFinished()
-
-		if scene.RegionSource == nil {
-			scene.RegionSource = &PhotoRegionSource{
-				imageSource: imageSource,
-			}
-		}
-
-		log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
-
-		source.scenes.Set(key, &scene, getSceneCost(&scene))
-		loading.scene = &scene
-		close(loading.loaded)
-		source.scenesLoading.Delete(key)
 	}
 
-	panic(fmt.Sprintf("Unable to get scene after %v tries", tries))
+	log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
+	return scene
+}
+
+func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource, cacheKey string) *Scene {
+	key := fmt.Sprintf("%v %v %v", getCollectionKey(config.Collection), getLayoutKey(config.Layout), cacheKey)
+
+	value, found := source.scenes.Get(key)
+	if found {
+		return value.(*Scene)
+	}
+
+	loading := &loadingScene{}
+	loading.loaded = make(chan struct{})
+
+	stored, loaded := source.scenesLoading.LoadOrStore(key, loading)
+	if loaded {
+		loading = stored.(*loadingScene)
+		<-loading.loaded
+		return loading.scene
+	}
+
+	scene := source.loadScene(config, imageSource)
+
+	source.scenes.Set(key, &scene, getSceneCost(&scene))
+	loading.scene = &scene
+	close(loading.loaded)
+	source.scenesLoading.Delete(key)
+	return &scene
 }
