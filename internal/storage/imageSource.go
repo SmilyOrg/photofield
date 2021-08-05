@@ -173,11 +173,8 @@ func (source *ImageSource) Close() {
 }
 
 func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan string, wg *sync.WaitGroup) error {
-	abs_path, error := filepath.Abs(dir)
-	if error != nil {
-		return error
-	}
-	for path := range source.infoDatabase.List(abs_path, maxPhotos) {
+	dir = filepath.FromSlash(dir)
+	for path := range source.infoDatabase.List(dir, maxPhotos) {
 		paths <- path
 	}
 	wg.Done()
@@ -185,12 +182,17 @@ func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan stri
 }
 
 func (source *ImageSource) IndexImages(dir string, maxPhotos int, counter chan<- int) {
+	info := ImageInfo{
+		DateTime: time.Now(),
+	}
+	dir = filepath.FromSlash(dir)
 	for path := range source.walkImages(dir, maxPhotos) {
-		source.infoDatabase.Write(path, ImageInfo{}, AppendPath)
+		source.infoDatabase.Write(path, info, AppendPath)
 		// Uncomment to test slow indexing
 		// time.Sleep(10 * time.Millisecond)
 		counter <- 1
 	}
+	source.infoDatabase.DeactivateOlderThan(dir, info.DateTime)
 }
 
 func (source *ImageSource) walkImages(dir string, maxPhotos int) <-chan string {

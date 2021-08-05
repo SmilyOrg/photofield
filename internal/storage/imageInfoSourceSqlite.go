@@ -96,12 +96,12 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 	defer conn.Close()
 
 	updateMeta := conn.Prep(`
-		INSERT INTO infos(path, width, height, datetime)
+		INSERT INTO infos(path, width, height, created_at)
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			width=excluded.width,
 			height=excluded.height,
-			datetime=excluded.datetime;`)
+			created_at=excluded.created_at;`)
 	defer updateMeta.Finalize()
 
 	updateColor := conn.Prep(`
@@ -111,11 +111,13 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 			color=excluded.color;`)
 	defer updateColor.Finalize()
 
-	insert := conn.Prep(`
-		INSERT OR IGNORE INTO infos(path)
-		VALUES (?)
-	`)
-	defer insert.Finalize()
+	appendPath := conn.Prep(`
+		INSERT INTO infos(path, indexed_at, active)
+		VALUES (?, ?, 1)
+		ON CONFLICT(path) DO UPDATE SET
+			indexed_at=excluded.indexed_at,
+			active=1;`)
+	defer appendPath.Finalize()
 
 	lastCommit := time.Now()
 	inTransaction := false
@@ -138,13 +140,14 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 
 		switch imageInfo.Type {
 		case AppendPath:
-			insert.BindText(1, imageInfo.Path)
-			_, err := insert.Step()
+			appendPath.BindText(1, imageInfo.Path)
+			appendPath.BindText(2, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
+			_, err := appendPath.Step()
 			if err != nil {
 				log.Printf("Unable to insert path %s: %s\n", imageInfo.Path, err.Error())
 				continue
 			}
-			err = insert.Reset()
+			err = appendPath.Reset()
 			if err != nil {
 				panic(err)
 			}
@@ -194,7 +197,7 @@ func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfo, bool) {
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-		SELECT width, height, datetime, color FROM infos
+		SELECT width, height, created_at, color FROM infos
 		WHERE path = ?;`)
 	defer stmt.Finalize()
 
@@ -223,6 +226,24 @@ func (source *ImageInfoSourceSqlite) Write(path string, info ImageInfo, writeTyp
 	return nil
 }
 
+func (source *ImageInfoSourceSqlite) DeactivateOlderThan(dir string, datetime time.Time) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+		UPDATE infos
+		SET active = 0
+		WHERE path LIKE ? AND (indexed_at < ? OR indexed_at ISNULL);`)
+	defer stmt.Finalize()
+
+	stmt.BindText(1, dir+"%")
+	stmt.BindText(2, datetime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
+	_, err := stmt.Step()
+	if err != nil {
+		log.Printf("Unable to deactivate indexed files in %s: %s\n", dir, err.Error())
+	}
+}
+
 func (source *ImageInfoSourceSqlite) List(dir string, limit int) <-chan string {
 	out := make(chan string)
 	go func() {
@@ -234,7 +255,7 @@ func (source *ImageInfoSourceSqlite) List(dir string, limit int) <-chan string {
 		sql := `
 			SELECT path
 			FROM infos
-			WHERE path LIKE ?
+			WHERE path LIKE ? AND active = 1
 		`
 
 		if limit > 0 {

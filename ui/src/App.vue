@@ -127,9 +127,6 @@ import { useRouter, useRoute } from 'vue-router'
 import NaturalViewer from './components/NaturalViewer.vue'
 import { updateUntilDone } from './utils';
 import { computed, watch } from '@vue/runtime-core';
-import * as OverlayScrollbars from "overlayscrollbars";
-import "./scrollbar-timeline-ext.js";
-import "./scrollbar-timeline-ext.css";
 
 export default {
   name: 'App',
@@ -215,11 +212,12 @@ export default {
     },
     async reindex() {
       await reindexCollection(this.collection?.id);
-      updateUntilDone(
+      await updateUntilDone(
         this.indexTasksMutate,
         () => this.indexTasks?.items?.length > 0,
         100
-      )
+      );
+      this.refreshCache();
     },
     onTitleClick() {
       this.$bus.emit("home");

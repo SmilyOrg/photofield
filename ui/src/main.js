@@ -10,6 +10,10 @@ import "overlayscrollbars/css/OverlayScrollbars.min.css";
 import "./os-theme-minimal-dark.css";
 import "./os-theme-customizations.css";
 
+import "overlayscrollbars";
+import "./scrollbar-timeline-ext.js";
+import "./scrollbar-timeline-ext.css";
+
 const app = createApp(App);
 
 app.use(BalmUI);

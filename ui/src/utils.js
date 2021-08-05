@@ -1,11 +1,16 @@
-export function updateUntilDone(updateFn, continueFn, intervalMs) {
-  if (intervalMs === undefined) intervalMs = 1000;
-  async function update() {
-    await updateFn();
-    if (!continueFn()) return;
-    setTimeout(update, intervalMs);
-  }
-  update();
+export async function updateUntilDone(updateFn, continueFn, intervalMs) {
+  return new Promise(resolve => {
+    if (intervalMs === undefined) intervalMs = 1000;
+    async function update() {
+      await updateFn();
+      if (!continueFn()) {
+        resolve();
+        return;
+      }
+      setTimeout(update, intervalMs);
+    }
+    update();
+  })
 }
 
 export function throttle(callback, delay) {
