@@ -111,6 +111,7 @@
         :cacheKey="cacheKey"
         :class="{ simulating }"
         :fullpage="true"
+        :scrollbar="scrollbar"
         @load="onLoad"
         @tasks="onTasks"
         @immersive="onImmersive"
@@ -126,6 +127,9 @@ import { useRouter, useRoute } from 'vue-router'
 import NaturalViewer from './components/NaturalViewer.vue'
 import { updateUntilDone } from './utils';
 import { computed, watch } from '@vue/runtime-core';
+import * as OverlayScrollbars from "overlayscrollbars";
+import "./scrollbar-timeline-ext.js";
+import "./scrollbar-timeline-ext.css";
 
 export default {
   name: 'App',
@@ -157,6 +161,7 @@ export default {
       immersive: false,
       collections: [],
       collectionMenuOpen: false,
+      scrollbar: null,
     }
   },
   setup(props) {
@@ -170,6 +175,13 @@ export default {
     }
   },
   async mounted() {
+    this.scrollbar = OverlayScrollbars(document.querySelectorAll('body'), {
+      className: "os-theme-minimal-dark",
+      scrollbars: {
+        clickScrolling: true,
+      },
+    });
+    this.scrollbar.addExt("timeline");
     this.cacheKey = localStorage.cacheKey || "";
     this.collections = await getCollections();
     if (!this.$route.params.collectionId) {
@@ -220,6 +232,11 @@ export default {
       if (immersive) {
         this.settingsExpanded = false;
       }
+      this.scrollbar.options({
+        scrollbars: {
+          visibility: immersive ? "hidden" : "auto",
+        },
+      })
     },
     onTasks(tasks) {
       this.tasks = tasks;

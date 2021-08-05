@@ -143,6 +143,7 @@ export default {
     },
 
     elementToViewportCoordinates(eventOrPoint) {
+      if (!this.viewer) return null;
       const point =
         eventOrPoint instanceof OpenSeadragon.Point ? eventOrPoint :
         new OpenSeadragon.Point(eventOrPoint.x, eventOrPoint.y);

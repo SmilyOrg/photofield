@@ -60,6 +60,7 @@ type PhotoRegionData struct {
 	Video      bool              `json:"video"`
 	Width      int               `json:"width"`
 	Height     int               `json:"height"`
+	CreatedAt  string            `json:"created_at"`
 	Thumbnails []RegionThumbnail `json:"thumbnails"`
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
 }
@@ -83,7 +84,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, s
 		}
 	}
 
-	size := photo.GetSize(source)
+	info := regionSource.imageSource.GetImageInfo(originalPath)
 
 	return Region{
 		Id:     id,
@@ -94,8 +95,9 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, s
 			Filename:   filepath.Base(originalPath),
 			Extension:  strings.ToLower(filepath.Ext(originalPath)),
 			Video:      source.IsSupportedVideo(originalPath),
-			Width:      size.X,
-			Height:     size.Y,
+			Width:      info.Width,
+			Height:     info.Height,
+			CreatedAt:  info.DateTime.Format(time.RFC3339),
 			Thumbnails: thumbnails,
 		},
 	}

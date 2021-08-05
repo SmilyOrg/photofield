@@ -67,12 +67,14 @@
 import { computed, nextTick, ref, toRef, watch, watchEffect } from 'vue';
 import { debounce, throttle, waitDebounce } from '../utils';
 import TileViewer from './TileViewer.vue';
-import { getCollection, getRegion, getRegions, getScene, useCollectionTask, useRegionTask, useSceneTask } from '../api';
+import { getCollection, getRegion, getRegions, getScene, useCollectionTask, useRegionsTask, useRegionTask, useSceneTask } from '../api';
 import { timeout, useTask, useTaskGroup } from "vue-concurrency";
 import PageTitle from './PageTitle.vue';
 import Simulation from '../simulation';
 import ContextMenu from '@overcoder/vue-context-menu';
 import RegionMenu from './RegionMenu.vue';
+import dateParseISO from 'date-fns/parseISO';
+import dateFormat from 'date-fns/format';
 
 export default {
 
@@ -82,12 +84,13 @@ export default {
     "cacheKey",
     "settings",
     "fullpage",
+    "scrollbar",
   ],
 
   emits: {
     load: null,
     tasks: null,
-    immersive: Boolean,
+    immersive: immersive => typeof immersive == "boolean",
   },
 
   components: {
@@ -155,6 +158,20 @@ export default {
       });
     }).restartable();
 
+    const scrollbarLabel = ref("...");
+    const regionsTask = useRegionsTask();
+    const visibleRegionsTask = useTask(function*(_, view, sceneParams) {
+      yield timeout(200);
+      const regions = yield regionsTask.perform(view.x, view.y, view.w, view.h, sceneParams);
+      if (regions && regions.length > 0) {
+        const region = regions[0];
+        const date = dateParseISO(region.data?.created_at);
+        if (date) {
+          scrollbarLabel.value = dateFormat(date, "d MMM yyyy");
+        }
+      }
+    }).keepLatest();
+
     const tasks = useTaskGroup({
       collectionTask,
       sceneTask,
@@ -170,6 +187,8 @@ export default {
       region,
       regionSeekId,
       regionSeekApplyTask,
+      visibleRegionsTask,
+      scrollbarLabel,
       tasks,
     }
   },
@@ -252,6 +271,19 @@ export default {
         removeFullpageListeners();
       }
     },
+    scrollbar: {
+      immediate: true,
+      handler(newScrollbar, oldScrollbar) {
+        this.detachScrollbar(oldScrollbar);
+        this.attachScrollbar(newScrollbar);
+      },
+    },
+    scrollbarLabel: {
+      immediate: true,
+      handler(label) {
+        this.scrollbarHandle?.setLabel(label);
+      },
+    },
     async sceneParams(sceneParams) {
       this.sceneTask.perform(sceneParams);
       this.regionTask.perform(this.regionId, sceneParams);
@@ -275,8 +307,11 @@ export default {
         this.regionFocusPending = null;
       }
     },
-    nativeScroll(nativeScroll) {
-      this.$emit("immersive", !nativeScroll);
+    nativeScroll: {
+      immediate: true,
+      handler(nativeScroll) {
+        this.$emit("immersive", !nativeScroll);
+      },
     }
   },
   methods: {
@@ -302,6 +337,26 @@ export default {
 
     removeFullpageListeners() {
       window.removeEventListener('scroll', this.onScroll);
+    },
+
+    attachScrollbar(scrollbar) {
+      if (!scrollbar) return;
+      scrollbar.options({
+        callbacks: {
+          onScroll: this.onScroll,
+        },
+      });
+      this.scrollbarHandle = scrollbar.ext("timeline");
+    },
+
+    detachScrollbar(scrollbar) {
+      if (!scrollbar) return;
+      scrollbar.options({
+        callbacks: {
+          onScroll: null,
+        },
+      });
+      this.scrollbarHandle = null;
     },
     
     async simulate() {
@@ -623,15 +678,17 @@ export default {
 
       const scroller = this.$refs.scroller;
       let scrollMaxY;
-      if (this.fullpage) {
-        scrollMaxY = document.body.scrollHeight - window.innerHeight;
-      } else {
-        if (!scroller) {
-          console.warn("Scroller not found, view to scroll pending", view);
-          this.pendingViewToScroll = view;
-          return;
+      if (!this.scrollbar) {
+        if (this.fullpage) {
+          scrollMaxY = document.body.scrollHeight - window.innerHeight;
+        } else {
+          if (!scroller) {
+            console.warn("Scroller not found, view to scroll pending", view);
+            this.pendingViewToScroll = view;
+            return;
+          }
+          scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
         }
-        scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
       }
       
       if (this.pendingViewToScroll) {
@@ -644,7 +701,11 @@ export default {
       const scrollRatio = panY / viewMaxY;
       const scrollTop = scrollRatio * scrollMaxY;
 
-      if (this.fullpage) {
+      if (this.scrollbar) {
+        this.scrollbar.scroll({
+          y: (scrollRatio * 100) + "%"
+        })
+      } else if (this.fullpage) {
         window.scrollTo(window.scrollX, scrollTop);
       } else {
         scroller.scroll({
@@ -665,33 +726,35 @@ export default {
       }
 
       if (!this.$refs.scroller) return;
-      
-      const scroller = this.$refs.scroller;
 
       const viewMaxY = this.viewer.scene.height - this.window.height;
+      let scrollRatio = 0;
 
-      const scrollMaxY = 
-        this.fullpage ?
-          document.body.scrollHeight - window.innerHeight :
-          scroller.scrollHeight - scroller.clientHeight;
+      if (this.scrollbar) {
+        const scroll = this.scrollbar.scroll();
+        scrollRatio = scroll.ratio.y;
+      } else {
+        const scroller = this.$refs.scroller;
+        const scrollMaxY = 
+          this.fullpage ?
+            document.body.scrollHeight - window.innerHeight :
+            scroller.scrollHeight - scroller.clientHeight;
+        const scrollTop =
+          this.fullpage ?
+            window.scrollY :
+            scroller.scrollTop;
+        scrollRatio = scrollMaxY ? scrollTop / scrollMaxY : 0;
+      }
 
-      const scrollTop =
-        this.fullpage ?
-          window.scrollY :
-          scroller.scrollTop;
-      
-      const scrollRatio = scrollMaxY ? scrollTop / scrollMaxY : 0;
       const viewY = scrollRatio * viewMaxY;
-
       const view = {
         x: 0,
         y: viewY,
         w: this.window.width,
         h: this.window.height,
       }
-
       this.$refs.viewer.setView(view, transition && { animationTime: transition });
-
+      this.visibleRegionsTask.perform(view, this.sceneParams);
     },
 
   }

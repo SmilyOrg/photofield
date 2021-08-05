@@ -1,0 +1,28 @@
+.scrollbar-timeline {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  cursor: default;
+}
+
+.scrollbar-timeline .scrollbar-timeline-label {
+  position: absolute;
+  right: 10px;
+  color: #fff;
+  background: rgb(76, 76, 76);
+  width: max-content;
+  padding: 4px 10px;
+  border-radius: 8px;
+  transition: right 0.3s, opacity 0.3s;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.os-host-scrolling .scrollbar-timeline .scrollbar-timeline-label, .os-scrollbar-handle:hover .scrollbar-timeline .scrollbar-timeline-label, .os-scrollbar-handle.active .scrollbar-timeline .scrollbar-timeline-label {
+  opacity: 1;
+  pointer-events: initial;
+}
+
+.os-scrollbar-handle:hover .scrollbar-timeline .scrollbar-timeline-label, .os-scrollbar-handle.active .scrollbar-timeline .scrollbar-timeline-label {
+  right: 20px;
+}

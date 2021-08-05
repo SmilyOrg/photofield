@@ -6,6 +6,9 @@ import router from './router'
 import BalmUI from 'balm-ui'; // Official Google Material Components
 import BalmUIPlus from 'balm-ui/dist/balm-ui-plus'; // BalmJS Team Material Components
 import 'balm-ui/dist/balm-ui.css';
+import "overlayscrollbars/css/OverlayScrollbars.min.css";
+import "./os-theme-minimal-dark.css";
+import "./os-theme-customizations.css";
 
 const app = createApp(App);
 

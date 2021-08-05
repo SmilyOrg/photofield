@@ -119,6 +119,15 @@ export function useRegionTask() {
   })
 }
 
+export function useRegionsTask() {
+  return useTask(function*(_, x, y, w, h, sceneParams) {
+    if (sceneParams == null) {
+      return null;
+    }
+    return getRegions(x, y, w, h, sceneParams);
+  })
+}
+
 
 
 export function useIndexTasks(collectionId) {
