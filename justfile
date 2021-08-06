@@ -23,3 +23,10 @@ db *args:
 
 grafana-export:
   @hamara export --host=localhost:9091 --key=$GRAFANA_API_KEY > docker/grafana/provisioning/datasources/default.yaml
+
+pprof := "http://localhost:8080/debug/pprof"
+
+prof-cpu seconds="10":
+  filepath=profiles/cpu/cpu-$(date +"%F-%H%M%S").pprof && \
+  curl --progress-bar -o $filepath {{pprof}}/profile?seconds={{seconds}} && \
+  go tool pprof -http=: $filepath

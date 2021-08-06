@@ -182,17 +182,16 @@ func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan stri
 }
 
 func (source *ImageSource) IndexImages(dir string, maxPhotos int, counter chan<- int) {
-	info := ImageInfo{
-		DateTime: time.Now(),
-	}
 	dir = filepath.FromSlash(dir)
+	indexed := make(map[string]struct{})
 	for path := range source.walkImages(dir, maxPhotos) {
-		source.infoDatabase.Write(path, info, AppendPath)
+		source.infoDatabase.Write(path, ImageInfo{}, AppendPath)
+		indexed[path] = struct{}{}
 		// Uncomment to test slow indexing
 		// time.Sleep(10 * time.Millisecond)
 		counter <- 1
 	}
-	source.infoDatabase.DeactivateOlderThan(dir, info.DateTime)
+	source.infoDatabase.DeleteNonexistent(dir, indexed)
 }
 
 func (source *ImageSource) walkImages(dir string, maxPhotos int) <-chan string {

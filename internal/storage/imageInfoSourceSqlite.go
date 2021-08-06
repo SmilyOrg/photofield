@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	. "photofield/internal"
+	"sync"
 	"time"
 
 	"zombiezen.com/go/sqlite"
@@ -17,9 +18,10 @@ import (
 )
 
 type ImageInfoSourceSqlite struct {
-	path    string
-	pool    *sqlitex.Pool
-	pending chan *ImageInfoWrite
+	path             string
+	pool             *sqlitex.Pool
+	pending          chan *ImageInfoWrite
+	transactionMutex sync.RWMutex
 }
 
 type ImageInfoWriteType int32
@@ -28,6 +30,7 @@ const (
 	AppendPath  ImageInfoWriteType = iota
 	UpdateMeta  ImageInfoWriteType = iota
 	UpdateColor ImageInfoWriteType = iota
+	Delete      ImageInfoWriteType = iota
 )
 
 type ImageInfoWrite struct {
@@ -112,18 +115,22 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 	defer updateColor.Finalize()
 
 	appendPath := conn.Prep(`
-		INSERT INTO infos(path, indexed_at, active)
-		VALUES (?, ?, 1)
-		ON CONFLICT(path) DO UPDATE SET
-			indexed_at=excluded.indexed_at,
-			active=1;`)
+		INSERT OR IGNORE INTO infos(path)
+		VALUES (?)
+	`)
 	defer appendPath.Finalize()
+
+	delete := conn.Prep(`
+		DELETE FROM infos
+		WHERE path = ?;`)
+	defer delete.Finalize()
 
 	lastCommit := time.Now()
 	inTransaction := false
 
 	defer func() {
 		err := sqlitex.Exec(conn, "COMMIT;", nil)
+		source.transactionMutex.Unlock()
 		if err != nil {
 			panic(err)
 		}
@@ -131,6 +138,7 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 
 	for imageInfo := range source.pending {
 		if !inTransaction {
+			source.transactionMutex.Lock()
 			err := sqlitex.Exec(conn, "BEGIN TRANSACTION;", nil)
 			if err != nil {
 				panic(err)
@@ -141,13 +149,23 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 		switch imageInfo.Type {
 		case AppendPath:
 			appendPath.BindText(1, imageInfo.Path)
-			appendPath.BindText(2, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
 			_, err := appendPath.Step()
 			if err != nil {
 				log.Printf("Unable to insert path %s: %s\n", imageInfo.Path, err.Error())
 				continue
 			}
 			err = appendPath.Reset()
+			if err != nil {
+				panic(err)
+			}
+		case Delete:
+			delete.BindText(1, imageInfo.Path)
+			_, err := delete.Step()
+			if err != nil {
+				log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
+				continue
+			}
+			err = delete.Reset()
 			if err != nil {
 				panic(err)
 			}
@@ -182,6 +200,7 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 		sinceLastCommitMs := time.Since(lastCommit).Seconds()
 		if inTransaction && (sinceLastCommitMs >= 10 || len(source.pending) == 0) {
 			err := sqlitex.Exec(conn, "COMMIT;", nil)
+			source.transactionMutex.Unlock()
 			if err != nil {
 				panic(err)
 			}
@@ -226,22 +245,20 @@ func (source *ImageInfoSourceSqlite) Write(path string, info ImageInfo, writeTyp
 	return nil
 }
 
-func (source *ImageInfoSourceSqlite) DeactivateOlderThan(dir string, datetime time.Time) {
-	conn := source.pool.Get(nil)
-	defer source.pool.Put(conn)
+func (source *ImageInfoSourceSqlite) WaitForCommit() {
+	source.transactionMutex.RLock()
+	defer source.transactionMutex.RUnlock()
+}
 
-	stmt := conn.Prep(`
-		UPDATE infos
-		SET active = 0
-		WHERE path LIKE ? AND (indexed_at < ? OR indexed_at ISNULL);`)
-	defer stmt.Finalize()
-
-	stmt.BindText(1, dir+"%")
-	stmt.BindText(2, datetime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
-	_, err := stmt.Step()
-	if err != nil {
-		log.Printf("Unable to deactivate indexed files in %s: %s\n", dir, err.Error())
+func (source *ImageInfoSourceSqlite) DeleteNonexistent(dir string, m map[string]struct{}) {
+	source.WaitForCommit()
+	for path := range source.List(dir, 0) {
+		_, exists := m[path]
+		if !exists {
+			source.Write(path, ImageInfo{}, Delete)
+		}
 	}
+	source.WaitForCommit()
 }
 
 func (source *ImageInfoSourceSqlite) List(dir string, limit int) <-chan string {
@@ -255,7 +272,7 @@ func (source *ImageInfoSourceSqlite) List(dir string, limit int) <-chan string {
 		sql := `
 			SELECT path
 			FROM infos
-			WHERE path LIKE ? AND active = 1
+			WHERE path LIKE ?
 		`
 
 		if limit > 0 {
