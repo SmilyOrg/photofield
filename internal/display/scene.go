@@ -473,6 +473,30 @@ func (bitmap *Bitmap) DrawOverdraw(c *canvas.Context, source *storage.ImageSourc
 	// )
 }
 
+func (bitmap *Bitmap) DrawVideoIcon(c *canvas.Context) {
+	style := c.Style
+
+	sprite := bitmap.Sprite
+
+	iconSize := sprite.Rect.H * 0.04
+	marginTop := iconSize * 1.5
+	marginRight := iconSize * 1.5
+
+	style.FillColor = getRGBA(color.White)
+	style.StrokeColor = getRGBA(color.RGBA{R: 0, G: 0, B: 0, A: 0xCC})
+
+	canvasIconSize := canvas.Rect{W: iconSize}.Transform(c.View()).W
+
+	style.StrokeWidth = canvasIconSize * 0.2
+	style.StrokeJoiner = canvas.RoundJoiner{}
+
+	c.RenderPath(
+		canvas.RegularPolygon(3, iconSize, true),
+		style,
+		c.View().Mul(sprite.Rect.GetMatrix()).Translate(sprite.Rect.W-marginRight, sprite.Rect.H-marginTop).Rotate(30),
+	)
+}
+
 func (sprite *Sprite) DrawText(c *canvas.Context, scales Scales, font *canvas.FontFace, txt string) {
 	text := NewTextFromRect(sprite.Rect, font, txt)
 	text.Draw(c, scales)
@@ -613,10 +637,11 @@ func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Conte
 func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *storage.ImageSource) {
 
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, Size{X: 1, Y: 1})
+	path := photo.GetPath(source)
 	if pixelArea < config.MaxSolidPixelArea {
 		style := c.Style
 
-		info := source.GetImageInfo(photo.GetPath(source))
+		info := source.GetImageInfo(path)
 		style.FillColor = info.GetColor()
 
 		photo.Sprite.DrawWithStyle(c, style)
@@ -634,6 +659,10 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 		err := bitmap.Draw(config.CanvasImage, c, scales, source)
 		if err == nil {
 			drawn = true
+
+			if source.IsSupportedVideo(path) {
+				bitmap.DrawVideoIcon(c)
+			}
 
 			if config.DebugOverdraw {
 				bitmap.DrawOverdraw(c, source)

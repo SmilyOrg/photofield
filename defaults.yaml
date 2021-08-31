@@ -18,7 +18,7 @@ system:
       max_size: 256Mi
     
 media:
-  extensions: [".jpg"]
+  extensions: [".jpg", ".mp4"]
   date_formats: ["20060201_150405"]
   images:
     extensions: [".jpg", ".jpeg", ".png", ".gif"]

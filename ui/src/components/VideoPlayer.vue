@@ -145,6 +145,7 @@ export default {
     },
     onLoadStart() {
       this.loading++;
+      this.interactive = false;
     },
     onCanPlay() {
       this.loading--;
