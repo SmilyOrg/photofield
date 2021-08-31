@@ -90,6 +90,10 @@ export function getThumbnailUrl(id, thumb, filename) {
   return `${host}/files/${id}/thumb/${thumb}/${filename}`;
 }
 
+export function getVideoUrl(id, size, filename) {
+  return `${host}/files/${id}/video/${size}/${filename}`;
+}
+
 export async function getScene(params) {
   return get("/scenes?" + params);
 }

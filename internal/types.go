@@ -130,8 +130,10 @@ func (thumbnail *Thumbnail) Init() {
 		thumbnail.SizeType = FitInside
 	case "OUTSIDE":
 		thumbnail.SizeType = FitOutside
-	default:
+	case "ORIGINAL":
 		thumbnail.SizeType = OriginalSize
+	default:
+		panic("Unsupported thumbnail fit: " + thumbnail.SizeTypeRaw)
 	}
 }
 

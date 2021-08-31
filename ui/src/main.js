@@ -14,6 +14,8 @@ import "overlayscrollbars";
 import "./scrollbar-timeline-ext.js";
 import "./scrollbar-timeline-ext.css";
 
+import "plyr/dist/plyr.css";
+
 const app = createApp(App);
 
 app.use(BalmUI);

@@ -407,7 +407,7 @@ func (source *ImageSource) IsSupportedImage(path string) bool {
 
 func (source *ImageSource) IsSupportedVideo(path string) bool {
 	pathExt := strings.ToLower(filepath.Ext(path))
-	for _, ext := range source.Images.Extensions {
+	for _, ext := range source.Videos.Extensions {
 		if pathExt == ext {
 			return true
 		}

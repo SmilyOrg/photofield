@@ -1,3 +1,18 @@
+export function isCloseClick(down, up, timeThreshold, distThreshhold) {
+  if (timeThreshold === undefined) {
+    timeThreshold = 300;
+  }
+  if (distThreshhold === undefined) {
+    distThreshhold = 5;
+  }
+  if (!down || !up) return false;
+  const duration = up.timeStamp - down.timeStamp;
+  const dx = up.screenX - down.screenX;
+  const dy = up.screenY - down.screenY;
+  const distSquared = dx*dx + dy*dy;
+  return duration < timeThreshold && distSquared < distThreshhold*distThreshhold;
+}
+
 export async function updateUntilDone(updateFn, continueFn, intervalMs) {
   return new Promise(resolve => {
     if (intervalMs === undefined) intervalMs = 1000;

@@ -6,6 +6,10 @@ html {
   overflow-y: scroll;
 }
 
+.plyr {
+  min-width: 0 !important;
+}
+
 /* 
 html {
   scrollbar-width: none;

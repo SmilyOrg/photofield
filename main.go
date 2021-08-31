@@ -543,22 +543,11 @@ func fileHandler(w http.ResponseWriter, r *http.Request) {
 
 func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
 
-	scene, err := getSceneFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	vars := mux.Vars(r)
 
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
-	if id < 0 || id >= len(scene.Photos) {
-		http.Error(w, "Id out of bounds", http.StatusBadRequest)
 		return
 	}
 
@@ -572,15 +561,20 @@ func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
 		size = "M"
 	}
 
-	photo := &scene.Photos[id]
+	videoPath, err := imageSource.GetImagePath(ImageId(id))
+	if err == NotFoundError {
+		http.Error(w, "Id not found", http.StatusNotFound)
+		return
+	}
+
 	path := ""
 	for i := range imageSource.Videos.Thumbnails {
-		video := imageSource.Videos.Thumbnails[i]
-		candidatePath := video.GetPath(photo.GetPath(imageSource))
+		thumbnail := imageSource.Videos.Thumbnails[i]
+		candidatePath := thumbnail.GetPath(videoPath)
 		if !imageSource.Exists(candidatePath) {
 			continue
 		}
-		if size != "full" && video.Name != size {
+		if size != "full" && thumbnail.Name != size {
 			continue
 		}
 		path = candidatePath
@@ -592,7 +586,6 @@ func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.ServeFile(w, r, path)
-
 }
 
 func fileThumbHandler(w http.ResponseWriter, r *http.Request) {

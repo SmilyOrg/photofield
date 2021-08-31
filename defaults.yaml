@@ -58,9 +58,10 @@ media:
     thumbnails:
       - name: M
         path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
-        fit: INSIDE
-        width: 120
-        height: 120
+        fit: OUTSIDE
+        width: 720
+        height: 720
         
       - name: H264
         path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4"
+        fit: ORIGINAL

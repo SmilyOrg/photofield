@@ -19,10 +19,11 @@ export default {
     immediate: Boolean,
   },
 
-  emits: ["zoom", "click", "view", "load", "key-down"],
+  emits: ["zoom", "click", "view", "load", "key-down", "viewer"],
 
   data() {
     return {
+      viewer: null,
       latestView: {
         x: 0,
         y: 0,
@@ -133,6 +134,7 @@ export default {
 
       this.viewer.innerTracker.keyDownHandler = null;
 
+      this.$emit("viewer", this.viewer);
     },
 
     async onCanvasClick(event) {
@@ -157,7 +159,13 @@ export default {
 
     onZoom(event) {
       if (!this.interactive) return;
-      this.$emit("zoom", event.zoom);
+      
+      const view = this.latestView;
+      const viewWidthZoom = this.scene.width / view.w;
+      const viewHeightZoom = this.scene.width / view.h;
+      const viewMinZoom = Math.min(viewWidthZoom, viewHeightZoom);
+
+      this.$emit("zoom", event.zoom, viewMinZoom);
       this.onPan();
     },
 
@@ -310,6 +318,10 @@ export default {
 .container, .tileViewer {
   width: 100%;
   height: 100%;
+}
+
+.container {
+  position: relative;
 }
 
 </style>

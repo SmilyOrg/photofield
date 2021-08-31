@@ -70,21 +70,33 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, s
 	source := regionSource.imageSource
 
 	originalPath := photo.GetPath(source)
+	info := source.GetImageInfo(originalPath)
+	originalSize := Size{
+		X: info.Width,
+		Y: info.Height,
+	}
+	isVideo := source.IsSupportedVideo(originalPath)
+
+	var thumbnailTemplates []Thumbnail
+	if isVideo {
+		thumbnailTemplates = source.Videos.Thumbnails
+	} else {
+		thumbnailTemplates = source.Images.Thumbnails
+	}
 
 	var thumbnails []RegionThumbnail
-	for i := range source.Images.Thumbnails {
-		thumbnail := &source.Images.Thumbnails[i]
+	for i := range thumbnailTemplates {
+		thumbnail := &thumbnailTemplates[i]
 		thumbnailPath := thumbnail.GetPath(originalPath)
 		if source.Exists(thumbnailPath) {
+			thumbnailSize := thumbnail.Fit(originalSize)
 			thumbnails = append(thumbnails, RegionThumbnail{
 				Name:   thumbnail.Name,
-				Width:  thumbnail.Width,
-				Height: thumbnail.Height,
+				Width:  thumbnailSize.X,
+				Height: thumbnailSize.Y,
 			})
 		}
 	}
-
-	info := regionSource.imageSource.GetImageInfo(originalPath)
 
 	return Region{
 		Id:     id,
@@ -94,7 +106,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, s
 			Path:       originalPath,
 			Filename:   filepath.Base(originalPath),
 			Extension:  strings.ToLower(filepath.Ext(originalPath)),
-			Video:      source.IsSupportedVideo(originalPath),
+			Video:      isVideo,
 			Width:      info.Width,
 			Height:     info.Height,
 			CreatedAt:  info.DateTime.Format(time.RFC3339),

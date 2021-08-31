@@ -14,13 +14,14 @@
       <h2>Scene</h2><pre>{{ scene }}</pre>
       <h2>Region</h2><pre>{{ region }}</pre>
     </div> -->
-    
+
     <tile-viewer
       class="viewer"
       ref="viewer"
-      :interactive="!nativeScroll"
+      :interactive="!nativeScroll && !panDisabled"
       :scene="viewer.scene"
       :tileSize="tileSize"
+      @viewer="overlayViewer = $event"
       @zoom="onZoom"
       @view="onView"
       @click="onClick"
@@ -28,6 +29,14 @@
       @keydown="onKeyDown"
       @contextmenu.prevent="onContext"
     ></tile-viewer>
+    <overlays
+      :viewer="overlayViewer"
+      :overlay="lastViewedRegion"
+      :scene="viewer.scene"
+      :active="!nativeScroll"
+      @interactive="interactive => panDisabled = interactive"
+      class="overlays"
+    ></overlays>
     <div
       class="scroller"
       :class="{ disabled: !nativeScroll }"
@@ -57,7 +66,7 @@
         :sceneParams="sceneParams"
         :flipX="contextFlipX"
         :flipY="contextFlipY"
-        @close="$refs.contextMenu.close()"
+        @close="closeContextMenu()"
       ></region-menu>
     </ContextMenu>
   </div>
@@ -65,9 +74,9 @@
 
 <script>
 import { computed, nextTick, ref, toRef, watch, watchEffect } from 'vue';
-import { debounce, throttle, waitDebounce } from '../utils';
+import { isCloseClick } from '../utils';
 import TileViewer from './TileViewer.vue';
-import { getCollection, getRegion, getRegions, getScene, useCollectionTask, useRegionsTask, useRegionTask, useSceneTask } from '../api';
+import { getRegions, useCollectionTask, useRegionsTask, useRegionTask, useSceneTask } from '../api';
 import { timeout, useTask, useTaskGroup } from "vue-concurrency";
 import PageTitle from './PageTitle.vue';
 import Simulation from '../simulation';
@@ -75,6 +84,7 @@ import ContextMenu from '@overcoder/vue-context-menu';
 import RegionMenu from './RegionMenu.vue';
 import dateParseISO from 'date-fns/parseISO';
 import dateFormat from 'date-fns/format';
+import Overlays from './Overlays.vue';
 
 export default {
 
@@ -98,6 +108,7 @@ export default {
     PageTitle,
     ContextMenu,
     RegionMenu,
+    Overlays,
   },
 
   data() {
@@ -121,6 +132,10 @@ export default {
       contextAnchor: "",
       contextFlipX: false,
       contextFlipY: false,
+      contextMenuOpen: false,
+      overlayViewer: null,
+      lastViewedRegion: null,
+      panDisabled: false,
     }
   },
 
@@ -456,6 +471,7 @@ export default {
 
     onScroll(event) {
       if (!this.nativeScroll) return;
+      this.closeContextMenu();
       this.pushScrollToView();
     },
 
@@ -503,15 +519,20 @@ export default {
         return;
       }
       this.lastPointerUpEvent = event;
+      if (this.contextMenuOpen) {
+        this.closeContextMenu();
+        return;
+      }
       // console.log("UP", event);
       const down = this.lastPointerDownEvent;
       const up = this.lastPointerUpEvent;
-      const duration = up.timeStamp - down.timeStamp;
-      const dx = up.screenX - down.screenX;
-      const dy = up.screenY - down.screenY;
-      const distance = Math.sqrt(dx*dx + dy*dy);
-      const quick = duration < this.pointerTimeThreshold && distance < this.pointerDistThreshold;
-      if (quick) {
+      const close = isCloseClick(
+        down,
+        up,
+        this.pointerTimeThreshold,
+        this.pointerDistThreshold
+      );
+      if (close) {
         this.nativeScroll = false;
         await nextTick();
         const pos = this.$refs.viewer.elementToViewportCoordinates(down);
@@ -584,7 +605,7 @@ export default {
 
     async onContext(event) {
       this.contextRegion = null;
-      this.$refs.contextMenu.open(event);
+      this.openContextMenu(event);
       const menuWidth = 250;
       const menuHeight = 300;
       const right = event.x + menuWidth;
@@ -596,6 +617,17 @@ export default {
       if (regions && regions.length > 0) {
         this.contextRegion = regions[0];
       }
+    },
+
+    openContextMenu(event) {
+      this.$refs.contextMenu.open(event);
+      this.contextMenuOpen = true;
+    },
+
+    closeContextMenu() {
+      if (!this.contextMenuOpen) return;
+      this.contextMenuOpen = false;
+      this.$refs.contextMenu.close();
     },
 
     async focusRegion(region, transition) {
@@ -611,6 +643,9 @@ export default {
     },
 
     async viewRegion(region, transition) {
+      if (!this.lastViewedRegion || this.lastViewedRegion.id != region.id) {
+        this.lastViewedRegion = region;
+      }
       this.setView(region.bounds, transition);
       this.onView(region.bounds);
     },
@@ -799,8 +834,7 @@ export default {
 }
 
 .context-menu {
-  position: absolute;
-  margin-top: -60px;
+  position: fixed;
   width: fit-content;
 }
 
