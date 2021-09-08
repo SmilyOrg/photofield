@@ -14,9 +14,18 @@ import (
 	"github.com/tdewolff/canvas"
 )
 
+type LayoutType string
+
+const (
+	Album    LayoutType = "ALBUM"
+	Timeline            = "TIMELINE"
+	Square              = "SQUARE"
+	Wall                = "WALL"
+)
+
 type Layout struct {
-	Limit        int    `json:"limit"`
-	Type         string `json:"type"`
+	Limit        int        `json:"limit"`
+	Type         LayoutType `json:"type"`
 	FontFamily   *canvas.FontFamily
 	HeaderFont   *canvas.FontFace
 	SceneWidth   float64

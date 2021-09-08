@@ -21,6 +21,9 @@ db-add migration_file_name:
 db *args:
   migrate -database sqlite://data/photofield.cache.db -path db/migrations {{args}}
 
+api-codegen:
+  oapi-codegen -generate="types,chi-server" -package=openapi api.yaml > internal/api/api.gen.go
+
 grafana-export:
   @hamara export --host=localhost:9091 --key=$GRAFANA_API_KEY > docker/grafana/provisioning/datasources/default.yaml
 

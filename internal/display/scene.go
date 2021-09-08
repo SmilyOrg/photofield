@@ -7,6 +7,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"time"
 
 	. "photofield/internal"
 	storage "photofield/internal/storage"
@@ -81,11 +82,15 @@ type RegionSource interface {
 	GetRegionById(int, *Scene, RegionConfig) Region
 }
 
+type SceneId = string
+
 type Scene struct {
+	Id           SceneId      `json:"id"`
+	CreatedAt    time.Time    `json:"created_at"`
 	Fonts        Fonts        `json:"-"`
 	Bounds       Rect         `json:"bounds"`
 	Photos       []Photo      `json:"-"`
-	PhotoCount   int          `json:"photoCount"`
+	PhotoCount   int          `json:"photo_count"`
 	Solids       []Solid      `json:"-"`
 	Texts        []Text       `json:"-"`
 	RegionSource RegionSource `json:"-"`
@@ -709,13 +714,17 @@ func (scene *Scene) getRegionScale() float64 {
 	return scene.Bounds.W
 }
 
-func (scene *Scene) GetRegions(config *Render, bounds Rect) []Region {
+func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region {
+	query := RegionConfig{
+		Limit: 100,
+	}
+	if limit != nil {
+		query.Limit = *limit
+	}
 	return scene.RegionSource.GetRegionsFromBounds(
 		bounds,
 		scene,
-		RegionConfig{
-			Limit: 100,
-		},
+		query,
 	)
 }
 

@@ -1,5 +1,5 @@
 import { createApp } from 'vue'
-import App from './App.vue'
+import Root from './Root.vue'
 import './index.css'
 import router from './router'
 
@@ -16,7 +16,7 @@ import "./scrollbar-timeline-ext.css";
 
 import "plyr/dist/plyr.css";
 
-const app = createApp(App);
+const app = createApp(Root);
 
 app.use(BalmUI);
 app.use(BalmUIPlus);

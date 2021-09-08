@@ -8,8 +8,13 @@
       contentSelector="#content"
       @nav="drawer = !drawer"
     >
-      <span class="title" @click="onTitleClick()">
-        {{ collection?.name || "Photos" }}
+      <span class="title">
+        <router-link class="title-home" to="/">
+          Photos
+        </router-link>
+        <span v-if="collection" class="title-collection" @click="onTitleClick()">
+          <ui-icon>chevron_right</ui-icon> {{ collection.name }}
+        </span>
       </span>
 
       <template #toolbar="{ toolbarItemClass }">
@@ -80,10 +85,10 @@
       <ui-drawer-header>
         <ui-drawer-title>Photos</ui-drawer-title>
         <ui-drawer-subtitle>
-          {{ collections.length }} collections
+          {{ collections?.length }} collections
         </ui-drawer-subtitle>
       </ui-drawer-header>
-      <ui-drawer-content v-if="collections.length > 0">
+      <ui-drawer-content v-if="collections?.length > 0">
         <ui-nav>
           <ui-nav-item
             v-for="c in collections"
@@ -108,12 +113,11 @@
         class="viewer"
         ref="viewer"
         :settings="settings"
-        :cacheKey="cacheKey"
         :class="{ simulating }"
         :fullpage="true"
         :scrollbar="scrollbar"
         @load="onLoad"
-        @tasks="onTasks"
+        @scene="v => scene = v"
         @immersive="onImmersive"
       >
       </router-view>
@@ -122,17 +126,21 @@
 </template>
 
 <script>
-import { getCollections, reindexCollection, useIndexTasks } from './api';
-import { useRouter, useRoute } from 'vue-router'
+import { reindexCollection, useApi } from './api';
 import NaturalViewer from './components/NaturalViewer.vue'
 import { updateUntilDone } from './utils';
-import { computed, watch } from '@vue/runtime-core';
+import { computed, toRef } from 'vue';
 
 export default {
   name: 'App',
   components: {
     NaturalViewer,
   },
+  
+  props: [
+    "collectionId",
+  ],
+
   data() {
     return {
       settings: {
@@ -142,33 +150,42 @@ export default {
         layout: "",
       },
       layoutOptions: [
-        { label: "Default", value: "default" },
-        { label: "Album", value: "album" },
-        { label: "Timeline", value: "timeline" },
-        { label: "Wall", value: "wall" },
+        { label: "Album", value: "ALBUM" },
+        { label: "Timeline", value: "TIMELINE" },
+        { label: "Wall", value: "WALL" },
       ],
       settingsExpanded: false,
-      cacheKey: "",
       load: {
         image: 0,
       },
-      tasks: null,
       drawer: false,
       simulating: false,
       immersive: false,
-      collections: [],
       collectionMenuOpen: false,
       scrollbar: null,
+      scene: null,
     }
   },
   setup(props) {
-    const route = useRoute()
-    const { data: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useIndexTasks(() => route.params.collectionId);
+    const collectionId = toRef(props, "collectionId");
+
+    const { data: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useApi(
+      () => collectionId.value && `/index-tasks?collection_id=${collectionId.value}`
+    );
+
+    const { items: collections } = useApi(() => "/collections");
+    const { data: fetchedCollection } = useApi(
+      () => collectionId.value && `/collections/${collectionId.value}`
+    );
+
+    const collection = computed(() => collectionId.value && fetchedCollection.value);
 
     return {
       indexTasks,
       indexTasksError,
       indexTasksMutate,
+      collection,
+      collections,
     }
   },
   async mounted() {
@@ -179,36 +196,28 @@ export default {
       },
     });
     this.scrollbar.addExt("timeline");
-    this.cacheKey = localStorage.cacheKey || "";
-    this.collections = await getCollections();
-    if (!this.$route.params.collectionId) {
-      this.drawer = true;
-    }
+  },
+  watch: {
+    collection(newCollection, oldCollection) {
+      if (newCollection && newCollection?.id != oldCollection?.id) {
+        this.settings.layout = newCollection.layout;
+      }
+    },
   },
   computed: {
-    scene() {
-      return this.tasks?.sceneTask.last?.value;
-    },
-    collection() {
-      return this.tasks?.collectionTask.last?.value;
-    },
     loading() {
-      if (!this.tasks) return false;
-      return (
-        this.tasks.sceneTask.isRunning ||
-        this.tasks.collectionTask.isRunning
-      );
+      // TODO reimplement?
+      return false;
     },
     fileCount() {
-      return this.scene?.photoCount !== undefined ?
-        this.scene.photoCount.toLocaleString() : 
+      return this.scene?.photo_count !== undefined ?
+        this.scene.photo_count.toLocaleString() : 
         null;
     }
   },
   methods: {
     refreshCache() {
-      this.cacheKey = Date.now();
-      localStorage.cacheKey = this.cacheKey;
+      // TODO: reimplement
     },
     async reindex() {
       await reindexCollection(this.collection?.id);
@@ -230,7 +239,7 @@ export default {
       if (immersive) {
         this.settingsExpanded = false;
       }
-      this.scrollbar.options({
+      this.scrollbar?.options({
         scrollbars: {
           visibility: immersive ? "hidden" : "auto",
         },
@@ -254,6 +263,15 @@ export default {
 </script>
 
 <style scoped>
+
+.title-collection i {
+  vertical-align: sub;
+}
+
+.title-home {
+  text-decoration: none;
+  color: inherit;
+}
 
 .sidebar button {
     padding: 20px 0;

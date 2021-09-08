@@ -19,7 +19,7 @@ export default {
     immediate: Boolean,
   },
 
-  emits: ["zoom", "click", "view", "load", "key-down", "viewer"],
+  emits: ["zoom", "click", "view", "reset", "load", "key-down", "viewer"],
 
   data() {
     return {
@@ -42,7 +42,8 @@ export default {
   },
   watch: {
 
-    scene() {
+    scene(newScene, oldScene) {
+      if (newScene?.id == oldScene?.id) return;
       this.reset();
     },
 
@@ -150,7 +151,7 @@ export default {
         eventOrPoint instanceof OpenSeadragon.Point ? eventOrPoint :
         new OpenSeadragon.Point(eventOrPoint.x, eventOrPoint.y);
       const viewportPos = this.viewer.viewport.viewerElementToViewportCoordinates(point);
-      const scale = this.scene.width;
+      const scale = this.scene.bounds.w;
       return {
         x: viewportPos.x * scale,
         y: viewportPos.y * scale,
@@ -161,8 +162,8 @@ export default {
       if (!this.interactive) return;
       
       const view = this.latestView;
-      const viewWidthZoom = this.scene.width / view.w;
-      const viewHeightZoom = this.scene.width / view.h;
+      const viewWidthZoom = this.scene.bounds.w / view.w;
+      const viewHeightZoom = this.scene.bounds.w / view.h;
       const viewMinZoom = Math.min(viewWidthZoom, viewHeightZoom);
 
       this.$emit("zoom", event.zoom, viewMinZoom);
@@ -171,7 +172,7 @@ export default {
 
     onPan() {
       if (!this.interactive) return;
-      const scale = this.scene.width;
+      const scale = this.scene.bounds.w;
       const bounds = this.viewer.viewport.getBounds();
       this.emittedView = {
         x: bounds.x * scale,
@@ -212,7 +213,12 @@ export default {
         return;
       }
 
-      if (this.scene.width == 0) {
+      if (!this.scene) {
+        console.warn("Scene missing", view);
+        return;
+      }
+
+      if (this.scene.bounds.w == 0) {
         console.warn("Scene has zero width, ignoring", this.scene);
         return;
       }
@@ -224,9 +230,20 @@ export default {
         console.warn("Using pending view", view);
       }
 
+      if (
+        this.latestView && view &&
+        this.latestView.x == view.x &&
+        this.latestView.y == view.y &&
+        this.latestView.w == view.w &&
+        this.latestView.h == view.h
+      ) {
+        // View is already up to date, nothing to do.
+        return;
+      }
+
       this.latestView = view;
 
-      const scale = 1 / this.scene.width;
+      const scale = 1 / this.scene.bounds.w;
       const rect = this.tempRect;
       rect.x = view.x * scale;
       rect.y = view.y * scale;
@@ -267,16 +284,17 @@ export default {
     },
 
     reset() {
-      if (!this.scene.width || !this.scene.height) return;
+      if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
       if (!this.viewer) {
         this.initOpenSeadragon(this.$refs.viewer);
       } else {
-        var oldImage = this.viewer.world.getItemAt(0);
+        const oldImage = this.viewer.world.getItemAt(0);
         const newSource = this.getTiledImage();
         this.viewer.addTiledImage({
           tileSource: newSource,
           success: () => {
             if (oldImage) this.viewer.world.removeItem(oldImage);
+            this.$emit("reset");
           }
         });
       }
@@ -289,7 +307,7 @@ export default {
       const power = 1 << maxLevel;
       let width = power*tileSize;
       let height = power*tileSize;
-      const sceneAspect = this.scene.width / this.scene.height;
+      const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
       if (sceneAspect < 1) {
         width = height * sceneAspect;
       } else {
@@ -304,7 +322,8 @@ export default {
         minLevel,
         maxLevel,
         getTileUrl: (level, x, y) => {
-          return getTileUrl(level, x, y, tileSize, this.scene.params);
+          if (!this.scene) return;
+          return getTileUrl(this.scene.id, level, x, y, tileSize);
         }
       }
     },

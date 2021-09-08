@@ -19,7 +19,7 @@
       class="viewer"
       ref="viewer"
       :interactive="!nativeScroll && !panDisabled"
-      :scene="viewer.scene"
+      :scene="scene"
       :tileSize="tileSize"
       @viewer="overlayViewer = $event"
       @zoom="onZoom"
@@ -32,7 +32,7 @@
     <overlays
       :viewer="overlayViewer"
       :overlay="lastViewedRegion"
-      :scene="viewer.scene"
+      :scene="scene"
       :active="!nativeScroll"
       @interactive="interactive => panDisabled = interactive"
       class="overlays"
@@ -62,7 +62,7 @@
     >
       <region-menu
         :region="contextRegion"
-        :scene="viewer.scene"
+        :scene="scene"
         :sceneParams="sceneParams"
         :flipX="contextFlipX"
         :flipY="contextFlipY"
@@ -74,9 +74,10 @@
 
 <script>
 import { computed, nextTick, ref, toRef, watch, watchEffect } from 'vue';
+import qs from "qs";
 import { isCloseClick } from '../utils';
 import TileViewer from './TileViewer.vue';
-import { getRegions, useCollectionTask, useRegionsTask, useRegionTask, useSceneTask } from '../api';
+import { createScene, getRegions, useApi } from '../api';
 import { timeout, useTask, useTaskGroup } from "vue-concurrency";
 import PageTitle from './PageTitle.vue';
 import Simulation from '../simulation';
@@ -91,7 +92,6 @@ export default {
   props: [
     "collectionId",
     "regionId",
-    "cacheKey",
     "settings",
     "fullpage",
     "scrollbar",
@@ -101,6 +101,7 @@ export default {
     load: null,
     tasks: null,
     immersive: immersive => typeof immersive == "boolean",
+    scene: null,
   },
 
   components: {
@@ -115,19 +116,12 @@ export default {
     return {
       tileSize: 512,
       loadProgress: 0,
-      window: {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-      },
       view: {
         x: 0,
         y: 0,
         width: 0,
         height: 0,
       },
-      nativeScroll: true,
       contextRegion: null,
       contextAnchor: "",
       contextFlipX: false,
@@ -141,21 +135,50 @@ export default {
 
   setup(props) {
     const collectionId = toRef(props, "collectionId");
+    const regionId = toRef(props, "regionId");
+    const scrollbar = toRef(props, "scrollbar");
 
-    const collectionTask = useCollectionTask();
-    const collection = computed(() => collectionTask.last?.value);
-    watch(collectionId, id => {
-      collectionTask.perform(id);
+    const nativeScroll = ref(true);
+
+    const window = ref({
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+    });
+
+    const {
+      data: collection,
+    } = useApi(() => collectionId && `/collections/${collectionId.value}`);
+
+    const sceneParams = computed(() =>
+      window?.value?.width &&
+      {
+        collection_id: collectionId.value,
+        image_height: props.settings.image.height,
+        scene_width: window.value.width,
+        layout: props.settings.layout,
+      }
+    );
+    
+    const {
+      items: scenes,
+      itemsMutate: scenesMutate,
+    } = useApi(() => sceneParams.value && `/scenes?` + qs.stringify(sceneParams.value));
+
+    watch(scenes, async newValue => {
+      // Create scene if a matching one hasn't been found
+      if (newValue?.length === 0) {
+        console.log("scene not found, creating...");
+        const params = sceneParams.value;
+        scenesMutate(async () => ([await createScene(params)]));
+      }
     })
-    collectionTask.perform(collectionId.value);
 
-    const sceneTask = useSceneTask().restartable();
-    const scene = computed(() => sceneTask.last?.value);
-
-    const regionTask = useRegionTask().restartable();
-    const region = computed(() => {
-      if (regionTask.isRunning) return undefined;
-      return regionTask.last.value;
+    const scene = computed(() => {
+      const list = scenes?.value;
+      if (!list || list.length == 0) return null;
+      return list[0];
     });
 
     const regionSeekId = ref(null);
@@ -163,7 +186,6 @@ export default {
       yield timeout(1000);
 
       const seekId = regionSeekId.value;
-      regionSeekId.value = null;
       router.push({
         name: "region",
         params: {
@@ -173,38 +195,117 @@ export default {
       });
     }).restartable();
 
-    const scrollbarLabel = ref("...");
-    const regionsTask = useRegionsTask();
-    const visibleRegionsTask = useTask(function*(_, view, sceneParams) {
-      yield timeout(200);
-      const regions = yield regionsTask.perform(view.x, view.y, view.w, view.h, sceneParams);
-      if (regions && regions.length > 0) {
-        const region = regions[0];
-        const date = dateParseISO(region.data?.created_at);
-        if (date) {
-          scrollbarLabel.value = dateFormat(date, "d MMM yyyy");
+    const reorientPending = ref(null);
+    const resizeApplyTask = useTask(function*(_, rect) {
+      scrollbar.value?.sleep();
+
+      yield timeout(100);
+
+      const pre = visibleView?.value;
+      let preCenterRegionId = null;
+
+      // Find closest region to center
+      if (pre && pre.w != 0 && pre.h != 0) {
+        const regions = yield getRegions(
+          scene.value.id,
+          pre.x,
+          pre.y,
+          pre.w,
+          pre.h,
+        );
+        const precx = pre.x + pre.w/2;
+        const precy = pre.y + pre.h/2;
+        let minDistSq = Infinity;
+        for (let i = 0; i < regions.length; i++) {
+          const region = regions[i];
+          const rcx = region.bounds.x + region.bounds.w/2;
+          const rcy = region.bounds.y + region.bounds.h/2;
+          const dx = rcx - precx;
+          const dy = rcy - precy;
+          const distSq = dx*dx + dy*dy;
+          if (distSq < minDistSq) {
+            minDistSq = distSq;
+            preCenterRegionId = region.id;
+          }
         }
       }
+
+      if (preCenterRegionId) {
+        reorientPending.value = {
+          regionId: preCenterRegionId,
+          rect,
+        }
+      } else if (!reorientPending.value) {
+        scrollbar.value?.update();
+      }
+
+      window.value = rect;
+    }).restartable();
+
+    const { data: reorientRegion } = useApi(() => {
+      return reorientPending?.value &&
+      scene?.value?.id &&
+      reorientPending.value.rect.width === scene?.value?.bounds?.w &&
+      `/scenes/${scene.value.id}/regions/${reorientPending.value.regionId}`
+    });
+
+    const scrollbarUpdateRegion = ref(null);
+    watch(reorientRegion, reorientRegion => {
+      if (reorientRegion) {
+        scrollbarUpdateRegion.value = reorientRegion;
+        reorientRegion.value = null;
+        scrollbar.value?.update();
+      }
+    })
+
+    const { data: region } = useApi(() => 
+      scene?.value?.id &&
+      (regionSeekId?.value || regionId?.value) &&
+      `/scenes/${scene.value.id}/regions/${regionSeekId?.value || regionId.value}`
+    );
+
+    const visibleView = ref(null);
+
+    const visibleRegionsTask = useTask(function*(_, view, sceneParams) {
+      yield timeout(200);
+      visibleView.value = view;
     }).keepLatest();
 
-    const tasks = useTaskGroup({
-      collectionTask,
-      sceneTask,
-      regionTask,
+    const {
+      items: visibleRegions,
+    } = useApi(() =>
+      scene?.value?.id &&
+      visibleView?.value &&
+      `/scenes/${scene.value.id}/regions?${qs.stringify({
+        ...visibleView.value,
+        limit: 1,
+      })}`
+    );
+
+    const scrollbarLabel = computed(() => {
+      if (visibleRegions?.value?.length > 0) {
+        const region = visibleRegions.value[0];
+        const date = dateParseISO(region.data?.created_at);
+        if (!date) return;
+        return dateFormat(date, "d MMM yyyy");
+      }
     })
     
     return {
-      collectionTask,
+      nativeScroll,
+      scrollbarUpdateRegion,
+      reorientRegion,
+      window,
+      resizeApplyTask,
       collection,
-      sceneTask,
       scene,
-      regionTask,
+      scenes,
       region,
       regionSeekId,
       regionSeekApplyTask,
       visibleRegionsTask,
+      visibleRegions,
       scrollbarLabel,
-      tasks,
     }
   },
 
@@ -254,7 +355,6 @@ export default {
         imageHeight: this.settings.image.height,
         sceneWidth: this.window.width,
         layout: this.settings.layout == "default" ? undefined : this.settings.layout,
-        cacheKey: this.cacheKey,
       };
       if (params.collection == null) {
         return null;
@@ -265,7 +365,10 @@ export default {
       return Object.entries(params).map(([key, value]) => `${key}=${value}`).join("&");
     },
     canvas() {
-      const aspectRatio = this.viewer.scene.width / this.viewer.scene.height;
+      const aspectRatio =
+        this.scene?.bounds?.h ?
+          this.scene.bounds.w / this.scene.bounds.h :
+          1;
       return {
         width: this.window.width,
         height: this.window.width / aspectRatio,
@@ -276,9 +379,15 @@ export default {
     },
     pointerTimeThreshold() {
       return this.$refs.viewer.pointerTimeThreshold;
-    }
+    },
   },
   watch: {
+    scene(scene) {
+      this.$emit("scene", scene);
+      if (scene) {
+        this.pushScrollToView();
+      }
+    },
     fullpage(fullpage) {
       if (fullpage) {
         addFullpageListeners();
@@ -299,20 +408,15 @@ export default {
         this.scrollbarHandle?.setLabel(label);
       },
     },
-    async sceneParams(sceneParams) {
-      this.sceneTask.perform(sceneParams);
-      this.regionTask.perform(this.regionId, sceneParams);
-    },
     regionId: {
       immediate: true,
       async handler(regionId) {
+        this.regionSeekId = null;
         // console.log("regionId", regionId)
-        const recentlyFocused = this.focusRegionTime !== undefined && Date.now() - this.focusRegionTime < 200;
-        if (this.regionId != null && !recentlyFocused) {
+        if (this.regionId != null && !this.wasRecentlyFocused()) {
           this.nativeScroll = false;
           this.regionFocusPending = true;
         }
-        this.regionTask.perform(regionId, this.sceneParams);
       },
     },
     region(region) {
@@ -359,6 +463,7 @@ export default {
       scrollbar.options({
         callbacks: {
           onScroll: this.onScroll,
+          onUpdated: this.onScrollbarUpdated,
         },
       });
       this.scrollbarHandle = scrollbar.ext("timeline");
@@ -372,6 +477,10 @@ export default {
         },
       });
       this.scrollbarHandle = null;
+    },
+    
+    wasRecentlyFocused() {
+      return this.focusRegionTime !== undefined && Date.now() - this.focusRegionTime < 200;
     },
     
     async simulate() {
@@ -456,23 +565,27 @@ export default {
     },
 
     demoScroll() {
-      const y = (1 + Math.sin(Date.now() * Math.PI * 2 / 1000 * 0.05)) / 2 * (this.viewer.scene.height - this.window.height);
+      const y = (1 + Math.sin(Date.now() * Math.PI * 2 / 1000 * 0.05)) / 2 * (this.scene.bounds.h - this.window.height);
       this.$refs.scroller.scroll(0, y);
       window.requestAnimationFrame(this.demoScroll);
     },
 
     onResize(rect) {
       if (rect.width == 0 || rect.height == 0) return;
-      this.window = rect;
-      if (this.nativeScroll) {
-        this.pushScrollToView();
-      }
+      this.resizeApplyTask.perform(rect, this.pushScrollToView);
     },
 
     onScroll(event) {
       if (!this.nativeScroll) return;
       this.closeContextMenu();
       this.pushScrollToView();
+    },
+
+    onScrollbarUpdated() {
+      if (this.scrollbarUpdateRegion) {
+        this.pushViewToScroll(this.scrollbarUpdateRegion.bounds);
+        this.scrollbarUpdateRegion = null;
+      }
     },
 
     onLoad(event) {
@@ -533,10 +646,10 @@ export default {
         this.pointerDistThreshold
       );
       if (close) {
-        this.nativeScroll = false;
-        await nextTick();
-        const pos = this.$refs.viewer.elementToViewportCoordinates(down);
-        this.onClick(pos);
+        const zoomClick = await this.onClick(this.$refs.viewer.elementToViewportCoordinates(down));
+        if (zoomClick) {
+          this.nativeScroll = false;
+        }
         // console.log("redisp", down, up)
         // this.redispatchEventToViewer(down);
         // this.redispatchEventToViewer(up);
@@ -566,7 +679,7 @@ export default {
     },
 
     async onZoom(zoom) {
-      if (zoom < 0.99) {
+      if (!this.wasRecentlyFocused() && zoom < 0.99) {
         this.nativeScroll = true;
         this.pushScrollToView();
       }
@@ -586,7 +699,7 @@ export default {
     },
 
     async onClick(event) {
-      const regions = await getRegions(event.x, event.y, 0, 0, this.sceneParams);
+      const regions = await getRegions(this.scene.id, event.x, event.y, 0, 0);
       if (regions && regions.length > 0) {
         const region = regions[0];
         // console.log(region);
@@ -600,7 +713,9 @@ export default {
         // console.log(viewerArea, regionArea, areaDiff, animationTime)
         
         this.focusRegion(region, animationTime);
+        return true;
       }
+      return false;
     },
 
     async onContext(event) {
@@ -631,8 +746,8 @@ export default {
     },
 
     async focusRegion(region, transition) {
-      this.viewRegion(region, transition);
       this.focusRegionTime = Date.now();
+      this.viewRegion(region, transition);
       this.$router.push({
         name: "region",
         params: {
@@ -647,7 +762,6 @@ export default {
         this.lastViewedRegion = region;
       }
       this.setView(region.bounds, transition);
-      this.onView(region.bounds);
     },
 
     setView(view, transition) {
@@ -676,22 +790,21 @@ export default {
         prevId = parseInt(this.regionId, 10);
       }
       const nextId = prevId + offset;
-      if (nextId < 0 || nextId >= this.scene.photoCount-1) {
+      if (nextId < 0 || nextId >= this.scene.photo_count-1) {
         return;
       }
       this.regionFocusPending = true;
       this.regionSeekId = nextId;
-      this.regionTask.perform(nextId, this.sceneParams);
       this.regionSeekApplyTask.perform(this.$router);
     },
 
     navigateExit() {
       this.nativeScroll = true;
-      this.pushScrollToView(1);
+      this.pushScrollToView(null, 1);
       // Firefox fires an onScroll event when you make the scrollbar
       // visible again, which breaks the smooth transition. This ignores scroll
       // events until a short time after exiting navigation to prevent this.
-      this.ignoreScrollToViewUntil = Date.now() + 200;
+      // this.ignoreScrollToViewUntil = Date.now() + 200;
       this.$router.push({
         name: "collection",
         params: {
@@ -705,7 +818,7 @@ export default {
         console.warn("Pushing view to scroll while in native scrolling mode");
       }
 
-      if (this.viewer.scene.height == 0) {
+      if (!this.scene?.bounds?.h) {
         console.warn("Scene has zero height, view to scroll pending", view);
         this.pendingViewToScroll = view;
         return;
@@ -713,17 +826,22 @@ export default {
 
       const scroller = this.$refs.scroller;
       let scrollMaxY;
-      if (!this.scrollbar) {
-        if (this.fullpage) {
-          scrollMaxY = document.body.scrollHeight - window.innerHeight;
-        } else {
-          if (!scroller) {
-            console.warn("Scroller not found, view to scroll pending", view);
-            this.pendingViewToScroll = view;
-            return;
-          }
-          scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
+      if (this.scrollbar) {
+        if (!scroller) {
+          console.warn("Scroller not found, view to scroll pending", view);
+          this.pendingViewToScroll = view;
+          return;
         }
+        scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
+      } else if (this.fullpage) {
+        scrollMaxY = document.body.scrollHeight - window.innerHeight;
+      } else {
+        if (!scroller) {
+          console.warn("Scroller not found, view to scroll pending", view);
+          this.pendingViewToScroll = view;
+          return;
+        }
+        scrollMaxY = scroller.scrollHeight - scroller.clientHeight;
       }
       
       if (this.pendingViewToScroll) {
@@ -731,15 +849,14 @@ export default {
         this.pendingViewToScroll = null;
       }
 
-      const viewMaxY = this.viewer.scene.height - this.window.height;
+      const viewMaxY = this.scene.bounds.h - this.window.height;
       const panY = (view.y + view.h/2) - this.window.height/2;
       const scrollRatio = panY / viewMaxY;
       const scrollTop = scrollRatio * scrollMaxY;
+      
 
       if (this.scrollbar) {
-        this.scrollbar.scroll({
-          y: (scrollRatio * 100) + "%"
-        })
+        this.scrollbar.scroll([0, (scrollRatio * 100) + "%"]);
       } else if (this.fullpage) {
         window.scrollTo(window.scrollX, scrollTop);
       } else {
@@ -747,9 +864,12 @@ export default {
           top: scrollTop,
         })
       }
+
+      return scrollRatio;
+
     },
 
-    pushScrollToView(transition) {
+    pushScrollToView(scrollRatio, transition) {
 
       if (this.ignoreScrollToViewUntil != null && Date.now() < this.ignoreScrollToViewUntil) {
         return;
@@ -762,23 +882,24 @@ export default {
 
       if (!this.$refs.scroller) return;
 
-      const viewMaxY = this.viewer.scene.height - this.window.height;
-      let scrollRatio = 0;
-
-      if (this.scrollbar) {
-        const scroll = this.scrollbar.scroll();
-        scrollRatio = scroll.ratio.y;
-      } else {
-        const scroller = this.$refs.scroller;
-        const scrollMaxY = 
-          this.fullpage ?
-            document.body.scrollHeight - window.innerHeight :
-            scroller.scrollHeight - scroller.clientHeight;
-        const scrollTop =
-          this.fullpage ?
-            window.scrollY :
-            scroller.scrollTop;
-        scrollRatio = scrollMaxY ? scrollTop / scrollMaxY : 0;
+      const viewMaxY = (this.scene?.bounds?.h || 0) - this.window.height;
+      
+      if (scrollRatio == null) {
+        if (this.scrollbar) {
+          const scroll = this.scrollbar.scroll();
+          scrollRatio = scroll.ratio.y;
+        } else {
+          const scroller = this.$refs.scroller;
+          const scrollMaxY = 
+            this.fullpage ?
+              document.body.scrollHeight - window.innerHeight :
+              scroller.scrollHeight - scroller.clientHeight;
+          const scrollTop =
+            this.fullpage ?
+              window.scrollY :
+              scroller.scrollTop;
+          scrollRatio = scrollMaxY ? scrollTop / scrollMaxY : 0;
+        }
       }
 
       const viewY = scrollRatio * viewMaxY;
@@ -789,6 +910,7 @@ export default {
         h: this.window.height,
       }
       this.$refs.viewer.setView(view, transition && { animationTime: transition });
+
       this.visibleRegionsTask.perform(view, this.sceneParams);
     },
 

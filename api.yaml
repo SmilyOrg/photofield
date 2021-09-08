@@ -1,0 +1,596 @@
+openapi: '3.0.2'
+info:
+  title: Photofield
+  version: '0.1'
+servers:
+  - url: http://localhost:8080
+paths:    
+  /collections:
+    get:
+      description: Get all available collections (sets of files).
+      tags: ["Source"]
+      responses:
+        "200":
+          description: List of collections
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Collection"
+
+  /collections/{id}:
+    get:
+      description: Get a specific collection
+      tags: ["Source"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Opaque identifier
+          schema:
+            $ref: "#/components/schemas/CollectionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Collection"
+        "404":
+          description: Collection not found
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /index-tasks:
+    post:
+      description: Create a new index task i.e. scan the file system for files
+        in directories specified in the provided collection.
+      tags: ["Source"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - collection_id
+              properties:
+                collection_id:
+                  $ref: "#/components/schemas/CollectionId"
+      responses:
+        "202":
+          description: Accepted, it might take some time for the indexing to finish.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndexTask"
+        "409":
+          description: Conflict, indexing is already in progress for
+            the collection. The existing index task is returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndexTask"
+
+
+    get:
+      description: Get currently running index tasks. Indexing in this context
+        means scanning/walking the file system for files.
+      tags: ["Source"]
+      parameters:
+        - name: collection_id
+          in: query
+          required: true
+          description: Collection ID for the index tasks
+          schema:
+            $ref: "#/components/schemas/CollectionId"
+      responses:
+        "200":
+          description: List of index tasks
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/IndexTask"
+
+  /scenes:
+    post:
+      description: Create a new scene using the provided parameters
+      tags: ["Display"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SceneParams"
+      responses:
+        "202":
+          description: Accepted, it might take some time for it to fully finish creating.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scene"
+        "400":
+          description: Bad request parameters
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Problem"
+    get:
+      description: Get existing scenes matching the provided parameters
+      tags: ["Display"]
+      parameters:
+        - name: collection_id
+          in: query
+          required: true
+          description: Collection ID
+          schema:
+            $ref: "#/components/schemas/CollectionId"
+            
+        - name: scene_width
+          in: query
+          schema:
+            $ref: "#/components/schemas/SceneWidth"
+
+        - name: image_height
+          in: query
+          schema:
+            $ref: "#/components/schemas/ImageHeight"
+
+        - name: layout
+          in: query
+          schema:
+            $ref: "#/components/schemas/LayoutType"
+
+      responses:
+        "200":
+          description: List of scenes created for the specified collection
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Scene"
+  
+  /scenes/{id}:
+    get:
+      description: Get a previously created scene
+      tags: ["Display"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Opaque randomly generated identifier
+          schema:
+            $ref: "#/components/schemas/SceneId"
+      responses:
+        "200":
+          description: OK
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Scene"
+        "404":
+          description: Scene not found
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /scenes/{scene_id}/tiles:
+    get:
+      description: Get a rendered tile
+      tags: ["Display"]
+      parameters:
+
+        - name: scene_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SceneId"
+
+        - name: tile_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            example: 256
+            
+        - name: zoom
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            example: 3
+            
+        - name: "x"
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/TileCoord"
+            
+        - name: "y"
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/TileCoord"
+            
+        - name: debug_overdraw
+          in: query
+          schema:
+            type: boolean
+            example: false
+            
+        - name: debug_thumbnails
+          in: query
+          schema:
+            type: boolean
+            example: false
+
+      responses:
+        "200":
+          description: OK
+          content:
+            "image/jpeg":
+              schema:
+                type: string
+                format: binary
+
+  /scenes/{scene_id}/regions:
+    get:
+      description: Get regions within a certain bounding box
+      tags: ["Display"]
+      parameters:
+
+        - name: scene_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SceneId"
+
+        - name: "x"
+          in: query
+          required: true
+          schema:
+            type: number
+            example: 10
+    
+        - name: "y"
+          in: query
+          required: true
+          schema:
+            type: number
+            example: 200
+    
+        - name: w
+          in: query
+          required: true
+          schema:
+            type: number
+            example: 300
+    
+        - name: h
+          in: query
+          required: true
+          schema:
+            type: number
+            example: 200
+
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            example: 3
+    
+      responses:
+        "200":
+          description: Region list
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Region"
+
+
+  /scenes/{scene_id}/regions/{id}:
+    get:
+      description: Get a specific region
+      tags: ["Display"]
+      parameters:
+        - name: scene_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SceneId"
+
+        - name: id
+          in: path
+          required: true
+          description: Region ID
+          schema:
+            $ref: "#/components/schemas/RegionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Region"
+        "404":
+          description: Region not found
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /files/{id}:
+    get:
+      description: Get a file (referenced by region data)
+      tags: ["Files"]
+      parameters:
+        - $ref: "#/components/parameters/FileIdPathParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/FileResponse"
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+
+  /files/{id}/original/{filename}:
+    get:
+      description: Get a file via with an arbitrary filename as part of the URL
+      tags: ["Files"]
+      parameters:
+        - $ref: "#/components/parameters/FileIdPathParam"
+        - $ref: "#/components/parameters/FilenamePathParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/FileResponse"
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+
+  /files/{id}/image-variants/{size}/{filename}:
+    get:
+      description: Get an image thumbnail of the specified predefined size and
+        with an arbitrary filename as part of the URL
+      tags: ["Files"]
+      parameters:
+        - $ref: "#/components/parameters/FileIdPathParam"
+        - $ref: "#/components/parameters/FilenamePathParam"
+        - $ref: "#/components/parameters/SizePathParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/FileResponse"
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+
+  /files/{id}/video-variants/{size}/{filename}:
+    get:
+      description: Get a resized video of the specified predefined size and
+        with an arbitrary filename as part of the URL
+      tags: ["Files"]
+      parameters:
+        - $ref: "#/components/parameters/FileIdPathParam"
+        - $ref: "#/components/parameters/FilenamePathParam"
+        - $ref: "#/components/parameters/SizePathParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/FileResponse"
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+
+
+
+
+
+components:
+  responses:
+    FileResponse:
+      description: Raw binary file (image or video)
+      content:
+        "image/*":
+          schema:
+            $ref: "#/components/schemas/File"
+    FileNotFound:
+      description: Raw binary file (image or video)
+      content:
+        "image/*":
+          schema:
+            $ref: "#/components/schemas/File"
+
+  parameters:
+    FileIdPathParam:
+      name: id
+      in: path
+      required: true
+      description: File ID
+      schema:
+        $ref: "#/components/schemas/FileId"
+
+    FilenamePathParam:
+      name: filename
+      in: path
+      required: true
+      description: Arbitrary file name, used for better UX when opened
+        directly in a browser.
+      schema:
+        type: string
+        example: photo.jpg
+
+    SizePathParam:
+      name: size
+      in: path
+      required: true
+      description: Thumbnail size type label
+      schema:
+        type: string
+        example: M
+
+  schemas:
+    Scene:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          $ref: "#/components/schemas/SceneId"
+        bounds:
+          $ref: "#/components/schemas/Bounds"
+        photo_count:
+          type: integer
+          minimum: 0
+          example: 506
+
+    Collection:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          $ref: "#/components/schemas/CollectionId"
+        name:
+          type: string
+          description: User-friendly name
+          example: Vacation Photos
+          
+    IndexTask:
+      type: object
+      properties:
+        collection_id:
+          $ref: "#/components/schemas/CollectionId"
+        count:
+          type: integer
+          minimum: 0
+          example: 13
+          description: Number of files found since the start of the indexing.
+          
+    Region:
+      type: object
+      required:
+        - id
+        - bounds
+      properties:
+        id:
+          $ref: "#/components/schemas/RegionId"
+        bounds:
+          $ref: "#/components/schemas/Bounds"
+        data:
+          $ref: "#/components/schemas/RegionData"
+
+    RegionData:
+      type: object
+
+    File:
+      type: string
+      format: binary
+
+    SceneParams:
+      type: object
+      required:
+        - collection_id
+        - scene_width
+        - image_height
+        - layout
+      properties:
+        collection_id:
+          $ref: "#/components/schemas/CollectionId"
+        scene_width:
+          $ref: "#/components/schemas/SceneWidth"
+        image_height:
+          $ref: "#/components/schemas/ImageHeight"
+        layout:
+          $ref: "#/components/schemas/LayoutType"
+          
+    CollectionId:
+      type: string
+      example: vacation-photos
+    
+    SceneId:
+      type: string
+      example: Tqcqtc6h69
+
+    SceneWidth:
+      type: number
+      minimum: 0
+      example: 1200
+
+    ImageHeight:
+      type: number
+      minimum: 0
+      example: 300
+
+    RegionId:
+      type: integer
+      example: 0
+
+    FileId:
+      type: integer
+      example: 0
+
+    TileCoord:
+      type: integer
+      minimum: 0
+      example: 0
+
+    Bounds:
+      type: object
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+        w:
+          type: number
+          minimum: 0
+          example: 1200
+        h:
+          type: number
+          minimum: 0
+          example: 90000
+    
+    LayoutType:
+      type: string
+      enum:
+        - TIMELINE
+        - ALBUM
+        - SQUARE
+        - WALL
+
+    Problem:
+      type: object
+      properties:
+        status:
+          type: integer
+          format: int32
+          description: >
+            The HTTP status code generated by the origin server for this occurrence
+            of the problem.
+          minimum: 100
+          maximum: 600
+          exclusiveMaximum: true
+          example: 503
+        title:
+          type: string
+          description: >
+            A short summary of the problem type. Written in English and readable
+            for engineers, usually not suited for non technical stakeholders and
+            not localized.
+          example: Service Unavailable

@@ -13,10 +13,11 @@
     "openseadragon": "^2.4.2",
     "overlayscrollbars": "^1.13.1",
     "plyr": "^3.6.8",
+    "qs": "^6.10.1",
     "swrv": "^1.0.0-beta.8",
     "vue": "3.0.4",
     "vue-concurrency": "^2.0.3",
-    "vue-router": "^4.0.1"
+    "vue-router": "^4.0.11"
   },
   "devDependencies": {
     "@vue/compiler-sfc": "3.0.4",

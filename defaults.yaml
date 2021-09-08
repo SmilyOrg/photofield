@@ -5,6 +5,7 @@ collections:
 
 layout:
   limit: 0
+  type: ALBUM
 
 render:
   tile_size: 256

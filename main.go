@@ -2,42 +2,41 @@ package main
 
 import (
 	"embed"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
 	"io/ioutil"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
-	"strconv"
 
-	_ "embed"
 	_ "net/http/pprof"
 
 	"github.com/felixge/fgprof"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	chirender "github.com/go-chi/render"
 	"github.com/imdario/mergo"
+	spa "github.com/roberthodgen/spa-server"
 
 	_ "github.com/joho/godotenv/autoload"
 
 	. "photofield/internal"
+	openapi "photofield/internal/api"
 	. "photofield/internal/collection"
 	. "photofield/internal/display"
 	. "photofield/internal/layout"
 	. "photofield/internal/storage"
 
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	_ "github.com/mkevac/debugcharts"
-	spa "github.com/roberthodgen/spa-server"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
@@ -79,11 +78,14 @@ var httpLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 
 func instrumentationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		route := mux.CurrentRoute(r)
-		path, _ := route.GetPathTemplate()
-		timer := prometheus.NewTimer(httpLatency.WithLabelValues(path))
+		rctx := chi.RouteContext(r.Context())
+
+		startTime := time.Now()
 		next.ServeHTTP(rw, r)
-		timer.ObserveDuration()
+		latency := time.Since(startTime).Seconds()
+
+		path := rctx.RoutePattern()
+		httpLatency.WithLabelValues(path).Observe(latency)
 	})
 }
 
@@ -104,6 +106,28 @@ type TileRequest struct {
 	Priority int8
 	Process  chan struct{}
 	Done     chan struct{}
+}
+
+type Problem struct {
+	Status int    `json:"status"`
+	Title  string `json:"title"`
+}
+
+func (p Problem) Render(w http.ResponseWriter, r *http.Request) error {
+	chirender.Status(r, p.Status)
+	return nil
+}
+
+func problem(w http.ResponseWriter, r *http.Request, code int, message string) {
+	chirender.Render(w, r, Problem{
+		Status: code,
+		Title:  message,
+	})
+}
+
+func respond(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
+	chirender.Status(r, code)
+	chirender.Respond(w, r, v)
 }
 
 func drawTile(c *canvas.Context, render *Render, scene *Scene, zoom int, x int, y int) {
@@ -173,100 +197,6 @@ func putTileImage(config *Render, img *image.RGBA) {
 	pool.Put(img)
 }
 
-func getTileSize(config *Render, query *url.Values) int {
-	tileSizeQuery, err := strconv.Atoi(query.Get("tileSize"))
-	if err == nil && tileSizeQuery > 0 {
-		return tileSizeQuery
-	}
-	return config.TileSize
-}
-
-func indexTasksHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	w.Header().Set("Content-Type", "application/json")
-	if r.Method == "GET" {
-		collectionId := query.Get("collection_id")
-
-		tasks := make([]IndexTask, 0)
-		indexTasks.Range(func(key, value interface{}) bool {
-			task := value.(IndexTask)
-			if task.CollectionId == collectionId {
-				tasks = append(tasks, task)
-			}
-			return true
-		})
-		err := json.NewEncoder(w).Encode(struct {
-			Items []IndexTask `json:"items"`
-		}{
-			Items: tasks,
-		})
-		if err != nil {
-			http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
-			return
-		}
-	} else if r.Method == "POST" {
-		decoder := json.NewDecoder(r.Body)
-		var request struct {
-			CollectionId string `json:"collection_id"`
-		}
-		var err error
-		err = decoder.Decode(&request)
-		if err != nil {
-			http.Error(w, "Unable to decode body as JSON", http.StatusBadRequest)
-			return
-		}
-		collection := getCollectionById(request.CollectionId)
-		if collection == nil {
-			http.Error(w, "Invalid collection_id", http.StatusBadRequest)
-			return
-		}
-		task := IndexTask{
-			CollectionId: request.CollectionId,
-			Count:        0,
-		}
-		stored, loaded := indexTasks.LoadOrStore(collection.Id, task)
-		task = stored.(IndexTask)
-		if loaded {
-			w.WriteHeader(http.StatusConflict)
-		} else {
-			w.WriteHeader(http.StatusAccepted)
-			indexCollection(collection)
-		}
-		err = json.NewEncoder(w).Encode(task)
-		if err != nil {
-			http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
-			return
-		}
-	}
-}
-
-func scenesHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	scene, err := getSceneFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	scenes := []*Scene{scene}
-	err = json.NewEncoder(w).Encode(scenes)
-	if err != nil {
-		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
-		return
-	}
-}
-
-func filterCollections(collections []Collection, f func(Collection) bool) []Collection {
-	filtered := make([]Collection, 0)
-	for _, collection := range collections {
-		if f(collection) {
-			filtered = append(filtered, collection)
-		}
-	}
-	return filtered
-}
-
 func getCollectionById(id string) *Collection {
 	for i := range collections {
 		if collections[i].Id == id {
@@ -274,86 +204,6 @@ func getCollectionById(id string) *Collection {
 		}
 	}
 	return nil
-}
-
-func collectionsHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-
-	w.Header().Set("Content-Type", "application/json")
-
-	name := query.Get("name")
-
-	filtered := filterCollections(collections, func(collection Collection) bool {
-		if name != "" && name != collection.Name {
-			return false
-		}
-		return true
-	})
-
-	err := json.NewEncoder(w).Encode(filtered)
-	if err != nil {
-		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
-		return
-	}
-}
-
-func collectionHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	vars := mux.Vars(r)
-
-	id := vars["id"]
-	if id == "" {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
-	collection := getCollectionById(id)
-	if collection == nil {
-		http.Error(w, "Collection not found", http.StatusNotFound)
-		return
-	}
-
-	err := json.NewEncoder(w).Encode(collection)
-	if err != nil {
-		http.Error(w, "Unable to encode to json", http.StatusInternalServerError)
-		return
-	}
-}
-
-func tilesHandler(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	request := TileRequest{
-		Request:  r,
-		Response: w,
-		Priority: getTileRequestPriority(r),
-		Process:  make(chan struct{}),
-		Done:     make(chan struct{}),
-	}
-	if tileRequestConfig.Concurrency == 0 {
-		tilesHandlerImpl(w, r)
-	} else {
-		pushTileRequest(request)
-		<-request.Process
-		tilesHandlerImpl(w, r)
-		request.Done <- struct{}{}
-	}
-	endTime := time.Now()
-	if tileRequestConfig.LogStats {
-		millis := endTime.Sub(startTime).Milliseconds()
-		fmt.Printf("%4d, %4d, %4d, %4d\n", request.Priority, startTime.Sub(startupTime).Milliseconds(), endTime.Sub(startupTime).Milliseconds(), millis)
-	}
-}
-
-func getTileRequestPriority(r *http.Request) int8 {
-	query := r.URL.Query()
-	// score := 0.
-	zoom, err := strconv.Atoi(query.Get("zoom"))
-	if err == nil && zoom >= 0 && zoom < 100 {
-		return int8(zoom)
-		// score += 1 / (1 + (float64)(zoom))
-	}
-	return 100
 }
 
 func pushTileRequest(request TileRequest) {
@@ -403,234 +253,6 @@ func processTileRequests(concurrency int) {
 	}
 }
 
-func tilesHandlerImpl(w http.ResponseWriter, r *http.Request) {
-
-	query := r.URL.Query()
-
-	scene, err := getSceneFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	render := defaultSceneConfig.Render
-	render.TileSize = getTileSize(&render, &query)
-
-	zoom, err := strconv.Atoi(query.Get("zoom"))
-	if err != nil {
-		http.Error(w, "Invalid zoom", http.StatusBadRequest)
-		return
-	}
-
-	x, err := strconv.Atoi(query.Get("x"))
-	if err != nil {
-		http.Error(w, "Invalid x", http.StatusBadRequest)
-		return
-	}
-
-	y, err := strconv.Atoi(query.Get("y"))
-	if err != nil {
-		http.Error(w, "Invalid y", http.StatusBadRequest)
-		return
-	}
-
-	render.DebugOverdraw = query.Get("debugOverdraw") == "true"
-	render.DebugThumbnails = query.Get("debugThumbnails") == "true"
-
-	image, context := getTileImage(&render)
-	defer putTileImage(&render, image)
-	render.CanvasImage = image
-	render.Zoom = zoom
-	drawTile(context, &render, scene, zoom, x, y)
-	imageSource.Coder.EncodeJpeg(w, image)
-}
-
-func regionsHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-
-	scene, err := getSceneFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	render := defaultSceneConfig.Render
-	render.TileSize = getTileSize(&render, &query)
-
-	x, err := strconv.ParseFloat(query.Get("x"), 64)
-	if err != nil {
-		http.Error(w, "Invalid x", http.StatusBadRequest)
-		return
-	}
-
-	y, err := strconv.ParseFloat(query.Get("y"), 64)
-	if err != nil {
-		http.Error(w, "Invalid y", http.StatusBadRequest)
-		return
-	}
-
-	width, err := strconv.ParseFloat(query.Get("w"), 64)
-	if err != nil {
-		http.Error(w, "Invalid width", http.StatusBadRequest)
-		return
-	}
-
-	height, err := strconv.ParseFloat(query.Get("h"), 64)
-	if err != nil {
-		http.Error(w, "Invalid height", http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	bounds := Rect{
-		X: x,
-		Y: y,
-		W: width,
-		H: height,
-	}
-
-	regions := scene.GetRegions(&render, bounds)
-
-	json.NewEncoder(w).Encode(regions)
-}
-
-func regionHandler(w http.ResponseWriter, r *http.Request) {
-
-	scene, err := getSceneFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	vars := mux.Vars(r)
-
-	id, err := strconv.ParseInt(vars["id"], 10, 32)
-	if err != nil {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	region := scene.GetRegion(int(id))
-	if region.Id == -1 {
-		http.Error(w, "Id not found", http.StatusNotFound)
-		return
-	}
-
-	json.NewEncoder(w).Encode(region)
-}
-
-func fileHandler(w http.ResponseWriter, r *http.Request) {
-
-	vars := mux.Vars(r)
-
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
-	path, err := imageSource.GetImagePath(ImageId(id))
-	if err == NotFoundError {
-		http.Error(w, "Id not found", http.StatusNotFound)
-		return
-	}
-	http.ServeFile(w, r, path)
-
-}
-
-func fileVideoHandler(w http.ResponseWriter, r *http.Request) {
-
-	vars := mux.Vars(r)
-
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
-	size := vars["size"]
-	if size == "" {
-		http.Error(w, "Invalid video size", http.StatusBadRequest)
-		return
-	}
-
-	if size == "thumb" {
-		size = "M"
-	}
-
-	videoPath, err := imageSource.GetImagePath(ImageId(id))
-	if err == NotFoundError {
-		http.Error(w, "Id not found", http.StatusNotFound)
-		return
-	}
-
-	path := ""
-	for i := range imageSource.Videos.Thumbnails {
-		thumbnail := imageSource.Videos.Thumbnails[i]
-		candidatePath := thumbnail.GetPath(videoPath)
-		if !imageSource.Exists(candidatePath) {
-			continue
-		}
-		if size != "full" && thumbnail.Name != size {
-			continue
-		}
-		path = candidatePath
-	}
-
-	if path == "" || !imageSource.Exists(path) {
-		http.Error(w, "Video not found", http.StatusNotFound)
-		return
-	}
-
-	http.ServeFile(w, r, path)
-}
-
-func fileThumbHandler(w http.ResponseWriter, r *http.Request) {
-
-	vars := mux.Vars(r)
-
-	id, err := strconv.Atoi(vars["id"])
-	if err != nil {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
-	size := vars["size"]
-	if size == "" {
-		http.Error(w, "Invalid size", http.StatusBadRequest)
-		return
-	}
-
-	photoPath, err := imageSource.GetImagePath(ImageId(id))
-	if err == NotFoundError {
-		http.Error(w, "Id not found", http.StatusNotFound)
-		return
-	}
-
-	path := ""
-	for i := range imageSource.Images.Thumbnails {
-		thumbnail := imageSource.Images.Thumbnails[i]
-		candidatePath := thumbnail.GetPath(photoPath)
-		if !imageSource.Exists(candidatePath) {
-			continue
-		}
-		if thumbnail.Name != size {
-			continue
-		}
-		path = candidatePath
-	}
-
-	if path == "" || !imageSource.Exists(path) {
-		http.Error(w, "Thumbnail not found", http.StatusNotFound)
-		return
-	}
-
-	http.ServeFile(w, r, path)
-}
-
 func renderSample(config Render, scene *Scene) {
 	log.Println("rendering sample")
 	config.LogDraws = true
@@ -651,52 +273,352 @@ func renderSample(config Render, scene *Scene) {
 	f.Close()
 }
 
-func getSceneFromRequest(r *http.Request) (*Scene, error) {
+func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request) {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, entrypoint)
+	}
+	return http.HandlerFunc(fn)
+}
+
+type Api struct{}
+
+func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
+	data := &openapi.SceneParams{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	sceneConfig := defaultSceneConfig
+	sceneConfig.Layout.SceneWidth = float64(data.SceneWidth)
+	sceneConfig.Layout.ImageHeight = float64(data.ImageHeight)
+	sceneConfig.Layout.Type = LayoutType(data.Layout)
+	collection := getCollectionById(string(data.CollectionId))
+	if collection == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+	sceneConfig.Collection = *collection
 
-	query := r.URL.Query()
+	scene := sceneSource.Add(sceneConfig, imageSource)
 
-	var err error
-	var value string
+	respond(w, r, http.StatusAccepted, scene)
+}
 
-	value = query.Get("sceneWidth")
-	if value != "" {
-		sceneConfig.Layout.SceneWidth, err = strconv.ParseFloat(value, 64)
-		if err != nil || sceneConfig.Layout.SceneWidth <= 0 {
-			return nil, errors.New("invalid sceneWidth")
+func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.GetScenesParams) {
+
+	sceneConfig := defaultSceneConfig
+	if params.SceneWidth != nil {
+		sceneConfig.Layout.SceneWidth = float64(*params.SceneWidth)
+	}
+	if params.ImageHeight != nil {
+		sceneConfig.Layout.ImageHeight = float64(*params.ImageHeight)
+	}
+	if params.Layout != nil {
+		sceneConfig.Layout.Type = LayoutType(*params.Layout)
+	}
+	collection := getCollectionById(string(params.CollectionId))
+	if collection == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+	sceneConfig.Collection = *collection
+
+	scenes := sceneSource.GetScenesWithConfig(sceneConfig)
+	sort.Slice(scenes, func(i, j int) bool {
+		a := scenes[i]
+		b := scenes[j]
+		return a.CreatedAt.After(b.CreatedAt)
+	})
+
+	respond(w, r, http.StatusOK, struct {
+		Items []*Scene `json:"items"`
+	}{
+		Items: scenes,
+	})
+}
+
+func (*Api) GetScenesId(w http.ResponseWriter, r *http.Request, id openapi.SceneId) {
+
+	scene := sceneSource.GetSceneById(string(id), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusNotFound, "Scene not found")
+		return
+	}
+
+	respond(w, r, http.StatusOK, scene)
+}
+
+func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
+	respond(w, r, http.StatusOK, struct {
+		Items []Collection `json:"items"`
+	}{
+		Items: collections,
+	})
+}
+
+func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.CollectionId) {
+
+	for _, collection := range collections {
+		if collection.Id == string(id) {
+			respond(w, r, http.StatusOK, collection)
+			return
 		}
 	}
 
-	value = query.Get("imageHeight")
-	if value != "" {
-		sceneConfig.Layout.ImageHeight, err = strconv.ParseFloat(value, 64)
-		if err != nil {
-			return nil, errors.New("invalid imageHeight")
+	problem(w, r, http.StatusNotFound, "Scene not found")
+}
+
+func (*Api) GetIndexTasks(w http.ResponseWriter, r *http.Request, params openapi.GetIndexTasksParams) {
+
+	tasks := make([]IndexTask, 0)
+	indexTasks.Range(func(key, value interface{}) bool {
+		task := value.(IndexTask)
+		if task.CollectionId == string(params.CollectionId) {
+			tasks = append(tasks, task)
 		}
+		return true
+	})
+
+	respond(w, r, http.StatusOK, struct {
+		Items []IndexTask `json:"items"`
+	}{
+		Items: tasks,
+	})
+}
+
+func (*Api) PostIndexTasks(w http.ResponseWriter, r *http.Request) {
+
+	data := &openapi.PostIndexTasksJSONBody{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
 	}
 
-	sceneConfig.Layout.Type = query.Get("layout")
+	collection := getCollectionById(string(data.CollectionId))
+	if collection == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
 
-	value = query.Get("collection")
-	if value != "" {
-		collection := getCollectionById(value)
-		if collection == nil {
-			return nil, errors.New("collection not found")
+	task := IndexTask{
+		CollectionId: string(data.CollectionId),
+		Count:        0,
+	}
+	stored, loaded := indexTasks.LoadOrStore(collection.Id, task)
+	task = stored.(IndexTask)
+	if loaded {
+		respond(w, r, http.StatusConflict, task)
+	} else {
+		respond(w, r, http.StatusAccepted, task)
+		indexCollection(collection)
+	}
+}
+
+func (*Api) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
+	startTime := time.Now()
+
+	if tileRequestConfig.Concurrency == 0 {
+		GetScenesSceneIdTilesImpl(w, r, sceneId, params)
+	} else {
+		request := TileRequest{
+			Request:  r,
+			Response: w,
+			Priority: GetTilesRequestPriority(params),
+			Process:  make(chan struct{}),
+			Done:     make(chan struct{}),
 		}
-		sceneConfig.Collection = *collection
+		pushTileRequest(request)
+		<-request.Process
+		GetScenesSceneIdTilesImpl(w, r, sceneId, params)
+		request.Done <- struct{}{}
 	}
 
-	if sceneConfig.Layout.Type == "" {
-		sceneConfig.Layout.Type = sceneConfig.Collection.Layout
+	endTime := time.Now()
+	if tileRequestConfig.LogStats {
+		millis := endTime.Sub(startTime).Milliseconds()
+		fmt.Printf("%4d, %4d, %4d, %4d\n", GetTilesRequestPriority(params), startTime.Sub(startupTime).Milliseconds(), endTime.Sub(startupTime).Milliseconds(), millis)
+	}
+}
+
+func GetTilesRequestPriority(params openapi.GetScenesSceneIdTilesParams) int8 {
+	zoom := params.Zoom
+	if zoom >= 0 && zoom < 100 {
+		return int8(zoom)
+	}
+	return 100
+}
+
+func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
+	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusBadRequest, "Scene not found")
 	}
 
-	cacheKey := query.Get("cacheKey")
+	render := defaultSceneConfig.Render
+	render.TileSize = params.TileSize
+	if params.DebugOverdraw != nil {
+		render.DebugOverdraw = *params.DebugOverdraw
+	}
+	if params.DebugThumbnails != nil {
+		render.DebugThumbnails = *params.DebugThumbnails
+	}
 
-	// fmt.Printf("%.0f %.0f\n", sceneConfig.Layout.SceneWidth, sceneConfig.Layout.ImageHeight)
+	zoom := params.Zoom
+	x := int(params.X)
+	y := int(params.Y)
 
-	// return getScene(sceneConfig), nil
+	image, context := getTileImage(&render)
+	defer putTileImage(&render, image)
+	render.CanvasImage = image
+	render.Zoom = zoom
+	drawTile(context, &render, scene, zoom, x, y)
 
-	return sceneSource.GetScene(sceneConfig, imageSource, cacheKey), nil
+	imageSource.Coder.EncodeJpeg(w, image)
+}
+
+func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdRegionsParams) {
+
+	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusBadRequest, "Scene not found")
+		return
+	}
+
+	bounds := Rect{
+		X: float64(params.X),
+		Y: float64(params.Y),
+		W: float64(params.W),
+		H: float64(params.H),
+	}
+
+	render := defaultSceneConfig.Render
+	regions := scene.GetRegions(&render, bounds, params.Limit)
+
+	respond(w, r, http.StatusOK, struct {
+		Items []Region `json:"items"`
+	}{
+		Items: regions,
+	})
+}
+
+func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, id openapi.RegionId) {
+
+	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusBadRequest, "Scene not found")
+		return
+	}
+
+	region := scene.GetRegion(int(id))
+	if region.Id == -1 {
+		http.Error(w, "Region not found", http.StatusNotFound)
+		return
+	}
+
+	respond(w, r, http.StatusOK, region)
+}
+
+func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {
+
+	path, err := imageSource.GetImagePath(ImageId(id))
+	if err == NotFoundError {
+		problem(w, r, http.StatusNotFound, "File not found")
+		return
+	}
+
+	http.ServeFile(w, r, path)
+}
+
+func (*Api) GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, filename openapi.FilenamePathParam) {
+
+	path, err := imageSource.GetImagePath(ImageId(id))
+	if err == NotFoundError {
+		problem(w, r, http.StatusNotFound, "File not found")
+		return
+	}
+
+	http.ServeFile(w, r, path)
+}
+
+func (*Api) GetFilesIdImageVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
+
+	imagePath, err := imageSource.GetImagePath(ImageId(id))
+	if err == NotFoundError {
+		problem(w, r, http.StatusNotFound, "Image not found")
+		return
+	}
+
+	path := ""
+	for i := range imageSource.Images.Thumbnails {
+		thumbnail := imageSource.Images.Thumbnails[i]
+		candidatePath := thumbnail.GetPath(imagePath)
+		if !imageSource.Exists(candidatePath) {
+			continue
+		}
+		if thumbnail.Name != string(size) {
+			continue
+		}
+		path = candidatePath
+	}
+
+	if path == "" || !imageSource.Exists(path) {
+		problem(w, r, http.StatusNotFound, "Thumbnail not found")
+		return
+	}
+
+	http.ServeFile(w, r, path)
+}
+
+func (*Api) GetFilesIdVideoVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
+
+	// if size == "thumb" {
+	// 	size = "M"
+	// }
+
+	videoPath, err := imageSource.GetImagePath(ImageId(id))
+	if err == NotFoundError {
+		problem(w, r, http.StatusNotFound, "Video not found")
+		return
+	}
+
+	path := ""
+	for i := range imageSource.Videos.Thumbnails {
+		thumbnail := imageSource.Videos.Thumbnails[i]
+		candidatePath := thumbnail.GetPath(videoPath)
+		if !imageSource.Exists(candidatePath) {
+			continue
+		}
+		if size != "full" && thumbnail.Name != string(size) {
+			continue
+		}
+		path = candidatePath
+	}
+
+	if path == "" || !imageSource.Exists(path) {
+		problem(w, r, http.StatusNotFound, "Resized video not found")
+		return
+	}
+}
+
+func AddPrefix(prefix string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rctx := chi.RouteContext(r.Context())
+
+			routePath := rctx.RoutePath
+			if routePath == "" {
+				if r.URL.RawPath != "" {
+					routePath = r.URL.RawPath
+				} else {
+					routePath = r.URL.Path
+				}
+				rctx.RoutePath = prefix + routePath
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 type AppConfig struct {
@@ -789,7 +711,11 @@ func loadConfiguration() AppConfig {
 
 	expandCollections(&appConfig.Collections)
 	for i := range appConfig.Collections {
-		appConfig.Collections[i].GenerateId()
+		collection := &appConfig.Collections[i]
+		collection.GenerateId()
+		if collection.Layout == "" {
+			collection.Layout = string(appConfig.Layout.Type)
+		}
 	}
 
 	for i := range appConfig.Media.Images.Thumbnails {
@@ -802,11 +728,13 @@ func loadConfiguration() AppConfig {
 	return appConfig
 }
 
-func IndexHandler(entrypoint string) func(w http.ResponseWriter, r *http.Request) {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, entrypoint)
-	}
-	return http.HandlerFunc(fn)
+func addExampleScene() {
+	sceneConfig := defaultSceneConfig
+	sceneConfig.Scene.Id = "Tqcqtc6h69"
+	sceneConfig.Layout.SceneWidth = 800
+	sceneConfig.Layout.ImageHeight = 200
+	sceneConfig.Collection = *getCollectionById("vacation-photos")
+	sceneSource.Add(sceneConfig, imageSource)
 }
 
 func main() {
@@ -851,6 +779,7 @@ func main() {
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
+	// addExampleScene()
 	// renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 
 	addr := ":8080"
@@ -871,29 +800,35 @@ func main() {
 		processTileRequests(tileRequestConfig.Concurrency)
 	}
 
-	r := mux.NewRouter()
+	r := chi.NewRouter()
 
-	api := r.PathPrefix(apiPrefix).Subrouter()
-	api.Use(instrumentationMiddleware)
-	api.Handle("/metrics", promhttp.Handler())
-	api.HandleFunc("/index-tasks", indexTasksHandler)
-	api.HandleFunc("/scenes", scenesHandler)
-	api.HandleFunc("/collections", collectionsHandler)
-	api.HandleFunc("/collections/{id}", collectionHandler)
-	api.HandleFunc("/tiles", tilesHandler)
-	api.HandleFunc("/regions", regionsHandler)
-	api.HandleFunc("/regions/{id}", regionHandler)
-	api.HandleFunc("/files/{id}", fileHandler)
-	api.HandleFunc("/files/{id}/file/{filename}", fileHandler)
-	api.HandleFunc("/files/{id}/thumb/{size}/{filename}", fileThumbHandler)
-	api.HandleFunc("/files/{id}/video/{size}/{filename}", fileVideoHandler)
+	// r.Use(middleware.Logger)
+	r.Use(instrumentationMiddleware)
+	r.Use(middleware.Recoverer)
 
-	r.PathPrefix("/").Handler(spa.SpaHandler("static", "index.html"))
+	r.Route(apiPrefix, func(r chi.Router) {
 
-	http.Handle("/", handlers.CORS()(r))
+		r.Use(cors.Handler(cors.Options{
+			AllowedOrigins: []string{"*"},
+			AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+			MaxAge:         300, // Maximum value not ignored by any of major browsers
+		}))
 
-	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
+		var api Api
+		r.Mount("/", openapi.Handler(&api))
+		r.Mount("/metrics", promhttp.Handler())
+	})
+	msg := fmt.Sprintf("api at %v%v", addr, apiPrefix)
 
-	log.Println("listening on", addr+", "+addr+apiPrefix)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	r.Mount("/debug", middleware.Profiler())
+	r.Handle("/debug/fgprof", fgprof.Handler())
+
+	if apiPrefix != "/" {
+		r.Handle("/*", spa.SpaHandler("static", "index.html"))
+		msg += fmt.Sprintf(", ui at %v", addr)
+	}
+
+	log.Println(msg)
+	log.Fatal(http.ListenAndServe(addr, r))
 }

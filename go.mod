@@ -6,22 +6,24 @@ require (
 	github.com/EdlinOrg/prominentcolor v1.0.0
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
 	github.com/buger/jsonparser v1.0.0 // indirect
+	github.com/deepmap/oapi-codegen v1.8.2
 	github.com/dgraph-io/ristretto v0.0.2
 	github.com/disintegration/imaging v1.6.2
 	github.com/docker/go-units v0.4.0
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/felixge/fgprof v0.9.1
+	github.com/go-chi/chi/v5 v5.0.4
+	github.com/go-chi/cors v1.2.0
+	github.com/go-chi/render v1.0.1
 	github.com/goccy/go-yaml v1.7.17
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.1
-	github.com/gorilla/handlers v1.4.2
-	github.com/gorilla/mux v1.8.0
 	github.com/gosimple/slug v1.10.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/imdario/mergo v0.3.12
 	github.com/joho/godotenv v1.3.0
 	github.com/karrick/godirwalk v1.15.6
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
-	github.com/mattn/go-colorable v0.1.7 // indirect
+	github.com/matoous/go-nanoid/v2 v2.0.0
 	github.com/mkevac/debugcharts v0.0.0-20191222103121-ae1c48aa8615
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect

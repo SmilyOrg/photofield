@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/dgraph-io/ristretto"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 
 	. "photofield/internal"
 	. "photofield/internal/collection"
@@ -17,13 +19,18 @@ import (
 type SceneSource struct {
 	DefaultScene Scene
 
-	scenes        *ristretto.Cache
-	scenesLoading sync.Map
+	sceneCache *ristretto.Cache
+	scenes     sync.Map
 }
 
 type loadingScene struct {
 	scene  *Scene
 	loaded chan struct{}
+}
+
+type storedScene struct {
+	scene  *Scene
+	config SceneConfig
 }
 
 type SceneConfig struct {
@@ -36,7 +43,7 @@ type SceneConfig struct {
 func NewSceneSource() *SceneSource {
 	var err error
 	source := SceneSource{}
-	source.scenes, err = ristretto.NewCache(&ristretto.Config{
+	source.sceneCache, err = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e4,     // number of keys to track frequency of, 10x max expected key count
 		MaxCost:     1 << 27, // maximum size/cost of cache (128MiB)
 		BufferItems: 64,      // number of keys per Get buffer.
@@ -45,7 +52,7 @@ func NewSceneSource() *SceneSource {
 	if err != nil {
 		panic(err)
 	}
-	AddRistrettoMetrics("scene_cache", source.scenes)
+	AddRistrettoMetrics("scene_cache", source.sceneCache)
 	return &source
 }
 
@@ -85,16 +92,16 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *ImageSourc
 
 	layoutFinished := ElapsedWithCount("layout", len(ids))
 	switch config.Layout.Type {
-	case "timeline":
+	case Timeline:
 		LayoutTimeline(config.Layout, &scene, imageSource)
 
-	case "album":
+	case Album:
 		LayoutAlbum(config.Layout, &scene, imageSource)
 
-	case "square":
+	case Square:
 		LayoutSquare(&scene, imageSource)
 
-	case "wall":
+	case Wall:
 		LayoutWall(config.Layout, &scene, imageSource)
 
 	default:
@@ -108,33 +115,90 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *ImageSourc
 		}
 	}
 
+	scene.CreatedAt = time.Now()
+
 	log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
 	return scene
 }
 
-func (source *SceneSource) GetScene(config SceneConfig, imageSource *ImageSource, cacheKey string) *Scene {
-	key := fmt.Sprintf("%v %v %v", getCollectionKey(config.Collection), getLayoutKey(config.Layout), cacheKey)
-
-	value, found := source.scenes.Get(key)
+func (source *SceneSource) GetSceneById(id string, imageSource *ImageSource) *Scene {
+	value, found := source.sceneCache.Get(id)
 	if found {
 		return value.(*Scene)
 	}
 
-	loading := &loadingScene{}
-	loading.loaded = make(chan struct{})
-
-	stored, loaded := source.scenesLoading.LoadOrStore(key, loading)
+	stored, loaded := source.scenes.Load(id)
 	if loaded {
-		loading = stored.(*loadingScene)
-		<-loading.loaded
-		return loading.scene
+		scene := stored.(storedScene).scene
+		source.sceneCache.Set(id, scene, getSceneCost(scene))
+		return scene
+	}
+	return nil
+}
+
+func sceneConfigEqual(a SceneConfig, b SceneConfig) bool {
+	if a.Collection.ListLimit != b.Collection.ListLimit {
+		return false
+	}
+	for _, dirA := range a.Collection.Dirs {
+		found := false
+		for _, dirB := range b.Collection.Dirs {
+			if dirA == dirB {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	if a.Layout.SceneWidth != 0 &&
+		b.Layout.SceneWidth != 0 &&
+		a.Layout.SceneWidth != b.Layout.SceneWidth {
+		return false
+	}
+
+	if a.Layout.ImageHeight != 0 &&
+		b.Layout.ImageHeight != 0 &&
+		a.Layout.ImageHeight != b.Layout.ImageHeight {
+		return false
+	}
+
+	return a.Layout.Type != "" &&
+		b.Layout.Type != "" &&
+		a.Layout.Type == b.Layout.Type
+}
+
+func (source *SceneSource) GetScenesWithConfig(config SceneConfig) []*Scene {
+	scenes := make([]*Scene, 0)
+	source.scenes.Range(func(_, value interface{}) bool {
+		stored := value.(storedScene)
+		if sceneConfigEqual(stored.config, config) {
+			scenes = append(scenes, stored.scene)
+		}
+		return true
+	})
+	return scenes
+}
+
+func (source *SceneSource) Add(config SceneConfig, imageSource *ImageSource) *Scene {
+
+	id := config.Scene.Id
+	if id == "" {
+		var err error
+		id, err = gonanoid.Generate("6789BCDFGHJKLMNPQRTWbcdfghjkmnpqrtwz", 10)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	scene := source.loadScene(config, imageSource)
+	scene.Id = id
 
-	source.scenes.Set(key, &scene, getSceneCost(&scene))
-	loading.scene = &scene
-	close(loading.loaded)
-	source.scenesLoading.Delete(key)
+	source.scenes.Store(scene.Id, storedScene{
+		scene:  &scene,
+		config: config,
+	})
 	return &scene
 }
