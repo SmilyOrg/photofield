@@ -68,17 +68,17 @@
     <ui-drawer class="sidebar" type="modal" nav-id="menu" v-model="drawer">
       <template v-if="collection">
         <ui-drawer-header>
-          <ui-drawer-title>{{ collection.name }}</ui-drawer-title>
+          <ui-drawer-title>{{ collection?.name }}</ui-drawer-title>
           <ui-drawer-subtitle>
             {{ indexTasks?.items[0]?.count || fileCount }} files
           </ui-drawer-subtitle>
         </ui-drawer-header>
-        <ui-button @click="reindex()">Reindex Collection</ui-button>
+        <ui-button @click="reindex()">Reindex</ui-button>
+        <ui-button @click="recreateScene()">
+          Reload
+        </ui-button>
         <ui-button @click="simulate()">
           Simulate
-        </ui-button>
-        <ui-button @click="refreshCache()">
-          Refresh Cache
         </ui-button>
       </template>
       <ui-divider></ui-divider>
@@ -216,8 +216,8 @@ export default {
     }
   },
   methods: {
-    refreshCache() {
-      // TODO: reimplement
+    recreateScene() {
+      this.$bus.emit("recreate-scene");
     },
     async reindex() {
       await reindexCollection(this.collection?.id);
@@ -226,7 +226,7 @@ export default {
         () => this.indexTasks?.items?.length > 0,
         100
       );
-      this.refreshCache();
+      this.recreateScene();
     },
     onTitleClick() {
       this.$bus.emit("home");

@@ -3,6 +3,7 @@ export default class Simulation {
   constructor(options) {
     this.runs = options.runs;
     this.actions = options.actions;
+    this.scrollbar = options.scrollbar;
     let actionStart = 0;
     this.actions.forEach(action => {
       action.start = actionStart;
@@ -88,8 +89,7 @@ export default class Simulation {
         speed = distance * 1000 / action.duration;
         y = scroll.from + t * distance;
       }
-      // this.target.$refs.scroller.scroll(0, y);
-      window.scrollTo(window.scrollX, y);
+      this.scrollbar.scroll([0, y]);
     }
     this.frames.push([ elapsed, frameTime, t, speed ]);
   }

@@ -87,11 +87,11 @@ export default {
     },
 
     updateOverlay(region) {
-      if (!region) return;
+      if (!region || !region.bounds) return;
       if (!this.viewer) return;
       const overlay = this.viewer.getOverlayById("overlay-0");
       
-      const scale = 1 / this.scene.width;
+      const scale = 1 / this.scene.bounds.w;
       const rect = this.tempRect;
       rect.x = region.bounds.x * scale;
       rect.y = region.bounds.y * scale;

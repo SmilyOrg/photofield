@@ -166,12 +166,16 @@ export default {
       itemsMutate: scenesMutate,
     } = useApi(() => sceneParams.value && `/scenes?` + qs.stringify(sceneParams.value));
 
+    const recreateScene = async () => {
+      const params = sceneParams.value;
+      scenesMutate(async () => ([await createScene(params)]));
+    }
+
     watch(scenes, async newValue => {
       // Create scene if a matching one hasn't been found
       if (newValue?.length === 0) {
         console.log("scene not found, creating...");
-        const params = sceneParams.value;
-        scenesMutate(async () => ([await createScene(params)]));
+        await recreateScene();
       }
     })
 
@@ -295,6 +299,7 @@ export default {
       nativeScroll,
       scrollbarUpdateRegion,
       reorientRegion,
+      recreateScene,
       window,
       resizeApplyTask,
       collection,
@@ -318,6 +323,7 @@ export default {
     // this.$refs.scroller.addEventListener("scroll", this.onScroll);
     this.$emit("tasks", this.tasks);
     this.$bus.on("home", this.navigateExit);
+    this.$bus.on("recreate-scene", this.recreateScene);
     this.$bus.on("simulate-run", this.simulate);
     if (this.fullpage) this.addFullpageListeners();
     // this.simulate();
@@ -326,6 +332,7 @@ export default {
     clearInterval(this.demoInterval);
     this.removeResizeObserver();
     this.$bus.off("home", this.navigateExit);
+    this.$bus.off("recreate-scene", this.recreateScene);
     this.$bus.off("simulate-run", this.simulate);
     if (this.fullpage) this.removeFullpageListeners();
   },
@@ -382,9 +389,10 @@ export default {
     },
   },
   watch: {
-    scene(scene) {
-      this.$emit("scene", scene);
-      if (scene) {
+    scene(newScene, oldScene) {
+      if (oldScene && newScene && oldScene.id == newScene.id) return;
+      this.$emit("scene", newScene);
+      if (newScene) {
         this.pushScrollToView();
       }
     },
@@ -424,6 +432,7 @@ export default {
       if (this.region && this.regionFocusPending) {
         this.viewRegion(this.region);
         this.regionFocusPending = null;
+        this.scrollbarUpdateRegion = this.region;
       }
     },
     nativeScroll: {
@@ -558,7 +567,10 @@ export default {
         ]
       }
 
-      this.simulation = new Simulation(tileEvaluation);
+      this.simulation = new Simulation({
+        ...fast,
+        scrollbar: this.scrollbar,
+      });
       const results = await this.simulation.run(this);
       console.log(JSON.stringify(results, null, 2));
       this.$bus.emit("simulate-done");
@@ -685,12 +697,10 @@ export default {
       }
     },
 
-    // async onPan(view) {
-    //   if (this.nativeScroll) return;
-    //   this.region = null;
-    //   this.view = view;
-    //   this.pushViewToScroll(view);
-    // },
+    async onPan(view) {
+      if (this.nativeScroll) return;
+      this.pushViewToScroll(view);
+    },
 
     async onView(view) {
       this.view = view;
@@ -771,6 +781,7 @@ export default {
         transition && { animationTime: transition }
       )
       this.view = view;
+      this.pushViewToScroll(view);
     },
 
     onKeyDown(event) {
@@ -847,7 +858,9 @@ export default {
       if (this.pendingViewToScroll) {
         view = this.pendingViewToScroll;
         this.pendingViewToScroll = null;
+        console.warn("Using pending view to scroll")
       }
+
 
       const viewMaxY = this.scene.bounds.h - this.window.height;
       const panY = (view.y + view.h/2) - this.window.height/2;

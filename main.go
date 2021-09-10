@@ -599,6 +599,8 @@ func (*Api) GetFilesIdVideoVariantsSizeFilename(w http.ResponseWriter, r *http.R
 		problem(w, r, http.StatusNotFound, "Resized video not found")
 		return
 	}
+
+	http.ServeFile(w, r, path)
 }
 
 func AddPrefix(prefix string) func(next http.Handler) http.Handler {

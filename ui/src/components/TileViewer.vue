@@ -174,13 +174,13 @@ export default {
       if (!this.interactive) return;
       const scale = this.scene.bounds.w;
       const bounds = this.viewer.viewport.getBounds();
-      this.emittedView = {
+      this.latestView = {
         x: bounds.x * scale,
         y: bounds.y * scale,
         w: bounds.width * scale,
         h: bounds.height * scale,
       };
-      this.$emit("view", this.emittedView);
+      this.$emit("view", this.latestView);
     },
 
     onTileLoad() {
@@ -240,6 +240,7 @@ export default {
         // View is already up to date, nothing to do.
         return;
       }
+
 
       this.latestView = view;
 

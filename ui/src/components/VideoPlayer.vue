@@ -76,14 +76,16 @@ export default {
     this.player.on("play", this.onPlay);
     this.player.on("pause", this.onPause);
     this.player.on("error", this.onError);
-    this.player.on("controlshidden", this.onError);
 
+    // this.player.on("ready", () => console.log("ready"));
     // this.player.on("loadstart", () => console.log("loadstart"));
     // this.player.on("loadeddata", () => console.log("loadeddata"));
     // this.player.on("loadedmetadata", () => console.log("loadedmetadata"));
     // this.player.on("qualitychange", () => console.log("qualitychange"));
     // this.player.on("canplay", () => console.log("canplay"));
     // this.player.on("canplaythrough", () => console.log("canplaythrough"));
+    // this.player.on("play", () => console.log("play"));
+    // this.player.on("pause", () => console.log("pause"));
     // this.player.on("stalled", () => console.log("stalled"));
     // this.player.on("waiting", () => console.log("waiting"));
     // this.player.on("emptied", () => console.log("emptied"));
@@ -140,9 +142,6 @@ export default {
   },
 
   methods: {
-    onPlay() {
-      this.show = true;
-    },
     onLoadStart() {
       this.loading++;
       this.interactive = false;
@@ -152,9 +151,11 @@ export default {
       if (this.loading < 0) this.loading = 0;
       if (this.loading === 0) {
         this.show = true;
+        this.player.toggleControls(false);
       }
     },
-    onError() {
+    onError(event) {
+      console.error(event);
       if (!this.hasPlayed) {
         const qualityConfig = this.player.config.quality;
         const qualitySelected = qualityConfig.selected;
@@ -170,7 +171,9 @@ export default {
       this.show = true;
     },
     onPlay() {
-      this.interactive = true;
+      // TODO: The locking of controls here does not work that well yet, so it's
+      // disabled for now
+      // this.interactive = true;
     },
     onPause() {
       this.interactive = false;
