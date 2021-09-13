@@ -22,6 +22,15 @@ const (
 	LayoutTypeWALL LayoutType = "WALL"
 )
 
+// Defines values for TaskType.
+const (
+	TaskTypeINDEX TaskType = "INDEX"
+
+	TaskTypeLOADCOLOR TaskType = "LOAD_COLOR"
+
+	TaskTypeLOADMETA TaskType = "LOAD_META"
+)
+
 // Bounds defines model for Bounds.
 type Bounds struct {
 	H    *float32 `json:"h,omitempty"`
@@ -49,14 +58,6 @@ type FileId int
 
 // ImageHeight defines model for ImageHeight.
 type ImageHeight float32
-
-// IndexTask defines model for IndexTask.
-type IndexTask struct {
-	CollectionId *CollectionId `json:"collection_id,omitempty"`
-
-	// Number of files found since the start of the indexing.
-	Count *int `json:"count,omitempty"`
-}
 
 // LayoutType defines model for LayoutType.
 type LayoutType string
@@ -104,6 +105,26 @@ type SceneParams struct {
 // SceneWidth defines model for SceneWidth.
 type SceneWidth float32
 
+// Task defines model for Task.
+type Task struct {
+	CollectionId *CollectionId `json:"collection_id,omitempty"`
+
+	// Number of items already processed.
+	Done *int   `json:"done,omitempty"`
+	Id   TaskId `json:"id"`
+	Name string `json:"name"`
+
+	// Number of items pending as part of the task.
+	Pending *int      `json:"pending,omitempty"`
+	Type    *TaskType `json:"type,omitempty"`
+}
+
+// TaskId defines model for TaskId.
+type TaskId string
+
+// TaskType defines model for TaskType.
+type TaskType string
+
 // TileCoord defines model for TileCoord.
 type TileCoord int
 
@@ -115,17 +136,6 @@ type FilenamePathParam string
 
 // SizePathParam defines model for SizePathParam.
 type SizePathParam string
-
-// GetIndexTasksParams defines parameters for GetIndexTasks.
-type GetIndexTasksParams struct {
-	// Collection ID for the index tasks
-	CollectionId CollectionId `json:"collection_id"`
-}
-
-// PostIndexTasksJSONBody defines parameters for PostIndexTasks.
-type PostIndexTasksJSONBody struct {
-	CollectionId CollectionId `json:"collection_id"`
-}
 
 // GetScenesParams defines parameters for GetScenes.
 type GetScenesParams struct {
@@ -158,11 +168,26 @@ type GetScenesSceneIdTilesParams struct {
 	DebugThumbnails *bool     `json:"debug_thumbnails,omitempty"`
 }
 
-// PostIndexTasksJSONRequestBody defines body for PostIndexTasks for application/json ContentType.
-type PostIndexTasksJSONRequestBody PostIndexTasksJSONBody
+// GetTasksParams defines parameters for GetTasks.
+type GetTasksParams struct {
+	// Task type to filter on.
+	Type *TaskType `json:"type,omitempty"`
+
+	// Collection ID for the tasks
+	CollectionId *CollectionId `json:"collection_id,omitempty"`
+}
+
+// PostTasksJSONBody defines parameters for PostTasks.
+type PostTasksJSONBody struct {
+	CollectionId CollectionId `json:"collection_id"`
+	Type         TaskType     `json:"type"`
+}
 
 // PostScenesJSONRequestBody defines body for PostScenes for application/json ContentType.
 type PostScenesJSONRequestBody PostScenesJSONBody
+
+// PostTasksJSONRequestBody defines body for PostTasks for application/json ContentType.
+type PostTasksJSONRequestBody PostTasksJSONBody
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -185,12 +210,6 @@ type ServerInterface interface {
 	// (GET /files/{id}/video-variants/{size}/{filename})
 	GetFilesIdVideoVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, size SizePathParam, filename FilenamePathParam)
 
-	// (GET /index-tasks)
-	GetIndexTasks(w http.ResponseWriter, r *http.Request, params GetIndexTasksParams)
-
-	// (POST /index-tasks)
-	PostIndexTasks(w http.ResponseWriter, r *http.Request)
-
 	// (GET /scenes)
 	GetScenes(w http.ResponseWriter, r *http.Request, params GetScenesParams)
 
@@ -208,6 +227,12 @@ type ServerInterface interface {
 
 	// (GET /scenes/{scene_id}/tiles)
 	GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdTilesParams)
+
+	// (GET /tasks)
+	GetTasks(w http.ResponseWriter, r *http.Request, params GetTasksParams)
+
+	// (POST /tasks)
+	PostTasks(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -399,55 +424,6 @@ func (siw *ServerInterfaceWrapper) GetFilesIdVideoVariantsSizeFilename(w http.Re
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFilesIdVideoVariantsSizeFilename(w, r, id, size, filename)
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler(w, r.WithContext(ctx))
-}
-
-// GetIndexTasks operation middleware
-func (siw *ServerInterfaceWrapper) GetIndexTasks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetIndexTasksParams
-
-	// ------------- Required query parameter "collection_id" -------------
-	if paramValue := r.URL.Query().Get("collection_id"); paramValue != "" {
-
-	} else {
-		http.Error(w, "Query argument collection_id is required, but not found", http.StatusBadRequest)
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "collection_id", r.URL.Query(), &params.CollectionId)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid format for parameter collection_id: %s", err), http.StatusBadRequest)
-		return
-	}
-
-	var handler = func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetIndexTasks(w, r, params)
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler(w, r.WithContext(ctx))
-}
-
-// PostIndexTasks operation middleware
-func (siw *ServerInterfaceWrapper) PostIndexTasks(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var handler = func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PostIndexTasks(w, r)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -803,6 +779,63 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	handler(w, r.WithContext(ctx))
 }
 
+// GetTasks operation middleware
+func (siw *ServerInterfaceWrapper) GetTasks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTasksParams
+
+	// ------------- Optional query parameter "type" -------------
+	if paramValue := r.URL.Query().Get("type"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "type", r.URL.Query(), &params.Type)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter type: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "collection_id" -------------
+	if paramValue := r.URL.Query().Get("collection_id"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "collection_id", r.URL.Query(), &params.CollectionId)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter collection_id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTasks(w, r, params)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// PostTasks operation middleware
+func (siw *ServerInterfaceWrapper) PostTasks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostTasks(w, r)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
 // Handler creates http.Handler with routing matching OpenAPI spec.
 func Handler(si ServerInterface) http.Handler {
 	return HandlerWithOptions(si, ChiServerOptions{})
@@ -859,12 +892,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/files/{id}/video-variants/{size}/{filename}", wrapper.GetFilesIdVideoVariantsSizeFilename)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/index-tasks", wrapper.GetIndexTasks)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/index-tasks", wrapper.PostIndexTasks)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes", wrapper.GetScenes)
 	})
 	r.Group(func(r chi.Router) {
@@ -881,6 +908,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/tiles", wrapper.GetScenesSceneIdTiles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tasks", wrapper.GetTasks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tasks", wrapper.PostTasks)
 	})
 
 	return r

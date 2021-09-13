@@ -172,13 +172,9 @@ func (source *ImageSource) Close() {
 	source.Coder.Close()
 }
 
-func (source *ImageSource) ListImages(dir string, maxPhotos int, paths chan string, wg *sync.WaitGroup) error {
+func (source *ImageSource) ListImages(dir string, maxPhotos int) <-chan string {
 	dir = filepath.FromSlash(dir)
-	for path := range source.infoDatabase.List(dir, maxPhotos) {
-		paths <- path
-	}
-	wg.Done()
-	return nil
+	return source.infoDatabase.List(dir, maxPhotos)
 }
 
 func (source *ImageSource) IndexImages(dir string, maxPhotos int, counter chan<- int) {
@@ -192,6 +188,22 @@ func (source *ImageSource) IndexImages(dir string, maxPhotos int, counter chan<-
 		counter <- 1
 	}
 	source.infoDatabase.DeleteNonexistent(dir, indexed)
+}
+
+func (source *ImageSource) QueueMetaLoads(ids <-chan ImageId) {
+	if source.loadQueueMeta != nil {
+		for id := range ids {
+			source.loadQueueMeta.Append(id)
+		}
+	}
+}
+
+func (source *ImageSource) QueueColorLoads(ids <-chan ImageId) {
+	if source.loadQueueColor != nil {
+		for id := range ids {
+			source.loadQueueColor.Append(id)
+		}
+	}
 }
 
 func (source *ImageSource) walkImages(dir string, maxPhotos int) <-chan string {

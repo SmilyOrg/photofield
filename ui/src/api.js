@@ -1,5 +1,5 @@
 import useSWRV from "swrv";
-import { computed } from "vue";
+import { computed, watch, ref } from "vue";
 import qs from "qs";
 
 const host = import.meta.env.VITE_API_HOST || "/api";
@@ -44,6 +44,7 @@ export async function post(endpoint, body, def) {
 }
 
 export async function getRegions(sceneId, x, y, w, h) {
+  if (!sceneId) return null;
   const response = await get(`/scenes/${sceneId}/regions?x=${x}&y=${y}&w=${w}&h=${h}`);
   return response.items;
 }
@@ -60,8 +61,9 @@ export async function getCollection(id) {
   return get(`/collections/` + id);
 }
 
-export async function reindexCollection(id) {
-  return await post(`/index-tasks`, {
+export async function createTask(type, id) {
+  return await post(`/tasks`, {
+    type,
     collection_id: id
   });
 }
@@ -95,8 +97,8 @@ export function getVideoUrl(id, size, filename) {
   return `${host}/files/${id}/video-variants/${size}/${filename}`;
 }
 
-export function useApi(getUrl) {
-  const response = useSWRV(getUrl, fetcher);
+export function useApi(getUrl, config) {
+  const response = useSWRV(getUrl, fetcher, config);
   const items = computed(() => response.data.value?.items);
   const itemsMutate = async getItems => {
     const items = await getItems();
@@ -109,6 +111,40 @@ export function useApi(getUrl) {
     items,
     itemsMutate,
   }
+}
+
+export function useTasks() {
+  const intervalMs = 250;
+  const response = useApi(
+    () => `/tasks`
+  );
+  const { items, mutate } = response;
+  const timer = ref(null);
+  const resolves = ref([]);
+  const updateUntilDone = async () => {
+    await mutate();
+    if (resolves.value) {
+      return new Promise(resolve => resolves.value.push(resolve));
+    }
+    return;
+  }
+  watch(items, items => {
+    if (items.length > 0) {
+      if (!timer.value) {
+        timer.value = setTimeout(() => {
+          timer.value = null;
+          mutate();
+        }, intervalMs);
+      }
+    } else {
+      resolves.value.forEach(resolve => resolve());
+      resolves.value.length = 0;
+    }
+  })
+  return {
+    ...response,
+    updateUntilDone,
+  };
 }
 
 export async function createScene(params) {

@@ -18,6 +18,43 @@
       </span>
 
       <template #toolbar="{ toolbarItemClass }">
+        <div class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
+          <span v-if="!tasks?.length">
+            No background tasks running.
+          </span>
+          <ui-list :type="2" :nonInteractive="true">
+            <ui-item
+              v-for="task in tasks"
+              :key="task.id"
+            >
+              <ui-item-text-content class="task-content" v-if="task.pending !== undefined && task.done !== undefined">
+                <ui-item-text1>{{ task.name }}</ui-item-text1>
+                <ui-item-text2>{{ task.done }} / {{ task.done + task.pending }} files</ui-item-text2>
+                <ui-progress
+                  class="task-progress"
+                  active
+                  :progress="task.done / (task.done + task.pending)"
+                ></ui-progress>
+              </ui-item-text-content>
+              <ui-item-text-content class="task-content" v-else-if="task.pending !== undefined">
+                <ui-item-text1>{{ task.name }}</ui-item-text1>
+                <ui-item-text2>{{ task.pending }} remaining</ui-item-text2>
+                <ui-progress
+                  class="task-progress"
+                  active
+                ></ui-progress>
+              </ui-item-text-content>
+              <ui-item-text-content class="task-content" v-else-if="task.done !== undefined">
+                <ui-item-text1>{{ task.name }}</ui-item-text1>
+                <ui-item-text2>{{ task.done }} files</ui-item-text2>
+                <ui-progress
+                  class="task-progress"
+                  active
+                ></ui-progress>
+              </ui-item-text-content>
+            </ui-item>
+          </ui-list>
+        </div>
         <div class="settings" :class="{ hidden: !settingsExpanded, toolbarItemClass }">
           <ui-select
             v-model="settings.layout"
@@ -56,13 +93,18 @@
           @click="settingsExpanded = !settingsExpanded"
         >
         </ui-icon-button>
-        <ui-spinner
-          class="small-spinner"
-          size="small"
-          active
-          :closed="load.image.inProgress == 0"
-          :class="toolbarItemClass"
-        ></ui-spinner>
+        <ui-icon-button
+          @click="tasksExpanded = !tasksExpanded"
+        >
+          <ui-spinner
+            class="small-spinner"
+            size="small"
+            :active="tasksProgress == -1"
+            :progress="(tasksProgress >= 0 && tasksProgress) || 0"
+            :closed="tasksProgress === null"
+            :class="toolbarItemClass"
+          ></ui-spinner>
+        </ui-icon-button>
       </template>
     </ui-top-app-bar>
     <ui-drawer class="sidebar" type="modal" nav-id="menu" v-model="drawer">
@@ -70,16 +112,24 @@
         <ui-drawer-header>
           <ui-drawer-title>{{ collection?.name }}</ui-drawer-title>
           <ui-drawer-subtitle>
-            {{ indexTasks?.items[0]?.count || fileCount }} files
+            {{ fileCount }} files
           </ui-drawer-subtitle>
         </ui-drawer-header>
-        <ui-button @click="reindex()">Reindex</ui-button>
-        <ui-button @click="recreateScene()">
-          Reload
-        </ui-button>
-        <ui-button @click="simulate()">
-          Simulate
-        </ui-button>
+        <ui-button @click="reindex()">Reindex files</ui-button>
+        <expand-button
+          :expanded="collectionExpanded"
+          @click="collectionExpanded = !collectionExpanded"
+        ></expand-button>
+        <template v-if="collectionExpanded">
+          <ui-button @click="recreateScene()">
+            Reload scene
+          </ui-button>
+          <ui-button @click="loadMeta()">Reload metadata</ui-button>
+          <ui-button @click="loadColor()">Reload colors</ui-button>
+          <ui-button @click="simulate()">
+            Simulate
+          </ui-button>
+        </template>
       </template>
       <ui-divider></ui-divider>
       <ui-drawer-header>
@@ -89,26 +139,24 @@
         </ui-drawer-subtitle>
       </ui-drawer-header>
       <ui-drawer-content v-if="collections?.length > 0">
-        <ui-nav>
-          <ui-nav-item
+        <ui-list>
+          <router-link
             v-for="c in collections"
             :key="c.id"
-            :href="'/collections/' + c.id"
-            :active="c.id == collection?.id"
+            class="collection"
+            :to="'/collections/' + c.id"
+            @click="drawer = false"
           >
-            {{ c.name }}
-          </ui-nav-item>
-        </ui-nav>
+            <ui-item
+              :active="c.id == collection?.id"
+            >
+                {{ c.name }}
+            </ui-item>
+          </router-link>
+        </ui-list>
       </ui-drawer-content>
     </ui-drawer>
     <div id="content">
-      <div class="loading-overlay" :class="{ active: loading }">
-        <ui-spinner
-          :active="loading"
-          class="spinner"
-          size="large"
-        ></ui-spinner>
-      </div>
       <router-view
         class="viewer"
         ref="viewer"
@@ -126,15 +174,16 @@
 </template>
 
 <script>
-import { reindexCollection, useApi } from './api';
+import { createTask, useApi, useTasks } from './api';
 import NaturalViewer from './components/NaturalViewer.vue'
-import { updateUntilDone } from './utils';
+import ExpandButton from './components/ExpandButton.vue'
 import { computed, toRef } from 'vue';
 
 export default {
   name: 'App',
   components: {
     NaturalViewer,
+    ExpandButton,
   },
   
   props: [
@@ -155,6 +204,8 @@ export default {
         { label: "Wall", value: "WALL" },
       ],
       settingsExpanded: false,
+      tasksExpanded: false,
+      collectionExpanded: false,
       load: {
         image: 0,
       },
@@ -169,9 +220,11 @@ export default {
   setup(props) {
     const collectionId = toRef(props, "collectionId");
 
-    const { data: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useApi(
-      () => collectionId.value && `/index-tasks?collection_id=${collectionId.value}`
+    const { items: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useApi(
+      () => collectionId.value && `/tasks?type=INDEX&collection_id=${collectionId.value}`
     );
+
+    const { items: remoteTasks, updateUntilDone: remoteTasksUpdateUntilDone } = useTasks();
 
     const { items: collections } = useApi(() => "/collections");
     const { data: fetchedCollection } = useApi(
@@ -181,6 +234,8 @@ export default {
     const collection = computed(() => collectionId.value && fetchedCollection.value);
 
     return {
+      remoteTasks,
+      remoteTasksUpdateUntilDone,
       indexTasks,
       indexTasksError,
       indexTasksMutate,
@@ -205,27 +260,69 @@ export default {
     },
   },
   computed: {
-    loading() {
-      // TODO reimplement?
-      return false;
+    tasks() {
+      const tasks = [];
+      if (this.remoteTasks?.length > 0) {
+        for (const task of this.remoteTasks) {
+          tasks.push(task);
+        }
+      }
+      if (this.load.image.inProgress) {
+        tasks.push({
+          id: "image-load",
+          name: "Downloading",
+          pending: this.load.image.inProgress,
+        });
+      }
+      return tasks;
+    },
+    tasksProgress() {
+      let done = 0;
+      let pending = 0;
+      for (const task of this.tasks) {
+        if (task.done !== undefined) done += task.done;
+        if (task.pending !== undefined) pending += task.pending;
+      }
+      if (done > 0 && pending > 0) {
+        return done / (done + pending);
+      }
+      if (done > 0 || pending > 0) {
+        return -1;
+      }
+      return null;
     },
     fileCount() {
+      if (this.collection) {
+        for (const task of this.tasks) {
+          if (task.type != "INDEX") continue;
+          if (task.collection_id != this.collection.id) continue;
+          return task.done.toLocaleString();
+        }
+      }
       return this.scene?.photo_count !== undefined ?
         this.scene.photo_count.toLocaleString() : 
         null;
-    }
+    },
   },
   methods: {
     recreateScene() {
       this.$bus.emit("recreate-scene");
     },
     async reindex() {
-      await reindexCollection(this.collection?.id);
-      await updateUntilDone(
-        this.indexTasksMutate,
-        () => this.indexTasks?.items?.length > 0,
-        100
-      );
+      await createTask("INDEX", this.collection?.id);
+      await this.remoteTasksUpdateUntilDone();
+      this.recreateScene();
+    },
+    async loadMeta() {
+      await createTask("LOAD_META", this.collection?.id);
+      this.drawer = false;
+      await this.remoteTasksUpdateUntilDone();
+      this.recreateScene();
+    },
+    async loadColor() {
+      await createTask("LOAD_COLOR", this.collection?.id);
+      this.drawer = false;
+      await this.remoteTasksUpdateUntilDone();
       this.recreateScene();
     },
     onTitleClick() {
@@ -238,6 +335,7 @@ export default {
       this.immersive = immersive;
       if (immersive) {
         this.settingsExpanded = false;
+        this.tasksExpanded = false;
       }
       this.scrollbar?.options({
         scrollbars: {
@@ -283,6 +381,10 @@ export default {
   --mdc-theme-on-primary: rgba(0,0,0,.87);
   transition: transform 0.2s ease-out;
   transform: translateY(0);
+}
+
+.collection {
+  text-decoration: none;
 }
 
 button {
@@ -339,6 +441,32 @@ button {
   transform: translateX(40px);
 }
 
+.tasks {
+  transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 1;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-wrap: wrap;
+  align-self: start;
+  background: var(--mdc-theme-background);
+  border-radius: 10px;
+  justify-content: center;
+  margin-top: 50px;
+  padding: 0px 10px;
+}
+
+.tasks.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(40px);
+}
+
+.task-content {
+  width: 100%;
+}
+
 .size-icons {
   display: flex;
 }
@@ -372,19 +500,8 @@ button {
   --mdc-theme-primary: var(--mdc-theme-on-primary);
 }
 
-.loading-overlay {
-  display: none;
-  position: absolute;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.3);
-  width: 100%;
-  height: calc(100vh - 64px);
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-overlay.active {
-  display: flex;
+.task-progress {
+  --mdc-theme-primary: var(--mdc-theme-on-primary);
 }
 
 .viewer {

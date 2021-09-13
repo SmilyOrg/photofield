@@ -41,8 +41,8 @@
       class="scroller"
       :class="{ disabled: !nativeScroll }"
       ref="scroller"
-      @pointerDown="onPointerDown"
-      @pointerUp="onPointerUp"
+      @pointerdown="onPointerDown"
+      @pointerup="onPointerUp"
       @touchStart="onTouchStart"
       @touchEnd="onTouchEnd"
       @wheel="onWheel"
@@ -55,6 +55,12 @@
         :style="{ height: canvas.height + 'px' }">
       </div>
     </div>
+    
+    <ui-progress
+      class="progress"
+      :active="true"
+      :closed="!loading"
+    ></ui-progress>
 
     <ContextMenu
       class="context-menu"
@@ -115,6 +121,7 @@ export default {
   data() {
     return {
       tileSize: 512,
+      marginTop: 64,
       loadProgress: 0,
       view: {
         x: 0,
@@ -163,12 +170,16 @@ export default {
     
     const {
       items: scenes,
+      isValidating: scenesLoading,
       itemsMutate: scenesMutate,
     } = useApi(() => sceneParams.value && `/scenes?` + qs.stringify(sceneParams.value));
 
+    const recreateScenesInProgress = ref(0);
     const recreateScene = async () => {
+      recreateScenesInProgress.value = recreateScenesInProgress.value + 1;
       const params = sceneParams.value;
-      scenesMutate(async () => ([await createScene(params)]));
+      await scenesMutate(async () => ([await createScene(params)]));
+      recreateScenesInProgress.value = recreateScenesInProgress.value - 1;
     }
 
     watch(scenes, async newValue => {
@@ -294,8 +305,13 @@ export default {
         return dateFormat(date, "d MMM yyyy");
       }
     })
+
+    const loading = computed(() => {
+      return scenesLoading.value || recreateScenesInProgress.value > 0;
+    });
     
     return {
+      loading,
       nativeScroll,
       scrollbarUpdateRegion,
       reorientRegion,
@@ -738,7 +754,7 @@ export default {
       this.contextFlipX = right > window.innerWidth;
       this.contextFlipY = bottom > window.innerHeight;
       const pos = this.$refs.viewer.elementToViewportCoordinates(event);
-      const regions = await getRegions(pos.x, pos.y, 0, 0, this.sceneParams);
+      const regions = await getRegions(this.scene?.id, pos.x, pos.y, 0, 0);
       if (regions && regions.length > 0) {
         this.contextRegion = regions[0];
       }
@@ -862,8 +878,8 @@ export default {
       }
 
 
-      const viewMaxY = this.scene.bounds.h - this.window.height;
-      const panY = (view.y + view.h/2) - this.window.height/2;
+      const viewMaxY = this.scene.bounds.h - this.window.height + this.marginTop;
+      const panY = (view.y + this.marginTop + view.h/2) - this.window.height/2;
       const scrollRatio = panY / viewMaxY;
       const scrollTop = scrollRatio * scrollMaxY;
       
@@ -895,7 +911,7 @@ export default {
 
       if (!this.$refs.scroller) return;
 
-      const viewMaxY = (this.scene?.bounds?.h || 0) - this.window.height;
+      const viewMaxY = (this.scene?.bounds?.h || 0) - this.window.height + this.marginTop;
       
       if (scrollRatio == null) {
         if (this.scrollbar) {
@@ -918,7 +934,7 @@ export default {
       const viewY = scrollRatio * viewMaxY;
       const view = {
         x: 0,
-        y: viewY,
+        y: viewY - this.marginTop,
         w: this.window.width,
         h: this.window.height,
       }
@@ -935,6 +951,10 @@ export default {
 
 .container {
   position: relative;
+}
+
+.container .progress {
+  position: fixed;
 }
 
 .container .scroller {

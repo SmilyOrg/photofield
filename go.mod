@@ -30,6 +30,7 @@ require (
 	github.com/oliamb/cutter v0.2.2 // indirect
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/roberthodgen/spa-server v0.0.0-20171007154335-bb87b4ff3253
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sheerun/queue v1.0.1

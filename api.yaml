@@ -47,62 +47,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
-  /index-tasks:
-    post:
-      description: Create a new index task i.e. scan the file system for files
-        in directories specified in the provided collection.
-      tags: ["Source"]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - collection_id
-              properties:
-                collection_id:
-                  $ref: "#/components/schemas/CollectionId"
-      responses:
-        "202":
-          description: Accepted, it might take some time for the indexing to finish.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IndexTask"
-        "409":
-          description: Conflict, indexing is already in progress for
-            the collection. The existing index task is returned.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IndexTask"
-
-
-    get:
-      description: Get currently running index tasks. Indexing in this context
-        means scanning/walking the file system for files.
-      tags: ["Source"]
-      parameters:
-        - name: collection_id
-          in: query
-          required: true
-          description: Collection ID for the index tasks
-          schema:
-            $ref: "#/components/schemas/CollectionId"
-      responses:
-        "200":
-          description: List of index tasks
-          content:
-            "application/json":
-              schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/IndexTask"
-
   /scenes:
     post:
       description: Create a new scene using the provided parameters
@@ -397,6 +341,66 @@ paths:
         "404":
           $ref: "#/components/responses/FileNotFound"
 
+  /tasks:
+    post:
+      description: Create a new task e.g. scan the file system for files
+        in directories specified in the provided collection.
+      tags: ["System"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - collection_id
+              properties:
+                type:
+                  $ref: "#/components/schemas/TaskType"
+                collection_id:
+                  $ref: "#/components/schemas/CollectionId"
+      responses:
+        "202":
+          description: Accepted, it might take some time for the task to finish.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "409":
+          description: Conflict, task already in progress for the 
+            specified parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    get:
+      description: Get currently running tasks.
+      tags: ["System"]
+      parameters:
+        - name: type
+          in: query
+          description: Task type to filter on.
+          schema:
+            $ref: "#/components/schemas/TaskType"
+        - name: collection_id
+          in: query
+          description: Collection ID for the tasks
+          schema:
+            $ref: "#/components/schemas/CollectionId"
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
+
 
 
 
@@ -482,6 +486,31 @@ components:
           example: 13
           description: Number of files found since the start of the indexing.
           
+    Task:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          $ref: "#/components/schemas/TaskId"
+        type:
+          $ref: "#/components/schemas/TaskType"
+        name:
+          type: string
+        collection_id:
+          $ref: "#/components/schemas/CollectionId"
+        pending:
+          type: integer
+          minimum: 0
+          example: 13
+          description: Number of items pending as part of the task.
+        done:
+          type: integer
+          minimum: 0
+          example: 
+          description: Number of items already processed.
+          
     Region:
       type: object
       required:
@@ -519,9 +548,20 @@ components:
         layout:
           $ref: "#/components/schemas/LayoutType"
           
+    TaskType:
+      type: string
+      enum:
+        - INDEX
+        - LOAD_META
+        - LOAD_COLOR
+    
     CollectionId:
       type: string
       example: vacation-photos
+    
+    TaskId:
+      type: string
+      example: index-vacation-photos
     
     SceneId:
       type: string

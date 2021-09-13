@@ -151,7 +151,7 @@ export default {
         eventOrPoint instanceof OpenSeadragon.Point ? eventOrPoint :
         new OpenSeadragon.Point(eventOrPoint.x, eventOrPoint.y);
       const viewportPos = this.viewer.viewport.viewerElementToViewportCoordinates(point);
-      const scale = this.scene.bounds.w;
+      const scale = this.scene?.bounds.w || 1;
       return {
         x: viewportPos.x * scale,
         y: viewportPos.y * scale,

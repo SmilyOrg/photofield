@@ -10,6 +10,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"io"
@@ -45,6 +46,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 //go:embed defaults.yaml
@@ -66,6 +68,8 @@ var sceneSource *SceneSource
 var collections []Collection
 
 var indexTasks sync.Map
+var loadMetaOffset int64
+var loadColorOffset int64
 
 var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
@@ -89,9 +93,13 @@ func instrumentationMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-type IndexTask struct {
+type Task struct {
+	Id           string `json:"id"`
+	Type         string `json:"type"`
+	Name         string `json:"name"`
 	CollectionId string `json:"collection_id"`
-	Count        int    `json:"count"`
+	Done         int    `json:"done"`
+	Pending      int    `json:"pending,omitempty"`
 }
 
 type TileWriter func(w io.Writer) error
@@ -204,6 +212,16 @@ func getCollectionById(id string) *Collection {
 		}
 	}
 	return nil
+}
+
+func getIndexTask(collection *Collection) Task {
+	return Task{
+		Type:         string(openapi.TaskTypeINDEX),
+		Id:           fmt.Sprintf("index-%v", collection.Id),
+		Name:         fmt.Sprintf("Indexing %v", collection.Name),
+		CollectionId: collection.Id,
+		Done:         0,
+	}
 }
 
 func pushTileRequest(request TileRequest) {
@@ -369,27 +387,103 @@ func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.
 	problem(w, r, http.StatusNotFound, "Scene not found")
 }
 
-func (*Api) GetIndexTasks(w http.ResponseWriter, r *http.Request, params openapi.GetIndexTasksParams) {
-
-	tasks := make([]IndexTask, 0)
-	indexTasks.Range(func(key, value interface{}) bool {
-		task := value.(IndexTask)
-		if task.CollectionId == string(params.CollectionId) {
-			tasks = append(tasks, task)
+func gatherIntFromMetric(value *int, metric *io_prometheus_client.MetricFamily, name string) {
+	if metric.Name == nil || metric.Type == nil || *metric.Name != name {
+		return
+	}
+	switch *metric.Type {
+	case io_prometheus_client.MetricType_GAUGE:
+		m := metric.Metric[0]
+		if m == nil {
+			return
 		}
-		return true
+		g := m.Gauge
+		if g == nil {
+			return
+		}
+		*value = int(*g.Value)
+	case io_prometheus_client.MetricType_COUNTER:
+		m := metric.Metric[0]
+		if m == nil {
+			return
+		}
+		c := m.Counter
+		if c == nil {
+			return
+		}
+		*value = int(*c.Value)
+	default:
+		panic("Unsupported gather metric type")
+	}
+}
+
+func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetTasksParams) {
+
+	tasks := make([]Task, 0)
+
+	if params.Type == nil || *params.Type == openapi.TaskTypeINDEX {
+		indexTasks.Range(func(key, value interface{}) bool {
+			task := value.(Task)
+			if params.CollectionId == nil || task.CollectionId == string(*params.CollectionId) {
+				tasks = append(tasks, task)
+			}
+			return true
+		})
+	}
+
+	loadMetaTask := Task{
+		Type: string(openapi.TaskTypeLOADMETA),
+		Id:   "load-meta",
+		Name: "Loading metadata",
+	}
+	loadColorTask := Task{
+		Type: string(openapi.TaskTypeLOADCOLOR),
+		Id:   "load-color",
+		Name: "Loading colors",
+	}
+
+	metrics, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, "Unable to gather metrics")
+		return
+	}
+	for _, metric := range metrics {
+		gatherIntFromMetric(&loadMetaTask.Pending, metric, "pf_load_meta_pending")
+		gatherIntFromMetric(&loadMetaTask.Done, metric, "pf_load_meta_done")
+		gatherIntFromMetric(&loadColorTask.Pending, metric, "pf_load_color_pending")
+		gatherIntFromMetric(&loadColorTask.Done, metric, "pf_load_color_done")
+	}
+
+	if loadMetaTask.Pending > 0 {
+		offset := atomic.LoadInt64(&loadMetaOffset)
+		loadMetaTask.Done -= int(offset)
+		tasks = append(tasks, loadMetaTask)
+	} else {
+		atomic.StoreInt64(&loadMetaOffset, int64(loadMetaTask.Done))
+	}
+	if loadColorTask.Pending > 0 {
+		offset := atomic.LoadInt64(&loadColorOffset)
+		loadColorTask.Done -= int(offset)
+		tasks = append(tasks, loadColorTask)
+	} else {
+		atomic.StoreInt64(&loadColorOffset, int64(loadColorTask.Done))
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		a := tasks[i]
+		b := tasks[j]
+		return a.Id < b.Id
 	})
 
 	respond(w, r, http.StatusOK, struct {
-		Items []IndexTask `json:"items"`
+		Items []Task `json:"items"`
 	}{
 		Items: tasks,
 	})
 }
 
-func (*Api) PostIndexTasks(w http.ResponseWriter, r *http.Request) {
-
-	data := &openapi.PostIndexTasksJSONBody{}
+func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
+	data := &openapi.PostTasksJSONBody{}
 	if err := chirender.Decode(r, data); err != nil {
 		problem(w, r, http.StatusBadRequest, err.Error())
 		return
@@ -401,17 +495,39 @@ func (*Api) PostIndexTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task := IndexTask{
-		CollectionId: string(data.CollectionId),
-		Count:        0,
-	}
-	stored, loaded := indexTasks.LoadOrStore(collection.Id, task)
-	task = stored.(IndexTask)
-	if loaded {
-		respond(w, r, http.StatusConflict, task)
-	} else {
+	switch data.Type {
+
+	case openapi.TaskTypeINDEX:
+		task := getIndexTask(collection)
+		stored, loaded := indexTasks.LoadOrStore(collection.Id, task)
+		task = stored.(Task)
+		if loaded {
+			respond(w, r, http.StatusConflict, task)
+		} else {
+			respond(w, r, http.StatusAccepted, task)
+			indexCollection(collection)
+		}
+
+	case openapi.TaskTypeLOADMETA:
+		imageSource.QueueMetaLoads(collection.GetIds(imageSource))
+		task := Task{
+			Id:           fmt.Sprintf("load-meta-%v", collection.Id),
+			CollectionId: collection.Id,
+			Name:         fmt.Sprintf("Loading metadata for %v", collection.Name),
+		}
 		respond(w, r, http.StatusAccepted, task)
-		indexCollection(collection)
+
+	case openapi.TaskTypeLOADCOLOR:
+		imageSource.QueueColorLoads(collection.GetIds(imageSource))
+		task := Task{
+			Id:           fmt.Sprintf("load-color-%v", collection.Id),
+			CollectionId: collection.Id,
+			Name:         fmt.Sprintf("Loading colors for %v", collection.Name),
+		}
+		respond(w, r, http.StatusAccepted, task)
+
+	default:
+		problem(w, r, http.StatusBadRequest, "Unsupported task type")
 	}
 }
 
@@ -645,25 +761,22 @@ func expandCollections(collections *[]Collection) {
 }
 
 func indexCollections(collections *[]Collection) (ok bool) {
-	counter := make(chan int, 10)
-	go func() {
-		task := IndexTask{
-			CollectionId: "[all]",
-			Count:        0,
-		}
-		for add := range counter {
-			task.Count += add
-			indexTasks.Store("[all]", task)
-		}
-		indexTasks.Delete("[all]")
-	}()
 	go func() {
 		for _, collection := range *collections {
+			counter := make(chan int, 10)
+			go func(id string, counter chan int) {
+				task := getIndexTask(&collection)
+				for add := range counter {
+					task.Done += add
+					indexTasks.Store(id, task)
+				}
+				indexTasks.Delete(id)
+			}(collection.Id, counter)
 			for _, dir := range collection.Dirs {
 				imageSource.IndexImages(dir, collection.ListLimit, counter)
 			}
+			close(counter)
 		}
-		close(counter)
 	}()
 	return true
 }
@@ -671,12 +784,9 @@ func indexCollections(collections *[]Collection) (ok bool) {
 func indexCollection(collection *Collection) {
 	counter := make(chan int, 10)
 	go func() {
-		task := IndexTask{
-			CollectionId: collection.Id,
-			Count:        0,
-		}
+		task := getIndexTask(collection)
 		for add := range counter {
-			task.Count += add
+			task.Done += add
 			indexTasks.Store(collection.Id, task)
 		}
 		indexTasks.Delete(collection.Id)

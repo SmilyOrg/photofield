@@ -75,9 +75,15 @@ func (collection *Collection) GetPaths(source *ImageSource) <-chan string {
 	out := make(chan string)
 	wg := &sync.WaitGroup{}
 	wg.Add(len(collection.Dirs))
-	for _, photoDir := range collection.Dirs {
-		go source.ListImages(photoDir, collection.ListLimit, out, wg)
-	}
+	go func() {
+		for _, photoDir := range collection.Dirs {
+			paths := source.ListImages(photoDir, collection.ListLimit)
+			for path := range paths {
+				out <- path
+			}
+			wg.Done()
+		}
+	}()
 	go func() {
 		wg.Wait()
 		listingFinished()

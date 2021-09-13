@@ -28,15 +28,17 @@ func NewExifToolMostlyGeekDecoder(exifToolCount int) *ExifToolMostlyGeekDecoder 
 		"-Rotation",
 		"-ImageWidth",
 		"-ImageHeight",
-		// "-FileCreateDate", // This likely exists and contains timezone
-		// "-DateTimeOriginal",
-		// "-CreateDate",
-		// "-GPSDateTime",
+		// First available will be used
+		"-SubSecDateTimeOriginal",
+		"-DateTimeOriginal",
 		"-EXIF:DateTimeOriginal",
+		"-CreateDate",
 		"-XMP:CreateDate",
 		"-EXIF:CreateDate",
 		"-XMP:DateTimeOriginal",
-		"-Time:All",
+		"-GPSDateTime",
+		"-TimeStamp",
+		"-FileCreateDate",
 		"-n", // Machine-readable values
 		"-S", // Short tag names with no padding
 	)

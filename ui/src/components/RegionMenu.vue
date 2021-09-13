@@ -52,13 +52,10 @@
           {{ thumb.width }}
         </ui-nav-item>
       </div>
-      <ui-button
-        class="expand"
+      <expand-button
+        :expanded="expanded"
         @click="expanded = !expanded"
-      >
-        <ui-icon v-if="expanded">expand_less</ui-icon>
-        <ui-icon v-if="!expanded">expand_more</ui-icon>
-      </ui-button>
+      ></expand-button>
     </ui-card-actions>
     <!-- <pre>{{ region }}</pre> -->
   </ui-card>
@@ -68,12 +65,13 @@
 import copyImg from 'copy-image-clipboard';
 
 import TileViewer from './TileViewer.vue';
+import ExpandButton from './ExpandButton.vue';
 import { getFileBlob, getFileUrl, getThumbnailUrl } from '../api';
 
 export default {
   props: ["region", "scene", "flipX", "flipY"],
   emits: ["close"],
-  components: { TileViewer },
+  components: { TileViewer, ExpandButton },
   data() {
     return {
       menuWidth: 240,
@@ -133,11 +131,6 @@ export default {
 
 .region.right {
   right: 10px;
-}
-
-.expand {
-  width: 100%;
-  height: 20px;
 }
 
 .thumbnails {
