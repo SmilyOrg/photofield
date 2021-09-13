@@ -2,6 +2,7 @@ package photofield
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -47,6 +48,15 @@ type ImageInfo struct {
 	Width, Height int
 	DateTime      time.Time
 	Color         uint32
+}
+
+func (info *ImageInfo) String() string {
+	return fmt.Sprintf("width: %v, height: %v, date: %v, color: %08x",
+		info.Width,
+		info.Height,
+		info.DateTime.String(),
+		info.Color,
+	)
 }
 
 func (info *ImageInfo) IsZero() bool {

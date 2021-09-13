@@ -38,6 +38,7 @@ func NewExifToolMostlyGeekDecoder(exifToolCount int) *ExifToolMostlyGeekDecoder 
 		"-XMP:DateTimeOriginal",
 		"-GPSDateTime",
 		"-TimeStamp",
+		"-FileModifyDate",
 		"-FileCreateDate",
 		"-n", // Machine-readable values
 		"-S", // Short tag names with no padding
