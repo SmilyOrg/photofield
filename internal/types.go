@@ -15,6 +15,18 @@ import (
 
 var MetricsNamespace = "pf"
 
+type ListOrder int32
+
+const (
+	DateAsc  ListOrder = iota
+	DateDesc ListOrder = iota
+)
+
+type ListOptions struct {
+	OrderBy ListOrder
+	Limit   int
+}
+
 type TileRequestConfig struct {
 	Concurrency int  `json:"concurrency"`
 	LogStats    bool `json:"log_stats"`
@@ -44,6 +56,11 @@ type System struct {
 
 type Size image.Point
 
+type SourcedImageInfo struct {
+	Path string
+	ImageInfo
+}
+
 type ImageInfo struct {
 	Width, Height int
 	DateTime      time.Time
@@ -64,22 +81,6 @@ func (info *ImageInfo) IsZero() bool {
 		info.Height == 0 &&
 		info.DateTime.IsZero() &&
 		info.Color == 0
-}
-
-func (info *ImageInfo) HasMeta() bool {
-	return info.Width != 0 ||
-		info.Height != 0 ||
-		!info.DateTime.IsZero()
-}
-
-func (info *ImageInfo) NeedsMeta() bool {
-	return info.Width == 0 ||
-		info.Height == 0 ||
-		info.DateTime.IsZero()
-}
-
-func (info *ImageInfo) NeedsColor() bool {
-	return info.Color == 0
 }
 
 func (info *ImageInfo) GetColor() color.RGBA {

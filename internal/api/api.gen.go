@@ -86,9 +86,9 @@ type RegionId int
 
 // Scene defines model for Scene.
 type Scene struct {
-	Bounds     *Bounds `json:"bounds,omitempty"`
-	Id         SceneId `json:"id"`
-	PhotoCount *int    `json:"photo_count,omitempty"`
+	Bounds    *Bounds `json:"bounds,omitempty"`
+	FileCount *int    `json:"file_count,omitempty"`
+	Id        SceneId `json:"id"`
 }
 
 // SceneId defines model for SceneId.

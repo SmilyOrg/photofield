@@ -39,10 +39,12 @@ type FileConfig struct {
 }
 
 type ImageSourceConfig struct {
-	ListExtensions []string   `json:"extensions"`
-	Images         FileConfig `json:"images"`
-	Videos         FileConfig `json:"videos"`
-	DateFormats    []string   `json:"date_formats"`
+	ListExtensions       []string   `json:"extensions"`
+	Images               FileConfig `json:"images"`
+	Videos               FileConfig `json:"videos"`
+	DateFormats          []string   `json:"date_formats"`
+	ConcurrentMetaLoads  int        `json:"concurrent_meta_loads"`
+	ConcurrentColorLoads int        `json:"concurrent_color_loads"`
 }
 
 type ImageSource struct {
@@ -154,14 +156,14 @@ func NewImageSource(system System, config ImageSourceConfig, migrations embed.FS
 			"load_meta",
 			source.loadQueueMeta,
 			source.loadImageInfosMeta,
-			8,
+			source.ConcurrentMetaLoads,
 		)
 		go source.processQueue(
 			"load color",
 			"load_color",
 			source.loadQueueColor,
 			source.loadImageInfosColor,
-			1,
+			source.ConcurrentColorLoads,
 		)
 	}
 
@@ -172,9 +174,29 @@ func (source *ImageSource) Close() {
 	source.Coder.Close()
 }
 
-func (source *ImageSource) ListImages(dir string, maxPhotos int) <-chan string {
-	dir = filepath.FromSlash(dir)
-	return source.infoDatabase.List(dir, maxPhotos)
+func (source *ImageSource) ListImages(dirs []string, maxPhotos int) <-chan string {
+	for i := range dirs {
+		dirs[i] = filepath.FromSlash(dirs[i])
+	}
+	return source.infoDatabase.ListPaths(dirs, maxPhotos)
+}
+
+func (source *ImageSource) ListImageInfos(dirs []string, options ListOptions) <-chan SourcedImageInfo {
+	for i := range dirs {
+		dirs[i] = filepath.FromSlash(dirs[i])
+	}
+	out := make(chan SourcedImageInfo, 10000)
+	go func() {
+		infos := source.infoDatabase.List(dirs, options)
+		for info := range infos {
+			if info.NeedsMeta() || info.NeedsColor() {
+				info.ImageInfo = source.GetImageInfo(info.Path)
+			}
+			out <- info.SourcedImageInfo
+		}
+		close(out)
+	}()
+	return out
 }
 
 func (source *ImageSource) IndexImages(dir string, maxPhotos int, counter chan<- int) {
@@ -605,9 +627,10 @@ func (source *ImageSource) GetImageInfo(path string) ImageInfo {
 	}
 
 	startTime = time.Now()
-	info, found = source.infoDatabase.Get(path)
+	result, found := source.infoDatabase.Get(path)
+	info = result.ImageInfo
 	dbGetMs := time.Since(startTime).Milliseconds()
-	needsMeta := info.NeedsMeta()
+	needsMeta := result.NeedsMeta()
 	if found && !needsMeta {
 		startTime = time.Now()
 		source.infoCache.Set(path, info)
@@ -618,15 +641,15 @@ func (source *ImageSource) GetImageInfo(path string) ImageInfo {
 	}
 
 	startTime = time.Now()
-	needsColor := info.NeedsColor()
+	needsColor := result.NeedsColor()
 	if needsMeta || needsColor {
 		id := source.GetImageId(path)
-		if info.NeedsMeta() {
+		if needsMeta {
 			if source.loadQueueMeta != nil {
 				source.loadQueueMeta.Append(id)
 			}
 		}
-		if info.NeedsColor() {
+		if needsColor {
 			if source.loadQueueColor != nil {
 				source.loadQueueColor.Append(id)
 			}

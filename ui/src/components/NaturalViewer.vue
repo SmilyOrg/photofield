@@ -56,12 +56,6 @@
       </div>
     </div>
     
-    <ui-progress
-      class="progress"
-      :active="true"
-      :closed="!loading"
-    ></ui-progress>
-
     <ContextMenu
       class="context-menu"
       ref="contextMenu"
@@ -140,7 +134,7 @@ export default {
     }
   },
 
-  setup(props) {
+  setup(props, { emit }) {
     const collectionId = toRef(props, "collectionId");
     const regionId = toRef(props, "regionId");
     const scrollbar = toRef(props, "scrollbar");
@@ -306,12 +300,22 @@ export default {
       }
     })
 
-    const loading = computed(() => {
-      return scenesLoading.value || recreateScenesInProgress.value > 0;
-    });
+    watch([scenesLoading, recreateScenesInProgress], ([scenesLoading, recreatingCount]) => {
+      const tasks = [];
+      let count = 0;
+      if (scenesLoading) count++;
+      count += recreatingCount;
+      if (count > 0) {
+        tasks.push({
+          id: "scene-load",
+          name: "Loading scene",
+          pending: count,
+        });
+      }
+      emit("tasks", tasks);
+    })
     
     return {
-      loading,
       nativeScroll,
       scrollbarUpdateRegion,
       reorientRegion,
@@ -337,7 +341,6 @@ export default {
     }
     this.addResizeObserver();
     // this.$refs.scroller.addEventListener("scroll", this.onScroll);
-    this.$emit("tasks", this.tasks);
     this.$bus.on("home", this.navigateExit);
     this.$bus.on("recreate-scene", this.recreateScene);
     this.$bus.on("simulate-run", this.simulate);
@@ -817,7 +820,7 @@ export default {
         prevId = parseInt(this.regionId, 10);
       }
       const nextId = prevId + offset;
-      if (nextId < 0 || nextId >= this.scene.photo_count-1) {
+      if (nextId < 0 || nextId >= this.scene.file_count-1) {
         return;
       }
       this.regionFocusPending = true;

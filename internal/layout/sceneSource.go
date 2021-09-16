@@ -1,7 +1,6 @@
 package photofield
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -56,19 +55,6 @@ func NewSceneSource() *SceneSource {
 	return &source
 }
 
-func getCollectionKey(collection Collection) string {
-	key := fmt.Sprintf("%v", collection.ListLimit)
-	for _, dir := range collection.Dirs {
-		key += " " + dir
-	}
-	return key
-}
-
-func getLayoutKey(layout Layout) string {
-	key := fmt.Sprintf("%v %v %v", layout.SceneWidth, layout.ImageHeight, layout.Type)
-	return key
-}
-
 func (source *SceneSource) getImageIds(collection Collection, imageSource *ImageSource) []ImageId {
 	ids := make([]ImageId, 0)
 	for id := range collection.GetIds(imageSource) {
@@ -86,28 +72,28 @@ func getSceneCost(scene *Scene) int64 {
 }
 
 func (source *SceneSource) loadScene(config SceneConfig, imageSource *ImageSource) Scene {
-	scene := source.DefaultScene
-	ids := source.getImageIds(config.Collection, imageSource)
-	scene.AddPhotosFromIdSlice(ids)
+	log.Printf("scene loading %v", config.Collection.Id)
 
-	layoutFinished := ElapsedWithCount("layout", len(ids))
+	finished := Elapsed("scene load " + config.Collection.Id)
+
+	scene := source.DefaultScene
+
 	switch config.Layout.Type {
 	case Timeline:
-		LayoutTimeline(config.Layout, &scene, imageSource)
+		LayoutTimeline(config.Layout, config.Collection, &scene, imageSource)
 
 	case Album:
-		LayoutAlbum(config.Layout, &scene, imageSource)
+		LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
 
 	case Square:
 		LayoutSquare(&scene, imageSource)
 
 	case Wall:
-		LayoutWall(config.Layout, &scene, imageSource)
+		LayoutWall(config.Layout, config.Collection, &scene, imageSource)
 
 	default:
-		LayoutAlbum(config.Layout, &scene, imageSource)
+		LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
 	}
-	layoutFinished()
 
 	if scene.RegionSource == nil {
 		scene.RegionSource = &PhotoRegionSource{
@@ -115,7 +101,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *ImageSourc
 		}
 	}
 
+	scene.FileCount = len(scene.Photos)
 	scene.CreatedAt = time.Now()
+	finished()
 
 	log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
 	return scene
@@ -137,7 +125,10 @@ func (source *SceneSource) GetSceneById(id string, imageSource *ImageSource) *Sc
 }
 
 func sceneConfigEqual(a SceneConfig, b SceneConfig) bool {
-	if a.Collection.ListLimit != b.Collection.ListLimit {
+	if a.Collection.Limit != b.Collection.Limit {
+		return false
+	}
+	if a.Collection.IndexLimit != b.Collection.IndexLimit {
 		return false
 	}
 	for _, dirA := range a.Collection.Dirs {

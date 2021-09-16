@@ -6,9 +6,7 @@ import (
 	. "photofield/internal"
 	. "photofield/internal/display"
 	storage "photofield/internal/storage"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/tdewolff/canvas"
@@ -24,7 +22,6 @@ const (
 )
 
 type Layout struct {
-	Limit        int        `json:"limit"`
 	Type         LayoutType `json:"type"`
 	FontFamily   *canvas.FontFamily
 	HeaderFont   *canvas.FontFace
@@ -35,7 +32,7 @@ type Layout struct {
 }
 
 type Section struct {
-	photos   []*Photo
+	infos    []SourcedImageInfo
 	Inverted bool
 }
 
@@ -177,106 +174,34 @@ func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64
 	return scale
 }
 
-func orderSectionPhotoStream(section *Section, input chan SectionPhoto, output chan SectionPhoto) {
-	var buffer []SectionPhoto
-	index := 0
-	if section.Inverted {
-		index = len(section.photos) - 1
-	}
-	for photo := range input {
-
-		if photo.Index != index {
-			buffer = append(buffer, photo)
-			// log.Println("buffer", len(buffer))
-			continue
+func addSectionPhotos(section *Section, scene *Scene, source *storage.ImageSource) <-chan SectionPhoto {
+	photos := make(chan SectionPhoto, 10000)
+	go func() {
+		startIndex := len(scene.Photos)
+		for _, info := range section.infos {
+			scene.Photos = append(scene.Photos, Photo{
+				Id:     source.GetImageId(info.Path),
+				Sprite: Sprite{},
+			})
 		}
-
-		// log.Println("order", index, photo.Index)
-		output <- photo
-		if section.Inverted {
-			index--
-		} else {
-			index++
-		}
-
-		found := true
-		for found == true {
-			found = false
-			// log.Println("order buffer before", len(buffer))
-			for i := range buffer {
-				bphoto := buffer[i]
-				// log.Println("order search", index, bphoto.Index)
-				if bphoto.Index == index {
-					// log.Println("order search", index, "found")
-					// log.Println("order", index, bphoto.Index)
-					output <- bphoto
-					if section.Inverted {
-						index--
-					} else {
-						index++
-					}
-					lastIndex := len(buffer) - 1
-					// log.Println("order replace", buffer[i].Index, "at", i, "with", buffer[lastIndex].Index, "at", lastIndex)
-					buffer[i] = buffer[lastIndex]
-					// buffer[lastIndex] = nil
-					buffer = buffer[:lastIndex]
-					found = true
-					break
-				}
-			}
-			// log.Println("order buffer after", len(buffer))
-			if !found {
-				// log.Println("order search", index, "not found")
+		for index, info := range section.infos {
+			sceneIndex := startIndex + index
+			photo := &scene.Photos[sceneIndex]
+			photos <- SectionPhoto{
+				Index: sceneIndex,
+				Photo: photo,
+				Size: Size{
+					X: info.Width,
+					Y: info.Height,
+				},
 			}
 		}
-		// log.Println("buffer", len(buffer))
-
-	}
-	close(output)
+		close(photos)
+	}()
+	return photos
 }
 
-func getSectionPhotosUnordered(id int, section *Section, index chan int, output chan SectionPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
-	for i := range index {
-		photo := section.photos[i]
-		size := photo.GetSize(source)
-		output <- SectionPhoto{
-			Index: i,
-			Photo: photo,
-			Size:  size,
-		}
-	}
-	wg.Done()
-}
-
-func getSectionPhotos(section *Section, output chan SectionPhoto, source *storage.ImageSource) {
-	index := make(chan int, 1)
-	unordered := make(chan SectionPhoto, 1)
-
-	concurrent := 100
-	wg := &sync.WaitGroup{}
-	wg.Add(concurrent)
-
-	for i := 0; i < concurrent; i++ {
-		go getSectionPhotosUnordered(i, section, index, unordered, wg, source)
-	}
-	go orderSectionPhotoStream(section, unordered, output)
-
-	if section.Inverted {
-		for i := range section.photos {
-			index <- (len(section.photos) - 1 - i)
-		}
-	} else {
-		for i := range section.photos {
-			index <- i
-		}
-	}
-
-	close(index)
-	wg.Wait()
-	close(unordered)
-}
-
-func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan Rect, config Layout, scene *Scene, source *storage.ImageSource) {
+func layoutSectionPhotos(photos <-chan SectionPhoto, bounds Rect, config Layout, scene *Scene, source *storage.ImageSource) Rect {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()
@@ -334,143 +259,10 @@ func layoutSectionPhotos(photos chan SectionPhoto, bounds Rect, boundsOut chan R
 	}
 	x = 0
 	y += config.ImageHeight + config.LineSpacing
-	boundsOut <- Rect{
+	return Rect{
 		X: bounds.X,
 		Y: bounds.Y,
 		W: bounds.W,
 		H: y,
 	}
-	close(boundsOut)
-}
-
-func layoutSectionList(section *Section, bounds Rect, imageHeight float64, imageSpacing float64, lineSpacing float64, source *storage.ImageSource) canvas.Point {
-	x := 0.
-	y := 0.
-	lastLogTime := time.Now()
-	photoCount := len(section.photos)
-	for i := range section.photos {
-		photo := section.photos[i]
-		size := photo.GetSize(source)
-
-		aspectRatio := float64(size.X) / float64(size.Y)
-		imageWidth := float64(imageHeight) * aspectRatio
-
-		if x+imageWidth+imageSpacing > bounds.W {
-			x = 0
-			y += imageHeight + lineSpacing
-		}
-
-		photo.Sprite.PlaceFitHeight(
-			bounds.X+x,
-			bounds.Y+y,
-			imageHeight,
-			float64(size.X),
-			float64(size.Y),
-		)
-
-		// fmt.Printf("%d %f %f %f\n", i, x, imageWidth, bounds.W)
-
-		x += imageWidth + imageSpacing
-
-		now := time.Now()
-		if now.Sub(lastLogTime) > 1*time.Second {
-			lastLogTime = now
-			log.Printf("layout section %d / %d\n", i, photoCount)
-		}
-	}
-	x = 0
-	y += imageHeight + lineSpacing
-	return canvas.Point{
-		X: bounds.X + x,
-		Y: bounds.Y + y,
-	}
-}
-
-func getLayoutPhotosUnordered(id int, photos []Photo, indices chan int, output chan LayoutPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
-	for i := range indices {
-		photo := &photos[i]
-		path := photo.GetPath(source)
-		info := source.GetImageInfo(path)
-		output <- LayoutPhoto{
-			Index: i,
-			Photo: *photo,
-			Info:  info,
-		}
-	}
-	wg.Done()
-}
-
-func getLayoutPhotoChan(photos []Photo, source *storage.ImageSource) <-chan LayoutPhoto {
-	finished := ElapsedWithCount("layout load info", len(photos))
-
-	indices := make(chan int)
-	layoutPhotos := make(chan LayoutPhoto, 10)
-
-	concurrent := 20
-
-	wg := &sync.WaitGroup{}
-	wg.Add(concurrent)
-	for i := 0; i < concurrent; i++ {
-		go getLayoutPhotosUnordered(i, photos, indices, layoutPhotos, wg, source)
-	}
-
-	go func() {
-		for i := range photos {
-			indices <- i
-		}
-		close(indices)
-		wg.Wait()
-		finished()
-		close(layoutPhotos)
-	}()
-
-	// sort.Slice(scene.Photos, func(i, j int) bool {
-	// 	a := source.GetImageInfo(scene.Photos[i].Original.Path)
-	// 	b := source.GetImageInfo(scene.Photos[j].Original.Path)
-	// 	return a.DateTime.After(b.DateTime)
-	// })
-
-	return layoutPhotos
-}
-
-func layoutPhotoChanToSlice(input <-chan LayoutPhoto) []LayoutPhoto {
-	var layoutPhotos []LayoutPhoto
-	lastIndex := -1
-	lastLogTime := time.Now()
-	logInterval := 2 * time.Second
-	for photo := range input {
-		now := time.Now()
-		if now.Sub(lastLogTime) > logInterval {
-			perSec := float64(photo.Index-lastIndex) / logInterval.Seconds()
-			log.Printf("layout load info %d, %.2f / sec\n", photo.Index, perSec)
-			lastLogTime = now
-			lastIndex = photo.Index
-		}
-		layoutPhotos = append(layoutPhotos, photo)
-	}
-	return layoutPhotos
-}
-
-func getLayoutPhotos(photos []Photo, source *storage.ImageSource) []LayoutPhoto {
-	return layoutPhotoChanToSlice(getLayoutPhotoChan(photos, source))
-}
-
-func sortNewestToOldest(photos []LayoutPhoto) {
-	defer ElapsedWithCount("layout sort", len(photos))()
-
-	sort.Slice(photos, func(i, j int) bool {
-		a := photos[i]
-		b := photos[j]
-		return a.Info.DateTime.After(b.Info.DateTime)
-	})
-}
-
-func sortOldestToNewest(photos []LayoutPhoto) {
-	defer ElapsedWithCount("layout sort", len(photos))()
-
-	sort.Slice(photos, func(i, j int) bool {
-		a := photos[i]
-		b := photos[j]
-		return a.Info.DateTime.Before(b.Info.DateTime)
-	})
 }

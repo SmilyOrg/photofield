@@ -1,61 +1,73 @@
 package photofield
 
 import (
-	"fmt"
+	"log"
 	"math"
+	. "photofield/internal"
+	. "photofield/internal/collection"
 	. "photofield/internal/display"
 	storage "photofield/internal/storage"
+	"time"
 )
 
-func LayoutWall(config Layout, scene *Scene, source *storage.ImageSource) {
+func LayoutWall(layout Layout, collection Collection, scene *Scene, source *storage.ImageSource) {
 
-	photoCount := len(scene.Photos)
+	infos := collection.GetInfos(source, ListOptions{
+		OrderBy: DateAsc,
+		Limit:   collection.Limit,
+	})
+
+	section := Section{}
+
+	loadCounter := Counter{
+		Name:     "load infos",
+		Interval: 1 * time.Second,
+	}
+
+	index := 0
+	for info := range infos {
+		section.infos = append(section.infos, info)
+		loadCounter.Set(index)
+		index++
+	}
+
+	photoCount := len(section.infos)
 
 	edgeCount := int(math.Sqrt(float64(photoCount)))
 
-	scene.Bounds.W = config.SceneWidth
+	scene.Bounds.W = layout.SceneWidth
 	cols := edgeCount
 
 	layoutConfig := Layout{}
-	layoutConfig.ImageSpacing = config.SceneWidth / float64(edgeCount) * 0.02
+	layoutConfig.ImageSpacing = layout.SceneWidth / float64(edgeCount) * 0.02
 	layoutConfig.LineSpacing = layoutConfig.ImageSpacing
 
-	fmt.Printf("scene width %v cols %v\n", scene.Bounds.W, cols)
+	log.Printf("layout wall width %v cols %v\n", scene.Bounds.W, cols)
 
 	imageWidth := scene.Bounds.W / (float64(cols) - layoutConfig.ImageSpacing)
 	imageHeight := imageWidth * 2 / 3 * 1.2
 
-	fmt.Printf("image %f %f\n", imageWidth, imageHeight)
+	log.Printf("layout wall image %f %f\n", imageWidth, imageHeight)
 
 	rows := int(math.Ceil(float64(photoCount) / float64(cols)))
 
 	scene.Bounds.H = math.Ceil(float64(rows)) * (imageHeight + layoutConfig.LineSpacing)
 
-	fmt.Printf("scene %f %f\n", scene.Bounds.W, scene.Bounds.H)
-
 	sceneMargin := 10.
 	layoutConfig.ImageHeight = imageHeight
-
-	section := Section{}
-	for i := range scene.Photos {
-		photo := &scene.Photos[i]
-		section.photos = append(section.photos, photo)
-	}
 
 	x := sceneMargin
 	y := sceneMargin
 
-	photos := make(chan SectionPhoto, 1)
-	boundsOut := make(chan Rect)
-	go layoutSectionPhotos(photos, Rect{
+	layoutFinished := Elapsed("layout")
+	photos := addSectionPhotos(&section, scene, source)
+	newBounds := layoutSectionPhotos(photos, Rect{
 		X: x,
 		Y: y,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: scene.Bounds.H - sceneMargin*2,
-	}, boundsOut, layoutConfig, scene, source)
-	go getSectionPhotos(&section, photos, source)
-
-	newBounds := <-boundsOut
+	}, layoutConfig, scene, source)
+	layoutFinished()
 
 	scene.Bounds.H = newBounds.Y + newBounds.H + sceneMargin
 }

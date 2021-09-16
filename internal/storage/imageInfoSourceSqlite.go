@@ -39,6 +39,30 @@ type ImageInfoWrite struct {
 	ImageInfo
 }
 
+type ImageInfoExistence struct {
+	SizeNull     bool
+	DateTimeNull bool
+	ColorNull    bool
+}
+
+type ImageInfoResult struct {
+	ImageInfo
+	ImageInfoExistence
+}
+
+type ImageInfoListResult struct {
+	SourcedImageInfo
+	ImageInfoExistence
+}
+
+func (info *ImageInfoExistence) NeedsMeta() bool {
+	return info.SizeNull || info.DateTimeNull
+}
+
+func (info *ImageInfoExistence) NeedsColor() bool {
+	return info.ColorNull
+}
+
 func NewImageInfoSourceSqlite(migrations embed.FS) *ImageInfoSourceSqlite {
 
 	var err error
@@ -210,7 +234,7 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 	}
 }
 
-func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfo, bool) {
+func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfoResult, bool) {
 
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
@@ -222,7 +246,7 @@ func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfo, bool) {
 
 	stmt.BindText(1, path)
 
-	var imageInfo ImageInfo
+	var imageInfo ImageInfoResult
 
 	exists, _ := stmt.Step()
 	if !exists {
@@ -231,8 +255,14 @@ func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfo, bool) {
 
 	imageInfo.Width = stmt.ColumnInt(0)
 	imageInfo.Height = stmt.ColumnInt(1)
+	imageInfo.SizeNull = stmt.ColumnType(0) == sqlite.TypeNull || stmt.ColumnType(1) == sqlite.TypeNull
+
 	imageInfo.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(2))
+	imageInfo.DateTimeNull = stmt.ColumnType(2) == sqlite.TypeNull
+
 	imageInfo.Color = (uint32)(stmt.ColumnInt64(3))
+	imageInfo.ColorNull = stmt.ColumnType(3) == sqlite.TypeNull
+
 	return imageInfo, true
 }
 
@@ -252,7 +282,7 @@ func (source *ImageInfoSourceSqlite) WaitForCommit() {
 
 func (source *ImageInfoSourceSqlite) DeleteNonexistent(dir string, m map[string]struct{}) {
 	source.WaitForCommit()
-	for path := range source.List(dir, 0) {
+	for path := range source.ListPaths([]string{dir}, 0) {
 		_, exists := m[path]
 		if !exists {
 			source.Write(path, ImageInfo{}, Delete)
@@ -261,31 +291,120 @@ func (source *ImageInfoSourceSqlite) DeleteNonexistent(dir string, m map[string]
 	source.WaitForCommit()
 }
 
-func (source *ImageInfoSourceSqlite) List(dir string, limit int) <-chan string {
-	out := make(chan string)
+func (source *ImageInfoSourceSqlite) List(dirs []string, options ListOptions) <-chan ImageInfoListResult {
+	out := make(chan ImageInfoListResult, 10000)
 	go func() {
-		finished := Elapsed("listing sqlite")
+		defer Elapsed("listing infos sqlite")()
 
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT path
+			SELECT path, width, height, created_at, color
 			FROM infos
-			WHERE path LIKE ?
+			WHERE 
 		`
 
-		if limit > 0 {
-			sql += `LIMIT ?`
+		for i := range dirs {
+			sql += `path LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		switch options.OrderBy {
+		case DateAsc:
+			sql += `ORDER BY created_at ASC `
+		case DateDesc:
+			sql += `ORDER BY created_at DESC `
+		default:
+			panic("Unsupported listing order")
+		}
+
+		if options.Limit > 0 {
+			sql += `LIMIT ? `
 		}
 
 		sql += ";"
 
 		stmt := conn.Prep(sql)
+		bindIndex := 1
 		defer stmt.Finalize()
-		stmt.BindText(1, dir+"%")
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if options.Limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(options.Limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			var info ImageInfoListResult
+			info.Path = stmt.ColumnText(0)
+
+			info.Width = stmt.ColumnInt(1)
+			info.Height = stmt.ColumnInt(2)
+			info.SizeNull = stmt.ColumnType(1) == sqlite.TypeNull || stmt.ColumnType(2) == sqlite.TypeNull
+
+			info.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(3))
+			info.DateTimeNull = stmt.ColumnType(3) == sqlite.TypeNull
+
+			info.Color = (uint32)(stmt.ColumnInt64(4))
+			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
+
+			out <- info
+		}
+
+		close(out)
+	}()
+	return out
+}
+
+func (source *ImageInfoSourceSqlite) ListPaths(dirs []string, limit int) <-chan string {
+	out := make(chan string, 10000)
+	go func() {
+		defer Elapsed("listing paths sqlite")()
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT path, width, height, created_at, color
+			FROM infos
+			WHERE 
+		`
+
+		for i := range dirs {
+			sql += `path LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
 		if limit > 0 {
-			stmt.BindInt64(2, (int64)(limit))
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		bindIndex := 1
+		defer stmt.Finalize()
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(limit))
 		}
 
 		for {
@@ -297,7 +416,6 @@ func (source *ImageInfoSourceSqlite) List(dir string, limit int) <-chan string {
 			out <- stmt.ColumnText(0)
 		}
 
-		finished()
 		close(out)
 	}()
 	return out

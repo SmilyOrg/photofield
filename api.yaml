@@ -458,7 +458,7 @@ components:
           $ref: "#/components/schemas/SceneId"
         bounds:
           $ref: "#/components/schemas/Bounds"
-        photo_count:
+        file_count:
           type: integer
           minimum: 0
           example: 506

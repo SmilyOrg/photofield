@@ -6,6 +6,7 @@ import (
 	"log"
 
 	. "photofield/internal"
+	. "photofield/internal/collection"
 	. "photofield/internal/display"
 	storage "photofield/internal/storage"
 	"time"
@@ -22,12 +23,10 @@ type AlbumEvent struct {
 	Section    Section
 }
 
-func LayoutAlbumEvent(config Layout, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
-
-	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
+func LayoutAlbumEvent(layout Layout, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	if event.FirstOnDay {
-		font := config.FontFamily.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+		font := layout.FontFamily.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 		dateFormat := "Monday, Jan 2"
 		if event.First {
 			dateFormat = "Monday, Jan 2, 2006"
@@ -46,7 +45,7 @@ func LayoutAlbumEvent(config Layout, rect Rect, event *AlbumEvent, scene *Scene,
 		rect.Y += text.Sprite.Rect.H + 15
 	}
 
-	font := config.FontFamily.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	font := layout.FontFamily.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 	text := NewTextFromRect(
 		Rect{
 			X: rect.X,
@@ -60,11 +59,8 @@ func LayoutAlbumEvent(config Layout, rect Rect, event *AlbumEvent, scene *Scene,
 	scene.Texts = append(scene.Texts, text)
 	rect.Y += text.Sprite.Rect.H + 10
 
-	photos := make(chan SectionPhoto, 1)
-	boundsOut := make(chan Rect)
-	go layoutSectionPhotos(photos, rect, boundsOut, config, scene, source)
-	go getSectionPhotos(&event.Section, photos, source)
-	newBounds := <-boundsOut
+	photos := addSectionPhotos(&event.Section, scene, source)
+	newBounds := layoutSectionPhotos(photos, rect, layout, scene, source)
 
 	rect.Y = newBounds.Y + newBounds.H
 	if event.LastOnDay {
@@ -75,25 +71,21 @@ func LayoutAlbumEvent(config Layout, rect Rect, event *AlbumEvent, scene *Scene,
 	return rect
 }
 
-func LayoutAlbum(config Layout, scene *Scene, source *storage.ImageSource) {
+func LayoutAlbum(layout Layout, collection Collection, scene *Scene, source *storage.ImageSource) {
 
-	layoutPhotos := getLayoutPhotos(scene.Photos, source)
-	sortOldestToNewest(layoutPhotos)
+	limit := collection.Limit
 
-	count := len(layoutPhotos)
-	if config.Limit > 0 && config.Limit < count {
-		count = config.Limit
-	}
+	infos := collection.GetInfos(source, ListOptions{
+		OrderBy: DateAsc,
+		Limit:   limit,
+	})
 
-	config.ImageSpacing = 0.02 * config.ImageHeight
-	config.LineSpacing = 0.02 * config.ImageHeight
-
-	scene.Photos = scene.Photos[0:count]
-	layoutPhotos = layoutPhotos[0:count]
+	layout.ImageSpacing = 0.02 * layout.ImageHeight
+	layout.LineSpacing = 0.02 * layout.ImageHeight
 
 	sceneMargin := 10.
 
-	scene.Bounds.W = config.SceneWidth
+	scene.Bounds.W = layout.SceneWidth
 
 	event := AlbumEvent{
 		First: true,
@@ -108,45 +100,46 @@ func LayoutAlbum(config Layout, scene *Scene, source *storage.ImageSource) {
 		H: 0,
 	}
 
-	if config.FontFamily == nil {
-		config.FontFamily = canvas.NewFontFamily("Roboto")
-		err := config.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
+	if layout.FontFamily == nil {
+		layout.FontFamily = canvas.NewFontFamily("Roboto")
+		err := layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
 		if err != nil {
 			panic(err)
 		}
-		err = config.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
+		err = layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
 		if err != nil {
 			panic(err)
 		}
 	}
-	if config.HeaderFont == nil {
-		face := config.FontFamily.Face(80.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
-		config.HeaderFont = &face
+	if layout.HeaderFont == nil {
+		face := layout.FontFamily.Face(80.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
+		layout.HeaderFont = &face
 	}
 
 	scene.Solids = make([]Solid, 0)
 	scene.Texts = make([]Text, 0)
 
-	// log.Println("layout placing")
-	layoutPlaced := ElapsedWithCount("layout placing", count)
-	lastLogTime := time.Now()
+	layoutPlaced := Elapsed("layout placing")
+	layoutCounter := Counter{
+		Name:     "layout",
+		Interval: 1 * time.Second,
+	}
 
 	scene.Photos = scene.Photos[:0]
-	for i := range layoutPhotos {
-		if i >= count {
+	index := 0
+	for info := range infos {
+		if limit > 0 && index >= limit {
 			break
 		}
-		LayoutPhoto := &layoutPhotos[i]
-		info := LayoutPhoto.Info
-		scene.Photos = append(scene.Photos, LayoutPhoto.Photo)
-		photo := &scene.Photos[len(scene.Photos)-1]
 
 		photoTime := info.DateTime
 		elapsed := photoTime.Sub(lastPhotoTime)
 		if elapsed > 1*time.Hour {
-			event.EndTime = lastPhotoTime
-			event.LastOnDay = !SameDay(lastPhotoTime, photoTime)
-			rect = LayoutAlbumEvent(config, rect, &event, scene, source)
+			if eventCount > 0 {
+				event.EndTime = lastPhotoTime
+				event.LastOnDay = !SameDay(lastPhotoTime, photoTime)
+				rect = LayoutAlbumEvent(layout, rect, &event, scene, source)
+			}
 			eventCount++
 			event = AlbumEvent{
 				First:      eventCount == 1,
@@ -156,20 +149,17 @@ func LayoutAlbum(config Layout, scene *Scene, source *storage.ImageSource) {
 		}
 		lastPhotoTime = photoTime
 
-		event.Section.photos = append(event.Section.photos, photo)
+		event.Section.infos = append(event.Section.infos, info)
 
-		now := time.Now()
-		if now.Sub(lastLogTime) > 1*time.Second {
-			lastLogTime = now
-			log.Printf("layout %d / %d\n", i, count)
-		}
+		layoutCounter.Set(index)
+		index++
 	}
 	layoutPlaced()
 
-	if len(event.Section.photos) > 0 {
+	if len(event.Section.infos) > 0 {
 		event.EndTime = lastPhotoTime
 		event.LastOnDay = true
-		rect = LayoutAlbumEvent(config, rect, &event, scene, source)
+		rect = LayoutAlbumEvent(layout, rect, &event, scene, source)
 		eventCount++
 	}
 

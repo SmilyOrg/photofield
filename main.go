@@ -569,6 +569,7 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
 	if scene == nil {
 		problem(w, r, http.StatusBadRequest, "Scene not found")
+		return
 	}
 
 	render := defaultSceneConfig.Render
@@ -773,7 +774,7 @@ func indexCollections(collections *[]Collection) (ok bool) {
 				indexTasks.Delete(id)
 			}(collection.Id, counter)
 			for _, dir := range collection.Dirs {
-				imageSource.IndexImages(dir, collection.ListLimit, counter)
+				imageSource.IndexImages(dir, collection.IndexLimit, counter)
 			}
 			close(counter)
 		}
@@ -795,7 +796,7 @@ func indexCollection(collection *Collection) {
 		log.Printf("indexing %s\n", collection.Id)
 		for _, dir := range collection.Dirs {
 			log.Printf("indexing %s %s\n", collection.Id, dir)
-			imageSource.IndexImages(dir, collection.ListLimit, counter)
+			imageSource.IndexImages(dir, collection.IndexLimit, counter)
 		}
 		close(counter)
 	}()
@@ -827,6 +828,9 @@ func loadConfiguration() AppConfig {
 		collection.GenerateId()
 		if collection.Layout == "" {
 			collection.Layout = string(appConfig.Layout.Type)
+		}
+		if collection.Limit > 0 && collection.IndexLimit == 0 {
+			collection.IndexLimit = collection.Limit
 		}
 	}
 
@@ -871,7 +875,7 @@ func main() {
 	defer imageSource.Close()
 	sceneSource = NewSceneSource()
 
-	indexCollections(&collections)
+	// indexCollections(&collections)
 
 	fontFamily := canvas.NewFontFamily("Roboto")
 	// fontFamily.Use(canvas.CommonLigatures)

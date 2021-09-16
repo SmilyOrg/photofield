@@ -5,6 +5,26 @@ import (
 	"time"
 )
 
+type Counter struct {
+	Name      string
+	Interval  time.Duration
+	lastTime  time.Time
+	lastValue int
+}
+
+func (counter *Counter) Set(value int) {
+	now := time.Now()
+	elapsed := now.Sub(counter.lastTime)
+	if elapsed >= counter.Interval {
+		speed := float64(value-counter.lastValue) / elapsed.Seconds()
+		if !counter.lastTime.IsZero() {
+			log.Printf("%v %7v, %0.2f / sec\n", counter.Name, value, speed)
+		}
+		counter.lastTime = now
+		counter.lastValue = value
+	}
+}
+
 func Elapsed(name string) func() {
 	start := time.Now()
 	return func() {

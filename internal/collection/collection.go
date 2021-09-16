@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 
 	"github.com/gosimple/slug"
 
@@ -17,7 +16,8 @@ type Collection struct {
 	Id            string   `json:"id"`
 	Name          string   `json:"name"`
 	Layout        string   `json:"layout"`
-	ListLimit     int      `json:"list_limit"`
+	Limit         int      `json:"limit"`
+	IndexLimit    int      `json:"index_limit"`
 	ExpandSubdirs bool     `json:"expand_subdirs"`
 	ExpandSort    string   `json:"expand_sort"`
 	Dirs          []string `json:"dirs"`
@@ -39,9 +39,10 @@ func (collection *Collection) Expand() []Collection {
 		list, _ := dir.Readdirnames(0)
 		for _, name := range list {
 			child := Collection{
-				Name:      name,
-				Dirs:      []string{filepath.Join(photoDir, name)},
-				ListLimit: collection.ListLimit,
+				Name:       name,
+				Dirs:       []string{filepath.Join(photoDir, name)},
+				Limit:      collection.Limit,
+				IndexLimit: collection.IndexLimit,
 			}
 			collections = append(collections, child)
 		}
@@ -59,6 +60,10 @@ func (collection *Collection) Expand() []Collection {
 	return collections
 }
 
+func (collection *Collection) GetInfos(source *ImageSource, options ListOptions) <-chan SourcedImageInfo {
+	return source.ListImageInfos(collection.Dirs, options)
+}
+
 func (collection *Collection) GetIds(source *ImageSource) <-chan ImageId {
 	out := make(chan ImageId)
 	go func() {
@@ -71,23 +76,12 @@ func (collection *Collection) GetIds(source *ImageSource) <-chan ImageId {
 }
 
 func (collection *Collection) GetPaths(source *ImageSource) <-chan string {
-	listingFinished := Elapsed("listing")
-	out := make(chan string)
-	wg := &sync.WaitGroup{}
-	wg.Add(len(collection.Dirs))
-	go func() {
-		for _, photoDir := range collection.Dirs {
-			paths := source.ListImages(photoDir, collection.ListLimit)
-			for path := range paths {
-				out <- path
-			}
-			wg.Done()
-		}
-	}()
-	go func() {
-		wg.Wait()
-		listingFinished()
-		close(out)
-	}()
-	return out
+	limit := 0
+	if collection.IndexLimit > 0 {
+		limit = collection.IndexLimit
+	}
+	if collection.Limit > 0 {
+		limit = collection.Limit
+	}
+	return source.ListImages(collection.Dirs, limit)
 }

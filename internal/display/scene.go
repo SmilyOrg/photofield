@@ -90,7 +90,7 @@ type Scene struct {
 	Fonts        Fonts        `json:"-"`
 	Bounds       Rect         `json:"bounds"`
 	Photos       []Photo      `json:"-"`
-	PhotoCount   int          `json:"photo_count"`
+	FileCount    int          `json:"file_count"`
 	Solids       []Solid      `json:"-"`
 	Texts        []Text       `json:"-"`
 	RegionSource RegionSource `json:"-"`
@@ -260,7 +260,7 @@ func (scene *Scene) AddPhotosFromIds(ids <-chan storage.ImageId) {
 		photo.Id = id
 		scene.Photos = append(scene.Photos, photo)
 	}
-	scene.PhotoCount = len(scene.Photos)
+	scene.FileCount = len(scene.Photos)
 }
 
 func (scene *Scene) AddPhotosFromIdSlice(ids []storage.ImageId) {
@@ -269,7 +269,7 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []storage.ImageId) {
 		photo.Id = id
 		scene.Photos = append(scene.Photos, photo)
 	}
-	scene.PhotoCount = len(scene.Photos)
+	scene.FileCount = len(scene.Photos)
 }
 
 func (scene *Scene) GetVisiblePhotos(view Rect, maxCount int) <-chan PhotoRef {

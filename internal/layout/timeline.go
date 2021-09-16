@@ -5,6 +5,7 @@ import (
 	"time"
 
 	. "photofield/internal"
+	. "photofield/internal/collection"
 	. "photofield/internal/display"
 	storage "photofield/internal/storage"
 
@@ -21,7 +22,7 @@ type TimelineEvent struct {
 	Section    Section
 }
 
-func LayoutTimelineEvent(config Layout, rect Rect, event *TimelineEvent, scene *Scene, source *storage.ImageSource) Rect {
+func LayoutTimelineEvent(layout Layout, rect Rect, event *TimelineEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
@@ -48,7 +49,7 @@ func LayoutTimelineEvent(config Layout, rect Rect, event *TimelineEvent, scene *
 		headerText += "   " + dur.LimitFirstN(1).String()
 	}
 
-	font := config.FontFamily.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	font := layout.FontFamily.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 
 	scene.Texts = append(scene.Texts,
 		NewTextFromRect(
@@ -59,40 +60,29 @@ func LayoutTimelineEvent(config Layout, rect Rect, event *TimelineEvent, scene *
 	)
 	rect.Y += textHeight + 15
 
-	photos := make(chan SectionPhoto, 1)
-	boundsOut := make(chan Rect)
-	// event.Section.Inverted = true
-	go layoutSectionPhotos(photos, rect, boundsOut, config, scene, source)
-	go getSectionPhotos(&event.Section, photos, source)
-	newBounds := <-boundsOut
+	photos := addSectionPhotos(&event.Section, scene, source)
+	newBounds := layoutSectionPhotos(photos, rect, layout, scene, source)
 
 	rect.Y = newBounds.Y + newBounds.H
 	rect.Y += 10
 	return rect
 }
 
-func LayoutTimeline(config Layout, scene *Scene, source *storage.ImageSource) {
+func LayoutTimeline(layout Layout, collection Collection, scene *Scene, source *storage.ImageSource) {
 
-	// log.Println("layout")
+	limit := collection.Limit
 
-	// log.Println("layout load info")
-	layoutPhotos := getLayoutPhotos(scene.Photos, source)
-	sortNewestToOldest(layoutPhotos)
+	infos := collection.GetInfos(source, ListOptions{
+		OrderBy: DateDesc,
+		Limit:   limit,
+	})
 
-	count := len(layoutPhotos)
-	if config.Limit > 0 && config.Limit < count {
-		count = config.Limit
-	}
-
-	config.ImageSpacing = 0.02 * config.ImageHeight
-	config.LineSpacing = 0.02 * config.ImageHeight
-
-	scene.Photos = scene.Photos[0:count]
-	layoutPhotos = layoutPhotos[0:count]
+	layout.ImageSpacing = 0.02 * layout.ImageHeight
+	layout.LineSpacing = 0.02 * layout.ImageHeight
 
 	sceneMargin := 10.
 
-	scene.Bounds.W = config.SceneWidth
+	scene.Bounds.W = layout.SceneWidth
 
 	event := TimelineEvent{}
 	eventCount := 0
@@ -105,44 +95,42 @@ func LayoutTimeline(config Layout, scene *Scene, source *storage.ImageSource) {
 		H: 0,
 	}
 
-	if config.FontFamily == nil {
-		config.FontFamily = canvas.NewFontFamily("Roboto")
-		err := config.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
+	if layout.FontFamily == nil {
+		layout.FontFamily = canvas.NewFontFamily("Roboto")
+		err := layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
 		if err != nil {
 			panic(err)
 		}
-		err = config.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
+		err = layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
 		if err != nil {
 			panic(err)
 		}
 	}
-	if config.HeaderFont == nil {
-		face := config.FontFamily.Face(80.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
-		config.HeaderFont = &face
+	if layout.HeaderFont == nil {
+		face := layout.FontFamily.Face(80.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
+		layout.HeaderFont = &face
 	}
 
 	scene.Solids = make([]Solid, 0)
 	scene.Texts = make([]Text, 0)
 
-	// log.Println("layout placing")
-	layoutPlaced := ElapsedWithCount("layout placing", count)
-	lastLogTime := time.Now()
+	layoutPlaced := Elapsed("layout placing")
+	layoutCounter := Counter{
+		Name:     "layout",
+		Interval: 1 * time.Second,
+	}
 
-	scene.Photos = scene.Photos[:0]
-	for i := range layoutPhotos {
-		if i >= count {
+	index := 0
+	for info := range infos {
+		if limit > 0 && index >= limit {
 			break
 		}
-		LayoutPhoto := &layoutPhotos[i]
-		info := LayoutPhoto.Info
-		scene.Photos = append(scene.Photos, LayoutPhoto.Photo)
-		photo := &scene.Photos[len(scene.Photos)-1]
 
 		photoTime := info.DateTime
 		elapsed := lastPhotoTime.Sub(photoTime)
 		if elapsed > 30*time.Minute {
 			event.StartTime = lastPhotoTime
-			rect = LayoutTimelineEvent(config, rect, &event, scene, source)
+			rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
 			eventCount++
 			event = TimelineEvent{
 				EndTime: photoTime,
@@ -150,19 +138,16 @@ func LayoutTimeline(config Layout, scene *Scene, source *storage.ImageSource) {
 		}
 		lastPhotoTime = photoTime
 
-		event.Section.photos = append(event.Section.photos, photo)
+		event.Section.infos = append(event.Section.infos, info)
 
-		now := time.Now()
-		if now.Sub(lastLogTime) > 1*time.Second {
-			lastLogTime = now
-			log.Printf("layout %d / %d\n", i, count)
-		}
+		layoutCounter.Set(index)
+		index++
 	}
 	layoutPlaced()
 
-	if len(event.Section.photos) > 0 {
+	if len(event.Section.infos) > 0 {
 		event.StartTime = lastPhotoTime
-		rect = LayoutTimelineEvent(config, rect, &event, scene, source)
+		rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
 		eventCount++
 	}
 

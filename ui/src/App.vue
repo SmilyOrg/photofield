@@ -32,7 +32,6 @@
                 <ui-item-text2>{{ task.done }} / {{ task.done + task.pending }} files</ui-item-text2>
                 <ui-progress
                   class="task-progress"
-                  active
                   :progress="task.done / (task.done + task.pending)"
                 ></ui-progress>
               </ui-item-text-content>
@@ -167,6 +166,7 @@
         @load="onLoad"
         @scene="v => scene = v"
         @immersive="onImmersive"
+        @tasks="tasks => viewerTasks = tasks"
       >
       </router-view>
     </div>
@@ -215,6 +215,7 @@ export default {
       collectionMenuOpen: false,
       scrollbar: null,
       scene: null,
+      viewerTasks: null,
     }
   },
   setup(props) {
@@ -262,6 +263,9 @@ export default {
   computed: {
     tasks() {
       const tasks = [];
+      if (this.viewerTasks) {
+        tasks.push(...this.viewerTasks);
+      }
       if (this.remoteTasks?.length > 0) {
         for (const task of this.remoteTasks) {
           tasks.push(task);
@@ -299,8 +303,8 @@ export default {
           return task.done.toLocaleString();
         }
       }
-      return this.scene?.photo_count !== undefined ?
-        this.scene.photo_count.toLocaleString() : 
+      return this.scene?.file_count !== undefined ?
+        this.scene.file_count.toLocaleString() : 
         null;
     },
   },
@@ -342,9 +346,6 @@ export default {
           visibility: immersive ? "hidden" : "auto",
         },
       })
-    },
-    onTasks(tasks) {
-      this.tasks = tasks;
     },
     async simulate() {
       this.drawer = false;

@@ -3,7 +3,6 @@ package photofield
 import (
 	"image/color"
 	"log"
-	"sort"
 	"time"
 
 	. "photofield/internal"
@@ -53,11 +52,11 @@ func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 	// imageWidth := 120.
 	photoCount := len(scene.Photos)
 
-	sort.Slice(scene.Photos, func(i, j int) bool {
-		a := source.GetImageInfo(scene.Photos[i].GetPath(source))
-		b := source.GetImageInfo(scene.Photos[i].GetPath(source))
-		return a.DateTime.Before(b.DateTime)
-	})
+	// sort.Slice(scene.Photos, func(i, j int) bool {
+	// 	a := source.GetImageInfo(scene.Photos[i].GetPath(source))
+	// 	b := source.GetImageInfo(scene.Photos[i].GetPath(source))
+	// 	return a.DateTime.Before(b.DateTime)
+	// })
 
 	// imageWidth := 200.
 	// imageHeight := 160.
@@ -150,7 +149,7 @@ func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 				dateTime.Format(dayFormat),
 			))
 		}
-		day.photos = append(day.photos, photo)
+		// day.photos = append(day.photos, photo)
 
 		hourNum := dateTime.Hour()
 		if hour == nil || hour.Number != hourNum {

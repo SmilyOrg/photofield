@@ -5,6 +5,7 @@ collections:
 
 layout:
   limit: 0
+  index_limit: 0
   type: ALBUM
 
 render:
@@ -21,6 +22,8 @@ system:
 media:
   extensions: [".jpg", ".mp4"]
   date_formats: ["20060201_150405"]
+  concurrent_meta_loads: 8
+  concurrent_color_loads: 4
   images:
     extensions: [".jpg", ".jpeg", ".png", ".gif"]
     thumbnails:
