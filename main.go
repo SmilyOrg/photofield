@@ -368,6 +368,10 @@ func (*Api) GetScenesId(w http.ResponseWriter, r *http.Request, id openapi.Scene
 }
 
 func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
+	for i := range collections {
+		collection := &collections[i]
+		collection.UpdateStatus(imageSource)
+	}
 	respond(w, r, http.StatusOK, struct {
 		Items []Collection `json:"items"`
 	}{
@@ -379,6 +383,7 @@ func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.
 
 	for _, collection := range collections {
 		if collection.Id == string(id) {
+			collection.UpdateStatus(imageSource)
 			respond(w, r, http.StatusOK, collection)
 			return
 		}

@@ -167,6 +167,7 @@
         @scene="v => scene = v"
         @immersive="onImmersive"
         @tasks="tasks => viewerTasks = tasks"
+        @reindex="() => reindex()"
       >
       </router-view>
     </div>

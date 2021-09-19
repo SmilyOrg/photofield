@@ -474,7 +474,11 @@ components:
           type: string
           description: User-friendly name
           example: Vacation Photos
-          
+        indexed_at:
+          type: string
+          format: date-time
+          description: Time of latest performed full index
+
     IndexTask:
       type: object
       properties:

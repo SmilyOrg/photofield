@@ -210,6 +210,14 @@ func (source *ImageSource) IndexImages(dir string, maxPhotos int, counter chan<-
 		counter <- 1
 	}
 	source.infoDatabase.DeleteNonexistent(dir, indexed)
+	source.infoDatabase.SetIndexed(dir)
+	source.infoDatabase.WaitForCommit()
+}
+
+func (source *ImageSource) GetDir(dir string) ImageInfo {
+	dir = filepath.FromSlash(dir)
+	result, _ := source.infoDatabase.GetDir(dir)
+	return result.ImageInfo
 }
 
 func (source *ImageSource) QueueMetaLoads(ids <-chan ImageId) {

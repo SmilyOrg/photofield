@@ -85,6 +85,7 @@ import ContextMenu from '@overcoder/vue-context-menu';
 import RegionMenu from './RegionMenu.vue';
 import dateParseISO from 'date-fns/parseISO';
 import dateFormat from 'date-fns/format';
+import differenceInDays from 'date-fns/differenceInDays';
 import Overlays from './Overlays.vue';
 
 export default {
@@ -102,6 +103,7 @@ export default {
     tasks: null,
     immersive: immersive => typeof immersive == "boolean",
     scene: null,
+    reindex: null,
   },
 
   components: {
@@ -151,6 +153,26 @@ export default {
     const {
       data: collection,
     } = useApi(() => collectionId && `/collections/${collectionId.value}`);
+
+    watch(collection, async newValue => {
+      if (!newValue) return;
+      let autoIndex = false;
+      if (!newValue.indexed_at) {
+        console.log(`not indexed yet, indexing...`);
+        autoIndex = true;
+      } else {
+        const indexedAt = dateParseISO(newValue.indexed_at);
+        const now = new Date();
+        const days = differenceInDays(now, indexedAt);
+        if (days >= 1) {
+          console.log(`indexed ${days} days ago, reindexing...`);
+          autoIndex = true;
+        }
+      }
+      if (autoIndex) {
+        emit("reindex");
+      }
+    })
 
     const sceneParams = computed(() =>
       window?.value?.width &&

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/gosimple/slug"
 
@@ -13,14 +14,15 @@ import (
 )
 
 type Collection struct {
-	Id            string   `json:"id"`
-	Name          string   `json:"name"`
-	Layout        string   `json:"layout"`
-	Limit         int      `json:"limit"`
-	IndexLimit    int      `json:"index_limit"`
-	ExpandSubdirs bool     `json:"expand_subdirs"`
-	ExpandSort    string   `json:"expand_sort"`
-	Dirs          []string `json:"dirs"`
+	Id            string     `json:"id"`
+	Name          string     `json:"name"`
+	Layout        string     `json:"layout"`
+	Limit         int        `json:"limit"`
+	IndexLimit    int        `json:"index_limit"`
+	ExpandSubdirs bool       `json:"expand_subdirs"`
+	ExpandSort    string     `json:"expand_sort"`
+	Dirs          []string   `json:"dirs"`
+	IndexedAt     *time.Time `json:"indexed_at,omitempty"`
 }
 
 func (collection *Collection) GenerateId() {
@@ -58,6 +60,17 @@ func (collection *Collection) Expand() []Collection {
 		})
 	}
 	return collections
+}
+
+func (collection *Collection) UpdateStatus(source *ImageSource) {
+	var earliestIndex *time.Time
+	for _, dir := range collection.Dirs {
+		info := source.GetDir(dir)
+		if !info.DateTime.IsZero() && (earliestIndex == nil || info.DateTime.Before(*earliestIndex)) {
+			earliestIndex = &info.DateTime
+		}
+	}
+	collection.IndexedAt = earliestIndex
 }
 
 func (collection *Collection) GetInfos(source *ImageSource, options ListOptions) <-chan SourcedImageInfo {

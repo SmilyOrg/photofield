@@ -31,6 +31,7 @@ const (
 	UpdateMeta  ImageInfoWriteType = iota
 	UpdateColor ImageInfoWriteType = iota
 	Delete      ImageInfoWriteType = iota
+	Index       ImageInfoWriteType = iota
 )
 
 type ImageInfoWrite struct {
@@ -140,14 +141,18 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 
 	appendPath := conn.Prep(`
 		INSERT OR IGNORE INTO infos(path)
-		VALUES (?)
-	`)
+		VALUES (?);`)
 	defer appendPath.Finalize()
 
 	delete := conn.Prep(`
 		DELETE FROM infos
 		WHERE path = ?;`)
 	defer delete.Finalize()
+
+	upsertIndex := conn.Prep(`
+		INSERT OR REPLACE INTO dirs(path, indexed_at)
+		VALUES (?, ?);`)
+	defer upsertIndex.Finalize()
 
 	lastCommit := time.Now()
 	inTransaction := false
@@ -182,17 +187,6 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 			if err != nil {
 				panic(err)
 			}
-		case Delete:
-			delete.BindText(1, imageInfo.Path)
-			_, err := delete.Step()
-			if err != nil {
-				log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = delete.Reset()
-			if err != nil {
-				panic(err)
-			}
 		case UpdateMeta:
 			updateMeta.BindText(1, imageInfo.Path)
 			updateMeta.BindInt64(2, (int64)(imageInfo.Width))
@@ -219,6 +213,32 @@ func (source *ImageInfoSourceSqlite) writePendingInfosSqlite() {
 			if err != nil {
 				panic(err)
 			}
+
+		case Delete:
+			delete.BindText(1, imageInfo.Path)
+			_, err := delete.Step()
+			if err != nil {
+				log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
+				continue
+			}
+			err = delete.Reset()
+			if err != nil {
+				panic(err)
+			}
+
+		case Index:
+			upsertIndex.BindText(1, imageInfo.Path)
+			upsertIndex.BindText(2, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
+			_, err := upsertIndex.Step()
+			if err != nil {
+				log.Printf("Unable to set dir to indexed %s: %s\n", imageInfo.Path, err.Error())
+				continue
+			}
+			err = upsertIndex.Reset()
+			if err != nil {
+				panic(err)
+			}
+
 		}
 
 		sinceLastCommitMs := time.Since(lastCommit).Seconds()
@@ -266,6 +286,31 @@ func (source *ImageInfoSourceSqlite) Get(path string) (ImageInfoResult, bool) {
 	return imageInfo, true
 }
 
+func (source *ImageInfoSourceSqlite) GetDir(dir string) (ImageInfoResult, bool) {
+
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+		SELECT indexed_at FROM dirs
+		WHERE path = ?;`)
+	defer stmt.Finalize()
+
+	stmt.BindText(1, dir)
+
+	var imageInfo ImageInfoResult
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return imageInfo, false
+	}
+
+	imageInfo.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(0))
+	imageInfo.DateTimeNull = stmt.ColumnType(0) == sqlite.TypeNull
+
+	return imageInfo, true
+}
+
 func (source *ImageInfoSourceSqlite) Write(path string, info ImageInfo, writeType ImageInfoWriteType) error {
 	source.pending <- &ImageInfoWrite{
 		Path:      path,
@@ -288,7 +333,12 @@ func (source *ImageInfoSourceSqlite) DeleteNonexistent(dir string, m map[string]
 			source.Write(path, ImageInfo{}, Delete)
 		}
 	}
-	source.WaitForCommit()
+}
+
+func (source *ImageInfoSourceSqlite) SetIndexed(dir string) {
+	source.Write(dir, ImageInfo{
+		DateTime: time.Now(),
+	}, Index)
 }
 
 func (source *ImageInfoSourceSqlite) List(dirs []string, options ListOptions) <-chan ImageInfoListResult {

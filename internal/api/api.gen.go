@@ -6,6 +6,7 @@ package openapi
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/deepmap/oapi-codegen/pkg/runtime"
 	"github.com/go-chi/chi/v5"
@@ -42,6 +43,9 @@ type Bounds struct {
 // Collection defines model for Collection.
 type Collection struct {
 	Id CollectionId `json:"id"`
+
+	// Time of latest performed full index
+	IndexedAt *time.Time `json:"indexed_at,omitempty"`
 
 	// User-friendly name
 	Name *string `json:"name,omitempty"`
