@@ -72,6 +72,7 @@ type RegionConfig struct {
 }
 
 type Fonts struct {
+	Main   canvas.FontFamily
 	Header canvas.FontFace
 	Hour   canvas.FontFace
 	Debug  canvas.FontFace

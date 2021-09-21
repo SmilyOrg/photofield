@@ -49,7 +49,7 @@ func LayoutTimelineEvent(layout Layout, rect Rect, event *TimelineEvent, scene *
 		headerText += "   " + dur.LimitFirstN(1).String()
 	}
 
-	font := layout.FontFamily.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	font := scene.Fonts.Main.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 
 	scene.Texts = append(scene.Texts,
 		NewTextFromRect(
@@ -93,22 +93,6 @@ func LayoutTimeline(layout Layout, collection Collection, scene *Scene, source *
 		Y: sceneMargin,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: 0,
-	}
-
-	if layout.FontFamily == nil {
-		layout.FontFamily = canvas.NewFontFamily("Roboto")
-		err := layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
-		if err != nil {
-			panic(err)
-		}
-		err = layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
-		if err != nil {
-			panic(err)
-		}
-	}
-	if layout.HeaderFont == nil {
-		face := layout.FontFamily.Face(80.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
-		layout.HeaderFont = &face
 	}
 
 	scene.Solids = make([]Solid, 0)

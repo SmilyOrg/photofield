@@ -56,6 +56,9 @@ var defaults AppConfig
 //go:embed db/migrations
 var migrations embed.FS
 
+//go:embed fonts/Roboto/Roboto-Regular.ttf
+var robotoRegular []byte
+
 var startupTime time.Time
 
 var defaultSceneConfig SceneConfig
@@ -880,20 +883,15 @@ func main() {
 	defer imageSource.Close()
 	sceneSource = NewSceneSource()
 
-	// indexCollections(&collections)
-
-	fontFamily := canvas.NewFontFamily("Roboto")
+	fontFamily := canvas.NewFontFamily("Main")
 	// fontFamily.Use(canvas.CommonLigatures)
-	err := fontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
-	if err != nil {
-		panic(err)
-	}
-	err = fontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
+	err := fontFamily.LoadFont(robotoRegular, canvas.FontRegular)
 	if err != nil {
 		panic(err)
 	}
 
 	defaultSceneConfig.Scene.Fonts = Fonts{
+		Main:   *fontFamily,
 		Header: fontFamily.Face(14.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
 		Hour:   fontFamily.Face(24.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
 		Debug:  fontFamily.Face(30.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),

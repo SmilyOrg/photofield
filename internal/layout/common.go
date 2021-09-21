@@ -8,8 +8,6 @@ import (
 	storage "photofield/internal/storage"
 	"strings"
 	"time"
-
-	"github.com/tdewolff/canvas"
 )
 
 type LayoutType string
@@ -23,8 +21,6 @@ const (
 
 type Layout struct {
 	Type         LayoutType `json:"type"`
-	FontFamily   *canvas.FontFamily
-	HeaderFont   *canvas.FontFace
 	SceneWidth   float64
 	ImageHeight  float64
 	ImageSpacing float64

@@ -26,7 +26,7 @@ type AlbumEvent struct {
 func LayoutAlbumEvent(layout Layout, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
 
 	if event.FirstOnDay {
-		font := layout.FontFamily.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+		font := scene.Fonts.Main.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 		dateFormat := "Monday, Jan 2"
 		if event.First {
 			dateFormat = "Monday, Jan 2, 2006"
@@ -45,7 +45,7 @@ func LayoutAlbumEvent(layout Layout, rect Rect, event *AlbumEvent, scene *Scene,
 		rect.Y += text.Sprite.Rect.H + 15
 	}
 
-	font := layout.FontFamily.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	font := scene.Fonts.Main.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 	text := NewTextFromRect(
 		Rect{
 			X: rect.X,
@@ -98,22 +98,6 @@ func LayoutAlbum(layout Layout, collection Collection, scene *Scene, source *sto
 		Y: sceneMargin,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: 0,
-	}
-
-	if layout.FontFamily == nil {
-		layout.FontFamily = canvas.NewFontFamily("Roboto")
-		err := layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Regular.ttf", canvas.FontRegular)
-		if err != nil {
-			panic(err)
-		}
-		err = layout.FontFamily.LoadFontFile("fonts/Roboto/Roboto-Bold.ttf", canvas.FontBold)
-		if err != nil {
-			panic(err)
-		}
-	}
-	if layout.HeaderFont == nil {
-		face := layout.FontFamily.Face(80.0, canvas.Gray, canvas.FontRegular, canvas.FontNormal)
-		layout.HeaderFont = &face
 	}
 
 	scene.Solids = make([]Solid, 0)
