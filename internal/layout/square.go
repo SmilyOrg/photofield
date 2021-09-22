@@ -1,15 +1,14 @@
-package photofield
+package layout
 
 import (
 	"log"
 	"math"
+	"photofield/internal/image"
+	"photofield/internal/render"
 	"time"
-
-	. "photofield/internal/display"
-	storage "photofield/internal/storage"
 )
 
-func LayoutSquare(scene *Scene, source *storage.ImageSource) {
+func LayoutSquare(scene *render.Scene, source *image.Source) {
 
 	// imageWidth := 120.
 	photoCount := len(scene.Photos)
@@ -24,7 +23,7 @@ func LayoutSquare(scene *Scene, source *storage.ImageSource) {
 	cols := edgeCount
 	rows := int(math.Ceil(float64(photoCount) / float64(cols)))
 
-	scene.Bounds = Rect{
+	scene.Bounds = render.Rect{
 		X: 0,
 		Y: 0,
 		W: float64(cols+2) * (imageWidth + margin),
@@ -48,11 +47,3 @@ func LayoutSquare(scene *Scene, source *storage.ImageSource) {
 	}
 
 }
-
-// func getPhotosSize(id int, scene *Scene, index chan int, output chan SectionPhoto, wg *sync.WaitGroup, source *storage.ImageSource) {
-// 	for i := range index {
-// 		photo := &scene.Photos[i]
-// 		photo.Original.Size = photo.Original.GetSize(source)
-// 	}
-// 	wg.Done()
-// }

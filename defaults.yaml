@@ -12,18 +12,18 @@ render:
   tile_size: 256
   max_solid_pixel_area: 1000
 
-system:
+media:
+  concurrent_meta_loads: 8
+  concurrent_color_loads: 4
+  
   exif_tool_count: 4
   skip_load_info: false
   caches:
     image:
       max_size: 256Mi
     
-media:
   extensions: [".jpg", ".mp4"]
   date_formats: ["20060201_150405"]
-  concurrent_meta_loads: 8
-  concurrent_color_loads: 4
   images:
     extensions: [".jpg", ".jpeg", ".png", ".gif"]
     thumbnails:

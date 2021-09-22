@@ -1,16 +1,14 @@
-package photofield
+package collection
 
 import (
 	"log"
 	"os"
 	"path/filepath"
+	"photofield/internal/image"
 	"sort"
 	"time"
 
 	"github.com/gosimple/slug"
-
-	. "photofield/internal"
-	. "photofield/internal/storage"
 )
 
 type Collection struct {
@@ -62,7 +60,7 @@ func (collection *Collection) Expand() []Collection {
 	return collections
 }
 
-func (collection *Collection) UpdateStatus(source *ImageSource) {
+func (collection *Collection) UpdateStatus(source *image.Source) {
 	var earliestIndex *time.Time
 	for _, dir := range collection.Dirs {
 		info := source.GetDir(dir)
@@ -73,12 +71,12 @@ func (collection *Collection) UpdateStatus(source *ImageSource) {
 	collection.IndexedAt = earliestIndex
 }
 
-func (collection *Collection) GetInfos(source *ImageSource, options ListOptions) <-chan SourcedImageInfo {
-	return source.ListImageInfos(collection.Dirs, options)
+func (collection *Collection) GetInfos(source *image.Source, options image.ListOptions) <-chan image.SourcedInfo {
+	return source.ListInfos(collection.Dirs, options)
 }
 
-func (collection *Collection) GetIds(source *ImageSource) <-chan ImageId {
-	out := make(chan ImageId)
+func (collection *Collection) GetIds(source *image.Source) <-chan image.ImageId {
+	out := make(chan image.ImageId)
 	go func() {
 		for path := range collection.GetPaths(source) {
 			out <- source.GetImageId(path)
@@ -88,7 +86,7 @@ func (collection *Collection) GetIds(source *ImageSource) <-chan ImageId {
 	return out
 }
 
-func (collection *Collection) GetPaths(source *ImageSource) <-chan string {
+func (collection *Collection) GetPaths(source *image.Source) <-chan string {
 	limit := 0
 	if collection.IndexLimit > 0 {
 		limit = collection.IndexLimit

@@ -24,13 +24,12 @@ require (
 	github.com/karrick/godirwalk v1.15.6
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0
-	github.com/mkevac/debugcharts v0.0.0-20191222103121-ae1c48aa8615
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/oliamb/cutter v0.2.2 // indirect
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/prometheus/client_golang v1.11.0
-	github.com/prometheus/client_model v0.2.0 // indirect
+	github.com/prometheus/client_model v0.2.0
 	github.com/roberthodgen/spa-server v0.0.0-20171007154335-bb87b4ff3253
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sheerun/queue v1.0.1

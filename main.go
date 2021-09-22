@@ -3,7 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
-	"image"
+	goimage "image"
 	"image/draw"
 	"image/png"
 	"io/ioutil"
@@ -30,15 +30,6 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
-	. "photofield/internal"
-	openapi "photofield/internal/api"
-	. "photofield/internal/collection"
-	. "photofield/internal/display"
-	. "photofield/internal/layout"
-	. "photofield/internal/storage"
-
-	_ "github.com/mkevac/debugcharts"
-
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
 
@@ -47,6 +38,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	io_prometheus_client "github.com/prometheus/client_model/go"
+
+	"photofield/internal/codec"
+	"photofield/internal/collection"
+	"photofield/internal/image"
+	"photofield/internal/layout"
+	"photofield/internal/metrics"
+	"photofield/internal/openapi"
+	"photofield/internal/render"
+	"photofield/internal/scene"
 )
 
 //go:embed defaults.yaml
@@ -61,14 +61,14 @@ var robotoRegular []byte
 
 var startupTime time.Time
 
-var defaultSceneConfig SceneConfig
+var defaultSceneConfig scene.SceneConfig
 
 var tileRequestConfig TileRequestConfig
 
 var tilePools sync.Map
-var imageSource *ImageSource
-var sceneSource *SceneSource
-var collections []Collection
+var imageSource *image.Source
+var sceneSource *scene.SceneSource
+var collections []collection.Collection
 
 var indexTasks sync.Map
 var loadMetaOffset int64
@@ -79,7 +79,7 @@ var tileRequests []TileRequest
 var tileRequestsMutex sync.Mutex
 
 var httpLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
-	Namespace: MetricsNamespace,
+	Namespace: metrics.Namespace,
 	Name:      "http_latency",
 }, []string{"path"})
 
@@ -141,9 +141,9 @@ func respond(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
 	chirender.Respond(w, r, v)
 }
 
-func drawTile(c *canvas.Context, render *Render, scene *Scene, zoom int, x int, y int) {
+func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int, x int, y int) {
 
-	tileSize := float64(render.TileSize)
+	tileSize := float64(r.TileSize)
 	zoomPower := 1 << zoom
 
 	tx := float64(x) * tileSize
@@ -160,15 +160,15 @@ func drawTile(c *canvas.Context, render *Render, scene *Scene, zoom int, x int, 
 
 	scale *= float64(zoomPower)
 
-	scales := Scales{
+	scales := render.Scales{
 		Pixel: scale,
 		Tile:  1 / float64(tileSize),
 	}
 
 	c.ResetView()
 
-	img := render.CanvasImage
-	draw.Draw(img, img.Bounds(), &image.Uniform{canvas.White}, image.Point{}, draw.Src)
+	img := r.CanvasImage
+	draw.Draw(img, img.Bounds(), &goimage.Uniform{canvas.White}, goimage.Point{}, draw.Src)
 
 	matrix := canvas.Identity.
 		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
@@ -178,37 +178,37 @@ func drawTile(c *canvas.Context, render *Render, scene *Scene, zoom int, x int, 
 
 	c.SetFillColor(canvas.Black)
 
-	scene.Draw(render, c, scales, imageSource)
+	scene.Draw(r, c, scales, imageSource)
 
 }
 
-func getTilePool(config *Render) *sync.Pool {
+func getTilePool(config *render.Render) *sync.Pool {
 	stored, ok := tilePools.Load(config.TileSize)
 	if ok {
 		return stored.(*sync.Pool)
 	}
 	pool := sync.Pool{
 		New: func() interface{} {
-			return image.NewRGBA(image.Rect(0, 0, config.TileSize, config.TileSize))
+			return goimage.NewRGBA(goimage.Rect(0, 0, config.TileSize, config.TileSize))
 		},
 	}
 	stored, _ = tilePools.LoadOrStore(config.TileSize, &pool)
 	return stored.(*sync.Pool)
 }
 
-func getTileImage(config *Render) (*image.RGBA, *canvas.Context) {
+func getTileImage(config *render.Render) (*goimage.RGBA, *canvas.Context) {
 	pool := getTilePool(config)
-	img := pool.Get().(*image.RGBA)
+	img := pool.Get().(*goimage.RGBA)
 	renderer := rasterizer.New(img, 1.0)
 	return img, canvas.NewContext(renderer)
 }
 
-func putTileImage(config *Render, img *image.RGBA) {
+func putTileImage(config *render.Render, img *goimage.RGBA) {
 	pool := getTilePool(config)
 	pool.Put(img)
 }
 
-func getCollectionById(id string) *Collection {
+func getCollectionById(id string) *collection.Collection {
 	for i := range collections {
 		if collections[i].Id == id {
 			return &collections[i]
@@ -217,7 +217,7 @@ func getCollectionById(id string) *Collection {
 	return nil
 }
 
-func getIndexTask(collection *Collection) Task {
+func getIndexTask(collection *collection.Collection) Task {
 	return Task{
 		Type:         string(openapi.TaskTypeINDEX),
 		Id:           fmt.Sprintf("index-%v", collection.Id),
@@ -274,7 +274,7 @@ func processTileRequests(concurrency int) {
 	}
 }
 
-func renderSample(config Render, scene *Scene) {
+func renderSample(config render.Render, scene *render.Scene) {
 	log.Println("rendering sample")
 	config.LogDraws = true
 
@@ -282,7 +282,7 @@ func renderSample(config Render, scene *Scene) {
 	defer putTileImage(&config, image)
 	config.CanvasImage = image
 
-	drawFinished := ElapsedWithCount("draw", len(scene.Photos))
+	drawFinished := metrics.ElapsedWithCount("draw", len(scene.Photos))
 	drawTile(context, &config, scene, 0, 0, 0)
 	drawFinished()
 
@@ -313,7 +313,7 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 	sceneConfig := defaultSceneConfig
 	sceneConfig.Layout.SceneWidth = float64(data.SceneWidth)
 	sceneConfig.Layout.ImageHeight = float64(data.ImageHeight)
-	sceneConfig.Layout.Type = LayoutType(data.Layout)
+	sceneConfig.Layout.Type = layout.Type(data.Layout)
 	collection := getCollectionById(string(data.CollectionId))
 	if collection == nil {
 		problem(w, r, http.StatusBadRequest, "Collection not found")
@@ -336,7 +336,7 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 		sceneConfig.Layout.ImageHeight = float64(*params.ImageHeight)
 	}
 	if params.Layout != nil {
-		sceneConfig.Layout.Type = LayoutType(*params.Layout)
+		sceneConfig.Layout.Type = layout.Type(*params.Layout)
 	}
 	collection := getCollectionById(string(params.CollectionId))
 	if collection == nil {
@@ -353,7 +353,7 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	})
 
 	respond(w, r, http.StatusOK, struct {
-		Items []*Scene `json:"items"`
+		Items []*render.Scene `json:"items"`
 	}{
 		Items: scenes,
 	})
@@ -376,7 +376,7 @@ func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
 		collection.UpdateStatus(imageSource)
 	}
 	respond(w, r, http.StatusOK, struct {
-		Items []Collection `json:"items"`
+		Items []collection.Collection `json:"items"`
 	}{
 		Items: collections,
 	})
@@ -593,13 +593,13 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	x := int(params.X)
 	y := int(params.Y)
 
-	image, context := getTileImage(&render)
-	defer putTileImage(&render, image)
-	render.CanvasImage = image
+	img, context := getTileImage(&render)
+	defer putTileImage(&render, img)
+	render.CanvasImage = img
 	render.Zoom = zoom
 	drawTile(context, &render, scene, zoom, x, y)
 
-	imageSource.Coder.EncodeJpeg(w, image)
+	codec.EncodeJpeg(w, img)
 }
 
 func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdRegionsParams) {
@@ -610,18 +610,17 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 		return
 	}
 
-	bounds := Rect{
+	bounds := render.Rect{
 		X: float64(params.X),
 		Y: float64(params.Y),
 		W: float64(params.W),
 		H: float64(params.H),
 	}
 
-	render := defaultSceneConfig.Render
-	regions := scene.GetRegions(&render, bounds, params.Limit)
+	regions := scene.GetRegions(&defaultSceneConfig.Render, bounds, params.Limit)
 
 	respond(w, r, http.StatusOK, struct {
-		Items []Region `json:"items"`
+		Items []render.Region `json:"items"`
 	}{
 		Items: regions,
 	})
@@ -646,8 +645,8 @@ func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sc
 
 func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {
 
-	path, err := imageSource.GetImagePath(ImageId(id))
-	if err == NotFoundError {
+	path, err := imageSource.GetImagePath(image.ImageId(id))
+	if err == image.ErrNotFound {
 		problem(w, r, http.StatusNotFound, "File not found")
 		return
 	}
@@ -657,8 +656,8 @@ func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileId
 
 func (*Api) GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, filename openapi.FilenamePathParam) {
 
-	path, err := imageSource.GetImagePath(ImageId(id))
-	if err == NotFoundError {
+	path, err := imageSource.GetImagePath(image.ImageId(id))
+	if err == image.ErrNotFound {
 		problem(w, r, http.StatusNotFound, "File not found")
 		return
 	}
@@ -668,8 +667,8 @@ func (*Api) GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, i
 
 func (*Api) GetFilesIdImageVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
 
-	imagePath, err := imageSource.GetImagePath(ImageId(id))
-	if err == NotFoundError {
+	imagePath, err := imageSource.GetImagePath(image.ImageId(id))
+	if err == image.ErrNotFound {
 		problem(w, r, http.StatusNotFound, "Image not found")
 		return
 	}
@@ -701,8 +700,8 @@ func (*Api) GetFilesIdVideoVariantsSizeFilename(w http.ResponseWriter, r *http.R
 	// 	size = "M"
 	// }
 
-	videoPath, err := imageSource.GetImagePath(ImageId(id))
-	if err == NotFoundError {
+	videoPath, err := imageSource.GetImagePath(image.ImageId(id))
+	if err == image.ErrNotFound {
 		problem(w, r, http.StatusNotFound, "Video not found")
 		return
 	}
@@ -748,17 +747,21 @@ func AddPrefix(prefix string) func(next http.Handler) http.Handler {
 	}
 }
 
-type AppConfig struct {
-	Collections  []Collection      `json:"collections"`
-	Layout       Layout            `json:"layout"`
-	Render       Render            `json:"render"`
-	System       System            `json:"system"`
-	Media        ImageSourceConfig `json:"media"`
-	TileRequests TileRequestConfig `json:"tile_requests"`
+type TileRequestConfig struct {
+	Concurrency int  `json:"concurrency"`
+	LogStats    bool `json:"log_stats"`
 }
 
-func expandCollections(collections *[]Collection) {
-	expanded := make([]Collection, 0)
+type AppConfig struct {
+	Collections  []collection.Collection `json:"collections"`
+	Layout       layout.Layout           `json:"layout"`
+	Render       render.Render           `json:"render"`
+	Media        image.Config            `json:"media"`
+	TileRequests TileRequestConfig       `json:"tile_requests"`
+}
+
+func expandCollections(collections *[]collection.Collection) {
+	expanded := make([]collection.Collection, 0)
 	for _, collection := range *collections {
 		if collection.ExpandSubdirs {
 			expanded = append(expanded, collection.Expand()...)
@@ -769,7 +772,7 @@ func expandCollections(collections *[]Collection) {
 	*collections = expanded
 }
 
-func indexCollections(collections *[]Collection) (ok bool) {
+func indexCollections(collections *[]collection.Collection) (ok bool) {
 	go func() {
 		for _, collection := range *collections {
 			counter := make(chan int, 10)
@@ -790,7 +793,7 @@ func indexCollections(collections *[]Collection) (ok bool) {
 	return true
 }
 
-func indexCollection(collection *Collection) {
+func indexCollection(collection *collection.Collection) {
 	counter := make(chan int, 10)
 	go func() {
 		task := getIndexTask(collection)
@@ -879,9 +882,9 @@ func main() {
 	defaultSceneConfig.Render = appConfig.Render
 	tileRequestConfig = appConfig.TileRequests
 
-	imageSource = NewImageSource(appConfig.System, appConfig.Media, migrations)
+	imageSource = image.NewSource(appConfig.Media, migrations)
 	defer imageSource.Close()
-	sceneSource = NewSceneSource()
+	sceneSource = scene.NewSceneSource()
 
 	fontFamily := canvas.NewFontFamily("Main")
 	// fontFamily.Use(canvas.CommonLigatures)
@@ -890,7 +893,7 @@ func main() {
 		panic(err)
 	}
 
-	defaultSceneConfig.Scene.Fonts = Fonts{
+	defaultSceneConfig.Scene.Fonts = render.Fonts{
 		Main:   *fontFamily,
 		Header: fontFamily.Face(14.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
 		Hour:   fontFamily.Face(24.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),

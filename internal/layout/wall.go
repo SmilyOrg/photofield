@@ -1,25 +1,25 @@
-package photofield
+package layout
 
 import (
 	"log"
 	"math"
-	. "photofield/internal"
-	. "photofield/internal/collection"
-	. "photofield/internal/display"
-	storage "photofield/internal/storage"
+	"photofield/internal/collection"
+	"photofield/internal/image"
+	"photofield/internal/metrics"
+	"photofield/internal/render"
 	"time"
 )
 
-func LayoutWall(layout Layout, collection Collection, scene *Scene, source *storage.ImageSource) {
+func LayoutWall(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
 
-	infos := collection.GetInfos(source, ListOptions{
-		OrderBy: DateAsc,
+	infos := collection.GetInfos(source, image.ListOptions{
+		OrderBy: image.DateAsc,
 		Limit:   collection.Limit,
 	})
 
 	section := Section{}
 
-	loadCounter := Counter{
+	loadCounter := metrics.Counter{
 		Name:     "load infos",
 		Interval: 1 * time.Second,
 	}
@@ -59,9 +59,9 @@ func LayoutWall(layout Layout, collection Collection, scene *Scene, source *stor
 	x := sceneMargin
 	y := sceneMargin
 
-	layoutFinished := Elapsed("layout")
+	layoutFinished := metrics.Elapsed("layout")
 	photos := addSectionPhotos(&section, scene, source)
-	newBounds := layoutSectionPhotos(photos, Rect{
+	newBounds := layoutSectionPhotos(photos, render.Rect{
 		X: x,
 		Y: y,
 		W: scene.Bounds.W - sceneMargin*2,

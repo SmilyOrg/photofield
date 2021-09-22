@@ -1,6 +1,7 @@
+//go:build libjpeg
 // +build libjpeg
 
-package photofield
+package codec
 
 import (
 	"image"

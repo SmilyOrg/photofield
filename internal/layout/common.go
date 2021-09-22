@@ -1,26 +1,25 @@
-package photofield
+package layout
 
 import (
 	"log"
 	"path/filepath"
-	. "photofield/internal"
-	. "photofield/internal/display"
-	storage "photofield/internal/storage"
+	"photofield/internal/image"
+	"photofield/internal/render"
 	"strings"
 	"time"
 )
 
-type LayoutType string
+type Type string
 
 const (
-	Album    LayoutType = "ALBUM"
-	Timeline            = "TIMELINE"
-	Square              = "SQUARE"
-	Wall                = "WALL"
+	Album    Type = "ALBUM"
+	Timeline Type = "TIMELINE"
+	Square   Type = "SQUARE"
+	Wall     Type = "WALL"
 )
 
 type Layout struct {
-	Type         LayoutType `json:"type"`
+	Type         Type `json:"type"`
 	SceneWidth   float64
 	ImageHeight  float64
 	ImageSpacing float64
@@ -28,24 +27,24 @@ type Layout struct {
 }
 
 type Section struct {
-	infos    []SourcedImageInfo
+	infos    []image.SourcedInfo
 	Inverted bool
 }
 
 type SectionPhoto struct {
 	Index int
-	Photo *Photo
-	Size  Size
+	Photo *render.Photo
+	Size  image.Size
 }
 
-type LayoutPhoto struct {
+type Photo struct {
 	Index int
-	Photo Photo
-	Info  ImageInfo
+	Photo render.Photo
+	Info  image.Info
 }
 
 type PhotoRegionSource struct {
-	imageSource *storage.ImageSource
+	Source *image.Source
 }
 
 type RegionThumbnail struct {
@@ -67,19 +66,19 @@ type PhotoRegionData struct {
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
 }
 
-func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, scene *Scene, regionConfig RegionConfig) Region {
+func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.Photo, scene *render.Scene, regionConfig render.RegionConfig) render.Region {
 
-	source := regionSource.imageSource
+	source := regionSource.Source
 
 	originalPath := photo.GetPath(source)
-	info := source.GetImageInfo(originalPath)
-	originalSize := Size{
+	info := source.GetInfo(originalPath)
+	originalSize := image.Size{
 		X: info.Width,
 		Y: info.Height,
 	}
 	isVideo := source.IsSupportedVideo(originalPath)
 
-	var thumbnailTemplates []Thumbnail
+	var thumbnailTemplates []image.Thumbnail
 	if isVideo {
 		thumbnailTemplates = source.Videos.Thumbnails
 	} else {
@@ -100,7 +99,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, s
 		}
 	}
 
-	return Region{
+	return render.Region{
 		Id:     id,
 		Bounds: photo.Sprite.Rect,
 		Data: PhotoRegionData{
@@ -117,8 +116,8 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *Photo, s
 	}
 }
 
-func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect Rect, scene *Scene, regionConfig RegionConfig) []Region {
-	regions := make([]Region, 0)
+func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, scene *render.Scene, regionConfig render.RegionConfig) []render.Region {
+	regions := make([]render.Region, 0)
 	photos := scene.GetVisiblePhotos(rect, regionConfig.Limit)
 	for photo := range photos {
 		regions = append(regions, regionSource.getRegionFromPhoto(
@@ -130,15 +129,15 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect Rect, scene *Sce
 	return regions
 }
 
-func (regionSource PhotoRegionSource) GetRegionById(id int, scene *Scene, regionConfig RegionConfig) Region {
+func (regionSource PhotoRegionSource) GetRegionById(id int, scene *render.Scene, regionConfig render.RegionConfig) render.Region {
 	if id < 0 || id >= len(scene.Photos)-1 {
-		return Region{Id: -1}
+		return render.Region{Id: -1}
 	}
 	photo := scene.Photos[id]
 	return regionSource.getRegionFromPhoto(id, &photo, scene, regionConfig)
 }
 
-func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64 {
+func layoutFitRow(row []SectionPhoto, bounds render.Rect, imageSpacing float64) float64 {
 	count := len(row)
 	if count == 0 {
 		return 1.
@@ -155,7 +154,7 @@ func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64
 	for i := range row {
 		photo := row[i]
 		rect := photo.Photo.Sprite.Rect
-		photo.Photo.Sprite.Rect = Rect{
+		photo.Photo.Sprite.Rect = render.Rect{
 			X: x,
 			Y: rect.Y,
 			W: rect.W * scale,
@@ -170,14 +169,14 @@ func layoutFitRow(row []SectionPhoto, bounds Rect, imageSpacing float64) float64
 	return scale
 }
 
-func addSectionPhotos(section *Section, scene *Scene, source *storage.ImageSource) <-chan SectionPhoto {
+func addSectionPhotos(section *Section, scene *render.Scene, source *image.Source) <-chan SectionPhoto {
 	photos := make(chan SectionPhoto, 10000)
 	go func() {
 		startIndex := len(scene.Photos)
 		for _, info := range section.infos {
-			scene.Photos = append(scene.Photos, Photo{
+			scene.Photos = append(scene.Photos, render.Photo{
 				Id:     source.GetImageId(info.Path),
-				Sprite: Sprite{},
+				Sprite: render.Sprite{},
 			})
 		}
 		for index, info := range section.infos {
@@ -186,7 +185,7 @@ func addSectionPhotos(section *Section, scene *Scene, source *storage.ImageSourc
 			photos <- SectionPhoto{
 				Index: sceneIndex,
 				Photo: photo,
-				Size: Size{
+				Size: image.Size{
 					X: info.Width,
 					Y: info.Height,
 				},
@@ -197,7 +196,7 @@ func addSectionPhotos(section *Section, scene *Scene, source *storage.ImageSourc
 	return photos
 }
 
-func layoutSectionPhotos(photos <-chan SectionPhoto, bounds Rect, config Layout, scene *Scene, source *storage.ImageSource) Rect {
+func layoutSectionPhotos(photos <-chan SectionPhoto, bounds render.Rect, config Layout, scene *render.Scene, source *image.Source) render.Rect {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()
@@ -255,10 +254,16 @@ func layoutSectionPhotos(photos <-chan SectionPhoto, bounds Rect, config Layout,
 	}
 	x = 0
 	y += config.ImageHeight + config.LineSpacing
-	return Rect{
+	return render.Rect{
 		X: bounds.X,
 		Y: bounds.Y,
 		W: bounds.W,
 		H: y,
 	}
+}
+
+func SameDay(a, b time.Time) bool {
+	y1, m1, d1 := a.Date()
+	y2, m2, d2 := b.Date()
+	return y1 == y2 && m1 == m2 && d1 == d2
 }

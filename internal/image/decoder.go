@@ -1,40 +1,39 @@
-package photofield
+package image
 
 import (
 	"image"
 	"io"
+	"strconv"
 	"time"
-
-	. "photofield/internal"
 
 	"github.com/disintegration/imaging"
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-type MediaCoder struct {
-	infoCoder MediaInfoCoder
+type Decoder struct {
+	loader metadataLoader
 }
 
-type MediaInfoCoder interface {
-	DecodeInfo(path string, info *ImageInfo) error
+type metadataLoader interface {
+	DecodeInfo(path string, info *Info) error
 	Close()
 }
 
-func NewMediaCoder(exifToolCount int) *MediaCoder {
-	coder := MediaCoder{}
+func NewDecoder(exifToolCount int) *Decoder {
+	decoder := Decoder{}
 	if exifToolCount > 0 {
-		coder.infoCoder = NewExifToolMostlyGeekDecoder(exifToolCount)
+		decoder.loader = NewExifToolMostlyGeekLoader(exifToolCount)
 	} else {
-		coder.infoCoder = NewGoExifRwcarlsenDecoder()
+		decoder.loader = NewGoExifRwcarlsenLoader()
 	}
-	return &coder
+	return &decoder
 }
 
-func (coder *MediaCoder) Close() {
-	coder.infoCoder.Close()
+func (decoder *Decoder) Close() {
+	decoder.loader.Close()
 }
 
-func (coder *MediaCoder) decodePostProcess(reader io.ReadSeeker, img image.Image) (image.Image, error) {
+func (decoder *Decoder) PostProcess(reader io.ReadSeeker, img image.Image) (image.Image, error) {
 	_, err := reader.Seek(0, io.SeekStart)
 	if err != nil {
 		return img, err
@@ -60,27 +59,6 @@ func (coder *MediaCoder) decodePostProcess(reader io.ReadSeeker, img image.Image
 	return img, nil
 }
 
-func (coder *MediaCoder) DecodeJpeg(reader io.ReadSeeker) (image.Image, error) {
-	img, err := DecodeJpeg(reader)
-	if err != nil {
-		return img, err
-	}
-	return coder.decodePostProcess(reader, img)
-}
-
-func (coder *MediaCoder) EncodeJpeg(w io.Writer, image image.Image) error {
-	return EncodeJpeg(w, image)
-}
-
-func (coder *MediaCoder) Decode(reader io.ReadSeeker) (image.Image, string, error) {
-	img, fmt, err := image.Decode(reader)
-	if err != nil {
-		return img, fmt, err
-	}
-	img, err = coder.decodePostProcess(reader, img)
-	return img, fmt, err
-}
-
 func parseDateTime(value string) (time.Time, error) {
 	t, err := time.Parse("2006:01:02 15:04:05Z07:00", value)
 	if err == nil {
@@ -93,13 +71,13 @@ func parseDateTime(value string) (time.Time, error) {
 	return t, err
 }
 
-func (coder *MediaCoder) DecodeInfo(path string, info *ImageInfo) error {
-	err := coder.infoCoder.DecodeInfo(path, info)
+func (decoder *Decoder) DecodeInfo(path string, info *Info) error {
+	err := decoder.loader.DecodeInfo(path, info)
 	// println(path, info.Width, info.Height, info.DateTime.String())
 	return err
 }
 
-func getPortraitFromRotation(rotation string) bool {
+func getRotationDimensionSwap(rotation string) bool {
 	switch rotation {
 	case "90":
 		fallthrough
@@ -110,26 +88,49 @@ func getPortraitFromRotation(rotation string) bool {
 	}
 }
 
-func getPortraitFromOrientation(orientation string) bool {
+func getOrientationDimensionSwap(orientation string) bool {
 	switch orientation {
 	case "1":
-		fallthrough
+		return false
 	case "2":
-		fallthrough
+		return false
 	case "3":
-		fallthrough
+		return false
 	case "4":
 		return false
 	case "5":
-		fallthrough
+		return true
 	case "6":
-		fallthrough
+		return true
 	case "7":
-		fallthrough
+		return true
 	case "8":
 		return true
 	default:
 		return false
+	}
+}
+
+func parseOrientation(orientation string) Orientation {
+	n, err := strconv.Atoi(orientation)
+	if err != nil || n < 1 || n > 8 {
+		return Normal
+	}
+	return Orientation(n)
+}
+
+func getOrientationFromRotation(rotation string) Orientation {
+	switch rotation {
+	case "0":
+		return Normal
+	case "90":
+		return Rotate90
+	case "180":
+		return Rotate180
+	case "270":
+		return Rotate270
+	default:
+		return Normal
 	}
 }
 
@@ -147,13 +148,14 @@ func getOrientationFromExif(x *exif.Exif) string {
 	return "1"
 }
 
-func (coder *MediaCoder) DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
+func (decoder *Decoder) DecodeConfig(reader io.ReadSeeker) (image.Config, string, error) {
 	conf, fmt, err := image.DecodeConfig(reader)
 	if err != nil {
 		return conf, fmt, err
 	}
 	reader.Seek(0, io.SeekStart)
 	orientation := getOrientation(reader)
+	println(orientation)
 	switch orientation {
 	case "5":
 		fallthrough

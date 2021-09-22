@@ -1,36 +1,34 @@
-package photofield
+package layout
 
 import (
 	"image/color"
 	"log"
+	"photofield/internal/image"
+	"photofield/internal/render"
 	"time"
-
-	. "photofield/internal"
-	. "photofield/internal/display"
-	storage "photofield/internal/storage"
 )
 
 type Hour struct {
 	Section
 	Number int
-	Bounds Rect
+	Bounds render.Rect
 }
 
 type Day struct {
 	Section
 	Number int
-	Bounds Rect
+	Bounds render.Rect
 	Hours  map[int]*Hour
 }
 
 type Week struct {
 	Number int
-	Bounds Rect
+	Bounds render.Rect
 	Days   map[int]Day
 }
 
-func getColumnBounds(value int, total int, spacing float64, bounds Rect) Rect {
-	return Rect{
+func getColumnBounds(value int, total int, spacing float64, bounds render.Rect) render.Rect {
+	return render.Rect{
 		X: bounds.X,
 		Y: bounds.Y + float64(value)/float64(total)*(bounds.H+spacing),
 		W: bounds.W,
@@ -38,8 +36,8 @@ func getColumnBounds(value int, total int, spacing float64, bounds Rect) Rect {
 	}
 }
 
-func getRowBounds(value int, total int, spacing float64, bounds Rect) Rect {
-	return Rect{
+func getRowBounds(value int, total int, spacing float64, bounds render.Rect) render.Rect {
+	return render.Rect{
 		X: bounds.X + float64(value)/float64(total)*(bounds.W),
 		Y: bounds.Y,
 		W: 1.0 / float64(total) * (bounds.W - spacing),
@@ -47,14 +45,14 @@ func getRowBounds(value int, total int, spacing float64, bounds Rect) Rect {
 	}
 }
 
-func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
+func LayoutCalendar(config *render.Render, scene *render.Scene, source *image.Source) {
 
 	// imageWidth := 120.
 	photoCount := len(scene.Photos)
 
 	// sort.Slice(scene.Photos, func(i, j int) bool {
-	// 	a := source.GetImageInfo(scene.Photos[i].GetPath(source))
-	// 	b := source.GetImageInfo(scene.Photos[i].GetPath(source))
+	// 	a := source.GetInfo(scene.Photos[i].GetPath(source))
+	// 	b := source.GetInfo(scene.Photos[i].GetPath(source))
 	// 	return a.DateTime.Before(b.DateTime)
 	// })
 
@@ -85,9 +83,8 @@ func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 	y := sceneMargin
 	for i := range scene.Photos {
 		photo := &scene.Photos[i]
-		info := source.GetImageInfo(scene.Photos[i].GetPath(source))
+		info := source.GetInfo(scene.Photos[i].GetPath(source))
 		dateTime := info.DateTime
-		size := Size{X: info.Width, Y: info.Height}
 
 		_, weekNum := info.DateTime.ISOWeek()
 
@@ -96,13 +93,13 @@ func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 		if week == nil || week.Number != weekNum {
 			week = &Week{
 				Number: weekNum,
-				Bounds: getColumnBounds(weekNum, 1, 30, Rect{
+				Bounds: getColumnBounds(weekNum, 1, 30, render.Rect{
 					X: sceneMargin,
 					Y: sceneMargin,
 					W: scene.Bounds.W - sceneMargin*2,
 					H: imageHeight,
 				}),
-				// Bounds: Rect{
+				// Bounds: render.Rect{
 				// 	X: sceneMargin,
 				// 	Y: -1,
 				// 	W: scene.Bounds.Width - sceneMargin*2,
@@ -139,13 +136,13 @@ func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 				Bounds: getRowBounds(weekdayNum, 7, 20, week.Bounds),
 			}
 
-			scene.Solids = append(scene.Solids, NewSolidFromRect(day.Bounds, color.Gray{Y: 0xF0}))
+			scene.Solids = append(scene.Solids, render.NewSolidFromRect(day.Bounds, color.Gray{Y: 0xF0}))
 			dayNum := dateTime.Day()
 			dayFormat := "2"
 			if dayNum == 1 {
 				dayFormat = "2 Jan"
 			}
-			scene.Texts = append(scene.Texts, NewTextFromRect(day.Bounds, &scene.Fonts.Header,
+			scene.Texts = append(scene.Texts, render.NewTextFromRect(day.Bounds, &scene.Fonts.Header,
 				dateTime.Format(dayFormat),
 			))
 		}
@@ -164,8 +161,8 @@ func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 			hour.Bounds.X += hourBoundsIndent
 			hour.Bounds.W -= hourBoundsIndent
 
-			scene.Solids = append(scene.Solids, NewSolidFromRect(hour.Bounds, color.Gray{Y: 0xE0}))
-			scene.Texts = append(scene.Texts, NewTextFromRect(hourBoundsOriginal.Move(Point{X: 2, Y: 0}), &scene.Fonts.Hour,
+			scene.Solids = append(scene.Solids, render.NewSolidFromRect(hour.Bounds, color.Gray{Y: 0xE0}))
+			scene.Texts = append(scene.Texts, render.NewTextFromRect(hourBoundsOriginal.Move(render.Point{X: 2, Y: 0}), &scene.Fonts.Hour,
 				dateTime.Format("15:00"),
 			))
 
@@ -187,8 +184,8 @@ func LayoutCalendar(config *Render, scene *Scene, source *storage.ImageSource) {
 			photoBounds.Y,
 			photoBounds.W,
 			photoBounds.H,
-			float64(size.X),
-			float64(size.Y),
+			float64(info.Width),
+			float64(info.Height),
 		)
 
 		// photo.Original.Sprite.PlaceFitHeight(

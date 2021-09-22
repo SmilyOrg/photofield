@@ -1,16 +1,16 @@
-package photofield
+package layout
 
 import (
 	"log"
 	"time"
 
-	. "photofield/internal"
-	. "photofield/internal/collection"
-	. "photofield/internal/display"
-	storage "photofield/internal/storage"
-
 	"github.com/hako/durafmt"
 	"github.com/tdewolff/canvas"
+
+	"photofield/internal/collection"
+	"photofield/internal/image"
+	"photofield/internal/metrics"
+	"photofield/internal/render"
 )
 
 type TimelineEvent struct {
@@ -22,12 +22,12 @@ type TimelineEvent struct {
 	Section    Section
 }
 
-func LayoutTimelineEvent(layout Layout, rect Rect, event *TimelineEvent, scene *Scene, source *storage.ImageSource) Rect {
+func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, scene *render.Scene, source *image.Source) render.Rect {
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
 	textHeight := 30.
-	textBounds := Rect{
+	textBounds := render.Rect{
 		X: rect.X,
 		Y: rect.Y,
 		W: rect.W,
@@ -52,7 +52,7 @@ func LayoutTimelineEvent(layout Layout, rect Rect, event *TimelineEvent, scene *
 	font := scene.Fonts.Main.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 
 	scene.Texts = append(scene.Texts,
-		NewTextFromRect(
+		render.NewTextFromRect(
 			textBounds,
 			&font,
 			headerText,
@@ -68,12 +68,12 @@ func LayoutTimelineEvent(layout Layout, rect Rect, event *TimelineEvent, scene *
 	return rect
 }
 
-func LayoutTimeline(layout Layout, collection Collection, scene *Scene, source *storage.ImageSource) {
+func LayoutTimeline(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
 
 	limit := collection.Limit
 
-	infos := collection.GetInfos(source, ListOptions{
-		OrderBy: DateDesc,
+	infos := collection.GetInfos(source, image.ListOptions{
+		OrderBy: image.DateDesc,
 		Limit:   limit,
 	})
 
@@ -88,18 +88,18 @@ func LayoutTimeline(layout Layout, collection Collection, scene *Scene, source *
 	eventCount := 0
 	var lastPhotoTime time.Time
 
-	rect := Rect{
+	rect := render.Rect{
 		X: sceneMargin,
 		Y: sceneMargin,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: 0,
 	}
 
-	scene.Solids = make([]Solid, 0)
-	scene.Texts = make([]Text, 0)
+	scene.Solids = make([]render.Solid, 0)
+	scene.Texts = make([]render.Text, 0)
 
-	layoutPlaced := Elapsed("layout placing")
-	layoutCounter := Counter{
+	layoutPlaced := metrics.Elapsed("layout placing")
+	layoutCounter := metrics.Counter{
 		Name:     "layout",
 		Interval: 1 * time.Second,
 	}
@@ -139,7 +139,7 @@ func LayoutTimeline(layout Layout, collection Collection, scene *Scene, source *
 
 	scene.Bounds.H = rect.Y + sceneMargin
 	scene.RegionSource = PhotoRegionSource{
-		imageSource: source,
+		Source: source,
 	}
 
 }

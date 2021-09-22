@@ -1,14 +1,14 @@
-package photofield
+package layout
 
 import (
 	// . "photofield/internal"
 
 	"log"
+	"photofield/internal/collection"
+	"photofield/internal/image"
+	"photofield/internal/metrics"
+	"photofield/internal/render"
 
-	. "photofield/internal"
-	. "photofield/internal/collection"
-	. "photofield/internal/display"
-	storage "photofield/internal/storage"
 	"time"
 
 	"github.com/tdewolff/canvas"
@@ -23,7 +23,7 @@ type AlbumEvent struct {
 	Section    Section
 }
 
-func LayoutAlbumEvent(layout Layout, rect Rect, event *AlbumEvent, scene *Scene, source *storage.ImageSource) Rect {
+func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene *render.Scene, source *image.Source) render.Rect {
 
 	if event.FirstOnDay {
 		font := scene.Fonts.Main.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
@@ -31,8 +31,8 @@ func LayoutAlbumEvent(layout Layout, rect Rect, event *AlbumEvent, scene *Scene,
 		if event.First {
 			dateFormat = "Monday, Jan 2, 2006"
 		}
-		text := NewTextFromRect(
-			Rect{
+		text := render.NewTextFromRect(
+			render.Rect{
 				X: rect.X,
 				Y: rect.Y,
 				W: rect.W,
@@ -46,8 +46,8 @@ func LayoutAlbumEvent(layout Layout, rect Rect, event *AlbumEvent, scene *Scene,
 	}
 
 	font := scene.Fonts.Main.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
-	text := NewTextFromRect(
-		Rect{
+	text := render.NewTextFromRect(
+		render.Rect{
 			X: rect.X,
 			Y: rect.Y,
 			W: rect.W,
@@ -71,12 +71,12 @@ func LayoutAlbumEvent(layout Layout, rect Rect, event *AlbumEvent, scene *Scene,
 	return rect
 }
 
-func LayoutAlbum(layout Layout, collection Collection, scene *Scene, source *storage.ImageSource) {
+func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
 
 	limit := collection.Limit
 
-	infos := collection.GetInfos(source, ListOptions{
-		OrderBy: DateAsc,
+	infos := collection.GetInfos(source, image.ListOptions{
+		OrderBy: image.DateAsc,
 		Limit:   limit,
 	})
 
@@ -93,18 +93,18 @@ func LayoutAlbum(layout Layout, collection Collection, scene *Scene, source *sto
 	eventCount := 0
 	var lastPhotoTime time.Time
 
-	rect := Rect{
+	rect := render.Rect{
 		X: sceneMargin,
 		Y: sceneMargin,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: 0,
 	}
 
-	scene.Solids = make([]Solid, 0)
-	scene.Texts = make([]Text, 0)
+	scene.Solids = make([]render.Solid, 0)
+	scene.Texts = make([]render.Text, 0)
 
-	layoutPlaced := Elapsed("layout placing")
-	layoutCounter := Counter{
+	layoutPlaced := metrics.Elapsed("layout placing")
+	layoutCounter := metrics.Counter{
 		Name:     "layout",
 		Interval: 1 * time.Second,
 	}
@@ -151,7 +151,7 @@ func LayoutAlbum(layout Layout, collection Collection, scene *Scene, source *sto
 
 	scene.Bounds.H = rect.Y + sceneMargin
 	scene.RegionSource = PhotoRegionSource{
-		imageSource: source,
+		Source: source,
 	}
 
 }

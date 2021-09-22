@@ -1,4 +1,4 @@
-package photofield
+package metrics
 
 import (
 	"github.com/dgraph-io/ristretto"
@@ -7,9 +7,11 @@ import (
 	"github.com/sheerun/queue"
 )
 
+var Namespace = "pf"
+
 func addGauge(name string, function func() float64) {
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
-		Namespace: MetricsNamespace,
+		Namespace: Namespace,
 		Name:      name,
 	},
 		function,
@@ -18,7 +20,7 @@ func addGauge(name string, function func() float64) {
 
 func addCounterUint64(name string, function func() uint64) {
 	promauto.NewCounterFunc(prometheus.CounterOpts{
-		Namespace: MetricsNamespace,
+		Namespace: Namespace,
 		Name:      name,
 	},
 		func() float64 { return float64(function()) },
@@ -27,23 +29,23 @@ func addCounterUint64(name string, function func() uint64) {
 
 func addGaugeUint64(name string, function func() uint64) {
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
-		Namespace: MetricsNamespace,
+		Namespace: Namespace,
 		Name:      name,
 	},
 		func() float64 { return float64(function()) },
 	)
 }
 
-func AddQueueMetrics(name string, queue *queue.Queue) {
+func AddQueue(name string, queue *queue.Queue) {
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
-		Namespace: MetricsNamespace,
+		Namespace: Namespace,
 		Name:      name + "_pending",
 	}, func() float64 {
 		return float64(queue.Length())
 	})
 }
 
-func AddRistrettoMetrics(name string, cache *ristretto.Cache) {
+func AddRistretto(name string, cache *ristretto.Cache) {
 	addGauge(name+"_ratio", cache.Metrics.Ratio)
 	addCounterUint64(name+"_hits", cache.Metrics.Hits)
 	addCounterUint64(name+"_misses", cache.Metrics.Misses)
