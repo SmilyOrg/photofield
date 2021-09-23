@@ -119,16 +119,13 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 		}
 	}
 
-	swapDimensions := false
 	if orientation != "" {
-		swapDimensions = getOrientationDimensionSwap(orientation)
 		info.Orientation = parseOrientation(orientation)
 	} else if rotation != "" {
-		swapDimensions = getRotationDimensionSwap(rotation)
 		info.Orientation = getOrientationFromRotation(rotation)
 	}
 
-	if swapDimensions {
+	if info.Orientation.SwapsDimensions() {
 		info.Width, info.Height = info.Height, info.Width
 	}
 

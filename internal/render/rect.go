@@ -3,7 +3,6 @@ package render
 import (
 	"fmt"
 	goimage "image"
-	"math"
 	"photofield/internal/image"
 
 	"github.com/tdewolff/canvas"
@@ -83,6 +82,22 @@ func (rect Rect) GetMatrixFitWidth(width float64) canvas.Matrix {
 		Scale(scale, scale)
 }
 
+func (rect Rect) GetMatrixFitInside(width float64, height float64) canvas.Matrix {
+	ratio := rect.W / rect.H
+
+	matrix := rect.GetMatrix()
+
+	if width/height > ratio {
+		scale := rect.W / width
+		matrix = matrix.Translate(0, (rect.H-height*scale)*0.5).Scale(scale, scale)
+	} else {
+		scale := rect.H / height
+		matrix = matrix.Translate((rect.W-width*scale)*0.5, 0).Scale(scale, scale)
+	}
+
+	return matrix
+}
+
 func (rect Rect) GetMatrixFitImage(image *goimage.Image) canvas.Matrix {
 	bounds := (*image).Bounds()
 	return rect.GetMatrixFitWidth(float64(bounds.Max.X) - float64(bounds.Min.X))
@@ -97,16 +112,7 @@ func (rect Rect) GetMatrixFitImageRotate(img *goimage.Image, orientation image.O
 		imageWidth, imageHeight = imageHeight, imageWidth
 	}
 
-	imageAspectRatio := imageWidth / imageHeight
-	imageAspectRatioRotated := 1 / imageAspectRatio
-	rectAspectRatio := rect.W / rect.H
-	// In case the image dimensions don't match expected aspect ratio,
-	// assume a 90 CCW rotation
-	if math.Abs(rectAspectRatio-imageAspectRatio) > math.Abs(rectAspectRatio-imageAspectRatioRotated) {
-		orientation = orientation.Rotate270()
-	}
-
-	matrix := rect.GetMatrixFitWidth(imageWidth)
+	matrix := rect.GetMatrixFitInside(imageWidth, imageHeight)
 	switch orientation {
 	case image.MirrorHorizontal:
 		matrix = matrix.Translate(imageWidth, 0).ReflectX()

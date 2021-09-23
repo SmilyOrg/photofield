@@ -13,12 +13,17 @@ type Info struct {
 	Orientation   Orientation
 }
 
+func (info *Info) Size() Size {
+	return Size{X: info.Width, Y: info.Height}
+}
+
 func (info *Info) String() string {
-	return fmt.Sprintf("width: %v, height: %v, date: %v, color: %08x",
+	return fmt.Sprintf("width: %v, height: %v, date: %v, color: %08x, orientation: %s",
 		info.Width,
 		info.Height,
 		info.DateTime.String(),
 		info.Color,
+		info.Orientation,
 	)
 }
 
@@ -55,7 +60,6 @@ func (info *Info) SetColorRGB32(r uint32, g uint32, b uint32) {
 type Orientation int8
 
 const (
-	Undefined                 Orientation = 0
 	Normal                    Orientation = 1
 	MirrorHorizontal          Orientation = 2
 	Rotate180                 Orientation = 3
@@ -65,6 +69,10 @@ const (
 	MirrorHorizontalRotate90  Orientation = 7
 	Rotate270                 Orientation = 8
 )
+
+func (orientation Orientation) IsZero() bool {
+	return orientation == 0
+}
 
 func (orientation Orientation) SwapsDimensions() bool {
 	switch orientation {
@@ -109,5 +117,28 @@ func (orientation Orientation) Rotate270() Orientation {
 		return Rotate180
 	default:
 		return orientation
+	}
+}
+
+func (orientation Orientation) String() string {
+	switch orientation {
+	case Normal:
+		return "Normal (1)"
+	case MirrorHorizontal:
+		return "MirrorHorizontal (2)"
+	case Rotate180:
+		return "Rotate180 (3)"
+	case MirrorVertical:
+		return "MirrorVertical (4)"
+	case MirrorHorizontalRotate270:
+		return "MirrorHorizontalRotate270 (5)"
+	case Rotate90:
+		return "Rotate90 (6)"
+	case MirrorHorizontalRotate90:
+		return "MirrorHorizontalRotate90 (7)"
+	case Rotate270:
+		return "Rotate270 (8)"
+	default:
+		return fmt.Sprintf("Unknown (%d)", orientation)
 	}
 }

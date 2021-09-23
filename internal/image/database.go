@@ -54,9 +54,10 @@ type InfoWrite struct {
 }
 
 type InfoExistence struct {
-	SizeNull     bool
-	DateTimeNull bool
-	ColorNull    bool
+	SizeNull        bool
+	OrientationNull bool
+	DateTimeNull    bool
+	ColorNull       bool
 }
 
 type InfoResult struct {
@@ -70,7 +71,7 @@ type InfoListResult struct {
 }
 
 func (info *InfoExistence) NeedsMeta() bool {
-	return info.SizeNull || info.DateTimeNull
+	return info.SizeNull || info.OrientationNull || info.DateTimeNull
 }
 
 func (info *InfoExistence) NeedsColor() bool {
@@ -137,11 +138,12 @@ func (source *Database) writePendingInfosSqlite() {
 	defer conn.Close()
 
 	updateMeta := conn.Prep(`
-		INSERT INTO infos(path, width, height, created_at)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO infos(path, width, height, orientation, created_at)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			width=excluded.width,
 			height=excluded.height,
+			orientation=excluded.orientation,
 			created_at=excluded.created_at;`)
 	defer updateMeta.Finalize()
 
@@ -204,7 +206,8 @@ func (source *Database) writePendingInfosSqlite() {
 			updateMeta.BindText(1, imageInfo.Path)
 			updateMeta.BindInt64(2, (int64)(imageInfo.Width))
 			updateMeta.BindInt64(3, (int64)(imageInfo.Height))
-			updateMeta.BindText(4, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
+			updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
+			updateMeta.BindText(5, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
 			_, err := updateMeta.Step()
 			if err != nil {
 				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
@@ -273,30 +276,33 @@ func (source *Database) Get(path string) (InfoResult, bool) {
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-		SELECT width, height, created_at, color FROM infos
+		SELECT width, height, orientation, color, created_at FROM infos
 		WHERE path = ?;`)
 	defer stmt.Finalize()
 
 	stmt.BindText(1, path)
 
-	var imageInfo InfoResult
+	var info InfoResult
 
 	exists, _ := stmt.Step()
 	if !exists {
-		return imageInfo, false
+		return info, false
 	}
 
-	imageInfo.Width = stmt.ColumnInt(0)
-	imageInfo.Height = stmt.ColumnInt(1)
-	imageInfo.SizeNull = stmt.ColumnType(0) == sqlite.TypeNull || stmt.ColumnType(1) == sqlite.TypeNull
+	info.Width = stmt.ColumnInt(0)
+	info.Height = stmt.ColumnInt(1)
+	info.SizeNull = stmt.ColumnType(0) == sqlite.TypeNull || stmt.ColumnType(1) == sqlite.TypeNull
 
-	imageInfo.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(2))
-	imageInfo.DateTimeNull = stmt.ColumnType(2) == sqlite.TypeNull
+	info.Orientation = Orientation(stmt.ColumnInt(2))
+	info.OrientationNull = stmt.ColumnType(2) == sqlite.TypeNull
 
-	imageInfo.Color = (uint32)(stmt.ColumnInt64(3))
-	imageInfo.ColorNull = stmt.ColumnType(3) == sqlite.TypeNull
+	info.Color = (uint32)(stmt.ColumnInt64(3))
+	info.ColorNull = stmt.ColumnType(3) == sqlite.TypeNull
 
-	return imageInfo, true
+	info.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(4))
+	info.DateTimeNull = stmt.ColumnType(4) == sqlite.TypeNull
+
+	return info, true
 }
 
 func (source *Database) GetDir(dir string) (InfoResult, bool) {
@@ -363,7 +369,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT path, width, height, created_at, color
+			SELECT path, width, height, orientation, color, created_at
 			FROM infos
 			WHERE 
 		`
@@ -416,11 +422,14 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			info.Height = stmt.ColumnInt(2)
 			info.SizeNull = stmt.ColumnType(1) == sqlite.TypeNull || stmt.ColumnType(2) == sqlite.TypeNull
 
-			info.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(3))
-			info.DateTimeNull = stmt.ColumnType(3) == sqlite.TypeNull
+			info.Orientation = Orientation(stmt.ColumnInt(3))
+			info.OrientationNull = stmt.ColumnType(3) == sqlite.TypeNull
 
 			info.Color = (uint32)(stmt.ColumnInt64(4))
 			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
+
+			info.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(5))
+			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
 			out <- info
 		}

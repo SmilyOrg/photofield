@@ -14,8 +14,18 @@ func NewGoExifRwcarlsenLoader() *GoExifRwcarlsenLoader {
 	return nil
 }
 
-func getPortraitFromExif(x *exif.Exif) bool {
-	return getOrientationDimensionSwap(getOrientationFromExif(x))
+func getOrientationFromExif(x *exif.Exif) string {
+	if x == nil {
+		return "1"
+	}
+	orient, err := x.Get(exif.Orientation)
+	if err != nil {
+		return "1"
+	}
+	if orient != nil {
+		return orient.String()
+	}
+	return "1"
 }
 
 func (decoder *GoExifRwcarlsenLoader) DecodeInfo(path string, info *Info) error {
@@ -30,20 +40,20 @@ func (decoder *GoExifRwcarlsenLoader) DecodeInfo(path string, info *Info) error 
 		info.DateTime, _ = x.DateTime()
 	}
 
-	portrait := getPortraitFromExif(x)
+	orientation := parseOrientation(getOrientationFromExif(x))
+
 	file.Seek(0, io.SeekStart)
 	conf, _, err := image.DecodeConfig(file)
 	if err != nil {
 		return err
 	}
-	if portrait {
+
+	if orientation.SwapsDimensions() {
 		conf.Width, conf.Height = conf.Height, conf.Width
 	}
 
-	if err != nil {
-		return err
-	}
 	info.Width, info.Height = conf.Width, conf.Height
+	info.Orientation = orientation
 
 	return nil
 }

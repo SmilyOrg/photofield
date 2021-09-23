@@ -18,6 +18,10 @@ func (photo *Photo) GetSize(source *image.Source) image.Size {
 	return image.Size{X: info.Width, Y: info.Height}
 }
 
+func (photo *Photo) GetInfo(source *image.Source) image.Info {
+	return source.GetInfo(photo.GetPath(source))
+}
+
 func (photo *Photo) GetPath(source *image.Source) string {
 	path, err := source.GetImagePath(photo.Id)
 	if err != nil {
@@ -34,56 +38,11 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
-func (photo *Photo) getBestBitmap(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) (Bitmap, float64) {
-	var best *image.Thumbnail
-	originalSize := photo.GetSize(source)
-	originalPath := photo.GetPath(source)
-	originalOrientation := source.GetOrientation(originalPath)
-	originalZoomDist := math.Inf(1)
-	if source.IsSupportedImage(originalPath) {
-		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
-	}
-	// fmt.Printf("%4.0f %4.0f\n", photo.Original.Sprite.Rect.W, photo.Original.Sprite.Rect.H)
-	bestZoomDist := originalZoomDist
-	for i := range source.Images.Thumbnails {
-		thumbnail := &source.Images.Thumbnails[i]
-		thumbSize := thumbnail.Fit(originalSize)
-		zoomDist := photo.Sprite.Rect.GetPixelZoomDist(c, thumbSize)
-		if zoomDist < bestZoomDist {
-			thumbnailPath := thumbnail.GetPath(originalPath)
-			if source.Exists(thumbnailPath) {
-				best = thumbnail
-				bestZoomDist = zoomDist
-			}
-		}
-		// fmt.Printf("orig w %4.0f h %4.0f   thumb w %4.0f h %4.0f   zoom dist best %8.2f cur %8.2f area %8.6f\n", originalSize.Width, originalSize.Height, thumbSize.Width, thumbSize.Height, bestZoomDist, zoomDist, photo.Original.Sprite.Rect.GetPixelArea(c, thumbSize))
-	}
-
-	if best == nil {
-		return Bitmap{
-			Path:        originalPath,
-			Orientation: originalOrientation,
-			Sprite:      photo.Sprite,
-		}, originalZoomDist
-	}
-
-	bestPath := best.GetPath(originalPath)
-	bestOrientation := source.GetOrientation(bestPath)
-
-	return Bitmap{
-		Path:        bestPath,
-		Orientation: bestOrientation,
-		Sprite: Sprite{
-			Rect: photo.Sprite.Rect,
-		},
-	}, bestZoomDist
-}
-
 func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) []BitmapAtZoom {
 
-	originalSize := photo.GetSize(source)
+	originalInfo := photo.GetInfo(source)
+	originalSize := originalInfo.Size()
 	originalPath := photo.GetPath(source)
-	originalOrientation := source.GetOrientation(originalPath)
 	originalZoomDist := math.Inf(1)
 	if source.IsSupportedImage(originalPath) {
 		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
@@ -93,7 +52,7 @@ func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Conte
 	bitmaps[0] = BitmapAtZoom{
 		Bitmap: Bitmap{
 			Path:        originalPath,
-			Orientation: originalOrientation,
+			Orientation: originalInfo.Orientation,
 			Sprite:      photo.Sprite,
 		},
 		ZoomDist: originalZoomDist,
@@ -103,11 +62,9 @@ func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Conte
 		thumbnail := &source.Images.Thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
 		thumbPath := thumbnail.GetPath(originalPath)
-		thumbOrientation := source.GetOrientation(thumbPath)
 		bitmaps[1+i] = BitmapAtZoom{
 			Bitmap: Bitmap{
-				Path:        thumbPath,
-				Orientation: thumbOrientation,
+				Path: thumbPath,
 				Sprite: Sprite{
 					Rect: photo.Sprite.Rect,
 				},

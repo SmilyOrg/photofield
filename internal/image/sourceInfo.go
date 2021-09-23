@@ -47,12 +47,6 @@ func (source *Source) QueueColorLoads(ids <-chan ImageId) {
 	}
 }
 
-func (source *Source) GetOrientation(path string) Orientation {
-	info := Info{}
-	source.decoder.DecodeInfo(path, &info)
-	return info.Orientation
-}
-
 func (source *Source) heuristicFromPath(path string) (Info, error) {
 	var info Info
 
