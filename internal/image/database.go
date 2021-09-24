@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -78,12 +79,12 @@ func (info *InfoExistence) NeedsColor() bool {
 	return info.ColorNull
 }
 
-func NewDatabase(migrations embed.FS) *Database {
+func NewDatabase(path string, migrations embed.FS) *Database {
 
 	var err error
 
 	source := Database{}
-	source.path = "data/photofield.cache.db"
+	source.path = path
 	source.migrate(migrations)
 
 	source.pool, err = sqlitex.Open(source.path, 0, 10)
@@ -106,15 +107,15 @@ func (source *Database) open() *sqlite.Conn {
 }
 
 func (source *Database) migrate(migrations embed.FS) {
-
 	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations")
 	if err != nil {
 		panic(err)
 	}
+	url := fmt.Sprintf("sqlite://%v", filepath.ToSlash(source.path))
 	m, err := migrate.NewWithSourceInstance(
 		"migrations",
 		dbsource,
-		fmt.Sprintf("sqlite://%v", source.path),
+		url,
 	)
 	if err != nil {
 		panic(err)

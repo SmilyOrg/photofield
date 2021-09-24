@@ -1,6 +1,7 @@
 package image
 
 import (
+	"log"
 	"strconv"
 	"time"
 )
@@ -17,7 +18,12 @@ type metadataLoader interface {
 func NewDecoder(exifToolCount int) *Decoder {
 	decoder := Decoder{}
 	if exifToolCount > 0 {
-		decoder.loader = NewExifToolMostlyGeekLoader(exifToolCount)
+		var err error
+		decoder.loader, err = NewExifToolMostlyGeekLoader(exifToolCount)
+		if err != nil {
+			log.Printf("unable to use exiftool, defaulting to goexif - no video metadata support (%v)\n", err.Error())
+			decoder.loader = NewGoExifRwcarlsenLoader()
+		}
 	} else {
 		decoder.loader = NewGoExifRwcarlsenLoader()
 	}

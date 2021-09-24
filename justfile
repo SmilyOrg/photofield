@@ -3,11 +3,20 @@ set dotenv-load := true
 default:
   @just --list --list-heading $'photofield\n'
 
-build:
-  go build
+build *args:
+  go build {{args}}
 
-run: build
-  ./photofield
+build-ui:
+  cd ui && npm run build
+
+build-local:
+  goreleaser build --snapshot --single-target --rm-dist
+
+release-local:
+  goreleaser release --snapshot --skip-publish --rm-dist
+
+run *args: build
+  ./photofield {{args}}
 
 ui:
   cd ui && npm run dev
@@ -22,7 +31,7 @@ db *args:
   migrate -database sqlite://data/photofield.cache.db -path db/migrations {{args}}
 
 api-codegen:
-  oapi-codegen -generate="types,chi-server" -package=openapi api.yaml > internal/api/api.gen.go
+  oapi-codegen -generate="types,chi-server" -package=openapi api.yaml > internal/openapi/api.gen.go
 
 grafana-export:
   @hamara export --host=localhost:9091 --key=$GRAFANA_API_KEY > docker/grafana/provisioning/datasources/default.yaml

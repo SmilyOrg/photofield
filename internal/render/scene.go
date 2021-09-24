@@ -22,10 +22,6 @@ type Render struct {
 	CanvasImage draw.Image
 }
 
-type Transform struct {
-	view canvas.Matrix
-}
-
 type Point struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
@@ -177,10 +173,6 @@ func (scene *Scene) GetVisiblePhotos(view Rect, maxCount int) <-chan PhotoRef {
 type BitmapAtZoom struct {
 	Bitmap   Bitmap
 	ZoomDist float64
-}
-
-func (scene *Scene) getRegionScale() float64 {
-	return scene.Bounds.W
 }
 
 func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region {

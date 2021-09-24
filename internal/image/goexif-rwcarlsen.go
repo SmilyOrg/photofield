@@ -11,7 +11,7 @@ import (
 type GoExifRwcarlsenLoader struct{}
 
 func NewGoExifRwcarlsenLoader() *GoExifRwcarlsenLoader {
-	return nil
+	return &GoExifRwcarlsenLoader{}
 }
 
 func getOrientationFromExif(x *exif.Exif) string {

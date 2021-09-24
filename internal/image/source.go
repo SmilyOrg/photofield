@@ -40,6 +40,8 @@ type Caches struct {
 }
 
 type Config struct {
+	DatabasePath string
+
 	ExifToolCount        int  `json:"exif_tool_count"`
 	SkipLoadInfo         bool `json:"skip_load_info"`
 	ConcurrentMetaLoads  int  `json:"concurrent_meta_loads"`
@@ -83,7 +85,7 @@ func NewSource(config Config, migrations embed.FS) *Source {
 	source := Source{}
 	source.Config = config
 	source.decoder = NewDecoder(config.ExifToolCount)
-	source.database = NewDatabase(migrations)
+	source.database = NewDatabase(config.DatabasePath, migrations)
 	source.imageInfoCache = newInfoCache()
 	source.imageCache = newImageCache(config.Caches)
 	source.fileExistsCache = newFileExistsCache()

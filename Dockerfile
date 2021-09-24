@@ -1,29 +1,7 @@
 ###
-# Server
-###
-FROM golang:1.16-alpine AS go-builder
-RUN apk add --no-cache gcc libffi-dev musl-dev libjpeg-turbo-dev
-
-WORKDIR /go/src/app
-
-# get deps
-COPY go.mod go.sum ./
-RUN go mod download
-
-# build
-COPY *.go ./
-COPY defaults.yaml ./
-COPY internal ./internal
-COPY db ./db
-# RUN go install -tags libjpeg .
-RUN go install .
-
-
-
-###
 # Client
 ###
-FROM node:14-alpine3.14 as node-builder
+FROM node:16-alpine3.14 as node-builder
 WORKDIR /ui
 
 # install deps
@@ -37,19 +15,40 @@ RUN npm run build
 
 
 ###
+# Server
+###
+FROM golang:1.17-alpine AS go-builder
+# RUN apk add --no-cache gcc libffi-dev musl-dev libjpeg-turbo-dev
+
+WORKDIR /go/src/app
+
+# get deps
+COPY go.mod go.sum ./
+RUN go mod download
+
+# build
+COPY *.go ./
+COPY defaults.yaml ./
+COPY internal ./internal
+COPY db ./db
+COPY fonts ./fonts
+# RUN go install -tags libjpeg .
+COPY --from=node-builder /ui/dist/ ./ui/dist
+RUN go install -tags embedstatic .
+
+
+
+###
 # Runtime
 ###
 FROM alpine:3.14
-RUN apk add --no-cache exiftool>12.06-r0 libjpeg-turbo
+# RUN apk add --no-cache exiftool>12.06-r0 libjpeg-turbo
+RUN apk add --no-cache exiftool>12.06-r0
 
 COPY --from=go-builder /go/bin/ /app
-COPY --from=node-builder /ui/dist/ /app/static
 
 WORKDIR /app
 RUN mkdir ./data && touch ./data/configuration.yaml
-COPY fonts ./fonts
 
 EXPOSE 8080
-ENV API_PREFIX="/api"
-
 CMD ["./photofield"]

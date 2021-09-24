@@ -29,18 +29,22 @@ func (collection *Collection) GenerateId() {
 
 func (collection *Collection) Expand() []Collection {
 	collections := make([]Collection, 0)
-	for _, photoDir := range collection.Dirs {
-		dir, err := os.Open(photoDir)
+	for _, collectionDir := range collection.Dirs {
+		dir, err := os.Open(collectionDir)
 		if err != nil {
-			log.Fatalln("Unable to expand dir", photoDir)
+			log.Fatalln("Unable to expand dir", collectionDir)
 		}
 		defer dir.Close()
 
-		list, _ := dir.Readdirnames(0)
-		for _, name := range list {
+		list, _ := dir.ReadDir(0)
+		for _, entry := range list {
+			if !entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
 			child := Collection{
 				Name:       name,
-				Dirs:       []string{filepath.Join(photoDir, name)},
+				Dirs:       []string{filepath.Join(collectionDir, name)},
 				Limit:      collection.Limit,
 				IndexLimit: collection.IndexLimit,
 			}

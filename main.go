@@ -2,12 +2,15 @@ package main
 
 import (
 	"embed"
+	"flag"
 	"fmt"
 	goimage "image"
 	"image/draw"
 	"image/png"
+	"io/fs"
 	"io/ioutil"
 	"math"
+	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -26,9 +29,7 @@ import (
 	"github.com/go-chi/cors"
 	chirender "github.com/go-chi/render"
 	"github.com/imdario/mergo"
-	spa "github.com/roberthodgen/spa-server"
-
-	_ "github.com/joho/godotenv/autoload"
+	"github.com/joho/godotenv"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
@@ -49,6 +50,8 @@ import (
 	"photofield/internal/scene"
 )
 
+//go:generate just api-codegen
+
 //go:embed defaults.yaml
 var defaultsYaml []byte
 var defaults AppConfig
@@ -58,6 +61,13 @@ var migrations embed.FS
 
 //go:embed fonts/Roboto/Roboto-Regular.ttf
 var robotoRegular []byte
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+)
 
 var startupTime time.Time
 
@@ -813,23 +823,18 @@ func indexCollection(collection *collection.Collection) {
 	}()
 }
 
-func loadConfiguration() AppConfig {
+func loadConfiguration(path string) AppConfig {
 
 	var appConfig AppConfig
 
-	filename := "data/configuration.yaml"
-	bytes, err := ioutil.ReadFile(filename)
+	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		log.Printf("unable to open %s, using defaults: %s\n", filename, err.Error())
-		return defaults
-	}
-
-	if err := yaml.Unmarshal(bytes, &appConfig); err != nil {
-		log.Printf("unable to parse %s, using defaults: %s\n", filename, err.Error())
-		return defaults
-	}
-
-	if err := mergo.Merge(&appConfig, defaults); err != nil {
+		log.Printf("unable to open %s, using defaults (%s)\n", path, err.Error())
+		appConfig = defaults
+	} else if err := yaml.Unmarshal(bytes, &appConfig); err != nil {
+		log.Printf("unable to parse %s, using defaults (%s)\n", path, err.Error())
+		appConfig = defaults
+	} else if err := mergo.Merge(&appConfig, defaults); err != nil {
 		panic("unable to merge configuration with defaults")
 	}
 
@@ -864,15 +869,60 @@ func addExampleScene() {
 	sceneSource.Add(sceneConfig, imageSource)
 }
 
+func loadEnv() {
+	env := os.Getenv("PHOTOFIELD_ENV")
+	if env == "" {
+		env = "development"
+	}
+
+	godotenv.Load(".env." + env + ".local")
+	if env == "test" {
+		godotenv.Load(".env.local")
+	}
+	godotenv.Load(".env." + env)
+	godotenv.Load() // The Original .env
+}
+
+type spaFs struct {
+	root http.FileSystem
+}
+
+func (fs spaFs) Open(name string) (http.File, error) {
+	f, err := fs.root.Open(name)
+	if os.IsNotExist(err) {
+		return fs.root.Open("index.html")
+	}
+	return f, err
+}
+
 func main() {
 
 	startupTime = time.Now()
+
+	versionPtr := flag.Bool("version", false, "print version and exit")
+
+	flag.Parse()
+
+	if *versionPtr {
+		fmt.Printf("photofield %s, commit %s, built on %s by %s\n", version, commit, date, builtBy)
+		return
+	}
+	log.Printf("photofield %s", version)
+
+	loadEnv()
 
 	if err := yaml.Unmarshal(defaultsYaml, &defaults); err != nil {
 		panic(err)
 	}
 
-	appConfig := loadConfiguration()
+	dataDir, exists := os.LookupEnv("PHOTOFIELD_DATA_DIR")
+	if !exists {
+		dataDir = "."
+	}
+	configurationPath := filepath.Join(dataDir, "configuration.yaml")
+
+	appConfig := loadConfiguration(configurationPath)
+	appConfig.Media.DatabasePath = filepath.Join(dataDir, "photofield.cache.db")
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]
@@ -906,9 +956,9 @@ func main() {
 
 	addr := ":8080"
 
-	apiPrefix, exists := os.LookupEnv("API_PREFIX")
+	apiPrefix, exists := os.LookupEnv("PHOTOFIELD_API_PREFIX")
 	if !exists {
-		apiPrefix = "/"
+		apiPrefix = "/api"
 	}
 
 	if tileRequestConfig.LogStats {
@@ -947,8 +997,16 @@ func main() {
 	r.Handle("/debug/fgprof", fgprof.Handler())
 
 	if apiPrefix != "/" {
-		r.Handle("/*", spa.SpaHandler("static", "index.html"))
-		msg += fmt.Sprintf(", ui at %v", addr)
+		subfs, err := fs.Sub(StaticFs, "ui/dist")
+		if err != nil {
+			panic(err)
+		}
+		sfs := spaFs{
+			root: http.FS(subfs),
+		}
+		server := http.FileServer(sfs)
+		r.Handle("/*", server)
+		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
 	}
 
 	log.Println(msg)

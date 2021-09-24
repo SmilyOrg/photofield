@@ -14,3 +14,4 @@ tmp
 .ipynb_checkpoints
 tools/jupyter/data
 .env
+dist/

@@ -3,7 +3,6 @@ package image
 import (
 	"bufio"
 	"errors"
-	"log"
 	"strconv"
 	"strings"
 
@@ -14,9 +13,9 @@ type ExifToolMostlyGeekLoader struct {
 	exifTool *exiftool.Pool
 }
 
-func NewExifToolMostlyGeekLoader(exifToolCount int) *ExifToolMostlyGeekLoader {
+func NewExifToolMostlyGeekLoader(exifToolCount int) (*ExifToolMostlyGeekLoader, error) {
 	if exifToolCount <= 0 {
-		return nil
+		return nil, errors.New("invalid exif tool count")
 	}
 	var err error
 	decoder := &ExifToolMostlyGeekLoader{}
@@ -41,11 +40,7 @@ func NewExifToolMostlyGeekLoader(exifToolCount int) *ExifToolMostlyGeekLoader {
 		"-n", // Machine-readable values
 		"-S", // Short tag names with no padding
 	)
-	if err != nil {
-		log.Printf("exiftool error: %v\n", err.Error())
-		return nil
-	}
-	return decoder
+	return decoder, err
 }
 
 func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) error {
