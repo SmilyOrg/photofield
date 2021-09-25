@@ -5,6 +5,7 @@ before:
   hooks:
     - go mod tidy
     - go generate -x
+    - sh -c "cd ui && npm install && npm run build"
 builds:
   - env:
       - CGO_ENABLED=0
