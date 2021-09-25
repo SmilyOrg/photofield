@@ -50,8 +50,6 @@ import (
 	"photofield/internal/scene"
 )
 
-//go:generate just api-codegen
-
 //go:embed defaults.yaml
 var defaultsYaml []byte
 var defaults AppConfig
