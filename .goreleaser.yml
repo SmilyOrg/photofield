@@ -1,10 +1,9 @@
-# This is an example .goreleaser.yml file with some sane defaults.
+# photofield release configuration
+#
 # Make sure to check the documentation at https://goreleaser.com
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
-    # you may remove this if you don't need go generate
     - go generate -x
 builds:
   - env:
@@ -19,6 +18,13 @@ builds:
         goarch: arm64
     tags:
       - embedstatic
+dockers:
+  - dockerfile: Dockerfile-goreleaser
+    image_templates:
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}"
+      - "ghcr.io/smilyorg/photofield:v{{ .Major }}"
+      - "ghcr.io/smilyorg/photofield:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/smilyorg/photofield:latest"
 archives:
   - replacements:
       darwin: Darwin
