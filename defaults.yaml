@@ -22,7 +22,7 @@ media:
     image:
       max_size: 256Mi
     
-  extensions: [".jpg", ".mp4"]
+  extensions: [".jpg", ".jpeg", ".png", ".mp4"]
   date_formats: ["20060201_150405"]
   images:
     extensions: [".jpg", ".jpeg", ".png", ".gif"]
