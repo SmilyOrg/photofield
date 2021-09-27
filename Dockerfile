@@ -51,4 +51,5 @@ WORKDIR /app
 RUN mkdir ./data && touch ./data/configuration.yaml
 
 EXPOSE 8080
+ENV PHOTOFIELD_DATA_DIR=./data
 CMD ["./photofield"]
