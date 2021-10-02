@@ -12,6 +12,7 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -840,6 +841,7 @@ func loadConfiguration(path string) AppConfig {
 	for i := range appConfig.Collections {
 		collection := &appConfig.Collections[i]
 		collection.GenerateId()
+		collection.Layout = strings.ToUpper(collection.Layout)
 		if collection.Layout == "" {
 			collection.Layout = string(appConfig.Layout.Type)
 		}
