@@ -75,7 +75,8 @@ form of feedback to not lose track.
 ![Progressive load of a deer](docs/assets/progressive-load.gif)
 
 * **Different layouts**. Collections of photos can be displayed with different
-layouts:
+layouts.
+![layout examples](docs/assets/layouts.png)
   * **Album:** chronological photos grouped by event
   * **Timeline:** reverse-chronological timeline similar to Google Photos
   * **Wall:** a square collage of all the photos, because zooming is fun!
