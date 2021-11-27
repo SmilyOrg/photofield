@@ -84,6 +84,20 @@
             >
             </ui-icon-button>
           </div>
+          <expand-button
+            :expanded="settingsExtraExpanded"
+            @click="settingsExtraExpanded = !settingsExtraExpanded"
+          ></expand-button>
+          <template v-if="settingsExtraExpanded">
+            <ui-form-field>
+              <ui-checkbox v-model="settings.debug.overdraw"></ui-checkbox>
+              <label>Debug Overdraw</label>
+            </ui-form-field>
+            <ui-form-field>
+              <ui-checkbox v-model="settings.debug.thumbnails"></ui-checkbox>
+              <label>Debug Thumbnails</label>
+            </ui-form-field>
+          </template>
         </div>
         <ui-icon-button
           icon="settings"
@@ -198,6 +212,10 @@ export default {
           height: 100,
         },
         layout: "",
+        debug: {
+          overdraw: false,
+          thumbnails: false,
+        },
       },
       layoutOptions: [
         { label: "Album", value: "ALBUM" },
@@ -205,6 +223,7 @@ export default {
         { label: "Wall", value: "WALL" },
       ],
       settingsExpanded: false,
+      settingsExtraExpanded: false,
       tasksExpanded: false,
       collectionExpanded: false,
       load: {

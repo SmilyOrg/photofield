@@ -88,7 +88,26 @@ media:
       # width
       # height: Predefined thumbnail dimensions used to pick the most
       #         appropriately-sized thumbnail for the zoom level. 
+      # 
+      # extra_cost: Additional weight to add when picking the closest thumbnail.
+      #             Higher number means that other thumbnails will be preferred
+      #             if they exist.
+
+      #
+      # Embedded JPEG thumbnail
+      #
+      - name: exif-thumb
+        exif: ThumbnailImage
+        fit: INSIDE
+        width: 120
+        height: 120
+        # It's expensive to extract, so this makes it more of a last resort, but
+        # still a lot better than loading the original photo.
+        extra_cost: 10
         
+      #
+      # Synology Moments / Photo Station thumbnails
+      #
       - name: S
         path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
         fit: INSIDE
@@ -122,6 +141,9 @@ media:
   videos:
     extensions: [".mp4"]
     thumbnails:
+      #
+      # Synology Moments / Photo Station video variants
+      #
       - name: M
         path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
         fit: OUTSIDE

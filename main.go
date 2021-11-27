@@ -947,7 +947,7 @@ func main() {
 		Main:   *fontFamily,
 		Header: fontFamily.Face(14.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
 		Hour:   fontFamily.Face(24.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
-		Debug:  fontFamily.Face(30.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),
+		Debug:  fontFamily.Face(34.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 

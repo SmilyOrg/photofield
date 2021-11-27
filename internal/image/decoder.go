@@ -1,31 +1,38 @@
 package image
 
 import (
+	"bytes"
+	goimage "image"
+	"image/jpeg"
+	"io"
 	"log"
 	"strconv"
 	"time"
 )
 
 type Decoder struct {
-	loader metadataLoader
+	loader       metadataLoader
+	goexifLoader *GoExifRwcarlsenLoader
 }
 
 type metadataLoader interface {
 	DecodeInfo(path string, info *Info) error
+	DecodeBytes(path string, tagName string) ([]byte, error)
 	Close()
 }
 
 func NewDecoder(exifToolCount int) *Decoder {
 	decoder := Decoder{}
+	decoder.goexifLoader = NewGoExifRwcarlsenLoader()
 	if exifToolCount > 0 {
 		var err error
 		decoder.loader, err = NewExifToolMostlyGeekLoader(exifToolCount)
 		if err != nil {
 			log.Printf("unable to use exiftool, defaulting to goexif - no video metadata support (%v)\n", err.Error())
-			decoder.loader = NewGoExifRwcarlsenLoader()
+			decoder.loader = decoder.goexifLoader
 		}
 	} else {
-		decoder.loader = NewGoExifRwcarlsenLoader()
+		decoder.loader = decoder.goexifLoader
 	}
 	return &decoder
 }
@@ -53,6 +60,20 @@ func (decoder *Decoder) DecodeInfo(path string, info *Info) error {
 	// 	println(path, info.String())
 	// }
 	return err
+}
+
+func (decoder *Decoder) DecodeImage(path string, tagName string) (goimage.Image, Info, error) {
+	imageBytes, err := decoder.loader.DecodeBytes(path, tagName)
+	if err != nil {
+		return nil, Info{}, err
+	}
+	info := Info{}
+	r := bytes.NewReader(imageBytes)
+	decoder.goexifLoader.DecodeInfoReader(r, &info)
+
+	r.Seek(0, io.SeekStart)
+	img, err := jpeg.Decode(r)
+	return img, info, err
 }
 
 func parseOrientation(orientation string) Orientation {

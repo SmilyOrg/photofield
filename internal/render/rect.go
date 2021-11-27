@@ -98,6 +98,22 @@ func (rect Rect) GetMatrixFitInside(width float64, height float64) canvas.Matrix
 	return matrix
 }
 
+func (rect Rect) GetMatrixFillOutside(width float64, height float64) canvas.Matrix {
+	ratio := rect.W / rect.H
+
+	matrix := rect.GetMatrix()
+
+	if width/height < ratio {
+		scale := rect.W / width
+		matrix = matrix.Translate(0, (rect.H-height*scale)*0.5).Scale(scale, scale)
+	} else {
+		scale := rect.H / height
+		matrix = matrix.Translate((rect.W-width*scale)*0.5, 0).Scale(scale, scale)
+	}
+
+	return matrix
+}
+
 func (rect Rect) GetMatrixFitImage(image *goimage.Image) canvas.Matrix {
 	bounds := (*image).Bounds()
 	return rect.GetMatrixFitWidth(float64(bounds.Max.X) - float64(bounds.Min.X))
@@ -136,6 +152,60 @@ func (rect Rect) GetMatrixFitImageRotate(img *goimage.Image, orientation image.O
 		matrix = matrix.Translate(imageWidth, 0).Rotate(-270)
 	}
 
+	return matrix
+}
+
+func (rect Rect) GetMatrixFitBoundsRotate(bounds goimage.Rectangle, orientation image.Orientation) canvas.Matrix {
+	imageWidth := float64(bounds.Max.X - bounds.Min.X)
+	imageHeight := float64(bounds.Max.Y - bounds.Min.Y)
+
+	if orientation.SwapsDimensions() {
+		imageWidth, imageHeight = imageHeight, imageWidth
+	}
+
+	matrix := rect.GetMatrixFitInside(imageWidth, imageHeight)
+	matrix = rect.OrientMatrix(matrix, imageWidth, imageHeight, orientation)
+
+	return matrix
+}
+
+func (rect Rect) GetMatrixFillBoundsRotate(bounds goimage.Rectangle, orientation image.Orientation) canvas.Matrix {
+	imageWidth := float64(bounds.Max.X - bounds.Min.X)
+	imageHeight := float64(bounds.Max.Y - bounds.Min.Y)
+
+	if orientation.SwapsDimensions() {
+		imageWidth, imageHeight = imageHeight, imageWidth
+	}
+
+	matrix := rect.GetMatrixFillOutside(imageWidth, imageHeight)
+	matrix = rect.OrientMatrix(matrix, imageWidth, imageHeight, orientation)
+
+	return matrix
+}
+
+func (rect Rect) OrientMatrix(matrix canvas.Matrix, width float64, height float64, orientation image.Orientation) canvas.Matrix {
+	switch orientation {
+	case image.MirrorHorizontal:
+		matrix = matrix.Translate(width, 0).ReflectX()
+
+	case image.Rotate180:
+		matrix = matrix.Translate(width, height).Rotate(-180)
+
+	case image.MirrorVertical:
+		matrix = matrix.Translate(0, height).ReflectY()
+
+	case image.MirrorHorizontalRotate270:
+		matrix = matrix.Translate(width, height).Rotate(-270).ReflectX()
+
+	case image.Rotate90:
+		matrix = matrix.Translate(0, height).Rotate(-90)
+
+	case image.MirrorHorizontalRotate90:
+		matrix = matrix.Rotate(-90).ReflectX()
+
+	case image.Rotate270:
+		matrix = matrix.Translate(width, 0).Rotate(-270)
+	}
 	return matrix
 }
 

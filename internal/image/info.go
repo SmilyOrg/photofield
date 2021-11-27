@@ -59,6 +59,7 @@ func (info *Info) SetColorRGB32(r uint32, g uint32, b uint32) {
 
 type Orientation int8
 
+// All rotations are counter-clockwise
 const (
 	Normal                    Orientation = 1
 	MirrorHorizontal          Orientation = 2

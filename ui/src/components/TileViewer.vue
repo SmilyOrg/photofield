@@ -17,6 +17,7 @@ export default {
     tileSize: Number,
     view: Object,
     immediate: Boolean,
+    debug: Object,
   },
 
   emits: ["zoom", "click", "view", "reset", "load", "key-down", "viewer"],
@@ -53,6 +54,13 @@ export default {
 
     immediate() {
       this.reset();
+    },
+
+    debug: {
+      deep: true,
+      handler() {
+        this.reset();
+      },
     },
 
     interactive(interactive) {
@@ -324,7 +332,7 @@ export default {
         maxLevel,
         getTileUrl: (level, x, y) => {
           if (!this.scene) return;
-          return getTileUrl(this.scene.id, level, x, y, tileSize);
+          return getTileUrl(this.scene.id, level, x, y, tileSize, this.debug);
         }
       }
     },

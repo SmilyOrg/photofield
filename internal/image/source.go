@@ -67,7 +67,7 @@ type Source struct {
 	database *Database
 
 	imageInfoCache  InfoCache
-	imageCache      *ristretto.Cache
+	imageCache      ImageCache
 	fileExistsCache *ristretto.Cache
 
 	pathToIndex sync.Map

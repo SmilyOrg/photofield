@@ -21,6 +21,7 @@
       :interactive="!nativeScroll && !panDisabled"
       :scene="scene"
       :tileSize="tileSize"
+      :debug="settings.debug"
       @viewer="overlayViewer = $event"
       @zoom="onZoom"
       @view="onView"
