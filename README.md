@@ -83,9 +83,13 @@ layouts.
   * [More future ideas?](https://github.com/SmilyOrg/photofield/issues/1)
 * **Reuse of existing thumbnails**. Do you have hundreds of gigabytes of
   existing thumbnails from an existing system? Me too! Let's just reuse those.
-  * Synology Moments `@eaDir` thumbnails are supported by default, others can be
-  configured via `configuration.yaml`. Please [open an issue] to add
-  support for other systems!
+  Here are the currently supported thumbnail sources:
+  * Synology Moments / Photo Station auto-generated thumbnails in `@eaDir`.
+  * Embedded JPEG thumbnails (`ThumbnailImage` Exif tag).
+  * Limited support for extension via `thumbnails` section of
+    the [Configuration].
+  * Please [open an issue] for other systems, bonus points for an idea on how to
+    integrate!
 * **Single file binary**. Thanks to [Go] and [GoReleaser], all the dependencies are packed into a [single binary
 file](#binaries) for most major OSes.
 * **Read-only file system based collections**. Photofield never changes your
@@ -328,6 +332,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 * [readme.so](https://readme.so/)
 
 
+[Configuration]: #configuration
 
 [open an issue]: https://github.com/SmilyOrg/photofield/issues
 [Getting Started]: #getting-started
