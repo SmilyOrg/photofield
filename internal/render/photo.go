@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"math"
 	"photofield/internal/image"
 	"sort"
@@ -11,6 +12,20 @@ import (
 type Photo struct {
 	Id     image.ImageId
 	Sprite Sprite
+}
+
+type Variant struct {
+	Thumbnail   *image.Thumbnail
+	Orientation image.Orientation
+	ZoomDist    float64
+}
+
+func (variant Variant) String() string {
+	name := "original"
+	if variant.Thumbnail != nil {
+		name = variant.Thumbnail.Name
+	}
+	return fmt.Sprintf("%0.2f %v", variant.ZoomDist, name)
 }
 
 func (photo *Photo) GetSize(source *image.Source) image.Size {
@@ -83,6 +98,41 @@ func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Conte
 	return bitmaps
 }
 
+func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) []Variant {
+
+	originalInfo := photo.GetInfo(source)
+	originalSize := originalInfo.Size()
+	originalPath := photo.GetPath(source)
+	originalZoomDist := math.Inf(1)
+	if source.IsSupportedImage(originalPath) {
+		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
+	}
+
+	variants := make([]Variant, 1+len(source.Images.Thumbnails))
+	variants[0] = Variant{
+		Thumbnail:   nil,
+		Orientation: originalInfo.Orientation,
+		ZoomDist:    originalZoomDist,
+	}
+
+	for i := range source.Images.Thumbnails {
+		thumbnail := &source.Images.Thumbnails[i]
+		thumbSize := thumbnail.Fit(originalSize)
+		variants[1+i] = Variant{
+			Thumbnail: thumbnail,
+			ZoomDist:  photo.Sprite.Rect.GetPixelZoomDist(c, thumbSize) + float64(thumbnail.ExtraCost),
+		}
+	}
+
+	sort.Slice(variants, func(i, j int) bool {
+		a := variants[i]
+		b := variants[j]
+		return a.ZoomDist < b.ZoomDist
+	})
+
+	return variants
+}
+
 func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) {
 
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
@@ -98,41 +148,56 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	drawn := false
-	bitmaps := photo.getBestBitmaps(config, scene, c, scales, source)
-	for _, bitmapAtZoom := range bitmaps {
-		bitmap := bitmapAtZoom.Bitmap
-
+	variants := photo.getBestVariants(config, scene, c, scales, source)
+	for _, variant := range variants {
 		// text := fmt.Sprintf("index %d zd %4.2f %s", index, bitmapAtZoom.ZoomDist, bitmap.Path)
 		// println(text)
 
-		err := bitmap.Draw(config.CanvasImage, c, scales, source)
-		if err == nil {
-			drawn = true
-
-			if source.IsSupportedVideo(path) {
-				bitmap.DrawVideoIcon(c)
-			}
-
-			if config.DebugOverdraw {
-				bitmap.DrawOverdraw(c, source)
-			}
-
-			if config.DebugThumbnails {
-				text := ""
-
-				for i := range source.Images.Thumbnails {
-					thumbnail := &source.Images.Thumbnails[i]
-					thumbnailPath := thumbnail.GetPath(photo.GetPath(source))
-					if source.Exists(thumbnailPath) {
-						text += thumbnail.Name + " "
-					}
-				}
-
-				bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
-			}
-
-			break
+		bitmap := Bitmap{
+			Sprite:      photo.Sprite,
+			Orientation: variant.Orientation,
 		}
+
+		img, _, err := source.GetImageOrThumbnail(path, variant.Thumbnail)
+		if err != nil {
+			continue
+		}
+
+		if variant.Thumbnail != nil {
+			bounds := img.Bounds()
+			imgWidth := float64(bounds.Max.X - bounds.Min.X)
+			imgHeight := float64(bounds.Max.Y - bounds.Min.Y)
+			imgAspect := imgWidth / imgHeight
+			imgAspectRotated := 1 / imgAspect
+			rectAspect := bitmap.Sprite.Rect.W / bitmap.Sprite.Rect.H
+			// In case the image dimensions don't match expected aspect ratio,
+			// assume a 90 CCW rotation
+			if math.Abs(rectAspect-imgAspect) > math.Abs(rectAspect-imgAspectRotated) {
+				bitmap.Orientation = image.Rotate90
+			}
+		}
+
+		bitmap.DrawImage(config.CanvasImage, img, c)
+		drawn = true
+
+		if source.IsSupportedVideo(path) {
+			bitmap.DrawVideoIcon(c)
+		}
+
+		if config.DebugOverdraw {
+			bounds := img.Bounds()
+			bitmap.DrawOverdraw(c, bounds.Size())
+		}
+
+		if config.DebugThumbnails {
+			bounds := img.Bounds()
+			text := fmt.Sprintf("%dx%d %s", bounds.Size().X, bounds.Size().Y, variant.String())
+			font := scene.Fonts.Debug
+			font.Color = canvas.Lime
+			bitmap.Sprite.DrawText(c, scales, &font, text)
+		}
+
+		break
 
 		// bitmap.Sprite.DrawText(c, scales, &scene.Fonts.Debug, text)
 	}

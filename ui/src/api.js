@@ -68,13 +68,19 @@ export async function createTask(type, id) {
   });
 }
 
-export function getTileUrl(sceneId, level, x, y, tileSize) {
-  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify({
+export function getTileUrl(sceneId, level, x, y, tileSize, debug) {
+  const params = {
     tile_size: tileSize,
     zoom: level,
     x,
     y,
-  })}`;
+  };
+  for (const key in debug) {
+    if (Object.hasOwnProperty.call(debug, key)) {
+      if (debug[key]) params[`debug_${key}`] = debug[key];
+    }
+  }
+  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params)}`;
   return url;
 }
 

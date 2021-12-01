@@ -1,7 +1,6 @@
 package image
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"io"
@@ -15,17 +14,15 @@ import (
 
 type Size = image.Point
 
-type imageRef struct {
-	path  string
-	err   error
-	image *image.Image
-	// mutex LoadingImage
-	// LoadingImage.loadOnce
-}
-
 type loadingImage struct {
 	imageRef imageRef
 	loaded   chan struct{}
+}
+
+type imageRef struct {
+	err   error
+	info  Info
+	image image.Image
 }
 
 func (source *Source) Exists(path string) bool {
@@ -40,18 +37,18 @@ func (source *Source) Exists(path string) bool {
 	return exists
 }
 
-func (source *Source) decode(path string, reader io.ReadSeeker) (*image.Image, error) {
+func (source *Source) decode(path string, reader io.ReadSeeker) (image.Image, error) {
 	lower := strings.ToLower(path)
 	if strings.HasSuffix(lower, "jpg") || strings.HasSuffix(lower, "jpeg") {
 		image, err := codec.DecodeJpeg(reader)
-		return &image, err
+		return image, err
 	}
 
 	image, _, err := image.Decode(reader)
-	return &image, err
+	return image, err
 }
 
-func (source *Source) LoadImage(path string) (*image.Image, error) {
+func (source *Source) LoadImage(path string) (image.Image, error) {
 	// fmt.Printf("loading %s\n", path)
 	file, err := os.Open(path)
 	if err != nil {
@@ -61,52 +58,61 @@ func (source *Source) LoadImage(path string) (*image.Image, error) {
 	return source.decode(path, file)
 }
 
-func (source *Source) GetImage(path string) (*image.Image, error) {
-	tries := 1000
-	for try := 0; try < tries; try++ {
-		value, found := source.imageCache.Get(path)
-		if found {
-			return value.(imageRef).image, value.(imageRef).err
+func (source *Source) Acquire(key string, path string, thumbnail *Thumbnail) (image.Image, Info, error) {
+	// log.Printf("%v acquire, %v\n", key, source.imagesLoadingCount)
+	source.imagesLoadingCount++
+	loading := &loadingImage{}
+	loading.loaded = make(chan struct{})
+	stored, loaded := source.imagesLoading.LoadOrStore(key, loading)
+	if loaded {
+		loading = stored.(*loadingImage)
+		// log.Printf("%v blocking on channel\n", key)
+		<-loading.loaded
+		// log.Printf("%v channel unblocked\n", key)
+		imageRef := loading.imageRef
+		return imageRef.image, Info{}, imageRef.err
+	} else {
+		// log.Printf("%v not found, loading, mutex locked\n", key)
+		var image image.Image
+		info := Info{}
+		var err error
+		if thumbnail == nil {
+			// log.Printf("%v loading\n", key)
+			image, err = source.LoadImage(path)
 		} else {
-			loading := &loadingImage{}
-			// loading.mutex.Lock()
-			loading.loaded = make(chan struct{})
-			stored, loaded := source.imagesLoading.LoadOrStore(path, loading)
-			if loaded {
-				loading = stored.(*loadingImage)
-				// log.Printf("%v blocking on channel, try %v\n", path, try)
-				<-loading.loaded
-				// log.Printf("%v channel unblocked\n", path)
-				imageRef := loading.imageRef
-				return imageRef.image, imageRef.err
+			thumbnailPath := thumbnail.GetPath(path)
+			if thumbnailPath != "" {
+				// log.Printf("%v loading thumbnail path %v\n", key, thumbnailPath)
+				image, err = source.LoadImage(thumbnailPath)
 			} else {
-
-				source.imagesLoadingCount++
-
-				// log.Printf("%v not found, try %v, loading, mutex locked\n", path, try)
-
-				// log.Printf("%v loading, try %v\n", path, try)
-				image, err := source.LoadImage(path)
-				imageRef := imageRef{
-					path:  path,
-					image: image,
-					err:   err,
-				}
-				source.imageCache.Set(path, imageRef, 0)
-				loading.imageRef = imageRef
-
-				// log.Printf("%v loaded, closing channel\n", path)
-				close(loading.loaded)
-
-				source.imagesLoading.Delete(path)
-				source.imagesLoadingCount--
-				// log.Printf("%v loaded, map entry deleted\n", path)
-
-				return image, err
+				// log.Printf("%v loading embedded %v\n", key, thumbnail.Exif)
+				image, info, err = source.decoder.DecodeImage(path, thumbnail.Exif)
 			}
 		}
+		imageRef := imageRef{
+			image: image,
+			err:   err,
+		}
+		loading.imageRef = imageRef
+		// log.Printf("%v loaded, closing channel\n", key)
+		close(loading.loaded)
+		return image, info, err
 	}
-	return nil, fmt.Errorf("unable to get image after %v tries", tries)
+}
+
+func (source *Source) Release(key string) {
+	source.imagesLoading.Delete(key)
+	source.imagesLoadingCount--
+	// log.Printf("%v loaded, map entry deleted\n", key)
+	// log.Printf("%v release, %v\n", key, source.imagesLoadingCount)
+}
+
+func (source *Source) GetImage(path string) (image.Image, Info, error) {
+	return source.imageCache.GetOrLoad(path, nil, source)
+}
+
+func (source *Source) GetImageOrThumbnail(path string, thumbnail *Thumbnail) (image.Image, Info, error) {
+	return source.imageCache.GetOrLoad(path, thumbnail, source)
 }
 
 func (source *Source) GetSmallestThumbnail(path string) string {
@@ -120,7 +126,7 @@ func (source *Source) GetSmallestThumbnail(path string) string {
 	return ""
 }
 
-func (source *Source) LoadSmallestImage(path string) (*image.Image, error) {
+func (source *Source) LoadSmallestImage(path string) (image.Image, error) {
 	for i := range source.Images.Thumbnails {
 		thumbnail := &source.Images.Thumbnails[i]
 		thumbnailPath := thumbnail.GetPath(path)
@@ -139,9 +145,9 @@ func (source *Source) LoadImageColor(path string) (color.RGBA, error) {
 	if err != nil {
 		return color.RGBA{}, err
 	}
-	centroids, err := prominentcolor.KmeansWithAll(1, *colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, prominentcolor.GetDefaultMasks())
+	centroids, err := prominentcolor.KmeansWithAll(1, colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, prominentcolor.GetDefaultMasks())
 	if err != nil {
-		centroids, err = prominentcolor.KmeansWithAll(1, *colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, make([]prominentcolor.ColorBackgroundMask, 0))
+		centroids, err = prominentcolor.KmeansWithAll(1, colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, make([]prominentcolor.ColorBackgroundMask, 0))
 		if err != nil {
 			return color.RGBA{}, err
 		}

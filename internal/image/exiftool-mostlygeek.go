@@ -3,11 +3,14 @@ package image
 import (
 	"bufio"
 	"errors"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/mostlygeek/go-exiftool"
 )
+
+var previewValueMatcher = regexp.MustCompile(`Binary data (\d+) bytes`)
 
 type ExifToolMostlyGeekLoader struct {
 	exifTool *exiftool.Pool
@@ -21,6 +24,19 @@ func NewExifToolMostlyGeekLoader(exifToolCount int) (*ExifToolMostlyGeekLoader, 
 	decoder := &ExifToolMostlyGeekLoader{}
 	decoder.exifTool, err = exiftool.NewPool(
 		"exiftool", exifToolCount,
+		"-n", // Machine-readable values
+		"-S", // Short tag names with no padding
+	)
+	return decoder, err
+}
+
+func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) error {
+
+	if decoder == nil {
+		return errors.New("unable to decode, exiftool missing")
+	}
+
+	bytes, err := decoder.exifTool.ExtractFlags(path,
 		"-Orientation",
 		"-Rotation",
 		"-ImageWidth",
@@ -37,19 +53,7 @@ func NewExifToolMostlyGeekLoader(exifToolCount int) (*ExifToolMostlyGeekLoader, 
 		"-TimeStamp",
 		"-FileModifyDate",
 		"-FileCreateDate",
-		"-n", // Machine-readable values
-		"-S", // Short tag names with no padding
 	)
-	return decoder, err
-}
-
-func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) error {
-
-	if decoder == nil {
-		return errors.New("unable to decode, exiftool missing")
-	}
-
-	bytes, err := decoder.exifTool.Extract(path)
 	if err != nil {
 		return err
 	}
@@ -87,6 +91,11 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 			if info.DateTime.IsZero() &&
 				(strings.Contains(name, "Date") || strings.Contains(name, "Time")) {
 				info.DateTime, _ = parseDateTime(value)
+			} else if strings.HasSuffix(name, "Image") {
+				match := previewValueMatcher.FindStringSubmatch(value)
+				if len(match) >= 2 {
+					println(name, match[1])
+				}
 			}
 		}
 	}
@@ -127,6 +136,18 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 	// println(path, info.Width, info.Height, info.DateTime.String())
 
 	return nil
+}
+
+func (decoder *ExifToolMostlyGeekLoader) DecodeBytes(path string, tagName string) ([]byte, error) {
+
+	bytes, err := decoder.exifTool.ExtractFlags(path, "-b", "-"+tagName)
+
+	if err != nil {
+		println(path, tagName, err.Error())
+		return nil, err
+	}
+
+	return bytes, nil
 }
 
 func (decoder *ExifToolMostlyGeekLoader) Close() {

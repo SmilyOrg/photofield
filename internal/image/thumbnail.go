@@ -18,11 +18,14 @@ type Thumbnail struct {
 	PathTemplateRaw string `json:"path"`
 	PathTemplate    *template.Template
 
+	Exif string `json:"exif"`
+
 	SizeTypeRaw string `json:"fit"`
 	SizeType    ThumbnailSizeType
 
-	Width  int `json:"width"`
-	Height int `json:"height"`
+	Width     int `json:"width"`
+	Height    int `json:"height"`
+	ExtraCost int `json:"extra_cost"`
 }
 
 type ThumbnailSizeType int32
@@ -34,10 +37,16 @@ const (
 )
 
 func (thumbnail *Thumbnail) Init() {
-	var err error
-	thumbnail.PathTemplate, err = template.New("").Parse(thumbnail.PathTemplateRaw)
-	if err != nil {
-		panic(err)
+	if thumbnail.PathTemplateRaw != "" {
+		var err error
+		thumbnail.PathTemplate, err = template.New("").Parse(thumbnail.PathTemplateRaw)
+		if err != nil {
+			panic(err)
+		}
+	} else if thumbnail.Exif != "" {
+		// No setup required
+	} else {
+		panic("thumbnail path or exif name must be specified")
 	}
 
 	switch thumbnail.SizeTypeRaw {
@@ -53,6 +62,9 @@ func (thumbnail *Thumbnail) Init() {
 }
 
 func (thumbnail *Thumbnail) GetPath(originalPath string) string {
+	if thumbnail.PathTemplate == nil {
+		return ""
+	}
 	var rendered bytes.Buffer
 	dir, filename := filepath.Split(originalPath)
 	err := thumbnail.PathTemplate.Execute(&rendered, PhotoTemplateData{

@@ -34,16 +34,19 @@ func (decoder *GoExifRwcarlsenLoader) DecodeInfo(path string, info *Info) error 
 		return err
 	}
 	defer file.Close()
+	return decoder.DecodeInfoReader(file, info)
+}
 
-	x, err := exif.Decode(file)
+func (decoder *GoExifRwcarlsenLoader) DecodeInfoReader(r io.ReadSeeker, info *Info) error {
+	x, err := exif.Decode(r)
 	if err == nil {
 		info.DateTime, _ = x.DateTime()
 	}
 
 	orientation := parseOrientation(getOrientationFromExif(x))
 
-	file.Seek(0, io.SeekStart)
-	conf, _, err := image.DecodeConfig(file)
+	r.Seek(0, io.SeekStart)
+	conf, _, err := image.DecodeConfig(r)
 	if err != nil {
 		return err
 	}
@@ -56,6 +59,26 @@ func (decoder *GoExifRwcarlsenLoader) DecodeInfo(path string, info *Info) error 
 	info.Orientation = orientation
 
 	return nil
+}
+
+func (decoder *GoExifRwcarlsenLoader) DecodeBytes(path string, tagName string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	x, err := exif.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+
+	tag, err := x.Get(exif.FieldName(tagName))
+	if err != nil {
+		return nil, err
+	}
+
+	return tag.Val, nil
 }
 
 func (decoder *GoExifRwcarlsenLoader) Close() {}
