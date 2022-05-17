@@ -9,6 +9,10 @@ require (
 	github.com/deepmap/oapi-codegen v1.8.2
 	github.com/dgraph-io/ristretto v0.0.2
 	github.com/docker/go-units v0.4.0
+	github.com/dsoprea/go-exif/v3 v3.0.0-20210625224831-a6301f85c82b // indirect
+	github.com/dsoprea/go-jpeg-image-structure v0.0.0-20210512043942-b434301c6836 // indirect
+	github.com/dsoprea/go-logging v0.0.0-20200710184922-b02d349568dd // indirect
+	github.com/evanoberholster/imagemeta v0.1.2 // indirect
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/felixge/fgprof v0.9.1
 	github.com/go-chi/chi/v5 v5.0.4
@@ -33,7 +37,6 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sheerun/queue v1.0.1
-	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52
