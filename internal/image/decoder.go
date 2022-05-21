@@ -41,16 +41,32 @@ func (decoder *Decoder) Close() {
 	decoder.loader.Close()
 }
 
-func parseDateTime(value string) (time.Time, error) {
-	t, err := time.Parse("2006:01:02 15:04:05Z07:00", value)
+func parseDateTime(value string) (t time.Time, hasTimezone bool, hasSubsec bool, err error) {
+	t, err = time.Parse("2006:01:02 15:04:05Z07:00", value)
 	if err == nil {
-		return t, nil
+		hasTimezone = true
+		hasSubsec = false
+		return
 	}
 	t, err = time.Parse("2006:01:02 15:04:05", value)
 	if err == nil {
-		return t, nil
+		hasTimezone = false
+		hasSubsec = false
+		return
 	}
-	return t, err
+	t, err = time.Parse("2006:01:02 15:04:05.99999999Z07:00", value)
+	if err == nil {
+		hasTimezone = true
+		hasSubsec = true
+		return
+	}
+	t, err = time.Parse("2006:01:02 15:04:05.99999999", value)
+	if err == nil {
+		hasTimezone = false
+		hasSubsec = true
+		return
+	}
+	return
 }
 
 func (decoder *Decoder) DecodeInfo(path string, info *Info) error {

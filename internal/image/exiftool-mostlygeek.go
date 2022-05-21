@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mostlygeek/go-exiftool"
 )
@@ -88,9 +89,15 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 		// case "GPSDateTime":
 		// 	gpsTime, _ = parseDateTime(value)
 		default:
-			if info.DateTime.IsZero() &&
-				(strings.Contains(name, "Date") || strings.Contains(name, "Time")) {
-				info.DateTime, _ = parseDateTime(value)
+			if strings.Contains(name, "Date") || strings.Contains(name, "Time") {
+				if info.DateTime.IsZero() {
+					info.DateTime, _, _, _ = parseDateTime(value)
+				} else {
+					t, hasTimezone, _, _ := parseDateTime(value)
+					if hasTimezone && info.DateTime.Location() == time.UTC {
+						info.DateTime = t
+					}
+				}
 			} else if strings.HasSuffix(name, "Image") {
 				match := previewValueMatcher.FindStringSubmatch(value)
 				if len(match) >= 2 {
@@ -102,12 +109,6 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-
-	// println(gpsTime.String(), info.DateTime.String())
-
-	// if !gpsTime.IsZero() {
-	// time.FixedZone()
-	// }
 
 	if imageWidth != "" {
 		info.Width, err = strconv.Atoi(imageWidth)

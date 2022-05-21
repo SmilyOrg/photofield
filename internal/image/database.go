@@ -19,6 +19,8 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/httpfs"
 )
 
+var dateFormat = "2006-01-02 15:04:05.999999 -07:00"
+
 type ListOrder int32
 
 const (
@@ -208,7 +210,7 @@ func (source *Database) writePendingInfosSqlite() {
 			updateMeta.BindInt64(2, (int64)(imageInfo.Width))
 			updateMeta.BindInt64(3, (int64)(imageInfo.Height))
 			updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
-			updateMeta.BindText(5, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
+			updateMeta.BindText(5, imageInfo.DateTime.Format(dateFormat))
 			_, err := updateMeta.Step()
 			if err != nil {
 				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
@@ -245,7 +247,7 @@ func (source *Database) writePendingInfosSqlite() {
 
 		case Index:
 			upsertIndex.BindText(1, imageInfo.Path)
-			upsertIndex.BindText(2, imageInfo.DateTime.Format("2006-01-02 15:04:05.999999999 -0700 MST"))
+			upsertIndex.BindText(2, imageInfo.DateTime.Format(dateFormat))
 			_, err := upsertIndex.Step()
 			if err != nil {
 				log.Printf("Unable to set dir to indexed %s: %s\n", imageInfo.Path, err.Error())
@@ -300,7 +302,7 @@ func (source *Database) Get(path string) (InfoResult, bool) {
 	info.Color = (uint32)(stmt.ColumnInt64(3))
 	info.ColorNull = stmt.ColumnType(3) == sqlite.TypeNull
 
-	info.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(4))
+	info.DateTime, _ = time.Parse(dateFormat, stmt.ColumnText(4))
 	info.DateTimeNull = stmt.ColumnType(4) == sqlite.TypeNull
 
 	return info, true
@@ -325,7 +327,7 @@ func (source *Database) GetDir(dir string) (InfoResult, bool) {
 		return imageInfo, false
 	}
 
-	imageInfo.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(0))
+	imageInfo.DateTime, _ = time.Parse(dateFormat, stmt.ColumnText(0))
 	imageInfo.DateTimeNull = stmt.ColumnType(0) == sqlite.TypeNull
 
 	return imageInfo, true
@@ -370,7 +372,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT path, width, height, orientation, color, created_at
+			SELECT path, width, height, orientation, color, created_at, datetime(created_at, "utc") as created_at_utc
 			FROM infos
 			WHERE 
 		`
@@ -384,9 +386,9 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		switch options.OrderBy {
 		case DateAsc:
-			sql += `ORDER BY created_at ASC `
+			sql += `ORDER BY created_at_utc ASC `
 		case DateDesc:
-			sql += `ORDER BY created_at DESC `
+			sql += `ORDER BY created_at_utc DESC `
 		default:
 			panic("Unsupported listing order")
 		}
@@ -429,7 +431,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			info.Color = (uint32)(stmt.ColumnInt64(4))
 			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
 
-			info.DateTime, _ = time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", stmt.ColumnText(5))
+			info.DateTime, _ = time.Parse(dateFormat, stmt.ColumnText(5))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
 			out <- info

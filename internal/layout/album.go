@@ -20,6 +20,7 @@ type AlbumEvent struct {
 	First      bool
 	FirstOnDay bool
 	LastOnDay  bool
+	Elapsed    time.Duration
 	Section    Section
 }
 
@@ -46,6 +47,7 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 	}
 
 	font := scene.Fonts.Main.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	time := event.StartTime.Format("15:00")
 	text := render.NewTextFromRect(
 		render.Rect{
 			X: rect.X,
@@ -54,7 +56,7 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 			H: 30,
 		},
 		&font,
-		event.StartTime.Format("15:00"),
+		time,
 	)
 	scene.Texts = append(scene.Texts, text)
 	rect.Y += text.Sprite.Rect.H + 10
@@ -129,6 +131,7 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 				First:      eventCount == 1,
 				StartTime:  photoTime,
 				FirstOnDay: !SameDay(lastPhotoTime, photoTime),
+				Elapsed:    elapsed,
 			}
 		}
 		lastPhotoTime = photoTime
