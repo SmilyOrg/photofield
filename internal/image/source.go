@@ -19,7 +19,7 @@ var ErrNotAnImage = errors.New("not a supported image extension, might be video"
 type ImageId uint32
 
 type SourcedInfo struct {
-	Path string
+	Id ImageId
 	Info
 }
 
@@ -68,11 +68,8 @@ type Source struct {
 
 	imageInfoCache  InfoCache
 	imageCache      ImageCache
+	pathCache       PathCache
 	fileExistsCache *ristretto.Cache
-
-	pathToIndex sync.Map
-	paths       []string
-	pathMutex   sync.RWMutex
 
 	imagesLoading      sync.Map
 	imagesLoadingCount int
@@ -89,6 +86,7 @@ func NewSource(config Config, migrations embed.FS) *Source {
 	source.imageInfoCache = newInfoCache()
 	source.imageCache = newImageCache(config.Caches)
 	source.fileExistsCache = newFileExistsCache()
+	source.pathCache = newPathCache()
 
 	if config.SkipLoadInfo {
 		log.Printf("skipping load info")
@@ -113,6 +111,10 @@ func NewSource(config Config, migrations embed.FS) *Source {
 	}
 
 	return &source
+}
+
+func (source *Source) Vacuum() error {
+	return source.database.vacuum()
 }
 
 func (source *Source) Close() {
@@ -148,6 +150,13 @@ func (source *Source) ListImages(dirs []string, maxPhotos int) <-chan string {
 	return source.database.ListPaths(dirs, maxPhotos)
 }
 
+func (source *Source) ListImageIds(dirs []string, maxPhotos int) <-chan ImageId {
+	for i := range dirs {
+		dirs[i] = filepath.FromSlash(dirs[i])
+	}
+	return source.database.ListIds(dirs, maxPhotos)
+}
+
 func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan SourcedInfo {
 	for i := range dirs {
 		dirs[i] = filepath.FromSlash(dirs[i])
@@ -157,7 +166,7 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan Sourc
 		infos := source.database.List(dirs, options)
 		for info := range infos {
 			if info.NeedsMeta() || info.NeedsColor() {
-				info.Info = source.GetInfo(info.Path)
+				info.Info = source.GetInfo(info.Id)
 			}
 			out <- info.SourcedInfo
 		}
@@ -166,35 +175,18 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan Sourc
 	return out
 }
 
-func (source *Source) GetImageId(path string) ImageId {
-	source.pathMutex.RLock()
-	stored, ok := source.pathToIndex.Load(path)
-	if ok {
-		source.pathMutex.RUnlock()
-		return ImageId(stored.(int))
-	}
-	source.pathMutex.RUnlock()
-	source.pathMutex.Lock()
-	count := 1 + len(source.paths)
-	stored, loaded := source.pathToIndex.LoadOrStore(path, count)
-	if loaded {
-		source.pathMutex.Unlock()
-		return ImageId(stored.(int))
-	}
-	source.paths = append(source.paths, path)
-	// log.Printf("add image id %5d %s\n", stored.(int), path)
-	source.pathMutex.Unlock()
-	return ImageId(stored.(int))
-}
-
+// Prefer using ImageId over this unless you absolutely need the path
 func (source *Source) GetImagePath(id ImageId) (string, error) {
-	index := int(id) - 1
-	source.pathMutex.RLock()
-	if index < 0 || index >= len(source.paths) {
+	path, ok := source.pathCache.Get(id)
+	if ok {
+		return path, nil
+	}
+
+	path, ok = source.database.GetPathFromId(id)
+	if !ok {
 		return "", ErrNotFound
 	}
-	path := source.paths[index]
-	source.pathMutex.RUnlock()
+	source.pathCache.Set(id, path)
 	return path, nil
 }
 

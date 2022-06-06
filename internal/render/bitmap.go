@@ -83,11 +83,6 @@ func renderImageFastCropped(rimg draw.Image, img goimage.Image, m canvas.Matrix,
 	draw.ApproxBiLinear.Transform(rimg, aff3, img, bounds, draw.Src, nil)
 }
 
-func (bitmap *Bitmap) GetSize(source *image.Source) image.Size {
-	info := source.GetInfo(bitmap.Path)
-	return image.Size{X: info.Width, Y: info.Height}
-}
-
 func (bitmap *Bitmap) DrawOverdraw(c *canvas.Context, size goimage.Point) {
 	style := c.Style
 

@@ -34,6 +34,7 @@
     <li><a href="#getting-started">Getting Started</a></li>
     <li><a href="#configuration">Configuration</a></li>
     <li><a href="#usage">Usage</a></li>
+    <li><a href="#maintenance">Maintenance</a></li>
     <li><a href="#development-setup">Development Setup</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
@@ -258,6 +259,26 @@ quirks that exist in the current version.
   that already exist for it with the bottom list of thumbnails by pixel width._
 
 
+
+## Maintenance
+
+Over time the cache database can grow in size due to version upgrades and so on.
+To shrink the database to its minimum size, you can _vacuum_ it. Multiple vacuums in a row have no effect as the vacuum itself rewrites the database from
+the ground up.
+
+While the vacuum is in progress, it will take twice the database size and may
+take several minutes if you have lots of photos and a low-power system.
+
+As an example it took around 5 minutes to vacuum a 260 MiB database containing around 500k photos on a DS418play. The size after vacuuming was 61 MiB as all the
+leftover data from database upgrades was cleaned up.
+
+```sh
+# CLI
+./photofield -vacuum
+
+# Docker
+docker exec -it photofield ./photofield -vacuum
+```
 
 ## Development Setup
 

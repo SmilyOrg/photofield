@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "iteration": 1628090892247,
+  "iteration": 1654108832702,
   "links": [],
   "panels": [
     {
@@ -1192,7 +1192,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
+          "selected": true,
           "text": [
             "All"
           ],
@@ -1232,9 +1232,14 @@
             "selected": false,
             "text": "file_exists",
             "value": "file_exists"
+          },
+          {
+            "selected": false,
+            "text": "path",
+            "value": "path"
           }
         ],
-        "query": "scene,image,image_info,file_exists",
+        "query": "scene,image,image_info,file_exists,path",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
@@ -1282,9 +1287,9 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
-          "text": "/tiles",
-          "value": "/tiles"
+          "selected": true,
+          "text": "/scenes/{scene_id}/tiles",
+          "value": "/scenes/{scene_id}/tiles"
         },
         "datasource": "Prometheus",
         "definition": "label_values(path)",
@@ -1331,5 +1336,5 @@
   "timezone": "",
   "title": "Photofield",
   "uid": "9sQ5hGGnk",
-  "version": 2
+  "version": 6
 }

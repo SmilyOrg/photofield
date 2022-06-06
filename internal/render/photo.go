@@ -29,12 +29,12 @@ func (variant Variant) String() string {
 }
 
 func (photo *Photo) GetSize(source *image.Source) image.Size {
-	info := source.GetInfo(photo.GetPath(source))
+	info := source.GetInfo(photo.Id)
 	return image.Size{X: info.Width, Y: info.Height}
 }
 
 func (photo *Photo) GetInfo(source *image.Source) image.Info {
-	return source.GetInfo(photo.GetPath(source))
+	return source.GetInfo(photo.Id)
 }
 
 func (photo *Photo) GetPath(source *image.Source) string {
@@ -98,11 +98,10 @@ func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Conte
 	return bitmaps
 }
 
-func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) []Variant {
+func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, originalPath string) []Variant {
 
 	originalInfo := photo.GetInfo(source)
 	originalSize := originalInfo.Size()
-	originalPath := photo.GetPath(source)
 	originalZoomDist := math.Inf(1)
 	if source.IsSupportedImage(originalPath) {
 		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
@@ -140,7 +139,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	if pixelArea < config.MaxSolidPixelArea {
 		style := c.Style
 
-		info := source.GetInfo(path)
+		info := source.GetInfo(photo.Id)
 		style.FillColor = info.GetColor()
 
 		photo.Sprite.DrawWithStyle(c, style)
@@ -148,7 +147,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	drawn := false
-	variants := photo.getBestVariants(config, scene, c, scales, source)
+	variants := photo.getBestVariants(config, scene, c, scales, source, path)
 	for _, variant := range variants {
 		// text := fmt.Sprintf("index %d zd %4.2f %s", index, bitmapAtZoom.ZoomDist, bitmap.Path)
 		// println(text)

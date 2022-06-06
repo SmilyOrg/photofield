@@ -80,17 +80,6 @@ func (collection *Collection) GetInfos(source *image.Source, options image.ListO
 }
 
 func (collection *Collection) GetIds(source *image.Source) <-chan image.ImageId {
-	out := make(chan image.ImageId)
-	go func() {
-		for path := range collection.GetPaths(source) {
-			out <- source.GetImageId(path)
-		}
-		close(out)
-	}()
-	return out
-}
-
-func (collection *Collection) GetPaths(source *image.Source) <-chan string {
 	limit := 0
 	if collection.IndexLimit > 0 {
 		limit = collection.IndexLimit
@@ -98,5 +87,5 @@ func (collection *Collection) GetPaths(source *image.Source) <-chan string {
 	if collection.Limit > 0 {
 		limit = collection.Limit
 	}
-	return source.ListImages(collection.Dirs, limit)
+	return source.ListImageIds(collection.Dirs, limit)
 }

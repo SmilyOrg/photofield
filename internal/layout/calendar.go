@@ -83,7 +83,7 @@ func LayoutCalendar(config *render.Render, scene *render.Scene, source *image.So
 	y := sceneMargin
 	for i := range scene.Photos {
 		photo := &scene.Photos[i]
-		info := source.GetInfo(scene.Photos[i].GetPath(source))
+		info := source.GetInfo(scene.Photos[i].Id)
 		dateTime := info.DateTime
 
 		_, weekNum := info.DateTime.ISOWeek()

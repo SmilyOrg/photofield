@@ -46,7 +46,7 @@ func (source *Source) LoadInfoColor(path string) (Info, error) {
 	return info, nil
 }
 
-func (source *Source) processQueue(name string, id string, queue *queue.Queue, workerFn func(<-chan string), workerCount int) {
+func (source *Source) processQueue(name string, id string, queue *queue.Queue, workerFn func(<-chan ImageId), workerCount int) {
 
 	loadCount := 0
 	lastLoadCount := 0
@@ -60,11 +60,11 @@ func (source *Source) processQueue(name string, id string, queue *queue.Queue, w
 
 	logging := false
 
-	paths := make(chan string)
-	defer close(paths)
+	ids := make(chan ImageId)
+	defer close(ids)
 
 	for i := 0; i < workerCount; i++ {
-		go workerFn(paths)
+		go workerFn(ids)
 	}
 
 	for {
@@ -74,11 +74,7 @@ func (source *Source) processQueue(name string, id string, queue *queue.Queue, w
 			return
 		}
 
-		path, err := source.GetImagePath(id)
-		if err != nil {
-			panic("Unable to load image info for non-existing image id")
-		}
-		paths <- path
+		ids <- id
 		doneCounter.Inc()
 
 		now := time.Now()

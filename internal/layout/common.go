@@ -71,7 +71,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 	source := regionSource.Source
 
 	originalPath := photo.GetPath(source)
-	info := source.GetInfo(originalPath)
+	info := source.GetInfo(photo.Id)
 	originalSize := image.Size{
 		X: info.Width,
 		Y: info.Height,
@@ -175,7 +175,7 @@ func addSectionPhotos(section *Section, scene *render.Scene, source *image.Sourc
 		startIndex := len(scene.Photos)
 		for _, info := range section.infos {
 			scene.Photos = append(scene.Photos, render.Photo{
-				Id:     source.GetImageId(info.Path),
+				Id:     info.Id,
 				Sprite: render.Sprite{},
 			})
 		}

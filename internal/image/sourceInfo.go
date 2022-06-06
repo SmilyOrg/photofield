@@ -9,25 +9,37 @@ import (
 	"time"
 )
 
-func (source *Source) loadInfosMeta(paths <-chan string) {
-	for path := range paths {
+func (source *Source) loadInfosMeta(ids <-chan ImageId) {
+	for id := range ids {
+		path, err := source.GetImagePath(id)
+		if err != nil {
+			fmt.Println("Unable to find image path", err, path)
+			continue
+		}
 		info, err := source.LoadInfoMeta(path)
 		if err != nil {
 			fmt.Println("Unable to load image info meta", err, path)
+			continue
 		}
 		source.database.Write(path, info, UpdateMeta)
-		source.imageInfoCache.Delete(path)
+		source.imageInfoCache.Delete(id)
 	}
 }
 
-func (source *Source) loadInfosColor(paths <-chan string) {
-	for path := range paths {
+func (source *Source) loadInfosColor(ids <-chan ImageId) {
+	for id := range ids {
+		path, err := source.GetImagePath(id)
+		if err != nil {
+			fmt.Println("Unable to find image path", err, path)
+			continue
+		}
 		info, err := source.LoadInfoColor(path)
 		if err != nil {
 			fmt.Println("Unable to load image info color", err, path)
+			continue
 		}
 		source.database.Write(path, info, UpdateColor)
-		source.imageInfoCache.Delete(path)
+		source.imageInfoCache.Delete(id)
 	}
 }
 
@@ -75,9 +87,8 @@ func (source *Source) heuristicFromPath(path string) (Info, error) {
 	return info, nil
 }
 
-func (source *Source) GetInfo(path string) Info {
+func (source *Source) GetInfo(id ImageId) Info {
 	var info Info
-	var err error
 	var found bool
 
 	logging := false
@@ -85,7 +96,7 @@ func (source *Source) GetInfo(path string) Info {
 	totalStartTime := time.Now()
 
 	startTime := time.Now()
-	info, found = source.imageInfoCache.Get(path)
+	info, found = source.imageInfoCache.Get(id)
 	cacheGetMs := time.Since(startTime).Milliseconds()
 	if found {
 		// if (logging) log.Printf("image info %5d ms get cache\n", cacheGetMs)
@@ -93,13 +104,13 @@ func (source *Source) GetInfo(path string) Info {
 	}
 
 	startTime = time.Now()
-	result, found := source.database.Get(path)
+	result, found := source.database.Get(id)
 	info = result.Info
 	dbGetMs := time.Since(startTime).Milliseconds()
 	needsMeta := result.NeedsMeta()
 	if found && !needsMeta {
 		startTime = time.Now()
-		source.imageInfoCache.Set(path, info)
+		source.imageInfoCache.Set(id, info)
 		cacheSetMs := time.Since(startTime).Milliseconds()
 		if logging {
 			log.Printf("image info %5d ms get cache, %5d ms get db, %5d ms set cache\n", cacheGetMs, dbGetMs, cacheSetMs)
@@ -109,7 +120,6 @@ func (source *Source) GetInfo(path string) Info {
 	startTime = time.Now()
 	needsColor := result.NeedsColor()
 	if needsMeta || needsColor {
-		id := source.GetImageId(path)
 		if needsMeta {
 			if source.loadQueueMeta != nil {
 				source.loadQueueMeta.Append(id)
@@ -128,14 +138,21 @@ func (source *Source) GetInfo(path string) Info {
 	}
 
 	startTime = time.Now()
-	info, err = source.heuristicFromPath(path)
-	heuristicGetMs := time.Since(startTime).Milliseconds()
-	if err != nil {
-		fmt.Println("Unable to load image info heuristic", err, path)
+	{
+		path, err := source.GetImagePath(id)
+		if err == nil {
+			info, err = source.heuristicFromPath(path)
+			if err != nil {
+				fmt.Println("Unable to load image info heuristic", err, path)
+			}
+		} else {
+			fmt.Println("Unable to get path from image id", err, id)
+		}
 	}
+	heuristicGetMs := time.Since(startTime).Milliseconds()
 
 	startTime = time.Now()
-	source.imageInfoCache.Set(path, info)
+	source.imageInfoCache.Set(id, info)
 	cacheSetMs := time.Since(startTime).Milliseconds()
 
 	totalMs := time.Since(totalStartTime).Milliseconds()

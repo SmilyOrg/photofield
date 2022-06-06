@@ -56,14 +56,6 @@ func NewSceneSource() *SceneSource {
 	return &source
 }
 
-func (source *SceneSource) getImageIds(collection collection.Collection, imageSource *image.Source) []image.ImageId {
-	ids := make([]image.ImageId, 0)
-	for id := range collection.GetIds(imageSource) {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
 func getSceneCost(scene *render.Scene) int64 {
 	structCost := (int64)(unsafe.Sizeof(*scene))
 	photosCost := (int64)(len(scene.Photos)) * (int64)(unsafe.Sizeof(scene.Photos[0]))

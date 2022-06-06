@@ -108,6 +108,16 @@ func (source *Database) open() *sqlite.Conn {
 	return conn
 }
 
+func (source *Database) vacuum() error {
+	conn := source.open()
+	defer conn.Close()
+
+	log.Println("database vacuuming")
+	defer metrics.Elapsed("database vacuum")()
+
+	return sqlitex.Exec(conn, "VACUUM;", nil)
+}
+
 func (source *Database) migrate(migrations embed.FS) {
 	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations")
 	if err != nil {
@@ -122,6 +132,18 @@ func (source *Database) migrate(migrations embed.FS) {
 	if err != nil {
 		panic(err)
 	}
+
+	version, dirty, err := m.Version()
+	if err != nil {
+		panic(err)
+	}
+
+	dirtystr := ""
+	if dirty {
+		dirtystr = " (dirty)"
+	}
+	log.Printf("database version %v%s, migrating if needed", version, dirtystr)
+
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
 		panic(err)
@@ -140,31 +162,60 @@ func (source *Database) writePendingInfosSqlite() {
 	conn := source.open()
 	defer conn.Close()
 
+	upsertPrefix := conn.Prep(`
+		INSERT OR IGNORE INTO prefix(str)
+		VALUES (?);`)
+	defer upsertPrefix.Finalize()
+
 	updateMeta := conn.Prep(`
-		INSERT INTO infos(path, width, height, orientation, created_at)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(path) DO UPDATE SET
+		INSERT INTO infos(path_prefix_id, filename, width, height, orientation, created_at_unix, created_at_tz_offset)
+		SELECT
+			id as path_prefix_id,
+			? as filename,
+			? as width,
+			? as height,
+			? orientation,
+			? as created_at_unix,
+			? as created_at_tz_offset
+		FROM prefix
+		WHERE str == ?
+		ON CONFLICT(path_prefix_id, filename) DO UPDATE SET
 			width=excluded.width,
 			height=excluded.height,
 			orientation=excluded.orientation,
-			created_at=excluded.created_at;`)
+			created_at_unix=excluded.created_at_unix,
+			created_at_tz_offset=excluded.created_at_tz_offset;`)
 	defer updateMeta.Finalize()
 
 	updateColor := conn.Prep(`
-		INSERT INTO infos(path, color)
-		VALUES (?, ?)
-		ON CONFLICT(path) DO UPDATE SET
+		INSERT INTO infos(path_prefix_id, filename, color)
+		SELECT
+			id as path_prefix_id,
+			? as filename,
+			? as color
+		FROM prefix
+		WHERE str == ?
+		ON CONFLICT(path_prefix_id, filename) DO UPDATE SET
 			color=excluded.color;`)
 	defer updateColor.Finalize()
 
 	appendPath := conn.Prep(`
-		INSERT OR IGNORE INTO infos(path)
-		VALUES (?);`)
+		INSERT OR IGNORE INTO infos(path_prefix_id, filename)
+		SELECT
+			id as path_prefix_id,
+			? as filename
+		FROM prefix
+		WHERE str == ?`)
 	defer appendPath.Finalize()
 
 	delete := conn.Prep(`
-		DELETE FROM infos
-		WHERE path = ?;`)
+		DELETE
+		FROM infos
+		WHERE path_prefix_id == (
+			SELECT id
+			FROM prefix
+			WHERE str == ?
+		) AND filename == ?;`)
 	defer delete.Finalize()
 
 	upsertIndex := conn.Prep(`
@@ -173,6 +224,7 @@ func (source *Database) writePendingInfosSqlite() {
 	defer upsertIndex.Finalize()
 
 	lastCommit := time.Now()
+	lastOptimize := time.Time{}
 	inTransaction := false
 
 	defer func() {
@@ -195,10 +247,24 @@ func (source *Database) writePendingInfosSqlite() {
 
 		switch imageInfo.Type {
 		case AppendPath:
-			appendPath.BindText(1, imageInfo.Path)
-			_, err := appendPath.Step()
+			dir, file := filepath.Split(imageInfo.Path)
+
+			upsertPrefix.BindText(1, dir)
+			_, err := upsertPrefix.Step()
 			if err != nil {
-				log.Printf("Unable to insert path %s: %s\n", imageInfo.Path, err.Error())
+				log.Printf("Unable to insert path prefix %s: %s\n", dir, err.Error())
+				continue
+			}
+			err = upsertPrefix.Reset()
+			if err != nil {
+				panic(err)
+			}
+
+			appendPath.BindText(1, file)
+			appendPath.BindText(2, dir)
+			_, err = appendPath.Step()
+			if err != nil {
+				log.Printf("Unable to insert path filename %s: %s\n", file, err.Error())
 				continue
 			}
 			err = appendPath.Reset()
@@ -206,11 +272,17 @@ func (source *Database) writePendingInfosSqlite() {
 				panic(err)
 			}
 		case UpdateMeta:
-			updateMeta.BindText(1, imageInfo.Path)
+			dir, file := filepath.Split(imageInfo.Path)
+			_, timezoneOffsetSeconds := imageInfo.DateTime.Zone()
+
+			updateMeta.BindText(1, file)
 			updateMeta.BindInt64(2, (int64)(imageInfo.Width))
 			updateMeta.BindInt64(3, (int64)(imageInfo.Height))
 			updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
-			updateMeta.BindText(5, imageInfo.DateTime.Format(dateFormat))
+			updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
+			updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
+			updateMeta.BindText(7, dir)
+
 			_, err := updateMeta.Step()
 			if err != nil {
 				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
@@ -221,8 +293,12 @@ func (source *Database) writePendingInfosSqlite() {
 				panic(err)
 			}
 		case UpdateColor:
-			updateColor.BindText(1, imageInfo.Path)
+			dir, file := filepath.Split(imageInfo.Path)
+
+			updateColor.BindText(1, file)
 			updateColor.BindInt64(2, (int64)(imageInfo.Color))
+			updateColor.BindText(3, dir)
+
 			_, err := updateColor.Step()
 			if err != nil {
 				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
@@ -234,7 +310,11 @@ func (source *Database) writePendingInfosSqlite() {
 			}
 
 		case Delete:
-			delete.BindText(1, imageInfo.Path)
+			dir, file := filepath.Split(imageInfo.Path)
+
+			delete.BindText(1, dir)
+			delete.BindText(2, file)
+
 			_, err := delete.Step()
 			if err != nil {
 				log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
@@ -260,30 +340,64 @@ func (source *Database) writePendingInfosSqlite() {
 
 		}
 
-		sinceLastCommitMs := time.Since(lastCommit).Seconds()
-		if inTransaction && (sinceLastCommitMs >= 10 || len(source.pending) == 0) {
+		sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
+		if inTransaction && (sinceLastCommitSeconds >= 10 || len(source.pending) == 0) {
 			err := sqlitex.Exec(conn, "COMMIT;", nil)
-			source.transactionMutex.Unlock()
+			lastCommit = time.Now()
 			if err != nil {
 				panic(err)
 			}
-			lastCommit = time.Now()
+
+			if time.Since(lastOptimize).Hours() >= 1 {
+				lastOptimize = time.Now()
+				log.Println("database optimizing")
+				optimizeDone := metrics.Elapsed("database optimize")
+				err = sqlitex.Exec(conn, "PRAGMA optimize;", nil)
+				if err != nil {
+					panic(err)
+				}
+				optimizeDone()
+			}
+
+			source.transactionMutex.Unlock()
 			inTransaction = false
 		}
 	}
 }
 
-func (source *Database) Get(path string) (InfoResult, bool) {
+func (source *Database) GetPathFromId(id ImageId) (string, bool) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+		SELECT str || filename as path
+		FROM infos
+		JOIN prefix ON path_prefix_id == prefix.id
+		WHERE infos.rowid == ?;`)
+	defer stmt.Finalize()
+
+	stmt.BindInt64(1, (int64)(id))
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return "", false
+	}
+
+	return stmt.ColumnText(0), true
+}
+
+func (source *Database) Get(id ImageId) (InfoResult, bool) {
 
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-		SELECT width, height, orientation, color, created_at FROM infos
-		WHERE path = ?;`)
+		SELECT width, height, orientation, color, created_at
+		FROM infos
+		WHERE rowid == ?;`)
 	defer stmt.Finalize()
 
-	stmt.BindText(1, path)
+	stmt.BindInt64(1, (int64)(id))
 
 	var info InfoResult
 
@@ -349,6 +463,7 @@ func (source *Database) WaitForCommit() {
 
 func (source *Database) DeleteNonexistent(dir string, m map[string]struct{}) {
 	source.WaitForCommit()
+	// TODO delete prefixes
 	for path := range source.ListPaths([]string{dir}, 0) {
 		_, exists := m[path]
 		if !exists {
@@ -372,23 +487,30 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT path, width, height, orientation, color, created_at, datetime(created_at, "utc") as created_at_utc
+			SELECT rowid, width, height, orientation, color, created_at_unix, created_at_tz_offset
 			FROM infos
-			WHERE 
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
 		`
 
 		for i := range dirs {
-			sql += `path LIKE ? `
+			sql += `str LIKE ? `
 			if i < len(dirs)-1 {
 				sql += "OR "
 			}
 		}
 
+		sql += `
+			)
+		`
+
 		switch options.OrderBy {
 		case DateAsc:
-			sql += `ORDER BY created_at_utc ASC `
+			sql += `ORDER BY created_at_unix ASC `
 		case DateDesc:
-			sql += `ORDER BY created_at_utc DESC `
+			sql += `ORDER BY created_at_unix DESC `
 		default:
 			panic("Unsupported listing order")
 		}
@@ -419,7 +541,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 				break
 			}
 			var info InfoListResult
-			info.Path = stmt.ColumnText(0)
+			info.Id = (ImageId)(stmt.ColumnInt64(0))
 
 			info.Width = stmt.ColumnInt(1)
 			info.Height = stmt.ColumnInt(2)
@@ -431,7 +553,10 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			info.Color = (uint32)(stmt.ColumnInt64(4))
 			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
 
-			info.DateTime, _ = time.Parse(dateFormat, stmt.ColumnText(5))
+			unix := stmt.ColumnInt64(5)
+			timezoneOffset := stmt.ColumnInt(6)
+
+			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
 			out <- info
@@ -451,17 +576,25 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT path, width, height, created_at, color
+			SELECT str || filename as path
 			FROM infos
-			WHERE 
+			JOIN prefix ON path_prefix_id == prefix.id
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
 		`
 
 		for i := range dirs {
-			sql += `path LIKE ? `
+			sql += `str LIKE ? `
 			if i < len(dirs)-1 {
 				sql += "OR "
 			}
 		}
+
+		sql += `
+			)
+		`
 
 		if limit > 0 {
 			sql += `LIMIT ? `
@@ -489,6 +622,67 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 				break
 			}
 			out <- stmt.ColumnText(0)
+		}
+
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListIds(dirs []string, limit int) <-chan ImageId {
+	out := make(chan ImageId, 10000)
+	go func() {
+		defer metrics.Elapsed("listing ids sqlite")()
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT rowid as id
+			FROM infos
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		if limit > 0 {
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		bindIndex := 1
+		defer stmt.Finalize()
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			out <- (ImageId)(stmt.ColumnInt64(0))
 		}
 
 		close(out)

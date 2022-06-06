@@ -900,6 +900,7 @@ func main() {
 	startupTime = time.Now()
 
 	versionPtr := flag.Bool("version", false, "print version and exit")
+	vacuumPtr := flag.Bool("vacuum", false, "clean database for smaller size and better performance, and exit")
 
 	flag.Parse()
 
@@ -907,6 +908,7 @@ func main() {
 		fmt.Printf("photofield %s, commit %s, built on %s by %s\n", version, commit, date, builtBy)
 		return
 	}
+
 	log.Printf("photofield %s", version)
 
 	loadEnv()
@@ -934,6 +936,15 @@ func main() {
 
 	imageSource = image.NewSource(appConfig.Media, migrations)
 	defer imageSource.Close()
+
+	if *vacuumPtr {
+		err := imageSource.Vacuum()
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
 	sceneSource = scene.NewSceneSource()
 
 	fontFamily := canvas.NewFontFamily("Main")

@@ -15,21 +15,21 @@ type InfoCache struct {
 	cache *ristretto.Cache
 }
 
-func (c *InfoCache) Get(path string) (Info, bool) {
-	value, found := c.cache.Get(path)
+func (c *InfoCache) Get(id ImageId) (Info, bool) {
+	value, found := c.cache.Get((uint32)(id))
 	if found {
 		return value.(Info), true
 	}
 	return Info{}, false
 }
 
-func (c *InfoCache) Set(path string, info Info) error {
-	c.cache.Set(path, info, (int64)(unsafe.Sizeof(info)))
+func (c *InfoCache) Set(id ImageId, info Info) error {
+	c.cache.Set((uint32)(id), info, (int64)(unsafe.Sizeof(info)))
 	return nil
 }
 
-func (c *InfoCache) Delete(path string) {
-	c.cache.Del(path)
+func (c *InfoCache) Delete(id ImageId) {
+	c.cache.Del((uint32)(id))
 }
 
 func newInfoCache() InfoCache {
@@ -111,29 +111,26 @@ func newImageCache(caches Caches) ImageCache {
 }
 
 func (c *ImageCache) GetOrLoad(path string, thumbnail *Thumbnail, loader ImageLoader) (image.Image, Info, error) {
-	tries := 10
 	key := path
 	if thumbnail != nil {
 		key += "|thumbnail|" + thumbnail.Name
 	}
-	for try := 0; try < tries; try++ {
-		value, found := c.cache.Get(key)
-		if found {
-			imageRef := value.(imageRef)
-			return imageRef.image, imageRef.info, imageRef.err
-		} else {
-			image, info, err := loader.Acquire(key, path, thumbnail)
-			imageRef := imageRef{
-				image: image,
-				info:  info,
-				err:   err,
-			}
-			c.cache.SetWithTTL(key, imageRef, 0, 10*time.Minute)
-			loader.Release(key)
-			return image, info, err
-		}
+
+	value, found := c.cache.Get(key)
+	if found {
+		imageRef := value.(imageRef)
+		return imageRef.image, imageRef.info, imageRef.err
 	}
-	return nil, Info{}, fmt.Errorf("unable to get image after %v tries", tries)
+
+	image, info, err := loader.Acquire(key, path, thumbnail)
+	imageRef := imageRef{
+		image: image,
+		info:  info,
+		err:   err,
+	}
+	c.cache.SetWithTTL(key, imageRef, 0, 10*time.Minute)
+	loader.Release(key)
+	return image, info, err
 }
 
 func (c *ImageCache) Delete(path string) {
@@ -152,4 +149,41 @@ func newFileExistsCache() *ristretto.Cache {
 	}
 	metrics.AddRistretto("file_exists_cache", cache)
 	return cache
+}
+
+type PathCache struct {
+	cache *ristretto.Cache
+}
+
+func (c *PathCache) Get(id ImageId) (string, bool) {
+	value, found := c.cache.Get((uint32)(id))
+	if found {
+		return value.(string), true
+	}
+	return "", false
+}
+
+func (c *PathCache) Set(id ImageId, path string) error {
+	c.cache.Set((uint32)(id), path, (int64)(len(path)))
+	return nil
+}
+
+func (c *PathCache) Delete(id ImageId) {
+	c.cache.Del((uint32)(id))
+}
+
+func newPathCache() PathCache {
+	cache, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: 10e3,    // number of keys to track frequency of (10k).
+		MaxCost:     1 << 22, // maximum cost of cache (4MB).
+		BufferItems: 64,      // number of keys per Get buffer.
+		Metrics:     true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	metrics.AddRistretto("path_cache", cache)
+	return PathCache{
+		cache: cache,
+	}
 }
