@@ -134,7 +134,7 @@ func (source *Database) migrate(migrations embed.FS) {
 	}
 
 	version, dirty, err := m.Version()
-	if err != nil {
+	if err != nil && err != migrate.ErrNilVersion {
 		panic(err)
 	}
 
