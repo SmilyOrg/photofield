@@ -965,7 +965,10 @@ func main() {
 	// addExampleScene()
 	// renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 
-	addr := ":8080"
+	addr, exists := os.LookupEnv("PHOTOFIELD_ADDRESS")
+	if !exists {
+		addr = ":8080"
+	}
 
 	apiPrefix, exists := os.LookupEnv("PHOTOFIELD_API_PREFIX")
 	if !exists {
