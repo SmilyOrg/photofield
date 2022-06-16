@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"math"
+	"mime"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -1011,6 +1012,16 @@ func main() {
 	r.Handle("/debug/fgprof", fgprof.Handler())
 
 	if apiPrefix != "/" {
+		// Hardcode well-known mime types, see https://github.com/golang/go/issues/32350
+		mime.AddExtensionType(".js", "text/javascript")
+		mime.AddExtensionType(".css", "text/css")
+		mime.AddExtensionType(".html", "text/html")
+		mime.AddExtensionType(".woff", "font/woff")
+		mime.AddExtensionType(".woff2", "font/woff2")
+		mime.AddExtensionType(".png", "image/png")
+		mime.AddExtensionType(".jpg", "image/jpg")
+		mime.AddExtensionType(".jpeg", "image/jpeg")
+		mime.AddExtensionType(".ico", "image/vnd.microsoft.icon")
 		subfs, err := fs.Sub(StaticFs, "ui/dist")
 		if err != nil {
 			panic(err)
