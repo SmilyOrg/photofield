@@ -1,5 +1,5 @@
 <template>
-  <div class="container" :class="{ fullpage }">
+  <div class="container" :class="{ fullpage, fixed: !nativeScroll }">
 
     <page-title :title="pageTitle"></page-title>
     
@@ -942,7 +942,9 @@ export default {
       if (scrollRatio == null) {
         if (this.scrollbar) {
           const scroll = this.scrollbar.scroll();
-          scrollRatio = scroll.ratio.y;
+          // Uncomment for scroll position debugging
+          // console.log(scroll.position, scroll.max, scroll.ratio, scroll.position.y / viewMaxY)
+          scrollRatio = scroll.position.y / viewMaxY;
         } else {
           const scroller = this.$refs.scroller;
           const scrollMaxY = 
@@ -957,6 +959,9 @@ export default {
         }
       }
 
+      // Ratio can be outside of range if the range has changed recently
+      scrollRatio = Math.min(1, Math.max(0, scrollRatio));
+
       const viewY = scrollRatio * viewMaxY;
       const view = {
         x: 0,
@@ -965,6 +970,9 @@ export default {
         h: this.window.height,
       }
       this.$refs.viewer.setView(view, transition && { animationTime: transition });
+      
+      // Offset the native browser scroll to keep the viewer visible
+      this.$refs.viewer.$el.style.transform = `translate(0, ${viewY}px)`;
 
       this.visibleRegionsTask.perform(view, this.sceneParams);
     },
@@ -1010,8 +1018,16 @@ export default {
 }
 
 .container.fullpage .viewer {
-  position: fixed;
+  position: absolute;
   width: 100vw;
+  height: 100vh;
+  margin-top: -64px;
+}
+
+.container.fullpage.fixed .viewer {
+  position: fixed;
+  margin-top: 0;
+  transform: translate(0, 0) !important;
 }
 
 .context-menu {
