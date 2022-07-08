@@ -614,6 +614,8 @@ export default {
 
     onResize(rect) {
       if (rect.width == 0 || rect.height == 0) return;
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
       this.resizeApplyTask.perform(rect, this.pushScrollToView);
     },
 
@@ -1009,6 +1011,8 @@ export default {
   position: absolute;
   width: 100vw;
   height: 100vh;
+  /* Fix for mobile browsers */
+  height: calc(var(--vh, 1vh) * 100);
   margin-top: -64px;
 }
 
