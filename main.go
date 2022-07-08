@@ -613,6 +613,7 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	render.Zoom = zoom
 	drawTile(context, &render, scene, zoom, x, y)
 
+	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	codec.EncodeJpeg(w, img)
 }
 
