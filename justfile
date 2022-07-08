@@ -18,6 +18,10 @@ release-local:
 run *args: build
   ./photofield {{args}}
 
+run-static *args:
+  go build -tags embedstatic
+  ./photofield {{args}}
+
 ui:
   cd ui && npm run dev
 
