@@ -3,18 +3,6 @@
 
     <page-title :title="pageTitle"></page-title>
     
-    <!-- <div>
-      <div v-if="collectionTask.isRunning">Loading...</div>
-      <div v-else-if="collectionTask.isError">
-        <p>{{ collectionTask.last.error.message }}</p>
-        <button @click="collectionTask.perform">Try again</button>
-      </div>
-      <h2>Collection</h2><pre>{{ collection }}</pre>
-      <h2>Scene Params</h2><pre>{{ sceneParams }}</pre>
-      <h2>Scene</h2><pre>{{ scene }}</pre>
-      <h2>Region</h2><pre>{{ region }}</pre>
-    </div> -->
-
     <tile-viewer
       class="viewer"
       ref="viewer"
