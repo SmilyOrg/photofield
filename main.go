@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"math"
 	"mime"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -913,6 +914,17 @@ func CacheControl() func(next http.Handler) http.Handler {
 	}
 }
 
+func IndexHTML() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/") || len(r.URL.Path) == 0 {
+				r.URL.Path = path.Join(r.URL.Path, "index.html")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func main() {
 
 	startupTime = time.Now()
@@ -1052,6 +1064,7 @@ func main() {
 
 		r.Route("/", func(r chi.Router) {
 			r.Use(CacheControl())
+			r.Use(IndexHTML())
 			r.Handle("/*", server)
 		})
 		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
