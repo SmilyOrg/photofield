@@ -16,11 +16,13 @@ require (
 	github.com/go-chi/render v1.0.1
 	github.com/goccy/go-yaml v1.7.17
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.1
+	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f // indirect
 	github.com/gosimple/slug v1.10.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/imdario/mergo v0.3.12
 	github.com/joho/godotenv v1.3.0
 	github.com/karrick/godirwalk v1.15.6
+	github.com/lpar/gzipped v1.1.0
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0
 	github.com/mattn/go-colorable v0.1.9 // indirect

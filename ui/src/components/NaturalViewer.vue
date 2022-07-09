@@ -3,18 +3,6 @@
 
     <page-title :title="pageTitle"></page-title>
     
-    <!-- <div>
-      <div v-if="collectionTask.isRunning">Loading...</div>
-      <div v-else-if="collectionTask.isError">
-        <p>{{ collectionTask.last.error.message }}</p>
-        <button @click="collectionTask.perform">Try again</button>
-      </div>
-      <h2>Collection</h2><pre>{{ collection }}</pre>
-      <h2>Scene Params</h2><pre>{{ sceneParams }}</pre>
-      <h2>Scene</h2><pre>{{ scene }}</pre>
-      <h2>Region</h2><pre>{{ region }}</pre>
-    </div> -->
-
     <tile-viewer
       class="viewer"
       ref="viewer"
@@ -626,6 +614,8 @@ export default {
 
     onResize(rect) {
       if (rect.width == 0 || rect.height == 0) return;
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
       this.resizeApplyTask.perform(rect, this.pushScrollToView);
     },
 
@@ -1021,6 +1011,8 @@ export default {
   position: absolute;
   width: 100vw;
   height: 100vh;
+  /* Fix for mobile browsers */
+  height: calc(var(--vh, 1vh) * 100);
   margin-top: -64px;
 }
 

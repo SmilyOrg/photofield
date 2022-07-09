@@ -11,7 +11,9 @@ import (
 	"io/ioutil"
 	"math"
 	"mime"
+	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -32,6 +34,7 @@ import (
 	chirender "github.com/go-chi/render"
 	"github.com/imdario/mergo"
 	"github.com/joho/godotenv"
+	"github.com/lpar/gzipped"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
@@ -61,6 +64,8 @@ var migrations embed.FS
 
 //go:embed fonts/Roboto/Roboto-Regular.ttf
 var robotoRegular []byte
+
+var staticCacheRegex = regexp.MustCompile(`.+\.\w`)
 
 var (
 	version = "dev"
@@ -609,6 +614,7 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	render.Zoom = zoom
 	drawTile(context, &render, scene, zoom, x, y)
 
+	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	codec.EncodeJpeg(w, img)
 }
 
@@ -890,10 +896,33 @@ type spaFs struct {
 
 func (fs spaFs) Open(name string) (http.File, error) {
 	f, err := fs.root.Open(name)
-	if os.IsNotExist(err) {
+	if os.IsNotExist(err) && !strings.HasSuffix(name, ".br") && !strings.HasSuffix(name, ".gz") {
 		return fs.root.Open("index.html")
 	}
 	return f, err
+}
+
+func CacheControl() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			if staticCacheRegex.MatchString(r.URL.Path) {
+				w.Header().Set("Cache-Control", "max-age=31536000")
+			}
+			next.ServeHTTP(w, r)
+		}
+		return http.HandlerFunc(fn)
+	}
+}
+
+func IndexHTML() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/") || len(r.URL.Path) == 0 {
+				r.URL.Path = path.Join(r.URL.Path, "index.html")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func main() {
@@ -1026,11 +1055,18 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+
 		sfs := spaFs{
 			root: http.FS(subfs),
 		}
-		server := http.FileServer(sfs)
-		r.Handle("/*", server)
+
+		server := gzipped.FileServer(sfs)
+
+		r.Route("/", func(r chi.Router) {
+			r.Use(CacheControl())
+			r.Use(IndexHTML())
+			r.Handle("/*", server)
+		})
 		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
 	}
 
