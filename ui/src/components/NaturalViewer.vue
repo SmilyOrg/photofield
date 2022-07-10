@@ -528,10 +528,12 @@ export default {
 
     addFullpageListeners() {
       window.addEventListener('scroll', this.onScroll);
+      window.addEventListener('resize', this.onWindowResize);
     },
 
     removeFullpageListeners() {
       window.removeEventListener('scroll', this.onScroll);
+      window.removeEventListener('resize', this.onWindowResize);
     },
 
     attachScrollbar(scrollbar) {
@@ -651,9 +653,13 @@ export default {
 
     onResize(rect) {
       if (rect.width == 0 || rect.height == 0) return;
+      this.resizeApplyTask.perform(rect, this.pushScrollToView);
+    },
+
+    onWindowResize(rect) {
+      if (rect.width == 0 || rect.height == 0) return;
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
-      this.resizeApplyTask.perform(rect, this.pushScrollToView);
     },
 
     onScroll(event) {
