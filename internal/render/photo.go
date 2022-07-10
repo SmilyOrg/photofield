@@ -53,51 +53,6 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
-func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) []BitmapAtZoom {
-
-	originalInfo := photo.GetInfo(source)
-	originalSize := originalInfo.Size()
-	originalPath := photo.GetPath(source)
-	originalZoomDist := math.Inf(1)
-	if source.IsSupportedImage(originalPath) {
-		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
-	}
-
-	bitmaps := make([]BitmapAtZoom, 1+len(source.Images.Thumbnails))
-	bitmaps[0] = BitmapAtZoom{
-		Bitmap: Bitmap{
-			Path:        originalPath,
-			Orientation: originalInfo.Orientation,
-			Sprite:      photo.Sprite,
-		},
-		ZoomDist: originalZoomDist,
-	}
-
-	for i := range source.Images.Thumbnails {
-		thumbnail := &source.Images.Thumbnails[i]
-		thumbSize := thumbnail.Fit(originalSize)
-		thumbPath := thumbnail.GetPath(originalPath)
-		bitmaps[1+i] = BitmapAtZoom{
-			Bitmap: Bitmap{
-				Path: thumbPath,
-				Sprite: Sprite{
-					Rect: photo.Sprite.Rect,
-				},
-			},
-			ZoomDist: photo.Sprite.Rect.GetPixelZoomDist(c, thumbSize),
-		}
-		// fmt.Printf("orig w %4.0f h %4.0f   thumb w %4.0f h %4.0f   zoom dist best %8.2f cur %8.2f area %8.6f\n", originalSize.Width, originalSize.Height, thumbSize.Width, thumbSize.Height, bestZoomDist, zoomDist, photo.Original.Sprite.Rect.GetPixelArea(c, thumbSize))
-	}
-
-	sort.Slice(bitmaps, func(i, j int) bool {
-		a := bitmaps[i]
-		b := bitmaps[j]
-		return a.ZoomDist < b.ZoomDist
-	})
-
-	return bitmaps
-}
-
 func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, originalPath string) []Variant {
 
 	originalInfo := photo.GetInfo(source)
@@ -107,15 +62,16 @@ func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Cont
 		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
 	}
 
-	variants := make([]Variant, 1+len(source.Images.Thumbnails))
+	thumbnails := source.GetApplicableThumbnails(originalPath)
+	variants := make([]Variant, 1+len(thumbnails))
 	variants[0] = Variant{
 		Thumbnail:   nil,
 		Orientation: originalInfo.Orientation,
 		ZoomDist:    originalZoomDist,
 	}
 
-	for i := range source.Images.Thumbnails {
-		thumbnail := &source.Images.Thumbnails[i]
+	for i := range thumbnails {
+		thumbnail := &thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
 		variants[1+i] = Variant{
 			Thumbnail: thumbnail,

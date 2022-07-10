@@ -46,7 +46,7 @@
           v-for="thumb in region.data?.thumbnails"
           :key="thumb.name"
           class="thumbnail"
-          :href="getThumbnailUrl(region.data.id, thumb.name, region.data.filename)"
+          :href="getThumbnailUrl(region.data.id, thumb.name, thumb.filename)"
           target="_blank"
         >
           {{ thumb.width }}

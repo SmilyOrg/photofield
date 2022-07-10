@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"fmt"
 	"log"
 	"path/filepath"
 	"photofield/internal/image"
@@ -48,9 +49,10 @@ type PhotoRegionSource struct {
 }
 
 type RegionThumbnail struct {
-	Name   string `json:"name"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
+	Name     string `json:"name"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	Filename string `json:"filename"`
 }
 
 type PhotoRegionData struct {
@@ -77,24 +79,26 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 		Y: info.Height,
 	}
 	isVideo := source.IsSupportedVideo(originalPath)
+	extension := strings.ToLower(filepath.Ext(originalPath))
+	filename := filepath.Base(originalPath)
 
-	var thumbnailTemplates []image.Thumbnail
-	if isVideo {
-		thumbnailTemplates = source.Videos.Thumbnails
-	} else {
-		thumbnailTemplates = source.Images.Thumbnails
-	}
-
+	thumbnailTemplates := source.GetApplicableThumbnails(originalPath)
 	var thumbnails []RegionThumbnail
 	for i := range thumbnailTemplates {
 		thumbnail := &thumbnailTemplates[i]
 		thumbnailPath := thumbnail.GetPath(originalPath)
 		if source.Exists(thumbnailPath) {
 			thumbnailSize := thumbnail.Fit(originalSize)
+			basename := strings.TrimSuffix(filename, extension)
+			thumbnailFilename := fmt.Sprintf(
+				"%s_%s%s",
+				basename, thumbnail.Name, filepath.Ext(thumbnailPath),
+			)
 			thumbnails = append(thumbnails, RegionThumbnail{
-				Name:   thumbnail.Name,
-				Width:  thumbnailSize.X,
-				Height: thumbnailSize.Y,
+				Name:     thumbnail.Name,
+				Width:    thumbnailSize.X,
+				Height:   thumbnailSize.Y,
+				Filename: thumbnailFilename,
 			})
 		}
 	}
@@ -105,8 +109,8 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 		Data: PhotoRegionData{
 			Id:         int(photo.Id),
 			Path:       originalPath,
-			Filename:   filepath.Base(originalPath),
-			Extension:  strings.ToLower(filepath.Ext(originalPath)),
+			Filename:   filename,
+			Extension:  extension,
 			Video:      isVideo,
 			Width:      info.Width,
 			Height:     info.Height,

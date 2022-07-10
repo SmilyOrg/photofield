@@ -44,7 +44,13 @@ export default {
   watch: {
 
     scene(newScene, oldScene) {
-      if (newScene?.id == oldScene?.id) return;
+      if (
+        newScene?.id == oldScene?.id &&
+        newScene.bounds.w == oldScene.bounds.w &&
+        newScene.bounds.h == oldScene.bounds.h
+      ) {
+        return;
+      }
       this.reset();
     },
 

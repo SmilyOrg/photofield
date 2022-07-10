@@ -60,96 +60,104 @@ media:
     # Extensions to use to understand a file to be an image
     extensions: [".jpg", ".jpeg", ".png", ".gif"]
 
-    # Pre-generated thumbnail configuration, these thumbnails will be used to
-    # greatly speed up the rendering
-    thumbnails:
-  
-      # name: Short thumbnail type name
-      #
-      # path: Path template where to find the thumbnail.
-      #   {{.Dir}} is replaced by the parent directory of the original photo
-      #   {{.Filename}} is replaced by the original photo filename
-      #
-      # fit: Aspect ratio fit of the thumbnail in case it doesn't match the
-      #      original photo.
-      #
-      #   INSIDE
-      #     The thumbnail size is the maximum size of each dimension, so in case
-      #     of different aspect ratios, one dimension will always be smaller.
-      #
-      #   OUTSIDE
-      #     The thumbnail size is the minimum size of each dimension, so in case
-      #     of different aspect ratios, one dimension will always be bigger.
-      #
-      #   ORIGINAL
-      #     The size of the thumbnail is equal the size of the original. Mostly
-      #     useful for transcoded or differently encoded files.
-      #
-      # width
-      # height: Predefined thumbnail dimensions used to pick the most
-      #         appropriately-sized thumbnail for the zoom level. 
-      # 
-      # extra_cost: Additional weight to add when picking the closest thumbnail.
-      #             Higher number means that other thumbnails will be preferred
-      #             if they exist.
-
-      #
-      # Embedded JPEG thumbnail
-      #
-      - name: exif-thumb
-        exif: ThumbnailImage
-        fit: INSIDE
-        width: 120
-        height: 120
-        # It's expensive to extract, so this makes it more of a last resort, but
-        # still a lot better than loading the original photo.
-        extra_cost: 10
-        
-      #
-      # Synology Moments / Photo Station thumbnails
-      #
-      - name: S
-        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
-        fit: INSIDE
-        width: 120
-        height: 120
-        
-      - name: SM
-        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg"
-        fit: OUTSIDE
-        width: 240
-        height: 240
-        
-      - name: M
-        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg"
-        fit: OUTSIDE
-        width: 320
-        height: 320
-        
-      - name: B
-        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg"
-        fit: INSIDE
-        width: 640
-        height: 640
-        
-      - name: XL
-        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg"
-        fit: OUTSIDE
-        width: 1280
-        height: 1280
-  
   videos:
     extensions: [".mp4"]
-    thumbnails:
-      #
-      # Synology Moments / Photo Station video variants
-      #
-      - name: M
-        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
-        fit: OUTSIDE
-        width: 720
-        height: 720
-        
-      - name: H264
-        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4"
-        fit: ORIGINAL
+
+  # Pre-generated thumbnail configuration, these thumbnails will be used to
+  # greatly speed up the rendering
+  thumbnails:
+
+    # name: Short thumbnail type name
+    #
+    # path: Path template where to find the thumbnail.
+    #   {{.Dir}} is replaced by the parent directory of the original photo
+    #   {{.Filename}} is replaced by the original photo filename
+    #
+    # fit: Aspect ratio fit of the thumbnail in case it doesn't match the
+    #      original photo.
+    #
+    #   INSIDE
+    #     The thumbnail size is the maximum size of each dimension, so in case
+    #     of different aspect ratios, one dimension will always be smaller.
+    #
+    #   OUTSIDE
+    #     The thumbnail size is the minimum size of each dimension, so in case
+    #     of different aspect ratios, one dimension will always be bigger.
+    #
+    #   ORIGINAL
+    #     The size of the thumbnail is equal the size of the original. Mostly
+    #     useful for transcoded or differently encoded files.
+    #
+    # width
+    # height: Predefined thumbnail dimensions used to pick the most
+    #         appropriately-sized thumbnail for the zoom level. 
+    # 
+    # extra_cost: Additional weight to add when picking the closest thumbnail.
+    #             Higher number means that other thumbnails will be preferred
+    #             if they exist.
+
+    #
+    # Embedded JPEG thumbnail
+    #
+    - name: exif-thumb
+      exif: ThumbnailImage
+      extensions: [".jpg", ".jpeg"]
+      fit: INSIDE
+      width: 120
+      height: 120
+      # It's expensive to extract, so this makes it more of a last resort, but
+      # still a lot better than loading the original photo.
+      extra_cost: 10
+      
+    #
+    # Synology Moments / Photo Station thumbnails
+    #
+    - name: S
+      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
+      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+      fit: INSIDE
+      width: 120
+      height: 120
+      
+    - name: SM
+      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg"
+      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+      fit: OUTSIDE
+      width: 240
+      height: 240
+      
+    - name: M
+      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg"
+      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+      fit: OUTSIDE
+      width: 320
+      height: 320
+      
+    - name: B
+      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg"
+      extensions: [".jpg", ".jpeg", ".png", ".gif"]
+      fit: INSIDE
+      width: 640
+      height: 640
+      
+    - name: XL
+      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg"
+      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+      fit: OUTSIDE
+      width: 1280
+      height: 1280
+      
+    #
+    # Synology Moments / Photo Station video variants
+    #
+    - name: FM
+      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
+      extensions: [".mp4"]
+      fit: OUTSIDE
+      width: 720
+      height: 720
+      
+    - name: H264
+      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4"
+      extensions: [".mp4"]
+      fit: ORIGINAL

@@ -47,17 +47,17 @@ type Config struct {
 	ConcurrentMetaLoads  int  `json:"concurrent_meta_loads"`
 	ConcurrentColorLoads int  `json:"concurrent_color_loads"`
 
-	ListExtensions []string   `json:"extensions"`
-	DateFormats    []string   `json:"date_formats"`
-	Images         FileConfig `json:"images"`
-	Videos         FileConfig `json:"videos"`
+	ListExtensions []string    `json:"extensions"`
+	DateFormats    []string    `json:"date_formats"`
+	Images         FileConfig  `json:"images"`
+	Videos         FileConfig  `json:"videos"`
+	Thumbnails     []Thumbnail `json:"thumbnails"`
 
 	Caches Caches `json:"caches"`
 }
 
 type FileConfig struct {
-	Extensions []string    `json:"extensions"`
-	Thumbnails []Thumbnail `json:"thumbnails"`
+	Extensions []string `json:"extensions"`
 }
 
 type Source struct {
@@ -209,4 +209,22 @@ func (source *Source) GetDir(dir string) Info {
 	dir = filepath.FromSlash(dir)
 	result, _ := source.database.GetDir(dir)
 	return result.Info
+}
+
+func (source *Source) GetApplicableThumbnails(path string) []Thumbnail {
+	thumbs := make([]Thumbnail, 0, len(source.Thumbnails))
+	pathExt := strings.ToLower(filepath.Ext(path))
+	for _, t := range source.Thumbnails {
+		supported := false
+		for _, ext := range t.Extensions {
+			if pathExt == ext {
+				supported = true
+				break
+			}
+		}
+		if supported {
+			thumbs = append(thumbs, t)
+		}
+	}
+	return thumbs
 }

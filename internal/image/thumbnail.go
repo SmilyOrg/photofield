@@ -17,8 +17,8 @@ type Thumbnail struct {
 	Name            string `json:"name"`
 	PathTemplateRaw string `json:"path"`
 	PathTemplate    *template.Template
-
-	Exif string `json:"exif"`
+	Exif            string   `json:"exif"`
+	Extensions      []string `json:"extensions"`
 
 	SizeTypeRaw string `json:"fit"`
 	SizeType    ThumbnailSizeType

@@ -311,25 +311,10 @@ paths:
         "404":
           $ref: "#/components/responses/FileNotFound"
 
-  /files/{id}/image-variants/{size}/{filename}:
+  /files/{id}/variants/{size}/{filename}:
     get:
-      description: Get an image thumbnail of the specified predefined size and
-        with an arbitrary filename as part of the URL
-      tags: ["Files"]
-      parameters:
-        - $ref: "#/components/parameters/FileIdPathParam"
-        - $ref: "#/components/parameters/FilenamePathParam"
-        - $ref: "#/components/parameters/SizePathParam"
-      responses:
-        "200":
-          $ref: "#/components/responses/FileResponse"
-        "404":
-          $ref: "#/components/responses/FileNotFound"
-
-  /files/{id}/video-variants/{size}/{filename}:
-    get:
-      description: Get a resized video of the specified predefined size and
-        with an arbitrary filename as part of the URL
+      description: Get an image or resized video variant/thumbnail of the
+        specified predefined size and with an arbitrary filename as part of the URL
       tags: ["Files"]
       parameters:
         - $ref: "#/components/parameters/FileIdPathParam"

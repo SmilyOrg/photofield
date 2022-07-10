@@ -96,11 +96,7 @@ export async function getFileBlob(id) {
 }
 
 export function getThumbnailUrl(id, size, filename) {
-  return `${host}/files/${id}/image-variants/${size}/${filename}`;
-}
-
-export function getVideoUrl(id, size, filename) {
-  return `${host}/files/${id}/video-variants/${size}/${filename}`;
+  return `${host}/files/${id}/variants/${size}/${filename}`;
 }
 
 export function useApi(getUrl, config) {

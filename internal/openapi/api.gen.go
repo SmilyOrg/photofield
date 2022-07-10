@@ -208,14 +208,11 @@ type ServerInterface interface {
 	// (GET /files/{id})
 	GetFilesId(w http.ResponseWriter, r *http.Request, id FileIdPathParam)
 
-	// (GET /files/{id}/image-variants/{size}/{filename})
-	GetFilesIdImageVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, size SizePathParam, filename FilenamePathParam)
-
 	// (GET /files/{id}/original/{filename})
 	GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, filename FilenamePathParam)
 
-	// (GET /files/{id}/video-variants/{size}/{filename})
-	GetFilesIdVideoVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, size SizePathParam, filename FilenamePathParam)
+	// (GET /files/{id}/variants/{size}/{filename})
+	GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, size SizePathParam, filename FilenamePathParam)
 
 	// (GET /scenes)
 	GetScenes(w http.ResponseWriter, r *http.Request, params GetScenesParams)
@@ -317,50 +314,6 @@ func (siw *ServerInterfaceWrapper) GetFilesId(w http.ResponseWriter, r *http.Req
 	handler(w, r.WithContext(ctx))
 }
 
-// GetFilesIdImageVariantsSizeFilename operation middleware
-func (siw *ServerInterfaceWrapper) GetFilesIdImageVariantsSizeFilename(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var err error
-
-	// ------------- Path parameter "id" -------------
-	var id FileIdPathParam
-
-	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Path parameter "size" -------------
-	var size SizePathParam
-
-	err = runtime.BindStyledParameter("simple", false, "size", chi.URLParam(r, "size"), &size)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid format for parameter size: %s", err), http.StatusBadRequest)
-		return
-	}
-
-	// ------------- Path parameter "filename" -------------
-	var filename FilenamePathParam
-
-	err = runtime.BindStyledParameter("simple", false, "filename", chi.URLParam(r, "filename"), &filename)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid format for parameter filename: %s", err), http.StatusBadRequest)
-		return
-	}
-
-	var handler = func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFilesIdImageVariantsSizeFilename(w, r, id, size, filename)
-	}
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler(w, r.WithContext(ctx))
-}
-
 // GetFilesIdOriginalFilename operation middleware
 func (siw *ServerInterfaceWrapper) GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -396,8 +349,8 @@ func (siw *ServerInterfaceWrapper) GetFilesIdOriginalFilename(w http.ResponseWri
 	handler(w, r.WithContext(ctx))
 }
 
-// GetFilesIdVideoVariantsSizeFilename operation middleware
-func (siw *ServerInterfaceWrapper) GetFilesIdVideoVariantsSizeFilename(w http.ResponseWriter, r *http.Request) {
+// GetFilesIdVariantsSizeFilename operation middleware
+func (siw *ServerInterfaceWrapper) GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var err error
@@ -430,7 +383,7 @@ func (siw *ServerInterfaceWrapper) GetFilesIdVideoVariantsSizeFilename(w http.Re
 	}
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetFilesIdVideoVariantsSizeFilename(w, r, id, size, filename)
+		siw.Handler.GetFilesIdVariantsSizeFilename(w, r, id, size, filename)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -890,13 +843,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/files/{id}", wrapper.GetFilesId)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/files/{id}/image-variants/{size}/{filename}", wrapper.GetFilesIdImageVariantsSizeFilename)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/files/{id}/original/{filename}", wrapper.GetFilesIdOriginalFilename)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/files/{id}/video-variants/{size}/{filename}", wrapper.GetFilesIdVideoVariantsSizeFilename)
+		r.Get(options.BaseURL+"/files/{id}/variants/{size}/{filename}", wrapper.GetFilesIdVariantsSizeFilename)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes", wrapper.GetScenes)

@@ -681,17 +681,18 @@ func (*Api) GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, i
 	http.ServeFile(w, r, path)
 }
 
-func (*Api) GetFilesIdImageVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
+func (*Api) GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
 
 	imagePath, err := imageSource.GetImagePath(image.ImageId(id))
 	if err == image.ErrNotFound {
-		problem(w, r, http.StatusNotFound, "Image not found")
+		problem(w, r, http.StatusNotFound, "Path not found")
 		return
 	}
 
 	path := ""
-	for i := range imageSource.Images.Thumbnails {
-		thumbnail := imageSource.Images.Thumbnails[i]
+	thumbnails := imageSource.GetApplicableThumbnails(imagePath)
+	for i := range thumbnails {
+		thumbnail := thumbnails[i]
 		candidatePath := thumbnail.GetPath(imagePath)
 		if !imageSource.Exists(candidatePath) {
 			continue
@@ -703,40 +704,7 @@ func (*Api) GetFilesIdImageVariantsSizeFilename(w http.ResponseWriter, r *http.R
 	}
 
 	if path == "" || !imageSource.Exists(path) {
-		problem(w, r, http.StatusNotFound, "Thumbnail not found")
-		return
-	}
-
-	http.ServeFile(w, r, path)
-}
-
-func (*Api) GetFilesIdVideoVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
-
-	// if size == "thumb" {
-	// 	size = "M"
-	// }
-
-	videoPath, err := imageSource.GetImagePath(image.ImageId(id))
-	if err == image.ErrNotFound {
-		problem(w, r, http.StatusNotFound, "Video not found")
-		return
-	}
-
-	path := ""
-	for i := range imageSource.Videos.Thumbnails {
-		thumbnail := imageSource.Videos.Thumbnails[i]
-		candidatePath := thumbnail.GetPath(videoPath)
-		if !imageSource.Exists(candidatePath) {
-			continue
-		}
-		if size != "full" && thumbnail.Name != string(size) {
-			continue
-		}
-		path = candidatePath
-	}
-
-	if path == "" || !imageSource.Exists(path) {
-		problem(w, r, http.StatusNotFound, "Resized video not found")
+		problem(w, r, http.StatusNotFound, "Variant not found")
 		return
 	}
 
@@ -857,11 +825,8 @@ func loadConfiguration(path string) AppConfig {
 		}
 	}
 
-	for i := range appConfig.Media.Images.Thumbnails {
-		appConfig.Media.Images.Thumbnails[i].Init()
-	}
-	for i := range appConfig.Media.Videos.Thumbnails {
-		appConfig.Media.Videos.Thumbnails[i].Init()
+	for i := range appConfig.Media.Thumbnails {
+		appConfig.Media.Thumbnails[i].Init()
 	}
 
 	return appConfig
