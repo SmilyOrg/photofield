@@ -12,7 +12,7 @@
         :interactive="false"
         :immediate="false"
         :scene="scene"
-        :tileSize="256"
+        :tileSize="tileSize"
         :view="region.bounds"
         :style="{ height: imageHeight + 'px' }"
       ></tile-viewer>
@@ -69,7 +69,7 @@ import ExpandButton from './ExpandButton.vue';
 import { getFileBlob, getFileUrl, getThumbnailUrl } from '../api';
 
 export default {
-  props: ["region", "scene", "flipX", "flipY"],
+  props: ["region", "scene", "flipX", "flipY", "tileSize"],
   emits: ["close"],
   components: { TileViewer, ExpandButton },
   data() {

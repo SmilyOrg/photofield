@@ -65,6 +65,7 @@
         :sceneParams="sceneParams"
         :flipX="contextFlipX"
         :flipY="contextFlipY"
+        :tileSize="tileSize"
         @close="closeContextMenu()"
       ></region-menu>
     </ContextMenu>
