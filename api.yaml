@@ -462,6 +462,9 @@ components:
           type: integer
           minimum: 0
           example: 506
+        loading:
+          type: boolean
+          description: True while the scene is loading and the dimensions are not yet known.
 
     Collection:
       type: object

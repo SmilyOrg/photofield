@@ -140,6 +140,7 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 
 		layoutCounter.Set(index)
 		index++
+		scene.FileCount = index
 	}
 	layoutPlaced()
 

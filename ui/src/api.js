@@ -107,6 +107,10 @@ export function useApi(getUrl, config) {
   const response = useSWRV(getUrl, fetcher, config);
   const items = computed(() => response.data.value?.items);
   const itemsMutate = async getItems => {
+    if (!getItems) {
+      await response.mutate();
+      return;
+    } 
     const items = await getItems();
     await response.mutate(() => ({
       items,

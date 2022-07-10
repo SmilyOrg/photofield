@@ -126,6 +126,7 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 
 		layoutCounter.Set(index)
 		index++
+		scene.FileCount = index
 	}
 	layoutPlaced()
 

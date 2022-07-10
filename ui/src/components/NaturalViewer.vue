@@ -2,7 +2,7 @@
   <div class="container" :class="{ fullpage, fixed: !nativeScroll }">
 
     <page-title :title="pageTitle"></page-title>
-    
+
     <tile-viewer
       class="viewer"
       ref="viewer"
@@ -18,6 +18,7 @@
       @keydown="onKeyDown"
       @contextmenu.prevent="onContext"
     ></tile-viewer>
+    
     <overlays
       :viewer="overlayViewer"
       :overlay="lastViewedRegion"
@@ -26,6 +27,15 @@
       @interactive="interactive => panDisabled = interactive"
       class="overlays"
     ></overlays>
+
+    <spinner
+      class="spinner"
+      :total="scene?.file_count"
+      :speed="sceneLoadFilesPerSecond"
+      :divider="10000"
+      :loading="scene?.loading"
+    ></spinner>
+    
     <div
       class="scroller"
       :class="{ disabled: !nativeScroll }"
@@ -76,6 +86,7 @@ import dateParseISO from 'date-fns/parseISO';
 import dateFormat from 'date-fns/format';
 import differenceInDays from 'date-fns/differenceInDays';
 import Overlays from './Overlays.vue';
+import Spinner from './Spinner.vue';
 
 export default {
 
@@ -101,6 +112,7 @@ export default {
     ContextMenu,
     RegionMenu,
     Overlays,
+    Spinner,
   },
 
   data() {
@@ -129,6 +141,7 @@ export default {
     const collectionId = toRef(props, "collectionId");
     const regionId = toRef(props, "regionId");
     const scrollbar = toRef(props, "scrollbar");
+    const sceneLoadFilesPerSecond = ref(0);
 
     const nativeScroll = ref(true);
 
@@ -200,6 +213,23 @@ export default {
       if (!list || list.length == 0) return null;
       return list[0];
     });
+    watch(scene, async (newValue, oldValue) => {
+      if (newValue?.loading) {
+        let prev = oldValue?.file_count || 0;
+        if (prev > newValue.file_count) {
+          prev = 0;
+        }
+        sceneLoadFilesPerSecond.value = newValue.file_count - prev;
+        sceneRefreshTask.perform();
+      } else {
+        sceneLoadFilesPerSecond.value = 0;
+      }
+    })
+    const sceneRefreshTask = useTask(function*() {
+      yield timeout(1000);
+      scenesMutate();
+    }).keepLatest()
+
 
     const regionSeekId = ref(null);
     const regionSeekApplyTask = useTask(function*(_, router) {
@@ -336,6 +366,7 @@ export default {
       collection,
       scene,
       scenes,
+      sceneLoadFilesPerSecond,
       region,
       regionSeekId,
       regionSeekApplyTask,
@@ -420,7 +451,13 @@ export default {
   },
   watch: {
     scene(newScene, oldScene) {
-      if (oldScene && newScene && oldScene.id == newScene.id) return;
+      if (
+        oldScene && newScene &&
+        oldScene.id == newScene.id &&
+        oldScene.file_count == newScene.file_count
+      ) {
+        return;
+      }
       this.$emit("scene", newScene);
       if (newScene) {
         this.pushScrollToView();
@@ -976,6 +1013,14 @@ export default {
 
 <style scoped>
 
+.spinner {
+  position: fixed;
+  --size: 200px;
+  top: calc(50% - var(--size)/2);
+  left: calc(50% - var(--size)/2);
+  width: var(--size);
+  height: var(--size);
+}
 .container {
   position: relative;
 }

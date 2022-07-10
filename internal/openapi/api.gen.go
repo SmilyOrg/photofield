@@ -93,6 +93,9 @@ type Scene struct {
 	Bounds    *Bounds `json:"bounds,omitempty"`
 	FileCount *int    `json:"file_count,omitempty"`
 	Id        SceneId `json:"id"`
+
+	// True while the scene is loading and the dimensions are not yet known.
+	Loading *bool `json:"loading,omitempty"`
 }
 
 // SceneId defines model for SceneId.
