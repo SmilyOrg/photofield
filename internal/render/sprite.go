@@ -66,9 +66,9 @@ func (sprite *Sprite) DrawWithStyle(c *canvas.Context, style canvas.Style) {
 	)
 }
 
-func (sprite *Sprite) DrawText(c *canvas.Context, scales Scales, font *canvas.FontFace, txt string) {
+func (sprite *Sprite) DrawText(config *Render, c *canvas.Context, scales Scales, font *canvas.FontFace, txt string) {
 	text := NewTextFromRect(sprite.Rect, font, txt)
-	text.Draw(c, scales)
+	text.Draw(config, c, scales)
 }
 
 func (sprite *Sprite) IsVisible(c *canvas.Context, scales Scales) bool {

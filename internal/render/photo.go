@@ -135,10 +135,11 @@ func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Cont
 func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) {
 
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
-	path := photo.GetPath(source)
 	if pixelArea < config.MaxSolidPixelArea {
 		style := c.Style
 
+		// TODO: this can be a bottleneck for lots of images
+		// if it ends up hitting the database for each individual image
 		info := source.GetInfo(photo.Id)
 		style.FillColor = info.GetColor()
 
@@ -147,6 +148,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	drawn := false
+	path := photo.GetPath(source)
 	variants := photo.getBestVariants(config, scene, c, scales, source, path)
 	for _, variant := range variants {
 		// text := fmt.Sprintf("index %d zd %4.2f %s", index, bitmapAtZoom.ZoomDist, bitmap.Path)
@@ -193,7 +195,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			text := fmt.Sprintf("%dx%d %s", bounds.Size().X, bounds.Size().Y, variant.String())
 			font := scene.Fonts.Debug
 			font.Color = canvas.Lime
-			bitmap.Sprite.DrawText(c, scales, &font, text)
+			bitmap.Sprite.DrawText(config, c, scales, &font, text)
 		}
 
 		break

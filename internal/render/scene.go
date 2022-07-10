@@ -127,7 +127,7 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 
 	for i := range scene.Texts {
 		text := &scene.Texts[i]
-		text.Draw(c, scales)
+		text.Draw(config, c, scales)
 	}
 }
 
