@@ -929,12 +929,14 @@ export default {
 
       const viewMaxY = (this.scene?.bounds?.h || 0) - this.window.height + this.marginTop;
       
+      let scrollY = 0;
       if (scrollRatio == null) {
         if (this.scrollbar) {
           const scroll = this.scrollbar.scroll();
           // Uncomment for scroll position debugging
           // console.log(scroll.position, scroll.max, scroll.ratio, scroll.position.y / viewMaxY)
-          scrollRatio = scroll.position.y / viewMaxY;
+          scrollRatio = scroll.ratio.y;
+          scrollY = scroll.position.y;
         } else {
           const scroller = this.$refs.scroller;
           const scrollMaxY = 
@@ -946,6 +948,7 @@ export default {
               window.scrollY :
               scroller.scrollTop;
           scrollRatio = scrollMaxY ? scrollTop / scrollMaxY : 0;
+          scrollY = scrollTop;
         }
       }
 
@@ -962,7 +965,7 @@ export default {
       this.$refs.viewer.setView(view, transition && { animationTime: transition });
       
       // Offset the native browser scroll to keep the viewer visible
-      this.$refs.viewer.$el.style.transform = `translate(0, ${viewY}px)`;
+      this.$refs.viewer.$el.style.transform = `translate(0, ${scrollY}px)`;
 
       this.visibleRegionsTask.perform(view, this.sceneParams);
     },
