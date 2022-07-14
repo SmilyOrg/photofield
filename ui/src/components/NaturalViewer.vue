@@ -214,6 +214,7 @@ export default {
       if (!list || list.length == 0) return null;
       return list[0];
     });
+    const sceneRefreshCount = ref(0);
     watch(scene, async (newValue, oldValue) => {
       if (newValue?.loading) {
         let prev = oldValue?.file_count || 0;
@@ -223,11 +224,16 @@ export default {
         sceneLoadFilesPerSecond.value = newValue.file_count - prev;
         sceneRefreshTask.perform();
       } else {
+        sceneRefreshCount.value = 0;
         sceneLoadFilesPerSecond.value = 0;
       }
     })
+    const sceneRefreshDelays = [10, 50, 100, 200, 500, 1000];
     const sceneRefreshTask = useTask(function*() {
-      yield timeout(1000);
+      const count = sceneRefreshCount.value;
+      const delay = sceneRefreshDelays[Math.min(sceneRefreshDelays.length - 1, count)];
+      sceneRefreshCount.value = count + 1;
+      yield timeout(delay);
       scenesMutate();
     }).keepLatest()
 
