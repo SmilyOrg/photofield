@@ -161,7 +161,7 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan Sourc
 	for i := range dirs {
 		dirs[i] = filepath.FromSlash(dirs[i])
 	}
-	out := make(chan SourcedInfo, 10000)
+	out := make(chan SourcedInfo, 1000)
 	go func() {
 		infos := source.database.List(dirs, options)
 		for info := range infos {

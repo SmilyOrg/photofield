@@ -374,7 +374,7 @@ func (source *Database) GetPathFromId(id ImageId) (string, bool) {
 		FROM infos
 		JOIN prefix ON path_prefix_id == prefix.id
 		WHERE infos.rowid == ?;`)
-	defer stmt.Finalize()
+	defer stmt.Reset()
 
 	stmt.BindInt64(1, (int64)(id))
 
@@ -395,7 +395,7 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 		SELECT width, height, orientation, color, created_at
 		FROM infos
 		WHERE rowid == ?;`)
-	defer stmt.Finalize()
+	defer stmt.Reset()
 
 	stmt.BindInt64(1, (int64)(id))
 
@@ -430,7 +430,7 @@ func (source *Database) GetDir(dir string) (InfoResult, bool) {
 	stmt := conn.Prep(`
 		SELECT indexed_at FROM dirs
 		WHERE path = ?;`)
-	defer stmt.Finalize()
+	defer stmt.Reset()
 
 	stmt.BindText(1, dir)
 
@@ -479,7 +479,7 @@ func (source *Database) SetIndexed(dir string) {
 }
 
 func (source *Database) List(dirs []string, options ListOptions) <-chan InfoListResult {
-	out := make(chan InfoListResult, 10000)
+	out := make(chan InfoListResult, 1000)
 	go func() {
 		defer metrics.Elapsed("listing infos sqlite")()
 
@@ -523,7 +523,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		stmt := conn.Prep(sql)
 		bindIndex := 1
-		defer stmt.Finalize()
+		defer stmt.Reset()
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
@@ -604,7 +604,7 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 
 		stmt := conn.Prep(sql)
 		bindIndex := 1
-		defer stmt.Finalize()
+		defer stmt.Reset()
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
@@ -665,7 +665,7 @@ func (source *Database) ListIds(dirs []string, limit int) <-chan ImageId {
 
 		stmt := conn.Prep(sql)
 		bindIndex := 1
-		defer stmt.Finalize()
+		defer stmt.Reset()
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")

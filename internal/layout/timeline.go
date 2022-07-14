@@ -60,8 +60,7 @@ func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, 
 	)
 	rect.Y += textHeight + 15
 
-	photos := addSectionPhotos(&event.Section, scene, source)
-	newBounds := layoutSectionPhotos(photos, rect, layout, scene, source)
+	newBounds := addSectionToScene(&event.Section, scene, rect, layout, source)
 
 	rect.Y = newBounds.Y + newBounds.H
 	rect.Y += 10
