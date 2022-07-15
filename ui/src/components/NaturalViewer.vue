@@ -2,7 +2,7 @@
   <div class="container" :class="{ fullpage, fixed: !nativeScroll }">
 
     <page-title :title="pageTitle"></page-title>
-    
+
     <tile-viewer
       class="viewer"
       ref="viewer"
@@ -18,6 +18,7 @@
       @keydown="onKeyDown"
       @contextmenu.prevent="onContext"
     ></tile-viewer>
+    
     <overlays
       :viewer="overlayViewer"
       :overlay="lastViewedRegion"
@@ -26,6 +27,15 @@
       @interactive="interactive => panDisabled = interactive"
       class="overlays"
     ></overlays>
+
+    <spinner
+      class="spinner"
+      :total="scene?.file_count"
+      :speed="sceneLoadFilesPerSecond"
+      :divider="10000"
+      :loading="scene?.loading"
+    ></spinner>
+    
     <div
       class="scroller"
       :class="{ disabled: !nativeScroll }"
@@ -55,6 +65,7 @@
         :sceneParams="sceneParams"
         :flipX="contextFlipX"
         :flipY="contextFlipY"
+        :tileSize="tileSize"
         @close="closeContextMenu()"
       ></region-menu>
     </ContextMenu>
@@ -76,6 +87,7 @@ import dateParseISO from 'date-fns/parseISO';
 import dateFormat from 'date-fns/format';
 import differenceInDays from 'date-fns/differenceInDays';
 import Overlays from './Overlays.vue';
+import Spinner from './Spinner.vue';
 
 export default {
 
@@ -101,6 +113,7 @@ export default {
     ContextMenu,
     RegionMenu,
     Overlays,
+    Spinner,
   },
 
   data() {
@@ -129,6 +142,7 @@ export default {
     const collectionId = toRef(props, "collectionId");
     const regionId = toRef(props, "regionId");
     const scrollbar = toRef(props, "scrollbar");
+    const sceneLoadFilesPerSecond = ref(0);
 
     const nativeScroll = ref(true);
 
@@ -200,6 +214,29 @@ export default {
       if (!list || list.length == 0) return null;
       return list[0];
     });
+    const sceneRefreshCount = ref(0);
+    watch(scene, async (newValue, oldValue) => {
+      if (newValue?.loading) {
+        let prev = oldValue?.file_count || 0;
+        if (prev > newValue.file_count) {
+          prev = 0;
+        }
+        sceneLoadFilesPerSecond.value = newValue.file_count - prev;
+        sceneRefreshTask.perform();
+      } else {
+        sceneRefreshCount.value = 0;
+        sceneLoadFilesPerSecond.value = 0;
+      }
+    })
+    const sceneRefreshDelays = [10, 50, 100, 200, 500, 1000];
+    const sceneRefreshTask = useTask(function*() {
+      const count = sceneRefreshCount.value;
+      const delay = sceneRefreshDelays[Math.min(sceneRefreshDelays.length - 1, count)];
+      sceneRefreshCount.value = count + 1;
+      yield timeout(delay);
+      scenesMutate();
+    }).keepLatest()
+
 
     const regionSeekId = ref(null);
     const regionSeekApplyTask = useTask(function*(_, router) {
@@ -336,6 +373,7 @@ export default {
       collection,
       scene,
       scenes,
+      sceneLoadFilesPerSecond,
       region,
       regionSeekId,
       regionSeekApplyTask,
@@ -420,7 +458,13 @@ export default {
   },
   watch: {
     scene(newScene, oldScene) {
-      if (oldScene && newScene && oldScene.id == newScene.id) return;
+      if (
+        oldScene && newScene &&
+        oldScene.id == newScene.id &&
+        oldScene.file_count == newScene.file_count
+      ) {
+        return;
+      }
       this.$emit("scene", newScene);
       if (newScene) {
         this.pushScrollToView();
@@ -491,10 +535,12 @@ export default {
 
     addFullpageListeners() {
       window.addEventListener('scroll', this.onScroll);
+      window.addEventListener('resize', this.onWindowResize);
     },
 
     removeFullpageListeners() {
       window.removeEventListener('scroll', this.onScroll);
+      window.removeEventListener('resize', this.onWindowResize);
     },
 
     attachScrollbar(scrollbar) {
@@ -614,9 +660,13 @@ export default {
 
     onResize(rect) {
       if (rect.width == 0 || rect.height == 0) return;
+      this.resizeApplyTask.perform(rect, this.pushScrollToView);
+    },
+
+    onWindowResize(rect) {
+      if (rect.width == 0 || rect.height == 0) return;
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', `${vh}px`);
-      this.resizeApplyTask.perform(rect, this.pushScrollToView);
     },
 
     onScroll(event) {
@@ -929,12 +979,14 @@ export default {
 
       const viewMaxY = (this.scene?.bounds?.h || 0) - this.window.height + this.marginTop;
       
+      let scrollY = 0;
       if (scrollRatio == null) {
         if (this.scrollbar) {
           const scroll = this.scrollbar.scroll();
           // Uncomment for scroll position debugging
           // console.log(scroll.position, scroll.max, scroll.ratio, scroll.position.y / viewMaxY)
-          scrollRatio = scroll.position.y / viewMaxY;
+          scrollRatio = scroll.ratio.y;
+          scrollY = scroll.position.y;
         } else {
           const scroller = this.$refs.scroller;
           const scrollMaxY = 
@@ -946,6 +998,7 @@ export default {
               window.scrollY :
               scroller.scrollTop;
           scrollRatio = scrollMaxY ? scrollTop / scrollMaxY : 0;
+          scrollY = scrollTop;
         }
       }
 
@@ -962,7 +1015,7 @@ export default {
       this.$refs.viewer.setView(view, transition && { animationTime: transition });
       
       // Offset the native browser scroll to keep the viewer visible
-      this.$refs.viewer.$el.style.transform = `translate(0, ${viewY}px)`;
+      this.$refs.viewer.$el.style.transform = `translate(0, ${scrollY}px)`;
 
       this.visibleRegionsTask.perform(view, this.sceneParams);
     },
@@ -973,6 +1026,14 @@ export default {
 
 <style scoped>
 
+.spinner {
+  position: fixed;
+  --size: 200px;
+  top: calc(50% - var(--size)/2);
+  left: calc(50% - var(--size)/2);
+  width: var(--size);
+  height: var(--size);
+}
 .container {
   position: relative;
 }

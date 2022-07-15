@@ -12,7 +12,7 @@
         :interactive="false"
         :immediate="false"
         :scene="scene"
-        :tileSize="256"
+        :tileSize="tileSize"
         :view="region.bounds"
         :style="{ height: imageHeight + 'px' }"
       ></tile-viewer>
@@ -46,7 +46,7 @@
           v-for="thumb in region.data?.thumbnails"
           :key="thumb.name"
           class="thumbnail"
-          :href="getThumbnailUrl(region.data.id, thumb.name, region.data.filename)"
+          :href="getThumbnailUrl(region.data.id, thumb.name, thumb.filename)"
           target="_blank"
         >
           {{ thumb.width }}
@@ -69,7 +69,7 @@ import ExpandButton from './ExpandButton.vue';
 import { getFileBlob, getFileUrl, getThumbnailUrl } from '../api';
 
 export default {
-  props: ["region", "scene", "flipX", "flipY"],
+  props: ["region", "scene", "flipX", "flipY", "tileSize"],
   emits: ["close"],
   components: { TileViewer, ExpandButton },
   data() {

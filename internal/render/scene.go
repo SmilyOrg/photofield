@@ -54,6 +54,7 @@ type SceneId = string
 type Scene struct {
 	Id           SceneId      `json:"id"`
 	CreatedAt    time.Time    `json:"created_at"`
+	Loading      bool         `json:"loading"`
 	Fonts        Fonts        `json:"-"`
 	Bounds       Rect         `json:"bounds"`
 	Photos       []Photo      `json:"-"`
@@ -126,7 +127,7 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 
 	for i := range scene.Texts {
 		text := &scene.Texts[i]
-		text.Draw(c, scales)
+		text.Draw(config, c, scales)
 	}
 }
 
@@ -182,6 +183,9 @@ func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region
 	if limit != nil {
 		query.Limit = *limit
 	}
+	if scene.RegionSource == nil {
+		return []Region{}
+	}
 	return scene.RegionSource.GetRegionsFromBounds(
 		bounds,
 		scene,
@@ -190,5 +194,8 @@ func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region
 }
 
 func (scene *Scene) GetRegion(id int) Region {
+	if scene.RegionSource == nil {
+		return Region{}
+	}
 	return scene.RegionSource.GetRegionById(id, scene, RegionConfig{})
 }

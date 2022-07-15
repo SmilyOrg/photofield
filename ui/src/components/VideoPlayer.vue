@@ -19,7 +19,7 @@
 </template>
 
 <script>
-import { getFileUrl, getVideoUrl } from '../api';
+import { getFileUrl, getThumbnailUrl } from '../api';
 import Plyr from 'plyr';
 import { isCloseClick } from '../utils';
 
@@ -106,10 +106,12 @@ export default {
           }
         ]
         .concat(
-          this.region?.data?.thumbnails?.map(thumbnail => ({
-            src: getVideoUrl(this.region.data.id, thumbnail.name, this.region.data.filename),
-            size: thumbnail.height,
-          })) || []
+          this.region?.data?.thumbnails
+            ?.filter(thumbnail => thumbnail.filename.endsWith(".mp4"))
+            .map(thumbnail => ({
+              src: getThumbnailUrl(this.region.data.id, thumbnail.name, this.region.data.filename),
+              size: thumbnail.height,
+            })) || []
         ),
       }
     }

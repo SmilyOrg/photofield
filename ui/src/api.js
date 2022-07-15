@@ -96,17 +96,17 @@ export async function getFileBlob(id) {
 }
 
 export function getThumbnailUrl(id, size, filename) {
-  return `${host}/files/${id}/image-variants/${size}/${filename}`;
-}
-
-export function getVideoUrl(id, size, filename) {
-  return `${host}/files/${id}/video-variants/${size}/${filename}`;
+  return `${host}/files/${id}/variants/${size}/${filename}`;
 }
 
 export function useApi(getUrl, config) {
   const response = useSWRV(getUrl, fetcher, config);
   const items = computed(() => response.data.value?.items);
   const itemsMutate = async getItems => {
+    if (!getItems) {
+      await response.mutate();
+      return;
+    } 
     const items = await getItems();
     await response.mutate(() => ({
       items,

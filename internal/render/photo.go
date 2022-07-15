@@ -53,51 +53,6 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
-func (photo *Photo) getBestBitmaps(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) []BitmapAtZoom {
-
-	originalInfo := photo.GetInfo(source)
-	originalSize := originalInfo.Size()
-	originalPath := photo.GetPath(source)
-	originalZoomDist := math.Inf(1)
-	if source.IsSupportedImage(originalPath) {
-		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
-	}
-
-	bitmaps := make([]BitmapAtZoom, 1+len(source.Images.Thumbnails))
-	bitmaps[0] = BitmapAtZoom{
-		Bitmap: Bitmap{
-			Path:        originalPath,
-			Orientation: originalInfo.Orientation,
-			Sprite:      photo.Sprite,
-		},
-		ZoomDist: originalZoomDist,
-	}
-
-	for i := range source.Images.Thumbnails {
-		thumbnail := &source.Images.Thumbnails[i]
-		thumbSize := thumbnail.Fit(originalSize)
-		thumbPath := thumbnail.GetPath(originalPath)
-		bitmaps[1+i] = BitmapAtZoom{
-			Bitmap: Bitmap{
-				Path: thumbPath,
-				Sprite: Sprite{
-					Rect: photo.Sprite.Rect,
-				},
-			},
-			ZoomDist: photo.Sprite.Rect.GetPixelZoomDist(c, thumbSize),
-		}
-		// fmt.Printf("orig w %4.0f h %4.0f   thumb w %4.0f h %4.0f   zoom dist best %8.2f cur %8.2f area %8.6f\n", originalSize.Width, originalSize.Height, thumbSize.Width, thumbSize.Height, bestZoomDist, zoomDist, photo.Original.Sprite.Rect.GetPixelArea(c, thumbSize))
-	}
-
-	sort.Slice(bitmaps, func(i, j int) bool {
-		a := bitmaps[i]
-		b := bitmaps[j]
-		return a.ZoomDist < b.ZoomDist
-	})
-
-	return bitmaps
-}
-
 func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, originalPath string) []Variant {
 
 	originalInfo := photo.GetInfo(source)
@@ -107,15 +62,16 @@ func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Cont
 		originalZoomDist = photo.Sprite.Rect.GetPixelZoomDist(c, originalSize)
 	}
 
-	variants := make([]Variant, 1+len(source.Images.Thumbnails))
+	thumbnails := source.GetApplicableThumbnails(originalPath)
+	variants := make([]Variant, 1+len(thumbnails))
 	variants[0] = Variant{
 		Thumbnail:   nil,
 		Orientation: originalInfo.Orientation,
 		ZoomDist:    originalZoomDist,
 	}
 
-	for i := range source.Images.Thumbnails {
-		thumbnail := &source.Images.Thumbnails[i]
+	for i := range thumbnails {
+		thumbnail := &thumbnails[i]
 		thumbSize := thumbnail.Fit(originalSize)
 		variants[1+i] = Variant{
 			Thumbnail: thumbnail,
@@ -135,10 +91,11 @@ func (photo *Photo) getBestVariants(config *Render, scene *Scene, c *canvas.Cont
 func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) {
 
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
-	path := photo.GetPath(source)
 	if pixelArea < config.MaxSolidPixelArea {
 		style := c.Style
 
+		// TODO: this can be a bottleneck for lots of images
+		// if it ends up hitting the database for each individual image
 		info := source.GetInfo(photo.Id)
 		style.FillColor = info.GetColor()
 
@@ -147,6 +104,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	drawn := false
+	path := photo.GetPath(source)
 	variants := photo.getBestVariants(config, scene, c, scales, source, path)
 	for _, variant := range variants {
 		// text := fmt.Sprintf("index %d zd %4.2f %s", index, bitmapAtZoom.ZoomDist, bitmap.Path)
@@ -193,7 +151,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			text := fmt.Sprintf("%dx%d %s", bounds.Size().X, bounds.Size().Y, variant.String())
 			font := scene.Fonts.Debug
 			font.Color = canvas.Lime
-			bitmap.Sprite.DrawText(c, scales, &font, text)
+			bitmap.Sprite.DrawText(config, c, scales, &font, text)
 		}
 
 		break

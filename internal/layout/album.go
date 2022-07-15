@@ -61,8 +61,7 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 	scene.Texts = append(scene.Texts, text)
 	rect.Y += text.Sprite.Rect.H + 10
 
-	photos := addSectionPhotos(&event.Section, scene, source)
-	newBounds := layoutSectionPhotos(photos, rect, layout, scene, source)
+	newBounds := addSectionToScene(&event.Section, scene, rect, layout, source)
 
 	rect.Y = newBounds.Y + newBounds.H
 	if event.LastOnDay {
@@ -132,6 +131,9 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 				StartTime:  photoTime,
 				FirstOnDay: !SameDay(lastPhotoTime, photoTime),
 				Elapsed:    elapsed,
+				Section: Section{
+					infos: event.Section.infos[:0],
+				},
 			}
 		}
 		lastPhotoTime = photoTime
@@ -140,6 +142,7 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 
 		layoutCounter.Set(index)
 		index++
+		scene.FileCount = index
 	}
 	layoutPlaced()
 

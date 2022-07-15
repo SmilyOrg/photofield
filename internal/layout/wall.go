@@ -60,13 +60,13 @@ func LayoutWall(layout Layout, collection collection.Collection, scene *render.S
 	y := sceneMargin
 
 	layoutFinished := metrics.Elapsed("layout")
-	photos := addSectionPhotos(&section, scene, source)
-	newBounds := layoutSectionPhotos(photos, render.Rect{
+	bounds := render.Rect{
 		X: x,
 		Y: y,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: scene.Bounds.H - sceneMargin*2,
-	}, layoutConfig, scene, source)
+	}
+	newBounds := addSectionToScene(&section, scene, bounds, layoutConfig, source)
 	layoutFinished()
 
 	scene.Bounds.H = newBounds.Y + newBounds.H + sceneMargin

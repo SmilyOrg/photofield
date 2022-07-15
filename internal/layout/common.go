@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"fmt"
 	"log"
 	"path/filepath"
 	"photofield/internal/image"
@@ -32,7 +33,6 @@ type Section struct {
 }
 
 type SectionPhoto struct {
-	Index int
 	Photo *render.Photo
 	Size  image.Size
 }
@@ -48,9 +48,10 @@ type PhotoRegionSource struct {
 }
 
 type RegionThumbnail struct {
-	Name   string `json:"name"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
+	Name     string `json:"name"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	Filename string `json:"filename"`
 }
 
 type PhotoRegionData struct {
@@ -77,24 +78,26 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 		Y: info.Height,
 	}
 	isVideo := source.IsSupportedVideo(originalPath)
+	extension := strings.ToLower(filepath.Ext(originalPath))
+	filename := filepath.Base(originalPath)
 
-	var thumbnailTemplates []image.Thumbnail
-	if isVideo {
-		thumbnailTemplates = source.Videos.Thumbnails
-	} else {
-		thumbnailTemplates = source.Images.Thumbnails
-	}
-
+	thumbnailTemplates := source.GetApplicableThumbnails(originalPath)
 	var thumbnails []RegionThumbnail
 	for i := range thumbnailTemplates {
 		thumbnail := &thumbnailTemplates[i]
 		thumbnailPath := thumbnail.GetPath(originalPath)
 		if source.Exists(thumbnailPath) {
 			thumbnailSize := thumbnail.Fit(originalSize)
+			basename := strings.TrimSuffix(filename, extension)
+			thumbnailFilename := fmt.Sprintf(
+				"%s_%s%s",
+				basename, thumbnail.Name, filepath.Ext(thumbnailPath),
+			)
 			thumbnails = append(thumbnails, RegionThumbnail{
-				Name:   thumbnail.Name,
-				Width:  thumbnailSize.X,
-				Height: thumbnailSize.Y,
+				Name:     thumbnail.Name,
+				Width:    thumbnailSize.X,
+				Height:   thumbnailSize.Y,
+				Filename: thumbnailFilename,
 			})
 		}
 	}
@@ -105,8 +108,8 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 		Data: PhotoRegionData{
 			Id:         int(photo.Id),
 			Path:       originalPath,
-			Filename:   filepath.Base(originalPath),
-			Extension:  strings.ToLower(filepath.Ext(originalPath)),
+			Filename:   filename,
+			Extension:  extension,
 			Video:      isVideo,
 			Width:      info.Width,
 			Height:     info.Height,
@@ -169,34 +172,7 @@ func layoutFitRow(row []SectionPhoto, bounds render.Rect, imageSpacing float64) 
 	return scale
 }
 
-func addSectionPhotos(section *Section, scene *render.Scene, source *image.Source) <-chan SectionPhoto {
-	photos := make(chan SectionPhoto, 10000)
-	go func() {
-		startIndex := len(scene.Photos)
-		for _, info := range section.infos {
-			scene.Photos = append(scene.Photos, render.Photo{
-				Id:     info.Id,
-				Sprite: render.Sprite{},
-			})
-		}
-		for index, info := range section.infos {
-			sceneIndex := startIndex + index
-			photo := &scene.Photos[sceneIndex]
-			photos <- SectionPhoto{
-				Index: sceneIndex,
-				Photo: photo,
-				Size: image.Size{
-					X: info.Width,
-					Y: info.Height,
-				},
-			}
-		}
-		close(photos)
-	}()
-	return photos
-}
-
-func layoutSectionPhotos(photos <-chan SectionPhoto, bounds render.Rect, config Layout, scene *render.Scene, source *image.Source) render.Rect {
+func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect, config Layout, source *image.Source) render.Rect {
 	x := 0.
 	y := 0.
 	lastLogTime := time.Now()
@@ -204,9 +180,20 @@ func layoutSectionPhotos(photos <-chan SectionPhoto, bounds render.Rect, config 
 
 	row := make([]SectionPhoto, 0)
 
-	for photo := range photos {
-
-		// log.Println("layout", photo.Index)
+	startIndex := len(scene.Photos)
+	for index, info := range section.infos {
+		sceneIndex := startIndex + index
+		scene.Photos = append(scene.Photos, render.Photo{
+			Id:     info.Id,
+			Sprite: render.Sprite{},
+		})
+		photo := SectionPhoto{
+			Photo: &scene.Photos[sceneIndex],
+			Size: image.Size{
+				X: info.Width,
+				Y: info.Height,
+			},
+		}
 
 		aspectRatio := float64(photo.Size.X) / float64(photo.Size.Y)
 		imageWidth := float64(config.ImageHeight) * aspectRatio
@@ -218,8 +205,6 @@ func layoutSectionPhotos(photos <-chan SectionPhoto, bounds render.Rect, config 
 			y += config.ImageHeight*scale + config.LineSpacing
 		}
 
-		// fmt.Printf("%4.0f %4.0f %4.0f %4.0f %4.0f %4.0f %4.0f\n", bounds.X, bounds.Y, x, y, imageHeight, photo.Size.Width, photo.Size.Height)
-
 		photo.Photo.Sprite.PlaceFitHeight(
 			bounds.X+x,
 			bounds.Y+y,
@@ -230,25 +215,12 @@ func layoutSectionPhotos(photos <-chan SectionPhoto, bounds render.Rect, config 
 
 		row = append(row, photo)
 
-		// photoRect := photo.Photo.Original.Sprite.GetBounds()
-		// scene.Regions = append(scene.Regions, Region{
-		// 	Id: len(scene.Regions),
-		// 	Bounds: Bounds{
-		// 		X: photoRect.X,
-		// 		Y: photoRect.Y,
-		// 		W: photoRect.W,
-		// 		H: photoRect.H,
-		// 	},
-		// })
-
-		// fmt.Printf("%d %f %f %f\n", i, x, imageWidth, bounds.W)
-
 		x += imageWidth + config.ImageSpacing
 
 		now := time.Now()
 		if now.Sub(lastLogTime) > 1*time.Second {
 			lastLogTime = now
-			log.Printf("layout section %d\n", photo.Index)
+			log.Printf("layout section %d\n", i)
 		}
 		i++
 	}

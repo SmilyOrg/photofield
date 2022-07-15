@@ -44,7 +44,13 @@ export default {
   watch: {
 
     scene(newScene, oldScene) {
-      if (newScene?.id == oldScene?.id) return;
+      if (
+        newScene?.id == oldScene?.id &&
+        newScene.bounds.w == oldScene.bounds.w &&
+        newScene.bounds.h == oldScene.bounds.h
+      ) {
+        return;
+      }
       this.reset();
     },
 
@@ -308,12 +314,10 @@ export default {
         });
       }
     },
-    
-    getTiledImage() {
+
+    getTiledImageSizeAtLevel(level) {
       const tileSize = this.tileSize;
-      const minLevel = 0;
-      const maxLevel = 30;
-      const power = 1 << maxLevel;
+      const power = 1 << level;
       let width = power*tileSize;
       let height = power*tileSize;
       const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
@@ -322,8 +326,29 @@ export default {
       } else {
         height = width / sceneAspect;
       }
+      return { width, height }
+    },
+    
+    getTiledImage() {
+      const tileSize = this.tileSize;
+      let minLevel = 0;
+      const maxLevel = 30;
+      
+      const { width, height } = this.getTiledImageSizeAtLevel(maxLevel);
       if (width < 1) width = 1;
       if (height < 1) height = 1;
+      
+      // Limit minimum size loaded to avoid
+      // loading tiled images with very little content
+      const minTiledImageWidth = 10;
+      for (let i = 0; i < maxLevel; i++) {
+        const levelSize = this.getTiledImageSizeAtLevel(i);
+        if (levelSize.width >= minTiledImageWidth) {
+          minLevel = i;
+          break;
+        }
+      }
+
       return {
         width,
         height,

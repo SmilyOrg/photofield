@@ -64,42 +64,44 @@ func getSceneCost(scene *render.Scene) int64 {
 	return structCost + photosCost + solidsCost + textsCost
 }
 
-func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Source) render.Scene {
+func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Source) *render.Scene {
+
 	log.Printf("scene loading %v", config.Collection.Id)
 
-	finished := metrics.Elapsed("scene load " + config.Collection.Id)
-
 	scene := source.DefaultScene
-
-	switch config.Layout.Type {
-	case layout.Timeline:
-		layout.LayoutTimeline(config.Layout, config.Collection, &scene, imageSource)
-
-	case layout.Album:
-		layout.LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
-
-	case layout.Square:
-		layout.LayoutSquare(&scene, imageSource)
-
-	case layout.Wall:
-		layout.LayoutWall(config.Layout, config.Collection, &scene, imageSource)
-
-	default:
-		layout.LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
-	}
-
-	if scene.RegionSource == nil {
-		scene.RegionSource = &layout.PhotoRegionSource{
-			Source: imageSource,
-		}
-	}
-
-	scene.FileCount = len(scene.Photos)
 	scene.CreatedAt = time.Now()
-	finished()
+	scene.Loading = true
 
-	log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
-	return scene
+	go func() {
+		finished := metrics.Elapsed("scene load " + config.Collection.Id)
+		switch config.Layout.Type {
+		case layout.Timeline:
+			layout.LayoutTimeline(config.Layout, config.Collection, &scene, imageSource)
+
+		case layout.Album:
+			layout.LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
+
+		case layout.Square:
+			layout.LayoutSquare(&scene, imageSource)
+
+		case layout.Wall:
+			layout.LayoutWall(config.Layout, config.Collection, &scene, imageSource)
+
+		default:
+			layout.LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
+		}
+		if scene.RegionSource == nil {
+			scene.RegionSource = &layout.PhotoRegionSource{
+				Source: imageSource,
+			}
+		}
+		scene.FileCount = len(scene.Photos)
+		scene.Loading = false
+		finished()
+		log.Printf("photos %d, scene %.0f x %.0f\n", len(scene.Photos), scene.Bounds.W, scene.Bounds.H)
+	}()
+
+	return &scene
 }
 
 func (source *SceneSource) GetSceneById(id string, imageSource *image.Source) *render.Scene {
@@ -181,8 +183,8 @@ func (source *SceneSource) Add(config SceneConfig, imageSource *image.Source) *r
 	scene.Id = id
 
 	source.scenes.Store(scene.Id, storedScene{
-		scene:  &scene,
+		scene:  scene,
 		config: config,
 	})
-	return &scene
+	return scene
 }
