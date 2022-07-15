@@ -194,5 +194,8 @@ func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region
 }
 
 func (scene *Scene) GetRegion(id int) Region {
+	if scene.RegionSource == nil {
+		return Region{}
+	}
 	return scene.RegionSource.GetRegionById(id, scene, RegionConfig{})
 }
