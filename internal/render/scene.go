@@ -131,6 +131,26 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	}
 }
 
+func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
+	scale := float64(height) / scene.Bounds.H
+	timestamps := make([]uint32, height)
+
+	i := 0
+	ty := -1.
+	var t time.Time
+	for y := 0; y < height; y++ {
+		for ; ty <= float64(y) && i < len(scene.Photos); i++ {
+			photo := scene.Photos[i]
+			info := photo.GetInfo(source)
+			t = info.DateTime
+			ty = (photo.Sprite.Rect.Y + photo.Sprite.Rect.H) * scale
+		}
+		timestamps[y] = uint32(t.Unix())
+	}
+
+	return timestamps
+}
+
 func (scene *Scene) AddPhotosFromIds(ids <-chan image.ImageId) {
 	for id := range ids {
 		photo := Photo{}

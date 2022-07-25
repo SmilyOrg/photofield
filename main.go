@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	goimage "image"
@@ -616,6 +617,32 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 
 	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	codec.EncodeJpeg(w, img)
+}
+
+func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
+	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusBadRequest, "Scene not found")
+		return
+	}
+
+	minHeight := 1
+	maxHeight := 10000
+
+	if params.Height < minHeight {
+		problem(w, r, http.StatusBadRequest, fmt.Sprintf("Minimum height is %v", minHeight))
+		return
+	}
+
+	if params.Height > maxHeight {
+		problem(w, r, http.StatusBadRequest, fmt.Sprintf("Maximum height is %v", maxHeight))
+		return
+	}
+
+	timestamps := scene.GetTimestamps(params.Height, imageSource)
+	w.Header().Add("Content-Type", "application/octet-stream")
+	chirender.Status(r, http.StatusOK)
+	binary.Write(w, binary.LittleEndian, timestamps)
 }
 
 func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdRegionsParams) {

@@ -271,7 +271,6 @@ export default {
         clickScrolling: true,
       },
     });
-    this.scrollbar.addExt("timeline");
   },
   watch: {
     collection(newCollection, oldCollection) {

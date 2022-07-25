@@ -35,7 +35,13 @@
       :divider="10000"
       :loading="scene?.loading"
     ></spinner>
-    
+
+    <date-strip
+      class="date-strip"
+      :class="{ visible: scrollSpeed > window.height * 12 }"
+      :date="scrollDate"
+    ></date-strip>
+
     <div
       class="scroller"
       :class="{ disabled: !nativeScroll }"
@@ -73,18 +79,18 @@
 </template>
 
 <script>
-import { computed, nextTick, ref, toRef, watch, watchEffect } from 'vue';
+import { computed, nextTick, ref, toRef, watch } from 'vue';
 import qs from "qs";
 import { isCloseClick } from '../utils';
 import TileViewer from './TileViewer.vue';
-import { createScene, getRegions, useApi } from '../api';
-import { timeout, useTask, useTaskGroup } from "vue-concurrency";
+import DateStrip from './DateStrip.vue';
+import { createScene, getRegions, useApi, useBufferApi } from '../api';
+import { timeout, useTask } from "vue-concurrency";
 import PageTitle from './PageTitle.vue';
 import Simulation from '../simulation';
 import ContextMenu from '@overcoder/vue-context-menu';
 import RegionMenu from './RegionMenu.vue';
 import dateParseISO from 'date-fns/parseISO';
-import dateFormat from 'date-fns/format';
 import differenceInDays from 'date-fns/differenceInDays';
 import Overlays from './Overlays.vue';
 import Spinner from './Spinner.vue';
@@ -114,6 +120,7 @@ export default {
     RegionMenu,
     Overlays,
     Spinner,
+    DateStrip,
   },
 
   data() {
@@ -322,12 +329,29 @@ export default {
     );
 
     const visibleView = ref(null);
-
-    const visibleRegionsTask = useTask(function*(_, view, sceneParams) {
+    const visibleViewTask = useTask(function*(_, view, sceneParams) {
       yield timeout(200);
       visibleView.value = view;
     }).keepLatest();
 
+    const scrollTop = ref(0);
+    let scrollTopLastUpdate = 0;
+    watch(scrollTop, (newValue, oldValue) => {
+      const now = Date.now();
+      const diff = newValue - oldValue;
+      const elapsed = now - scrollTopLastUpdate;
+      const pxPerSec = Math.abs(diff) * 1000 / elapsed;
+      scrollSpeedTask.perform(pxPerSec);
+      scrollTopLastUpdate = now;
+    })
+    
+    const scrollSpeed = ref(0);
+    const scrollSpeedTask = useTask(function*(_, y) {
+      scrollSpeed.value = y;
+      yield timeout(500);
+      scrollSpeed.value = 0;
+    }).restartable();
+    
     const {
       items: visibleRegions,
     } = useApi(() =>
@@ -339,13 +363,33 @@ export default {
       })}`
     );
 
-    const scrollbarLabel = computed(() => {
-      if (visibleRegions?.value?.length > 0) {
-        const region = visibleRegions.value[0];
-        const date = dateParseISO(region.data?.created_at);
-        if (!date) return;
-        return dateFormat(date, "d MMM yyyy");
-      }
+    const {
+      data: datesBuffer,
+    } = useBufferApi(() => 
+      scene?.value?.id &&
+      !scene?.value?.loading &&
+      window.value?.height &&
+      `/scenes/${scene.value.id}/dates?${qs.stringify({
+        height: window.value?.height,
+      })}`
+    )
+
+    const timestamps = computed(() => {
+      return new Uint32Array(datesBuffer.value);
+    })
+
+    const scrollRatio = ref(0);
+
+    const scrollDate = computed(() => {
+      if (!timestamps.value || timestamps.value.length < 1) return;
+      const index =
+        Math.min(timestamps.value.length - 1,
+        Math.max(0,
+        Math.floor(
+          scrollRatio.value * (timestamps.value.length - 1)
+        )));
+      const timestamp = timestamps.value[index];
+      return new Date(timestamp * 1000);
     })
 
     watch([scenesLoading, recreateScenesInProgress], ([scenesLoading, recreatingCount]) => {
@@ -362,7 +406,7 @@ export default {
       }
       emit("tasks", tasks);
     })
-    
+
     return {
       nativeScroll,
       scrollbarUpdateRegion,
@@ -377,9 +421,12 @@ export default {
       region,
       regionSeekId,
       regionSeekApplyTask,
-      visibleRegionsTask,
+      visibleViewTask,
       visibleRegions,
-      scrollbarLabel,
+      scrollRatio,
+      scrollTop,
+      scrollDate,
+      scrollSpeed,
     }
   },
 
@@ -484,12 +531,6 @@ export default {
         this.attachScrollbar(newScrollbar);
       },
     },
-    scrollbarLabel: {
-      immediate: true,
-      handler(label) {
-        this.scrollbarHandle?.setLabel(label);
-      },
-    },
     regionId: {
       immediate: true,
       async handler(regionId) {
@@ -551,7 +592,7 @@ export default {
           onUpdated: this.onScrollbarUpdated,
         },
       });
-      this.scrollbarHandle = scrollbar.ext("timeline");
+      this.scrollbarHandle = scrollbar;
     },
 
     detachScrollbar(scrollbar) {
@@ -960,6 +1001,8 @@ export default {
         })
       }
 
+      this.scrollRatio = scrollRatio;
+      this.scrollTop = scrollTop;
       return scrollRatio;
 
     },
@@ -1017,7 +1060,9 @@ export default {
       // Offset the native browser scroll to keep the viewer visible
       this.$refs.viewer.$el.style.transform = `translate(0, ${scrollY}px)`;
 
-      this.visibleRegionsTask.perform(view, this.sceneParams);
+      this.visibleViewTask.perform(view, this.sceneParams);
+      this.scrollRatio = scrollRatio;
+      this.scrollTop = scrollY;
     },
 
   }
@@ -1034,6 +1079,21 @@ export default {
   width: var(--size);
   height: var(--size);
 }
+
+.date-strip {
+  position: fixed;
+  left: 20px;
+  top: 80px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 2s cubic-bezier(1,0,.87,0);
+}
+
+.date-strip.visible {
+  opacity: 1;
+  transition: none;
+}
+
 .container {
   position: relative;
 }

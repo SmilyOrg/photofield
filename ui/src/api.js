@@ -119,6 +119,19 @@ export function useApi(getUrl, config) {
   }
 }
 
+async function bufferFetcher(endpoint) {
+  const response = await fetch(host + endpoint);
+  if (!response.ok) {
+    console.error(response);
+    throw new Error(response.statusText);
+  }
+  return await response.arrayBuffer();
+}
+
+export function useBufferApi(getUrl, config) {
+  return useSWRV(getUrl, bufferFetcher, config);
+}
+
 export function useTasks() {
   const intervalMs = 250;
   const response = useApi(
