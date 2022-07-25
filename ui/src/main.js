@@ -12,8 +12,6 @@ import "./os-theme-minimal-dark.css";
 import "./os-theme-customizations.css";
 
 import "overlayscrollbars";
-import "./scrollbar-timeline-ext.js";
-import "./scrollbar-timeline-ext.css";
 
 import "plyr/dist/plyr.css";
 

@@ -1,8 +1,7 @@
 .os-theme-minimal-dark > .os-scrollbar > .os-scrollbar-track > .os-scrollbar-handle:before {
-  border-top-left-radius: 8px;
-  border-bottom-left-radius: 8px;
+  right: 2px;
 }
 
 .os-theme-minimal-dark > .os-scrollbar-vertical > .os-scrollbar-track > .os-scrollbar-handle {
-  min-height: 28px;
+  min-height: 32px;
 }

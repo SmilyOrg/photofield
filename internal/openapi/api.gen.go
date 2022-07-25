@@ -156,6 +156,11 @@ type GetScenesParams struct {
 // PostScenesJSONBody defines parameters for PostScenes.
 type PostScenesJSONBody SceneParams
 
+// GetScenesSceneIdDatesParams defines parameters for GetScenesSceneIdDates.
+type GetScenesSceneIdDatesParams struct {
+	Height int `json:"height"`
+}
+
 // GetScenesSceneIdRegionsParams defines parameters for GetScenesSceneIdRegions.
 type GetScenesSceneIdRegionsParams struct {
 	X     float32 `json:"x"`
@@ -222,6 +227,9 @@ type ServerInterface interface {
 
 	// (GET /scenes/{id})
 	GetScenesId(w http.ResponseWriter, r *http.Request, id SceneId)
+
+	// (GET /scenes/{scene_id}/dates)
+	GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdDatesParams)
 
 	// (GET /scenes/{scene_id}/regions)
 	GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdRegionsParams)
@@ -492,6 +500,49 @@ func (siw *ServerInterfaceWrapper) GetScenesId(w http.ResponseWriter, r *http.Re
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetScenesId(w, r, id)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// GetScenesSceneIdDates operation middleware
+func (siw *ServerInterfaceWrapper) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "scene_id" -------------
+	var sceneId SceneId
+
+	err = runtime.BindStyledParameter("simple", false, "scene_id", chi.URLParam(r, "scene_id"), &sceneId)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter scene_id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetScenesSceneIdDatesParams
+
+	// ------------- Required query parameter "height" -------------
+	if paramValue := r.URL.Query().Get("height"); paramValue != "" {
+
+	} else {
+		http.Error(w, "Query argument height is required, but not found", http.StatusBadRequest)
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "height", r.URL.Query(), &params.Height)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter height: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetScenesSceneIdDates(w, r, sceneId, params)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -856,6 +907,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{id}", wrapper.GetScenesId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/scenes/{scene_id}/dates", wrapper.GetScenesSceneIdDates)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/regions", wrapper.GetScenesSceneIdRegions)
