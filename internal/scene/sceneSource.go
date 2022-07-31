@@ -19,6 +19,7 @@ import (
 type SceneSource struct {
 	DefaultScene render.Scene
 
+	maxSize    int64
 	sceneCache *ristretto.Cache
 	scenes     sync.Map
 }
@@ -42,10 +43,12 @@ type SceneConfig struct {
 
 func NewSceneSource() *SceneSource {
 	var err error
-	source := SceneSource{}
+	source := SceneSource{
+		maxSize: 1 << 26, // 67 MB
+	}
 	source.sceneCache, err = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e4,     // number of keys to track frequency of, 10x max expected key count
-		MaxCost:     1 << 27, // maximum size/cost of cache (128MiB)
+		NumCounters: 10000,   // number of keys to track frequency of, 10x max expected key count
+		MaxCost:     1 << 50, // maximum size/cost of cache, managed externally
 		BufferItems: 64,      // number of keys per Get buffer.
 		Metrics:     true,
 	})
@@ -102,6 +105,37 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	}()
 
 	return &scene
+}
+
+func (source *SceneSource) getOldestScene() (totalSize int64, oldestScene *render.Scene) {
+	totalSize = 0
+	source.scenes.Range(func(_, value interface{}) bool {
+		stored := value.(storedScene)
+		totalSize += getSceneCost(stored.scene)
+		if oldestScene == nil || stored.scene.CreatedAt.Before(oldestScene.CreatedAt) {
+			oldestScene = stored.scene
+		}
+		return true
+	})
+	return totalSize, oldestScene
+}
+
+func (source *SceneSource) deleteScene(id string) {
+	log.Printf("scene delete %v", id)
+	source.scenes.Delete(id)
+	source.sceneCache.Del(id)
+}
+
+func (source *SceneSource) pruneScenes() {
+	for {
+		totalSize, oldestScene := source.getOldestScene()
+		if totalSize <= int64(source.maxSize) {
+			break
+		}
+		if oldestScene != nil {
+			source.deleteScene(oldestScene.Id)
+		}
+	}
 }
 
 func (source *SceneSource) GetSceneById(id string, imageSource *image.Source) *render.Scene {
@@ -178,6 +212,8 @@ func (source *SceneSource) Add(config SceneConfig, imageSource *image.Source) *r
 			panic(err)
 		}
 	}
+
+	source.pruneScenes()
 
 	scene := source.loadScene(config, imageSource)
 	scene.Id = id
