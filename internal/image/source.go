@@ -211,6 +211,14 @@ func (source *Source) GetDir(dir string) Info {
 	return result.Info
 }
 
+func (source *Source) GetDirsCount(dirs []string) int {
+	for i, _ := range dirs {
+		dirs[i] = filepath.FromSlash(dirs[i])
+	}
+	count, _ := source.database.GetDirsCount(dirs)
+	return count
+}
+
 func (source *Source) GetApplicableThumbnails(path string) []Thumbnail {
 	thumbs := make([]Thumbnail, 0, len(source.Thumbnails))
 	pathExt := strings.ToLower(filepath.Ext(path))

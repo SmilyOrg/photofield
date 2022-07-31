@@ -33,6 +33,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	chirender "github.com/go-chi/render"
+	"github.com/hako/durafmt"
 	"github.com/imdario/mergo"
 	"github.com/joho/godotenv"
 	"github.com/lpar/gzipped"
@@ -828,6 +829,7 @@ func loadConfiguration(path string) AppConfig {
 
 	var appConfig AppConfig
 
+	log.Printf("config path %v", path)
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Printf("unable to open %s, using defaults (%s)\n", path, err.Error())
@@ -984,7 +986,17 @@ func main() {
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
-	// addExampleScene()
+	extensions := strings.Join(appConfig.Media.ListExtensions, ", ")
+	log.Printf("extensions %v", extensions)
+
+	log.Printf("%v collections", len(collections))
+	for i := range collections {
+		collection := &collections[i]
+		collection.UpdateStatus(imageSource)
+		indexedAgo := durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1)
+		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+	}
+
 	// renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 
 	addr, exists := os.LookupEnv("PHOTOFIELD_ADDRESS")
