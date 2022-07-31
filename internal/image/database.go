@@ -447,6 +447,49 @@ func (source *Database) GetDir(dir string) (InfoResult, bool) {
 	return imageInfo, true
 }
 
+func (source *Database) GetDirsCount(dirs []string) (int, bool) {
+
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	sql := `
+	SELECT COUNT(rowid)
+	FROM infos
+	WHERE path_prefix_id IN (
+		SELECT id
+		FROM prefix
+		WHERE
+	`
+
+	for i := range dirs {
+		sql += `str LIKE ? `
+		if i < len(dirs)-1 {
+			sql += "OR "
+		}
+	}
+
+	sql += `
+		)
+	`
+
+	stmt := conn.Prep(sql)
+	bindIndex := 1
+	defer stmt.Reset()
+
+	for _, dir := range dirs {
+		stmt.BindText(bindIndex, dir+"%")
+		bindIndex++
+	}
+
+	if exists, err := stmt.Step(); err != nil {
+		log.Printf("error listing files: %s\n", err.Error())
+	} else if !exists {
+		return 0, false
+	}
+
+	return stmt.ColumnInt(0), true
+}
+
 func (source *Database) Write(path string, info Info, writeType InfoWriteType) error {
 	source.pending <- &InfoWrite{
 		Path: path,

@@ -21,6 +21,7 @@ type Collection struct {
 	ExpandSort    string     `json:"expand_sort"`
 	Dirs          []string   `json:"dirs"`
 	IndexedAt     *time.Time `json:"indexed_at,omitempty"`
+	IndexedCount  int        `json:"indexed_count"`
 }
 
 func (collection *Collection) GenerateId() {
@@ -73,6 +74,7 @@ func (collection *Collection) UpdateStatus(source *image.Source) {
 		}
 	}
 	collection.IndexedAt = earliestIndex
+	collection.IndexedCount = source.GetDirsCount(collection.Dirs)
 }
 
 func (collection *Collection) GetInfos(source *image.Source, options image.ListOptions) <-chan image.SourcedInfo {
