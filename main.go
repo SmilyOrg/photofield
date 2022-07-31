@@ -993,7 +993,10 @@ func main() {
 	for i := range collections {
 		collection := &collections[i]
 		collection.UpdateStatus(imageSource)
-		indexedAgo := durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1)
+		indexedAgo := "N/A"
+		if collection.IndexedAt != nil {
+			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
+		}
 		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
 	}
 
