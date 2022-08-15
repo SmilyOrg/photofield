@@ -1031,12 +1031,15 @@ func main() {
 
 	r.Route(apiPrefix, func(r chi.Router) {
 
-		r.Use(cors.Handler(cors.Options{
-			AllowedOrigins: []string{"*"},
-			AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-			MaxAge:         300, // Maximum value not ignored by any of major browsers
-		}))
+		allowedOrigins := os.Getenv("PHOTOFIELD_CORS_ALLOWED_ORIGINS")
+		if allowedOrigins != "" {
+			r.Use(cors.Handler(cors.Options{
+				AllowedOrigins: strings.Split(allowedOrigins, ","),
+				AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+				AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+				MaxAge:         300, // Maximum value not ignored by any of major browsers
+			}))
+		}
 
 		var api Api
 		r.Mount("/", openapi.Handler(&api))
