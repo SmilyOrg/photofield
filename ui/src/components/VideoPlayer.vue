@@ -157,7 +157,7 @@ export default {
       }
     },
     onError(event) {
-      console.error(event);
+      console.error("Video playback error", event);
       if (!this.hasPlayed) {
         const qualityConfig = this.player.config.quality;
         const qualitySelected = qualityConfig.selected;

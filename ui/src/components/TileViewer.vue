@@ -1,12 +1,18 @@
 <template>
-  <div class="container">
-    <div class="tileViewer" ref="viewer"></div>
+  <div class="container" ref="container" tabindex="1">
+    <div class="tileViewer" ref="map"></div>
   </div>
 </template>
 
 <script>
-import OpenSeadragon from "openseadragon";
-import { getTileUrl } from "../api.js";
+import Map from 'ol/Map';
+import XYZ from 'ol/source/XYZ';
+import TileLayer from 'ol/layer/Tile';
+import View from 'ol/View';
+import Projection from 'ol/proj/Projection';
+
+import "ol/ol.css";
+import { getTileUrl } from '../api';
 
 export default {
   
@@ -16,7 +22,6 @@ export default {
     interactive: Boolean,
     tileSize: Number,
     view: Object,
-    immediate: Boolean,
     debug: Object,
   },
 
@@ -25,6 +30,7 @@ export default {
   data() {
     return {
       viewer: null,
+      maxZoom: 30,
       latestView: {
         x: 0,
         y: 0,
@@ -34,9 +40,9 @@ export default {
     }
   },
   async created() {
-    this.tempRect = new OpenSeadragon.Rect();
   },
   async mounted() {
+
     this.reset();
   },
   unmounted() {
@@ -58,19 +64,14 @@ export default {
       this.reset();
     },
 
-    immediate() {
-      this.reset();
-    },
-
     debug: {
       deep: true,
       handler() {
-        this.reset();
+        this.reload();
       },
     },
 
     interactive(interactive) {
-      if (!this.viewer) return;
       this.setInteractive(interactive);
     },
 
@@ -81,148 +82,235 @@ export default {
   },
   computed: {
     pointerTarget() {
-      return this.$refs.viewer.querySelector(".openseadragon-canvas canvas");
+      return this.$refs.map.querySelector(".ol-layer > canvas");
     },
     pointerDistThreshold() {
-      return this.viewer.innerTracker.clickDistThreshold;
+      return 5;
     },
     pointerTimeThreshold() {
-      return this.viewer.innerTracker.clickTimeThreshold;
+      return 300;
     },
+    projectionExtent() {
+      let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
+      if (width < 1) width = 1;
+      if (height < 1) height = 1;
+      return [0, 0, width, height];
+    }
   },
   methods: {
 
-    initOpenSeadragon(element) {
+    getTiledImageSizeAtZoom(zoom) {
+      const tileSize = this.tileSize;
+      const power = 1 << zoom;
+      let width = power*tileSize;
+      let height = power*tileSize;
+      const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
+      if (sceneAspect < 1) {
+        width = height * sceneAspect;
+      } else {
+        height = width / sceneAspect;
+      }
+      return { width, height }
+    },
 
-      this.viewer = OpenSeadragon({
-        element,
-        prefixUrl: "./openseadragon/images/",
-        tileSources: this.getTiledImage(),
-        showNavigationControl: false,
-        defaultZoomLevel: 1,
-        // constrainDuringPan: true,
-        viewportMargins: {
-          left: 0,
-          right: 0,
-        },
-        springStiffness: 10,
-        gestureSettingsMouse: {
-          clickToZoom: false,
-          flickMomentum: 0.2,
-        },
-        gestureSettingsTouch: {
-          clickToZoom: false,
-          flickMomentum: 0.2,
-          flickEnabled: false,
-        },
-        animationTime: 0.1,
-        zoomPerSecond: 1.0,
-        zoomPerScroll: 1.5,
-        // blendTime: 0.3,
-        imageLoaderLimit: 10,
-        mouseNavEnabled: this.interactive,
-        // preload: true,
-        // autoResize: false,
-        // smoothTileEdgesMinZoom: Infinity,
-        // placeholderFillStyle: "#FF8800"
-        // debugMode: true,
-        immediateRender: this.immediate,
-        // imageSmoothingEnabled: false,
-        // alwaysBlend: true,
-        // autoResize: false,
+    initOpenLayers(element) {
+
+      const extent = this.projectionExtent;
+
+      const projection = new Projection({
+        code: "tiles",
+        units: "pixels",
+        extent,
       });
+      this.projection = projection;
+
+      const source = new XYZ({
+        tileUrlFunction: this.tileUrlFunction,
+        crossOrigin: "Anonymous",
+        projection,
+        tileSize: [this.tileSize, this.tileSize],
+        wrapX: false,
+        // zDirection: -1,
+        // zDi
+        // imageSmoothing: false,
+        // interpolate: false,
+        opaque: true,
+        transition: 100,
+        // transition: 0,
+      });
+      this.source = source;
+
+      const layer = new TileLayer({
+        preload: Infinity,
+        source,
+      });
+      this.layer = layer;
+
+      // Limit minimum size loaded to avoid
+      // loading tiled images with very little content
+      let minZoom = 0;
+      const minTiledImageWidth = 10;
+      for (let i = 0; i < this.maxZoom; i++) {
+        const zoomSize = this.getTiledImageSizeAtZoom(i);
+        if (zoomSize.width >= minTiledImageWidth) {
+          minZoom = i;
+          break;
+        }
+      }
+
+      this.map = new Map({
+        target: element,
+        // pixelRatio: 1,
+        layers: [layer],
+        view: new View({
+          center: [extent[2]/2, extent[3]],
+          projection,
+          zoom: 0,
+          minZoom,
+          maxZoom: this.maxZoom,
+          enableRotation: false,
+          extent,
+          smoothExtentConstraint: false,
+        }),
+        controls: [],
+      });
+      console.log(this.map.getView().getMinZoom())
+      this.map.on("click", event => this.onClick(event));
+      this.map.on("movestart", event => this.onMoveStart(event));
+      this.map.on("moveend", event => this.onMoveEnd(event));
+
+      this.v = this.map.getView();
 
       this.setInteractive(this.interactive);
+      this.$emit("viewer", this.map);
 
-      this.viewer.addHandler("open", () => {
-        this.setView(this.view || this.latestView);
-      });
-
-      this.viewer.addHandler("canvas-click", event => this.onCanvasClick(event));
-      this.viewer.addHandler("zoom", event => this.onZoom(event));
-      this.viewer.addHandler("open", () => {
-        // Initializing pans a couple of times, so wait with this handler
-        // until after initialization
-        this.viewer.addHandler("pan", event => this.onPan(event));
-      });
-      this.viewer.addHandler("tile-loaded", this.onTileLoad);
-
-      this.viewer.innerTracker.keyDownHandler = null;
-
-      this.$emit("viewer", this.viewer);
-    },
-
-    async onCanvasClick(event) {
-      if (!this.interactive) return;
-      if (!event.quick) return;
-      const coords = this.elementToViewportCoordinates(event.position);
-      this.$emit("click", coords);
-    },
-
-    elementToViewportCoordinates(eventOrPoint) {
-      if (!this.viewer) return null;
-      const point =
-        eventOrPoint instanceof OpenSeadragon.Point ? eventOrPoint :
-        new OpenSeadragon.Point(eventOrPoint.x, eventOrPoint.y);
-      const viewportPos = this.viewer.viewport.viewerElementToViewportCoordinates(point);
-      const scale = this.scene?.bounds.w || 1;
-      return {
-        x: viewportPos.x * scale,
-        y: viewportPos.y * scale,
-      }
-    },
-
-    onZoom(event) {
-      if (!this.interactive) return;
-      
-      const view = this.latestView;
-      const viewWidthZoom = this.scene.bounds.w / view.w;
-      const viewHeightZoom = this.scene.bounds.w / view.h;
-      const viewMinZoom = Math.min(viewWidthZoom, viewHeightZoom);
-
-      this.$emit("zoom", event.zoom, viewMinZoom);
-      this.onPan();
-    },
-
-    onPan() {
-      if (!this.interactive) return;
-      const scale = this.scene.bounds.w;
-      const bounds = this.viewer.viewport.getBounds();
-      this.latestView = {
-        x: bounds.x * scale,
-        y: bounds.y * scale,
-        w: bounds.width * scale,
-        h: bounds.height * scale,
-      };
-      this.$emit("view", this.latestView);
-    },
-
-    onTileLoad() {
-      const loader = this.viewer.imageLoader;
-      this.$emit("load", {
-        inProgress: loader.jobsInProgress,
-        limit: loader.jobLimit,
-      });
     },
 
     setInteractive(interactive) {
-      this.viewer.setMouseNavEnabled(interactive);
-      const touchAction = interactive ? 'none' : 'auto';
-      const element = OpenSeadragon.getElement(this.viewer.canvas);
-      if (typeof element.style.touchAction !== 'undefined') {
-        element.style.touchAction = touchAction;
-      } else if (typeof element.style.msTouchAction !== 'undefined') {
-        element.style.msTouchAction = touchAction;
-      }
+      const element = this.$refs.container;
       if (interactive) {
         element.focus();
       }
     },
 
-    setView(view, options) {
+    onClick(event) {
+      if (!this.interactive) return;
+      const coords = this.viewFromCoordinate(event.coordinate);
+      this.$emit("click", coords);
+    },
 
-      if (!this.viewer) {
-        console.warn("Viewer not initialized yet, setting pending view", view);
+    onMoveStart(event) {
+      this.moveStartEvent = event;
+    },
+
+    onMoveEnd(event) {
+      if (!this.interactive) return;
+
+      if (!this.scene) return;
+      if (!this.moveStartEvent) throw new Error("Missing moveStartEvent");
+
+      const startState = this.moveStartEvent.frameState.viewState;
+      const endState = event.frameState.viewState;
+
+      const zoomChange = startState.zoom != endState.zoom;
+      const panChange = startState.center[0] != endState.center[0] || startState.center[1] != endState.center[1];
+
+      // console.log(endState.zoom)
+
+      if (!zoomChange && !panChange) {
+        return;
+      }
+
+      const visibleExtent = this.v.calculateExtent(this.map.getSize());
+      const view = this.viewFromExtent(visibleExtent);
+      this.latestView = view;
+    
+      if (zoomChange) {
+        const viewWidthZoom = this.scene.bounds.w / view.w;
+        const viewHeightZoom = this.scene.bounds.w / view.h;
+        const viewMinZoom = Math.min(viewWidthZoom, viewHeightZoom);
+        this.$emit("zoom", viewMinZoom);
+      }
+
+      if (panChange) {
+        this.$emit("view", view);
+      }
+    },
+
+    reset() {
+      if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
+      if (this.map) {
+        this.map.dispose();
+      }
+      this.initOpenLayers(this.$refs.map);
+    },
+
+    reload() {
+      this.source.refresh();
+    },
+
+    tileUrlFunction([z, x, y], pixelRatio, proj) {
+      if (!this.scene) return;
+      return getTileUrl(this.scene.id, z, x, y, this.tileSize, this.debug);
+    },
+
+    elementToViewportCoordinates(eventOrPoint) {
+      const coord = this.map.getEventCoordinate(eventOrPoint);
+      return this.viewFromCoordinate(coord);
+    },
+
+    extentFromView(view) {
+      if (!this.scene) throw new Error("Scene not found");
+      const fullExtent = this.projection.getExtent();
+      const fw = fullExtent[2] - fullExtent[0];
+      const fh = fullExtent[3] - fullExtent[1];
+      const sx = fw / this.scene.bounds.w;
+      const sy = fh / this.scene.bounds.h;
+      const tx = view.x * sx;
+      const ty = fh - view.y * sy;
+      const tw = view.w * sx;
+      const th = view.h * sy;
+      return [tx, ty-th, tx+tw, ty];
+    },
+
+    viewFromExtent(extent) {
+      if (!this.scene) throw new Error("Scene not found");
+      const fullExtent = this.projection.getExtent();
+      const fw = fullExtent[2] - fullExtent[0];
+      const fh = fullExtent[3] - fullExtent[1];
+      const sx = this.scene.bounds.w / fw;
+      const sy = this.scene.bounds.h / fh;
+      const tx = extent[0];
+      const ty = extent[3];
+      const tw = extent[2]-tx;
+      const th = ty-extent[1];
+      return {
+        x: tx * sx,
+        y: (fh-ty)*sy,
+        w: tw * sx,
+        h: th * sy,
+      }
+    },
+
+    viewFromCoordinate(coord) {
+      if (!this.scene) throw new Error("Scene not found");
+      const fullExtent = this.projection.getExtent();
+      const fw = fullExtent[2] - fullExtent[0];
+      const fh = fullExtent[3] - fullExtent[1];
+      const sx = this.scene.bounds.w / fw;
+      const sy = this.scene.bounds.h / fh;
+      const tx = coord[0];
+      const ty = coord[1];
+      return {
+        x: tx * sx,
+        y: (fh-ty)*sy,
+      }
+    },
+
+    setView(view, options) {
+    
+      if (!this.map) {
+        console.warn("Map not initialized yet, setting pending view", view);
         this.pendingView = { view, options };
         return;
       }
@@ -237,12 +325,12 @@ export default {
         return;
       }
 
-      if (this.pendingView) {
+      if (this.pendingView && !view) {
         view = this.pendingView.view;
         options = this.pendingView.options;
-        this.pendingView = null;
         console.warn("Using pending view", view);
       }
+      this.pendingView = null;
 
       if (
         this.latestView && view &&
@@ -254,112 +342,16 @@ export default {
         // View is already up to date, nothing to do.
         return;
       }
-
-
+      
       this.latestView = view;
 
-      const scale = 1 / this.scene.bounds.w;
-      const rect = this.tempRect;
-      rect.x = view.x * scale;
-      rect.y = view.y * scale;
-      rect.width = view.w * scale;
-      rect.height = view.h * scale;
-
-      if (rect.width == 0 || rect.height == 0) {
-        console.warn("View has zero area, ignoring", rect);
-        return;
-      }
-
-      function withSpeed(viewport, animationTime, callback) {
-        const prevValues = {
-          centerSpringX: viewport.centerSpringX.animationTime,
-          centerSpringY: viewport.centerSpringY.animationTime,
-          zoomSpring: viewport.zoomSpring.animationTime,
-        }
-
-        viewport.centerSpringX.animationTime =
-        viewport.centerSpringY.animationTime =
-        viewport.zoomSpring.animationTime =
-        animationTime;
-
-        callback();
-
-        viewport.centerSpringX.animationTime = prevValues.centerSpringX;
-        viewport.centerSpringY.animationTime = prevValues.centerSpringY;
-        viewport.zoomSpring.animationTime = prevValues.zoomSpring;
-      }
-
-      if (options && options.animationTime) {
-        withSpeed(this.viewer.viewport, options.animationTime, () => {
-          this.viewer.viewport.fitBounds(rect, false);
-        });
-      } else {
-        this.viewer.viewport.fitBounds(rect, options ? options.immediate : true);
-      }
-    },
-
-    reset() {
-      if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
-      if (!this.viewer) {
-        this.initOpenSeadragon(this.$refs.viewer);
-      } else {
-        const oldImage = this.viewer.world.getItemAt(0);
-        const newSource = this.getTiledImage();
-        this.viewer.addTiledImage({
-          tileSource: newSource,
-          success: () => {
-            if (oldImage) this.viewer.world.removeItem(oldImage);
-            this.$emit("reset");
-          }
-        });
-      }
-    },
-
-    getTiledImageSizeAtLevel(level) {
-      const tileSize = this.tileSize;
-      const power = 1 << level;
-      let width = power*tileSize;
-      let height = power*tileSize;
-      const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
-      if (sceneAspect < 1) {
-        width = height * sceneAspect;
-      } else {
-        height = width / sceneAspect;
-      }
-      return { width, height }
-    },
-    
-    getTiledImage() {
-      const tileSize = this.tileSize;
-      let minLevel = 0;
-      const maxLevel = 30;
+      const targetExtent = this.extentFromView(view);
       
-      const { width, height } = this.getTiledImageSizeAtLevel(maxLevel);
-      if (width < 1) width = 1;
-      if (height < 1) height = 1;
-      
-      // Limit minimum size loaded to avoid
-      // loading tiled images with very little content
-      const minTiledImageWidth = 10;
-      for (let i = 0; i < maxLevel; i++) {
-        const levelSize = this.getTiledImageSizeAtLevel(i);
-        if (levelSize.width >= minTiledImageWidth) {
-          minLevel = i;
-          break;
-        }
-      }
+      const fitOpts = options ? {
+        duration: options.animationTime*1000,
+      } : undefined;
 
-      return {
-        width,
-        height,
-        tileSize,
-        minLevel,
-        maxLevel,
-        getTileUrl: (level, x, y) => {
-          if (!this.scene) return;
-          return getTileUrl(this.scene.id, level, x, y, tileSize, this.debug);
-        }
-      }
+      this.v.fit(targetExtent, fitOpts);
     },
 
   }
@@ -375,6 +367,7 @@ export default {
 
 .container {
   position: relative;
+  /* padding-top: 60px; */
 }
 
 </style>

@@ -62,7 +62,7 @@ gallery software.
 ### Features
 
 * **Seamless zoomable interface**. Thanks to tiled image loading supported by
-[OpenSeadragon] and the API implementing tile rendering, you can switch between
+[OpenLayers] and the API implementing tile rendering, you can switch between
 levels of detail seamlessly without loading a special detailed or
 fullscreen view.
 
@@ -134,7 +134,8 @@ over time as IDs can change.
   fast single-file database/cache
 * [Vue 3] - frontend framework
 * [BalmUI] - Material UI components
-* [OpenSeadragon] - in-browser tiled image rendering
+* [OpenLayers] - in-browser tiled image rendering
+* [OpenSeadragon] (honorary mention) - tiled image rendering library used previously
 * [+ more Go libraries](go.mod)
 * [+ more npm libraries](ui/package.json)
 
@@ -370,6 +371,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [godirwalk]: https://github.com/karrick/godirwalk
 [prominent color]: https://github.com/EdlinOrg/prominentcolor
 
+[OpenLayers]: https://openlayers.org/
 [OpenSeadragon]: https://openseadragon.github.io/
 [Node.js]: https://nodejs.org/
 [Vue 3]: https://v3.vuejs.org/
