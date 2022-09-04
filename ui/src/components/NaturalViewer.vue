@@ -38,7 +38,7 @@
 
     <date-strip
       class="date-strip"
-      :class="{ visible: scrollSpeed > window.height * 12 }"
+      :class="{ visible: scrollSpeed > window.height * 4 }"
       :date="scrollDate"
     ></date-strip>
 
@@ -335,20 +335,26 @@ export default {
     }).keepLatest();
 
     const scrollTop = ref(0);
-    let scrollTopLastUpdate = 0;
-    watch(scrollTop, (newValue, oldValue) => {
-      const now = Date.now();
-      const diff = newValue - oldValue;
-      const elapsed = now - scrollTopLastUpdate;
-      const pxPerSec = Math.abs(diff) * 1000 / elapsed;
-      scrollSpeedTask.perform(pxPerSec);
-      scrollTopLastUpdate = now;
-    })
-    
+    const scrollRatio = ref(0);
+    const scrollLastUpdate = ref(0);
     const scrollSpeed = ref(0);
-    const scrollSpeedTask = useTask(function*(_, y) {
-      scrollSpeed.value = y;
-      yield timeout(500);
+    const scrollUpdateTask = useTask(function*(_, ratio, top) {
+      yield timeout(200);
+      const prevTop = scrollTop.value;
+      const prevTime = scrollLastUpdate.value;
+      const now = Date.now();
+      scrollTop.value = top;
+      scrollRatio.value = ratio;
+      scrollLastUpdate.value = now;
+      const elapsed = now - prevTime;
+      const diff = top - prevTop;
+      const pxPerSec = Math.abs(diff) * 1000 / elapsed;
+      scrollSpeed.value += (pxPerSec - scrollSpeed.value) * 0.9;
+      scrollResetTask.perform();
+    }).keepLatest();
+
+    const scrollResetTask = useTask(function*(_) {
+      yield timeout(1000);
       scrollSpeed.value = 0;
     }).restartable();
     
@@ -376,9 +382,7 @@ export default {
 
     const timestamps = computed(() => {
       return new Uint32Array(datesBuffer.value);
-    })
-
-    const scrollRatio = ref(0);
+    });
 
     const scrollDate = computed(() => {
       if (!timestamps.value || timestamps.value.length < 1) return;
@@ -423,8 +427,7 @@ export default {
       regionSeekApplyTask,
       visibleViewTask,
       visibleRegions,
-      scrollRatio,
-      scrollTop,
+      scrollUpdateTask,
       scrollDate,
       scrollSpeed,
     }
@@ -814,7 +817,7 @@ export default {
     },
 
     async onZoom(zoom) {
-      if (!this.wasRecentlyFocused() && zoom < 0.99) {
+      if (!this.wasRecentlyFocused() && zoom <= 1.1) {
         this.nativeScroll = true;
         this.pushScrollToView();
       }
@@ -898,7 +901,6 @@ export default {
     },
 
     setView(view, transition) {
-      // console.log(view, transition);
       this.$refs.viewer.setView(
         view,
         transition && { animationTime: transition }
@@ -1001,8 +1003,7 @@ export default {
         })
       }
 
-      this.scrollRatio = scrollRatio;
-      this.scrollTop = scrollTop;
+      this.scrollUpdateTask.perform(scrollRatio, scrollTop);
       return scrollRatio;
 
     },
@@ -1044,7 +1045,11 @@ export default {
           scrollY = scrollTop;
         }
       }
-
+      
+      if (viewMaxY < scrollY) {
+        this.scrollbar.scroll([0, viewMaxY + "px"]);
+      }
+      
       // Ratio can be outside of range if the range has changed recently
       scrollRatio = Math.min(1, Math.max(0, scrollRatio));
 
@@ -1061,8 +1066,7 @@ export default {
       this.$refs.viewer.$el.style.transform = `translate(0, ${scrollY}px)`;
 
       this.visibleViewTask.perform(view, this.sceneParams);
-      this.scrollRatio = scrollRatio;
-      this.scrollTop = scrollY;
+      this.scrollUpdateTask.perform(scrollRatio, scrollY);
     },
 
   }

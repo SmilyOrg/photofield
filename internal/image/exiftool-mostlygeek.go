@@ -92,7 +92,8 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 			if strings.Contains(name, "Date") || strings.Contains(name, "Time") {
 				if info.DateTime.IsZero() {
 					info.DateTime, _, _, _ = parseDateTime(value)
-				} else {
+				} else if name != "FileModifyDate" && name != "FileCreateDate" {
+					// Prefer time with timezone if available
 					t, hasTimezone, _, _ := parseDateTime(value)
 					if hasTimezone && info.DateTime.Location() == time.UTC {
 						info.DateTime = t

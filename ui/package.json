@@ -13,7 +13,7 @@
     "balm-ui": "^10.9.0",
     "copy-image-clipboard": "^1.0.1",
     "date-fns": "^2.28.0",
-    "openseadragon": "^3.1.0",
+    "ol": "^6.15.1",
     "overlayscrollbars": "^1.13.2",
     "plyr": "^3.7.2",
     "qs": "^6.11.0",
