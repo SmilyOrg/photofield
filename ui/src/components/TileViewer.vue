@@ -158,6 +158,10 @@ export default {
         }
       }
 
+      const sceneSmallerThanViewport =
+        this.scene.bounds.w < element.clientWidth ||
+        this.scene.bounds.h < element.clientHeight;
+
       this.map = new Map({
         target: element,
         // pixelRatio: 1,
@@ -171,10 +175,10 @@ export default {
           enableRotation: false,
           extent,
           smoothExtentConstraint: false,
+          showFullExtent: sceneSmallerThanViewport,
         }),
         controls: [],
       });
-      console.log(this.map.getView().getMinZoom())
       this.map.on("click", event => this.onClick(event));
       this.map.on("movestart", event => this.onMoveStart(event));
       this.map.on("moveend", event => this.onMoveEnd(event));
