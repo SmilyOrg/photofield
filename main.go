@@ -679,7 +679,7 @@ func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sc
 	}
 
 	region := scene.GetRegion(int(id))
-	if region.Id == -1 {
+	if region.Id <= 0 {
 		http.Error(w, "Region not found", http.StatusNotFound)
 		return
 	}

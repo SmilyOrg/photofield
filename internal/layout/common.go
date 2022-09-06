@@ -124,7 +124,7 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, sce
 	photos := scene.GetVisiblePhotos(rect, regionConfig.Limit)
 	for photo := range photos {
 		regions = append(regions, regionSource.getRegionFromPhoto(
-			photo.Index,
+			1+photo.Index,
 			photo.Photo,
 			scene, regionConfig,
 		))
@@ -133,10 +133,10 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, sce
 }
 
 func (regionSource PhotoRegionSource) GetRegionById(id int, scene *render.Scene, regionConfig render.RegionConfig) render.Region {
-	if id < 0 || id >= len(scene.Photos)-1 {
-		return render.Region{Id: -1}
+	if id <= 0 || id > len(scene.Photos) {
+		return render.Region{}
 	}
-	photo := scene.Photos[id]
+	photo := scene.Photos[id-1]
 	return regionSource.getRegionFromPhoto(id, &photo, scene, regionConfig)
 }
 
