@@ -548,7 +548,7 @@ export default {
     region(region) {
       // console.log("region", this.regionFocusPending, this.region)
       if (this.region && this.regionFocusPending) {
-        this.viewRegion(this.region);
+        this.focusRegion(this.region);
         this.regionFocusPending = null;
         this.scrollbarUpdateRegion = this.region;
       }
@@ -926,7 +926,7 @@ export default {
         prevId = parseInt(this.regionId, 10);
       }
       const nextId = prevId + offset;
-      if (nextId < 0 || nextId >= this.scene.file_count-1) {
+      if (nextId <= 0 || nextId > this.scene.file_count) {
         return;
       }
       this.regionFocusPending = true;
