@@ -1,8 +1,8 @@
 package image
 
 import (
-	"fmt"
 	"image"
+	"log"
 	"photofield/internal/metrics"
 	"reflect"
 	"time"
@@ -93,11 +93,18 @@ func newImageCache(caches Caches) ImageCache {
 				return int64(unsafe.Sizeof(*img)) +
 					int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
 
+			case *image.Paletted:
+				return int64(unsafe.Sizeof(*img)) +
+					int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0])) +
+					int64(cap(img.Palette))*int64(unsafe.Sizeof(img.Pix[0]))
+
 			case nil:
 				return 1
 
 			default:
-				panic(fmt.Sprintf("Unable to compute cost, unsupported image format %v", reflect.TypeOf(img)))
+				log.Printf("Unable to compute cost, unsupported image format %v", reflect.TypeOf(img))
+				// Fallback image size (10MB)
+				return 10000000
 			}
 		},
 	})
