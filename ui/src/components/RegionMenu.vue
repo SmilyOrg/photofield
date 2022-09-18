@@ -42,7 +42,7 @@
         </ui-item>
       </ui-nav>
       <div v-if="expanded" class="thumbnails">
-        <ui-nav-item
+        <a
           v-for="thumb in region.data?.thumbnails"
           :key="thumb.name"
           class="thumbnail"
@@ -50,7 +50,7 @@
           target="_blank"
         >
           {{ thumb.width }}
-        </ui-nav-item>
+        </a>
       </div>
       <expand-button
         :expanded="expanded"
@@ -140,8 +140,13 @@ export default {
 
 .thumbnail {
   font-size: 0.8em;
-  padding: 6px;
-  height: 24px;
+  padding: 10px 6px;
+  text-decoration: none;
+  color: var(--mdc-theme-text-primary-on-background);
+}
+
+.thumbnail:hover {
+  background: rgb(241, 241, 241);
 }
 
 .filename {

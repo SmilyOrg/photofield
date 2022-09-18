@@ -88,7 +88,7 @@
             :expanded="settingsExtraExpanded"
             @click="settingsExtraExpanded = !settingsExtraExpanded"
           ></expand-button>
-          <template v-if="settingsExtraExpanded">
+          <div v-if="settingsExtraExpanded">
             <ui-form-field>
               <ui-checkbox v-model="settings.debug.overdraw"></ui-checkbox>
               <label>Debug Overdraw</label>
@@ -97,7 +97,7 @@
               <ui-checkbox v-model="settings.debug.thumbnails"></ui-checkbox>
               <label>Debug Thumbnails</label>
             </ui-form-field>
-          </template>
+          </div>
         </div>
         <ui-icon-button
           icon="settings"

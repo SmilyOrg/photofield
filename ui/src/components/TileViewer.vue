@@ -186,6 +186,7 @@ export default {
       this.v = this.map.getView();
 
       this.setInteractive(this.interactive);
+      this.setView(this.view || this.latestView);
       this.$emit("viewer", this.map);
 
     },
