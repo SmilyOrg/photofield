@@ -2,8 +2,8 @@
   <ui-button
     class="expand"
   >
-    <ui-icon v-if="expanded">expand_less</ui-icon>
-    <ui-icon v-if="!expanded">expand_more</ui-icon>
+    <ui-icon class="icon" v-if="expanded">expand_less</ui-icon>
+    <ui-icon class="icon" v-if="!expanded">expand_more</ui-icon>
   </ui-button>
 </template>
 
@@ -18,6 +18,10 @@ export default {
 .expand {
   width: 100%;
   height: 20px;
+}
+
+.icon {
+  pointer-events: none;
 }
 
 </style>
