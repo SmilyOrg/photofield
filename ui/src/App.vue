@@ -2,7 +2,7 @@
   <div class="app">
     <ui-top-app-bar
       class="top-bar"
-      :class="{ immersive }"
+      :class="{ immersive, search: searchActive }"
       nav-id="menu"
       :fixed="true"
       contentSelector="#content"
@@ -18,6 +18,16 @@
       </span>
 
       <template #toolbar="{ toolbarItemClass }">
+
+        <search-input
+          v-if="capabilities?.search.supported"
+          :loading="query.search && scene?.loading"
+          :modelValue="query.search"
+          :error="scene?.error"
+          @active="searchActive = $event"
+          @update:modelValue="setQuery('search', $event)"
+        ></search-input>
+
         <div class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
           <span v-if="!tasks?.length">
             No background tasks running.
@@ -56,7 +66,8 @@
         </div>
         <div class="settings" :class="{ hidden: !settingsExpanded, toolbarItemClass }">
           <ui-select
-            v-model="settings.layout"
+            :modelValue="query.layout"
+            @update:modelValue="setQuery('layout', $event)"
             :options="layoutOptions"
           >
             Layout
@@ -64,22 +75,22 @@
           <div class="size-icons">
             <ui-icon-button
               icon="photo_size_select_small"
-              :class="{ active: settings.image.height == 30 }"
-              @click="settings.image.height = 30"
+              :class="{ active: query.image_height == '30' }"
+              @click="setQuery('image_height', 30)"
               outlined
             >
             </ui-icon-button>
             <ui-icon-button
               icon="photo_size_select_large"
-              :class="{ active: settings.image.height == 100 }"
-              @click="settings.image.height = 100"
+              :class="{ active: query.image_height == '100' }"
+              @click="setQuery('image_height', query.image_height == 100 ? undefined : 100)"
               outlined
             >
             </ui-icon-button>
             <ui-icon-button
               icon="photo_size_select_actual"
-              :class="{ active: settings.image.height == 300 }"
-              @click="settings.image.height = 300"
+              :class="{ active: query.image_height == '300' }"
+              @click="setQuery('image_height', 300)"
               outlined
             >
             </ui-icon-button>
@@ -137,8 +148,9 @@
           <ui-button @click="recreateScene()">
             Reload scene
           </ui-button>
-          <ui-button @click="loadMeta()">Reload metadata</ui-button>
-          <ui-button @click="loadColor()">Reload colors</ui-button>
+          <ui-button @click="reload('LOAD_META')">Reload metadata</ui-button>
+          <ui-button @click="reload('LOAD_COLOR')">Reload colors</ui-button>
+          <ui-button @click="reload('LOAD_AI')">Reload ai</ui-button>
           <ui-button @click="simulate()">
             Simulate
           </ui-button>
@@ -192,13 +204,16 @@
 import { createTask, useApi, useTasks } from './api';
 import NaturalViewer from './components/NaturalViewer.vue'
 import ExpandButton from './components/ExpandButton.vue'
+import SearchInput from './components/SearchInput.vue'
 import { computed, toRef } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 export default {
   name: 'App',
   components: {
     NaturalViewer,
     ExpandButton,
+    SearchInput,
   },
   
   props: [
@@ -208,20 +223,11 @@ export default {
   data() {
     return {
       settings: {
-        image: {
-          height: 100,
-        },
-        layout: "",
         debug: {
           overdraw: false,
           thumbnails: false,
         },
       },
-      layoutOptions: [
-        { label: "Album", value: "ALBUM" },
-        { label: "Timeline", value: "TIMELINE" },
-        { label: "Wall", value: "WALL" },
-      ],
       settingsExpanded: false,
       settingsExtraExpanded: false,
       tasksExpanded: false,
@@ -236,10 +242,32 @@ export default {
       scrollbar: null,
       scene: null,
       viewerTasks: null,
+      searchActive: false,
     }
   },
   setup(props) {
     const collectionId = toRef(props, "collectionId");
+    const layoutOptions = computed(() => {
+      return [
+        { label: `Default`, value: "DEFAULT" },
+        { label: "Album", value: "ALBUM" },
+        { label: "Timeline", value: "TIMELINE" },
+        { label: "Wall", value: "WALL" },
+      ]
+    })
+
+    const router = useRouter();
+    const route = useRoute();
+    const query = computed(() => route.query);
+
+    const setQuery = (key, value) => {
+      if (value == "" || (key == "layout" && value == "DEFAULT")) {
+        value = undefined;
+      }
+      const query = Object.assign({}, route.query);
+      query[key] = value;
+      router.push({ query });
+    }
 
     const { items: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useApi(
       () => collectionId.value && `/tasks?type=INDEX&collection_id=${collectionId.value}`
@@ -252,9 +280,14 @@ export default {
       () => collectionId.value && `/collections/${collectionId.value}`
     );
 
+    const { data: capabilities } = useApi(() => "/capabilities");
+
     const collection = computed(() => collectionId.value && fetchedCollection.value);
 
     return {
+      query,
+      setQuery,
+      layoutOptions,
       remoteTasks,
       remoteTasksUpdateUntilDone,
       indexTasks,
@@ -262,6 +295,7 @@ export default {
       indexTasksMutate,
       collection,
       collections,
+      capabilities,
     }
   },
   async mounted() {
@@ -271,13 +305,6 @@ export default {
         clickScrolling: true,
       },
     });
-  },
-  watch: {
-    collection(newCollection, oldCollection) {
-      if (newCollection && newCollection?.id != oldCollection?.id) {
-        this.settings.layout = newCollection.layout;
-      }
-    },
   },
   computed: {
     tasks() {
@@ -336,14 +363,8 @@ export default {
       await this.remoteTasksUpdateUntilDone();
       this.recreateScene();
     },
-    async loadMeta() {
-      await createTask("LOAD_META", this.collection?.id);
-      this.drawer = false;
-      await this.remoteTasksUpdateUntilDone();
-      this.recreateScene();
-    },
-    async loadColor() {
-      await createTask("LOAD_COLOR", this.collection?.id);
+    async reload(type) {
+      await createTask(type, this.collection?.id);
       this.drawer = false;
       await this.remoteTasksUpdateUntilDone();
       this.recreateScene();
@@ -397,10 +418,24 @@ export default {
 }
 
 .top-bar {
-  --mdc-theme-primary: white;
+  background-color: white;
   --mdc-theme-on-primary: rgba(0,0,0,.87);
-  transition: transform 0.2s ease-out;
-  transform: translateY(0);
+}
+
+.top-bar :deep(.mdc-top-app-bar__section--align-start) {
+  transition: max-width 0.1s, padding-left 0.2s, padding-right 0.2s;
+  max-width: 100%;
+}
+
+.top-bar.search :deep(.mdc-top-app-bar__section--align-start) {
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+
+.top-bar .mdc-select {
+  --mdc-theme-primary: white; 
 }
 
 .collection {
@@ -496,8 +531,12 @@ button {
   opacity: 0.03;
 }
 
-.size-icons button.active::before {
-  opacity: var(--mdc-ripple-focus-opacity,0.24);
+.size-icons button {
+  opacity: 0.3;
+}
+
+.size-icons button.active {
+  opacity: 1;
 }
 
 .size-icons button:first-child::before {
@@ -509,8 +548,6 @@ button {
   border-top-right-radius: 5px;
   border-bottom-right-radius: 5px;
 }
-
-
 
 .spinner {
   --mdc-theme-primary: white;

@@ -47,6 +47,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 
+	"photofield/internal/clip"
 	"photofield/internal/codec"
 	"photofield/internal/collection"
 	"photofield/internal/image"
@@ -90,6 +91,7 @@ var collections []collection.Collection
 var indexTasks sync.Map
 var loadMetaOffset int64
 var loadColorOffset int64
+var loadAIOffset int64
 
 var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
@@ -330,7 +332,13 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 	sceneConfig := defaultSceneConfig
 	sceneConfig.Layout.SceneWidth = float64(data.SceneWidth)
 	sceneConfig.Layout.ImageHeight = float64(data.ImageHeight)
-	sceneConfig.Layout.Type = layout.Type(data.Layout)
+	if data.Layout != "" {
+		sceneConfig.Layout.Type = layout.Type(data.Layout)
+	}
+	if data.Search != nil {
+		sceneConfig.Scene.Search = string(*data.Search)
+		sceneConfig.Layout.Type = layout.Search
+	}
 	collection := getCollectionById(string(data.CollectionId))
 	if collection == nil {
 		problem(w, r, http.StatusBadRequest, "Collection not found")
@@ -354,6 +362,10 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	}
 	if params.Layout != nil {
 		sceneConfig.Layout.Type = layout.Type(*params.Layout)
+	}
+	if params.Search != nil {
+		sceneConfig.Scene.Search = string(*params.Search)
+		sceneConfig.Layout.Type = layout.Search
 	}
 	collection := getCollectionById(string(params.CollectionId))
 	if collection == nil {
@@ -459,12 +471,17 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 	loadMetaTask := Task{
 		Type: string(openapi.TaskTypeLOADMETA),
 		Id:   "load-meta",
-		Name: "Loading metadata",
+		Name: "Extracting metadata",
 	}
 	loadColorTask := Task{
 		Type: string(openapi.TaskTypeLOADCOLOR),
 		Id:   "load-color",
-		Name: "Loading colors",
+		Name: "Extracting colors",
+	}
+	loadAITask := Task{
+		Type: string(openapi.TaskTypeLOADAI),
+		Id:   "load-ai",
+		Name: "Comprehending photos (AI)",
 	}
 
 	metrics, err := prometheus.DefaultGatherer.Gather()
@@ -477,6 +494,8 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 		gatherIntFromMetric(&loadMetaTask.Done, metric, "pf_load_meta_done")
 		gatherIntFromMetric(&loadColorTask.Pending, metric, "pf_load_color_pending")
 		gatherIntFromMetric(&loadColorTask.Done, metric, "pf_load_color_done")
+		gatherIntFromMetric(&loadAITask.Pending, metric, "pf_load_ai_pending")
+		gatherIntFromMetric(&loadAITask.Done, metric, "pf_load_ai_done")
 	}
 
 	if loadMetaTask.Pending > 0 {
@@ -492,6 +511,13 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 		tasks = append(tasks, loadColorTask)
 	} else {
 		atomic.StoreInt64(&loadColorOffset, int64(loadColorTask.Done))
+	}
+	if loadAITask.Pending > 0 {
+		offset := atomic.LoadInt64(&loadAIOffset)
+		loadAITask.Done -= int(offset)
+		tasks = append(tasks, loadAITask)
+	} else {
+		atomic.StoreInt64(&loadAIOffset, int64(loadAITask.Done))
 	}
 
 	sort.Slice(tasks, func(i, j int) bool {
@@ -534,26 +560,43 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case openapi.TaskTypeLOADMETA:
-		imageSource.QueueMetaLoads(collection.GetIds(imageSource))
+		imageSource.MetaQueue.AppendChan(collection.GetIdsUint32(imageSource))
 		task := Task{
 			Id:           fmt.Sprintf("load-meta-%v", collection.Id),
 			CollectionId: collection.Id,
-			Name:         fmt.Sprintf("Loading metadata for %v", collection.Name),
+			Name:         fmt.Sprintf("Extracting metadata from %v", collection.Name),
 		}
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeLOADCOLOR:
-		imageSource.QueueColorLoads(collection.GetIds(imageSource))
+		imageSource.ColorQueue.AppendChan(collection.GetIdsUint32(imageSource))
 		task := Task{
 			Id:           fmt.Sprintf("load-color-%v", collection.Id),
 			CollectionId: collection.Id,
-			Name:         fmt.Sprintf("Loading colors for %v", collection.Name),
+			Name:         fmt.Sprintf("Extracting colors from %v", collection.Name),
+		}
+		respond(w, r, http.StatusAccepted, task)
+
+	case openapi.TaskTypeLOADAI:
+		imageSource.AIQueue.AppendChan(collection.GetIdsUint32(imageSource))
+		task := Task{
+			Id:           fmt.Sprintf("load-ai-%v", collection.Id),
+			CollectionId: collection.Id,
+			Name:         fmt.Sprintf("Comprehending (AI) %v", collection.Name),
 		}
 		respond(w, r, http.StatusAccepted, task)
 
 	default:
 		problem(w, r, http.StatusBadRequest, "Unsupported task type")
 	}
+}
+
+func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
+	respond(w, r, http.StatusOK, openapi.Capabilities{
+		Search: openapi.Capability{
+			Supported: imageSource.AI.Available(),
+		},
+	})
 }
 
 func (*Api) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
@@ -769,6 +812,7 @@ type AppConfig struct {
 	Layout       layout.Layout           `json:"layout"`
 	Render       render.Render           `json:"render"`
 	Media        image.Config            `json:"media"`
+	AI           clip.AI                 `json:"ai"`
 	TileRequests TileRequestConfig       `json:"tile_requests"`
 }
 
@@ -797,7 +841,7 @@ func indexCollections(collections *[]collection.Collection) (ok bool) {
 				indexTasks.Delete(id)
 			}(collection.Id, counter)
 			for _, dir := range collection.Dirs {
-				imageSource.IndexImages(dir, collection.IndexLimit, counter)
+				imageSource.IndexFiles(dir, collection.IndexLimit, counter)
 			}
 			close(counter)
 		}
@@ -819,8 +863,9 @@ func indexCollection(collection *collection.Collection) {
 		log.Printf("indexing %s\n", collection.Id)
 		for _, dir := range collection.Dirs {
 			log.Printf("indexing %s %s\n", collection.Id, dir)
-			imageSource.IndexImages(dir, collection.IndexLimit, counter)
+			imageSource.IndexFiles(dir, collection.IndexLimit, counter)
 		}
+		imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
 		close(counter)
 	}()
 }
@@ -846,9 +891,6 @@ func loadConfiguration(path string) AppConfig {
 		collection := &appConfig.Collections[i]
 		collection.GenerateId()
 		collection.Layout = strings.ToUpper(collection.Layout)
-		if collection.Layout == "" {
-			collection.Layout = string(appConfig.Layout.Type)
-		}
 		if collection.Limit > 0 && collection.IndexLimit == 0 {
 			collection.IndexLimit = collection.Limit
 		}
@@ -857,6 +899,8 @@ func loadConfiguration(path string) AppConfig {
 	for i := range appConfig.Media.Thumbnails {
 		appConfig.Media.Thumbnails[i].Init()
 	}
+
+	appConfig.Media.AI = appConfig.AI
 
 	return appConfig
 }
@@ -1079,6 +1123,8 @@ func main() {
 		})
 		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
 	}
+
+	// addExampleScene()
 
 	log.Println(msg)
 	log.Fatal(http.ListenAndServe(addr, r))

@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-func (source *Source) loadInfosMeta(ids <-chan ImageId) {
-	for id := range ids {
+func (source *Source) loadInfosMeta(ids <-chan uint32) {
+	for iduint := range ids {
+		id := ImageId(iduint)
 		path, err := source.GetImagePath(id)
 		if err != nil {
 			fmt.Println("Unable to find image path", err, path)
@@ -26,8 +27,9 @@ func (source *Source) loadInfosMeta(ids <-chan ImageId) {
 	}
 }
 
-func (source *Source) loadInfosColor(ids <-chan ImageId) {
-	for id := range ids {
+func (source *Source) loadInfosColor(ids <-chan uint32) {
+	for iduint := range ids {
+		id := ImageId(iduint)
 		path, err := source.GetImagePath(id)
 		if err != nil {
 			fmt.Println("Unable to find image path", err, path)
@@ -43,19 +45,31 @@ func (source *Source) loadInfosColor(ids <-chan ImageId) {
 	}
 }
 
-func (source *Source) QueueMetaLoads(ids <-chan ImageId) {
-	if source.loadQueueMeta != nil {
-		for id := range ids {
-			source.loadQueueMeta.Append(id)
+func (source *Source) loadInfosAI(ids <-chan uint32) {
+	for iduint := range ids {
+		id := ImageId(iduint)
+		path, err := source.GetImagePath(id)
+		if err != nil {
+			fmt.Println("Unable to find image path", err, path)
+			continue
 		}
-	}
-}
 
-func (source *Source) QueueColorLoads(ids <-chan ImageId) {
-	if source.loadQueueColor != nil {
-		for id := range ids {
-			source.loadQueueColor.Append(id)
+		minSize := 200
+		f, err := source.OpenSmallestThumbnail(path, minSize)
+		if err != nil {
+			fmt.Println("Unable to load smallest image", err, path)
+			continue
 		}
+
+		embedding, err := source.Clip.EmbedImageReader(f)
+		f.Close()
+
+		if err != nil {
+			fmt.Println("Unable to get image embedding", err, path)
+			continue
+		}
+
+		source.database.WriteAI(id, embedding)
 	}
 }
 
@@ -121,14 +135,10 @@ func (source *Source) GetInfo(id ImageId) Info {
 	needsColor := result.NeedsColor()
 	if needsMeta || needsColor {
 		if needsMeta {
-			if source.loadQueueMeta != nil {
-				source.loadQueueMeta.Append(id)
-			}
+			source.MetaQueue.Append(uint32(id))
 		}
 		if needsColor {
-			if source.loadQueueColor != nil {
-				source.loadQueueColor.Append(id)
-			}
+			source.ColorQueue.Append(uint32(id))
 		}
 	}
 	addPendingMs := time.Since(startTime).Milliseconds()

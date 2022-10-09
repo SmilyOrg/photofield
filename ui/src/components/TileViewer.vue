@@ -1,6 +1,11 @@
 <template>
   <div class="container" ref="container" tabindex="1">
     <div class="tileViewer" ref="map"></div>
+    <photo-skeleton
+      v-if="loading"
+      class="skeleton"
+      :offset="latestView">
+    </photo-skeleton>
   </div>
 </template>
 
@@ -11,10 +16,16 @@ import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
 
+import PhotoSkeleton from './PhotoSkeleton.vue';
+
 import "ol/ol.css";
 import { getTileUrl } from '../api';
 
 export default {
+
+  components: {
+    PhotoSkeleton,
+  },
   
   props: {
     api: String,
@@ -23,6 +34,7 @@ export default {
     tileSize: Number,
     view: Object,
     debug: Object,
+    loading: Boolean,
   },
 
   emits: ["zoom", "click", "view", "reset", "load", "key-down", "viewer"],
@@ -260,6 +272,9 @@ export default {
     },
 
     elementToViewportCoordinates(eventOrPoint) {
+      if (!this.map) {
+        return null;
+      }
       const coord = this.map.getEventCoordinate(eventOrPoint);
       return this.viewFromCoordinate(coord);
     },
@@ -349,6 +364,7 @@ export default {
       }
       
       this.latestView = view;
+      // console.log(view);
 
       const targetExtent = this.extentFromView(view);
       
@@ -373,6 +389,14 @@ export default {
 .container {
   position: relative;
   /* padding-top: 60px; */
+}
+
+.skeleton {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
 </style>

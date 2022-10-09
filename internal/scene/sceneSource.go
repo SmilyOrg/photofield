@@ -1,6 +1,7 @@
 package scene
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -74,9 +75,22 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	scene := source.DefaultScene
 	scene.CreatedAt = time.Now()
 	scene.Loading = true
+	scene.Search = config.Scene.Search
 
 	go func() {
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
+
+		if scene.Search != "" {
+			searchDone := metrics.Elapsed("search embed")
+			embedding, err := imageSource.Clip.EmbedText(scene.Search)
+			if err != nil {
+				log.Println("search embed failed")
+				scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+			}
+			scene.SearchEmbedding = embedding
+			searchDone()
+		}
+
 		switch config.Layout.Type {
 		case layout.Timeline:
 			layout.LayoutTimeline(config.Layout, config.Collection, &scene, imageSource)
@@ -89,6 +103,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 
 		case layout.Wall:
 			layout.LayoutWall(config.Layout, config.Collection, &scene, imageSource)
+
+		case layout.Search:
+			layout.LayoutSearch(config.Layout, config.Collection, &scene, imageSource)
 
 		default:
 			layout.LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
@@ -182,6 +199,10 @@ func sceneConfigEqual(a SceneConfig, b SceneConfig) bool {
 	if a.Layout.ImageHeight != 0 &&
 		b.Layout.ImageHeight != 0 &&
 		a.Layout.ImageHeight != b.Layout.ImageHeight {
+		return false
+	}
+
+	if a.Scene.Search != b.Scene.Search {
 		return false
 	}
 

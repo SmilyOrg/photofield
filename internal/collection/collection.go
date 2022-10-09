@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"photofield/internal/clip"
 	"photofield/internal/image"
 	"sort"
 	"time"
@@ -81,6 +82,10 @@ func (collection *Collection) GetInfos(source *image.Source, options image.ListO
 	return source.ListInfos(collection.Dirs, options)
 }
 
+func (collection *Collection) GetSimilar(source *image.Source, embedding clip.Embedding, options image.ListOptions) <-chan image.SimilarityInfo {
+	return source.ListSimilar(collection.Dirs, embedding, options)
+}
+
 func (collection *Collection) GetIds(source *image.Source) <-chan image.ImageId {
 	limit := 0
 	if collection.IndexLimit > 0 {
@@ -90,4 +95,8 @@ func (collection *Collection) GetIds(source *image.Source) <-chan image.ImageId 
 		limit = collection.Limit
 	}
 	return source.ListImageIds(collection.Dirs, limit)
+}
+
+func (collection *Collection) GetIdsUint32(source *image.Source) <-chan uint32 {
+	return image.IdsToUint32(collection.GetIds(source))
 }

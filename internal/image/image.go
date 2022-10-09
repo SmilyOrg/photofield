@@ -115,6 +115,22 @@ func (source *Source) GetImageOrThumbnail(path string, thumbnail *Thumbnail) (im
 	return source.imageCache.GetOrLoad(path, thumbnail, source)
 }
 
+func (source *Source) OpenSmallestThumbnail(path string, minSize int) (*os.File, error) {
+	for i := range source.Thumbnails {
+		thumbnail := &source.Thumbnails[i]
+		if thumbnail.Width < minSize || thumbnail.Height < minSize {
+			continue
+		}
+		thumbnailPath := thumbnail.GetPath(path)
+		file, err := os.Open(thumbnailPath)
+		if err != nil {
+			continue
+		}
+		return file, nil
+	}
+	return os.Open(path)
+}
+
 func (source *Source) LoadSmallestImage(path string) (image.Image, error) {
 	for i := range source.Thumbnails {
 		thumbnail := &source.Thumbnails[i]

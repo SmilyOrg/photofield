@@ -6,9 +6,11 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"photofield/internal/clip"
 	"photofield/internal/metrics"
 
 	"zombiezen.com/go/sqlite"
@@ -24,6 +26,7 @@ var dateFormat = "2006-01-02 15:04:05.999999 -07:00"
 type ListOrder int32
 
 const (
+	None     ListOrder = iota
 	DateAsc  ListOrder = iota
 	DateDesc ListOrder = iota
 )
@@ -46,13 +49,16 @@ const (
 	AppendPath  InfoWriteType = iota
 	UpdateMeta  InfoWriteType = iota
 	UpdateColor InfoWriteType = iota
+	UpdateAI    InfoWriteType = iota
 	Delete      InfoWriteType = iota
 	Index       InfoWriteType = iota
 )
 
 type InfoWrite struct {
-	Path string
-	Type InfoWriteType
+	Path      string
+	Id        ImageId
+	Embedding clip.Embedding
+	Type      InfoWriteType
 	Info
 }
 
@@ -71,6 +77,11 @@ type InfoResult struct {
 type InfoListResult struct {
 	SourcedInfo
 	InfoExistence
+}
+
+type EmbeddingsResult struct {
+	Id ImageId
+	clip.Embedding
 }
 
 func (info *InfoExistence) NeedsMeta() bool {
@@ -115,7 +126,7 @@ func (source *Database) vacuum() error {
 	log.Println("database vacuuming")
 	defer metrics.Elapsed("database vacuum")()
 
-	return sqlitex.Exec(conn, "VACUUM;", nil)
+	return sqlitex.Execute(conn, "VACUUM;", nil)
 }
 
 func (source *Database) migrate(migrations embed.FS) {
@@ -199,6 +210,11 @@ func (source *Database) writePendingInfosSqlite() {
 			color=excluded.color;`)
 	defer updateColor.Finalize()
 
+	updateAI := conn.Prep(`
+		INSERT OR REPLACE INTO clip_emb(file_id, inv_norm, embedding)
+		VALUES (?, ?, ?);`)
+	defer updateAI.Finalize()
+
 	appendPath := conn.Prep(`
 		INSERT OR IGNORE INTO infos(path_prefix_id, filename)
 		SELECT
@@ -228,7 +244,7 @@ func (source *Database) writePendingInfosSqlite() {
 	inTransaction := false
 
 	defer func() {
-		err := sqlitex.Exec(conn, "COMMIT;", nil)
+		err := sqlitex.Execute(conn, "COMMIT;", nil)
 		source.transactionMutex.Unlock()
 		if err != nil {
 			panic(err)
@@ -238,7 +254,7 @@ func (source *Database) writePendingInfosSqlite() {
 	for imageInfo := range source.pending {
 		if !inTransaction {
 			source.transactionMutex.Lock()
-			err := sqlitex.Exec(conn, "BEGIN TRANSACTION;", nil)
+			err := sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
 			if err != nil {
 				panic(err)
 			}
@@ -309,6 +325,21 @@ func (source *Database) writePendingInfosSqlite() {
 				panic(err)
 			}
 
+		case UpdateAI:
+			updateAI.BindInt64(1, int64(imageInfo.Id))
+			updateAI.BindInt64(2, int64(imageInfo.Embedding.InvNormUint16())-clip.InvNormMean)
+			updateAI.BindBytes(3, imageInfo.Embedding.Byte())
+
+			_, err := updateAI.Step()
+			if err != nil {
+				log.Printf("Unable to insert image info ai for %d: %s\n", imageInfo.Id, err.Error())
+				continue
+			}
+			err = updateAI.Reset()
+			if err != nil {
+				panic(err)
+			}
+
 		case Delete:
 			dir, file := filepath.Split(imageInfo.Path)
 
@@ -342,7 +373,7 @@ func (source *Database) writePendingInfosSqlite() {
 
 		sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
 		if inTransaction && (sinceLastCommitSeconds >= 10 || len(source.pending) == 0) {
-			err := sqlitex.Exec(conn, "COMMIT;", nil)
+			err := sqlitex.Execute(conn, "COMMIT;", nil)
 			lastCommit = time.Now()
 			if err != nil {
 				panic(err)
@@ -352,7 +383,7 @@ func (source *Database) writePendingInfosSqlite() {
 				lastOptimize = time.Now()
 				log.Println("database optimizing")
 				optimizeDone := metrics.Elapsed("database optimize")
-				err = sqlitex.Exec(conn, "PRAGMA optimize;", nil)
+				err = sqlitex.Execute(conn, "PRAGMA optimize;", nil)
 				if err != nil {
 					panic(err)
 				}
@@ -373,7 +404,7 @@ func (source *Database) GetPathFromId(id ImageId) (string, bool) {
 		SELECT str || filename as path
 		FROM infos
 		JOIN prefix ON path_prefix_id == prefix.id
-		WHERE infos.rowid == ?;`)
+		WHERE infos.id == ?;`)
 	defer stmt.Reset()
 
 	stmt.BindInt64(1, (int64)(id))
@@ -394,7 +425,7 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 	stmt := conn.Prep(`
 		SELECT width, height, orientation, color, created_at
 		FROM infos
-		WHERE rowid == ?;`)
+		WHERE id == ?;`)
 	defer stmt.Reset()
 
 	stmt.BindInt64(1, (int64)(id))
@@ -420,6 +451,64 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 	info.DateTimeNull = stmt.ColumnType(4) == sqlite.TypeNull
 
 	return info, true
+}
+
+func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
+	out := make(chan InfoListResult, 1000)
+	go func() {
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+		SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset
+		FROM infos
+		WHERE id IN (`
+
+		length := len(ids)
+		if length > 1 {
+			sql += strings.Repeat("?, ", length-1)
+		}
+		sql += `?);`
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		for i, id := range ids {
+			stmt.BindInt64(1+i, (int64)(id))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+
+			var info InfoListResult
+			info.Id = (ImageId)(stmt.ColumnInt64(0))
+
+			info.Width = stmt.ColumnInt(1)
+			info.Height = stmt.ColumnInt(2)
+			info.SizeNull = stmt.ColumnType(1) == sqlite.TypeNull || stmt.ColumnType(2) == sqlite.TypeNull
+
+			info.Orientation = Orientation(stmt.ColumnInt(3))
+			info.OrientationNull = stmt.ColumnType(3) == sqlite.TypeNull
+
+			info.Color = (uint32)(stmt.ColumnInt64(4))
+			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
+
+			unix := stmt.ColumnInt64(5)
+			timezoneOffset := stmt.ColumnInt(6)
+
+			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
+			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
+
+			out <- info
+		}
+		close(out)
+	}()
+	return out
 }
 
 func (source *Database) GetDir(dir string) (InfoResult, bool) {
@@ -453,7 +542,7 @@ func (source *Database) GetDirsCount(dirs []string) (int, bool) {
 	defer source.pool.Put(conn)
 
 	sql := `
-	SELECT COUNT(rowid)
+	SELECT COUNT(id)
 	FROM infos
 	WHERE path_prefix_id IN (
 		SELECT id
@@ -499,6 +588,15 @@ func (source *Database) Write(path string, info Info, writeType InfoWriteType) e
 	return nil
 }
 
+func (source *Database) WriteAI(id ImageId, embedding clip.Embedding) error {
+	source.pending <- &InfoWrite{
+		Id:        id,
+		Type:      UpdateAI,
+		Embedding: embedding,
+	}
+	return nil
+}
+
 func (source *Database) WaitForCommit() {
 	source.transactionMutex.RLock()
 	defer source.transactionMutex.RUnlock()
@@ -524,13 +622,13 @@ func (source *Database) SetIndexed(dir string) {
 func (source *Database) List(dirs []string, options ListOptions) <-chan InfoListResult {
 	out := make(chan InfoListResult, 1000)
 	go func() {
-		defer metrics.Elapsed("listing infos sqlite")()
+		defer metrics.Elapsed("list infos sqlite")()
 
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT rowid, width, height, orientation, color, created_at_unix, created_at_tz_offset
+			SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset
 			FROM infos
 			WHERE path_prefix_id IN (
 				SELECT id
@@ -550,6 +648,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		`
 
 		switch options.OrderBy {
+		case None:
 		case DateAsc:
 			sql += `ORDER BY created_at_unix ASC `
 		case DateDesc:
@@ -565,8 +664,9 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		sql += ";"
 
 		stmt := conn.Prep(sql)
-		bindIndex := 1
 		defer stmt.Reset()
+
+		bindIndex := 1
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
@@ -583,6 +683,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			} else if !exists {
 				break
 			}
+
 			var info InfoListResult
 			info.Id = (ImageId)(stmt.ColumnInt64(0))
 
@@ -610,10 +711,87 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 	return out
 }
 
+func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-chan EmbeddingsResult {
+	out := make(chan EmbeddingsResult, 100)
+	go func() {
+		defer metrics.Elapsed("list embeddings sqlite")()
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT id, inv_norm, embedding
+			FROM infos
+			INNER JOIN clip_emb ON clip_emb.file_id = id
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		if options.Limit > 0 {
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		bindIndex := 1
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if options.Limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(options.Limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing embeddings: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+
+			id := (ImageId)(stmt.ColumnInt64(0))
+			invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(1))
+
+			size := stmt.ColumnLen(2)
+			bytes := make([]byte, size)
+			read := stmt.ColumnBytes(2, bytes)
+			if read != size {
+				log.Printf("Error reading embedding: buffer underrun, expected %d actual %d bytes\n", size, read)
+				continue
+			}
+
+			out <- EmbeddingsResult{
+				Id:        id,
+				Embedding: clip.FromRaw(bytes, invnorm),
+			}
+		}
+
+		close(out)
+	}()
+	return out
+}
+
 func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 	out := make(chan string, 10000)
 	go func() {
-		defer metrics.Elapsed("listing paths sqlite")()
+		defer metrics.Elapsed("list paths sqlite")()
 
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
@@ -672,18 +850,33 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 	return out
 }
 
-func (source *Database) ListIds(dirs []string, limit int) <-chan ImageId {
+func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool) <-chan ImageId {
 	out := make(chan ImageId, 10000)
 	go func() {
-		defer metrics.Elapsed("listing ids sqlite")()
+		defer metrics.Elapsed("list ids sqlite")()
 
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT rowid as id
+			SELECT id
 			FROM infos
-			WHERE path_prefix_id IN (
+		`
+
+		if missingEmbedding {
+			sql += `LEFT JOIN clip_emb ON clip_emb.file_id = id`
+		}
+
+		sql += `
+			WHERE
+		`
+
+		if missingEmbedding {
+			sql += `file_id is NULL AND`
+		}
+
+		sql += `
+			path_prefix_id IN (
 				SELECT id
 				FROM prefix
 				WHERE

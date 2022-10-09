@@ -94,6 +94,8 @@ import dateParseISO from 'date-fns/parseISO';
 import differenceInDays from 'date-fns/differenceInDays';
 import Overlays from './Overlays.vue';
 import Spinner from './Spinner.vue';
+import { useRoute } from 'vue-router';
+import differenceInSeconds from 'date-fns/differenceInSeconds/index';
 
 export default {
 
@@ -151,6 +153,9 @@ export default {
     const scrollbar = toRef(props, "scrollbar");
     const sceneLoadFilesPerSecond = ref(0);
 
+    const route = useRoute();
+    const query = computed(() => route.query);
+
     const nativeScroll = ref(true);
 
     const window = ref({
@@ -188,9 +193,10 @@ export default {
       window?.value?.width &&
       {
         collection_id: collectionId.value,
-        image_height: props.settings.image.height,
+        image_height: parseInt(route.query.image_height, 10) || (route.query.search ? 300 : 100),
         scene_width: window.value.width,
-        layout: props.settings.layout,
+        layout: route.query.layout,
+        search: route.query.search || undefined,
       }
     );
     
@@ -210,7 +216,15 @@ export default {
 
     watch(scenes, async newValue => {
       // Create scene if a matching one hasn't been found
-      if (newValue?.length === 0) {
+      if (!newValue) return;
+      const empty = newValue.length == 0;
+      const oldErrorOnly = newValue.every(scene => {
+        const createdAt = dateParseISO(scene.created_at);
+        const now = new Date();
+        const secondsAgo = differenceInSeconds(now, createdAt);
+        return scene.error && secondsAgo > 3;
+      });
+      if (empty || oldErrorOnly) {
         console.log("scene not found, creating...");
         await recreateScene();
       }
@@ -256,6 +270,7 @@ export default {
           collectionId: collectionId.value,
           regionId: seekId,
         },
+        query: route.query,
       });
     }).restartable();
 
@@ -412,6 +427,7 @@ export default {
     })
 
     return {
+      query,
       nativeScroll,
       scrollbarUpdateRegion,
       reorientRegion,
@@ -420,7 +436,9 @@ export default {
       resizeApplyTask,
       collection,
       scene,
+      sceneParams,
       scenes,
+      scenesLoading,
       sceneLoadFilesPerSecond,
       region,
       regionSeekId,
@@ -474,21 +492,6 @@ export default {
         }
       }
     },
-    sceneParams() {
-      const params = {
-        collection: this.collectionId,
-        imageHeight: this.settings.image.height,
-        sceneWidth: this.window.width,
-        layout: this.settings.layout == "default" ? undefined : this.settings.layout,
-      };
-      if (params.collection == null) {
-        return null;
-      }
-      if (params.sceneWidth == 0) {
-        return null;
-      }
-      return Object.entries(params).map(([key, value]) => `${key}=${value}`).join("&");
-    },
     canvas() {
       const aspectRatio =
         this.scene?.bounds?.h ?
@@ -511,7 +514,8 @@ export default {
       if (
         oldScene && newScene &&
         oldScene.id == newScene.id &&
-        oldScene.file_count == newScene.file_count
+        oldScene.file_count == newScene.file_count &&
+        oldScene.loading == newScene.loading
       ) {
         return;
       }
@@ -835,6 +839,7 @@ export default {
     },
 
     async onClick(event) {
+      if (!event) return false;
       const regions = await getRegions(this.scene.id, event.x, event.y, 0, 0);
       if (regions && regions.length > 0) {
         const region = regions[0];
@@ -890,6 +895,7 @@ export default {
           collectionId: this.collection.id,
           regionId: region?.id,
         },
+        query: this.query,
       })
     },
 
@@ -946,6 +952,7 @@ export default {
         params: {
           collectionId: this.collectionId,
         },
+        query: this.query,
       });
     },
 
@@ -1130,6 +1137,7 @@ export default {
   position: absolute;
   top: 0;
   left: 0;
+  outline: none;
 }
 
 .container.fullpage .viewer {

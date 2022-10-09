@@ -38,7 +38,6 @@
     <li><a href="#development-setup">Development Setup</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgements">Acknowledgements</a></li>
   </ol>
 </details>
@@ -82,6 +81,11 @@ layouts.
   * **Timeline:** reverse-chronological timeline similar to Google Photos
   * **Wall:** a square collage of all the photos, because zooming is fun!
   * [More future ideas?](https://github.com/SmilyOrg/photofield/issues/1)
+* **Semantic search using [photofield-ai] (alpha)**. If you set up an AI server
+  and configure it in the `ai` section of the [configuration], you should be
+  able to search for photo contents using words like "beach sunset", "a couple
+  kissing", or "cat eyes".
+  ![semantic search for "cat eyes"](docs/assets/semantic-search.jpg)
 * **Reuse of existing thumbnails**. Do you have hundreds of gigabytes of
   existing thumbnails from an existing system? Me too! Let's just reuse those.
   Here are the currently supported thumbnail sources:
@@ -91,8 +95,8 @@ layouts.
     the [Configuration].
   * Please [open an issue] for other systems, bonus points for an idea on how to
     integrate!
-* **Single file binary**. Thanks to [Go] and [GoReleaser], all the dependencies are packed into a [single binary
-file](#binaries) for most major OSes.
+* **Single file binary**. Thanks to [Go] and [GoReleaser], all the dependencies
+are packed into a [single binary file](#binaries) for most major OSes.
 * **Read-only file system based collections**. Photofield never changes your
 photos, thumbnails or directories. You are encouraged to even mount your photos
 as read-only to ensure this. The file system is the source of truth, everything
@@ -120,10 +124,8 @@ authentication or authorization support.
 * **Initial load can be slow**. All the photos need to be laid out when you
 first load a page in a specific window size and configuration, which can take
 some time with a slow CPU and cold HDD cache.
-* **No smart AI features**. Other galleries are already implementing this, so
-it seems like a distraction at this point.
 * **No permalinks**. Deep linking to images works, but it's currently not stable
-over time as IDs can change.
+over time as IDs can change. 
 
 ### Built With
 
@@ -285,9 +287,8 @@ docker exec -it photofield ./photofield -vacuum
 
 ### Prerequisites
 
-This is an example of how to list things you need to use the software and how to install them.
 * [Go] - for the backend / API server
-* [Node.js] - 
+* [Node.js] - for the frontend
 * [just] - to run common commands conveniently
 * [watchexec] - for auto-reloading the Go server
 * sh-like shell (e.g. sh, bash, busybox) - required by `just`
@@ -353,7 +354,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
 * [readme.so](https://readme.so/)
 
-
 [Configuration]: #configuration
 
 [open an issue]: https://github.com/SmilyOrg/photofield/issues
@@ -376,3 +376,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [Node.js]: https://nodejs.org/
 [Vue 3]: https://v3.vuejs.org/
 [BalmUI]: https://next-material.balmjs.com/
+[photofield-ai]: https://github.com/smilyorg/photofield-ai

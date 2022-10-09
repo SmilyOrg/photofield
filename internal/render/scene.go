@@ -8,6 +8,7 @@ import (
 	"github.com/tdewolff/canvas"
 	"golang.org/x/image/draw"
 
+	"photofield/internal/clip"
 	"photofield/internal/image"
 )
 
@@ -52,16 +53,19 @@ type RegionSource interface {
 type SceneId = string
 
 type Scene struct {
-	Id           SceneId      `json:"id"`
-	CreatedAt    time.Time    `json:"created_at"`
-	Loading      bool         `json:"loading"`
-	Fonts        Fonts        `json:"-"`
-	Bounds       Rect         `json:"bounds"`
-	Photos       []Photo      `json:"-"`
-	FileCount    int          `json:"file_count"`
-	Solids       []Solid      `json:"-"`
-	Texts        []Text       `json:"-"`
-	RegionSource RegionSource `json:"-"`
+	Id              SceneId        `json:"id"`
+	CreatedAt       time.Time      `json:"created_at"`
+	Search          string         `json:"search,omitempty"`
+	SearchEmbedding clip.Embedding `json:"-"`
+	Loading         bool           `json:"loading"`
+	Error           string         `json:"error,omitempty"`
+	Fonts           Fonts          `json:"-"`
+	Bounds          Rect           `json:"bounds"`
+	Photos          []Photo        `json:"-"`
+	FileCount       int            `json:"file_count"`
+	Solids          []Solid        `json:"-"`
+	Texts           []Text         `json:"-"`
+	RegionSource    RegionSource   `json:"-"`
 }
 
 type Scales struct {

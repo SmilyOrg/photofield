@@ -8,9 +8,12 @@ import (
 	"strings"
 	"sync"
 
+	"photofield/internal/clip"
+	"photofield/internal/metrics"
+	"photofield/internal/queue"
+
 	"github.com/dgraph-io/ristretto"
 	"github.com/docker/go-units"
-	"github.com/sheerun/queue"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -18,9 +21,25 @@ var ErrNotAnImage = errors.New("not a supported image extension, might be video"
 
 type ImageId uint32
 
+func IdsToUint32(ids <-chan ImageId) <-chan uint32 {
+	out := make(chan uint32)
+	go func() {
+		for id := range ids {
+			out <- uint32(id)
+		}
+		close(out)
+	}()
+	return out
+}
+
 type SourcedInfo struct {
 	Id ImageId
 	Info
+}
+
+type SimilarityInfo struct {
+	SourcedInfo
+	Similarity float32
 }
 
 type CacheConfig struct {
@@ -41,11 +60,13 @@ type Caches struct {
 
 type Config struct {
 	DatabasePath string
+	AI           clip.AI
 
 	ExifToolCount        int  `json:"exif_tool_count"`
 	SkipLoadInfo         bool `json:"skip_load_info"`
 	ConcurrentMetaLoads  int  `json:"concurrent_meta_loads"`
 	ConcurrentColorLoads int  `json:"concurrent_color_loads"`
+	ConcurrentAILoads    int  `json:"concurrent_ai_loads"`
 
 	ListExtensions []string    `json:"extensions"`
 	DateFormats    []string    `json:"date_formats"`
@@ -74,8 +95,11 @@ type Source struct {
 	imagesLoading      sync.Map
 	imagesLoadingCount int
 
-	loadQueueMeta  *queue.Queue
-	loadQueueColor *queue.Queue
+	MetaQueue  queue.Queue
+	ColorQueue queue.Queue
+
+	Clip    clip.Clip
+	AIQueue queue.Queue
 }
 
 func NewSource(config Config, migrations embed.FS) *Source {
@@ -91,23 +115,32 @@ func NewSource(config Config, migrations embed.FS) *Source {
 	if config.SkipLoadInfo {
 		log.Printf("skipping load info")
 	} else {
-		source.loadQueueMeta = queue.New()
-		go source.processQueue(
-			"load meta",
-			"load_meta",
-			source.loadQueueMeta,
-			source.loadInfosMeta,
-			source.ConcurrentMetaLoads,
-		)
 
-		source.loadQueueColor = queue.New()
-		go source.processQueue(
-			"load color",
-			"load_color",
-			source.loadQueueColor,
-			source.loadInfosColor,
-			source.ConcurrentColorLoads,
-		)
+		source.MetaQueue = queue.Queue{
+			ID:          "load_meta",
+			Name:        "load meta",
+			Worker:      source.loadInfosMeta,
+			WorkerCount: config.ConcurrentMetaLoads,
+		}
+		go source.MetaQueue.Run()
+
+		source.ColorQueue = queue.Queue{
+			ID:          "load_color",
+			Name:        "load color",
+			Worker:      source.loadInfosColor,
+			WorkerCount: config.ConcurrentColorLoads,
+		}
+		go source.ColorQueue.Run()
+
+		source.Clip = config.AI
+
+		source.AIQueue = queue.Queue{
+			ID:          "load_ai",
+			Name:        "load ai",
+			Worker:      source.loadInfosAI,
+			WorkerCount: 8,
+		}
+		go source.AIQueue.Run()
 	}
 
 	return &source
@@ -154,7 +187,14 @@ func (source *Source) ListImageIds(dirs []string, maxPhotos int) <-chan ImageId 
 	for i := range dirs {
 		dirs[i] = filepath.FromSlash(dirs[i])
 	}
-	return source.database.ListIds(dirs, maxPhotos)
+	return source.database.ListIds(dirs, maxPhotos, false)
+}
+
+func (source *Source) ListMissingEmbeddingIds(dirs []string, maxPhotos int) <-chan ImageId {
+	for i := range dirs {
+		dirs[i] = filepath.FromSlash(dirs[i])
+	}
+	return source.database.ListIds(dirs, maxPhotos, true)
 }
 
 func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan SourcedInfo {
@@ -163,6 +203,8 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan Sourc
 	}
 	out := make(chan SourcedInfo, 1000)
 	go func() {
+		defer metrics.Elapsed("list infos")()
+
 		infos := source.database.List(dirs, options)
 		for info := range infos {
 			if info.NeedsMeta() || info.NeedsColor() {
@@ -190,10 +232,10 @@ func (source *Source) GetImagePath(id ImageId) (string, error) {
 	return path, nil
 }
 
-func (source *Source) IndexImages(dir string, maxPhotos int, counter chan<- int) {
+func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 	dir = filepath.FromSlash(dir)
 	indexed := make(map[string]struct{})
-	for path := range walkFiles(dir, source.ListExtensions, maxPhotos) {
+	for path := range walkFiles(dir, source.ListExtensions, max) {
 		source.database.Write(path, Info{}, AppendPath)
 		indexed[path] = struct{}{}
 		// Uncomment to test slow indexing
@@ -205,6 +247,10 @@ func (source *Source) IndexImages(dir string, maxPhotos int, counter chan<- int)
 	source.database.WaitForCommit()
 }
 
+func (source *Source) IndexAI(dirs []string, maxPhotos int) {
+	source.AIQueue.AppendChan(IdsToUint32(source.ListMissingEmbeddingIds(dirs, maxPhotos)))
+}
+
 func (source *Source) GetDir(dir string) Info {
 	dir = filepath.FromSlash(dir)
 	result, _ := source.database.GetDir(dir)
@@ -212,7 +258,7 @@ func (source *Source) GetDir(dir string) Info {
 }
 
 func (source *Source) GetDirsCount(dirs []string) int {
-	for i, _ := range dirs {
+	for i := range dirs {
 		dirs[i] = filepath.FromSlash(dirs[i])
 	}
 	count, _ := source.database.GetDirsCount(dirs)

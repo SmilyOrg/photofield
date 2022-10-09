@@ -16,7 +16,7 @@ builds:
     ignore:
       # Unsupported by modernc sqlite currently
       - goos: windows
-        goarch: arm64
+        goarch: "386"
     tags:
       - embedstatic
 dockers:
