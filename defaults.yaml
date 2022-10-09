@@ -33,7 +33,17 @@ ai:
   # Host of an AI server providing machine learning features. Defining this
   # will enable search functionality on collection pages.
   # See https://github.com/SmilyOrg/photofield-ai on how to set it up
+  # 
   # host: http://localhost:8081
+  # 
+  # You can also define the visual (image scanning) host and the 
+  # textual search host separately, e.g. to scan images with a PC w/ GPU,
+  # but keep the search part on a NAS.
+  # 
+  # visual:
+    # host: http://localhost:8081
+  # textual:
+    # host: http://localhost:8081
 
 media:
   # Extract metadata from this many files concurrently

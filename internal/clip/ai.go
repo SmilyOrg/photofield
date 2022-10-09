@@ -65,12 +65,32 @@ func FromRaw(bytes []byte, invnorm uint16) Embedding {
 	}
 }
 
-type AI struct {
+type Model struct {
 	Host string `json:"host"`
 }
 
+type AI struct {
+	Host    string `json:"host"`
+	Visual  Model  `json:"visual"`
+	Textual Model  `json:"textual"`
+}
+
 func (a AI) Available() bool {
-	return a.Host != ""
+	return a.TextualHost() != ""
+}
+
+func (a AI) VisualHost() string {
+	if a.Visual.Host != "" {
+		return a.Visual.Host
+	}
+	return a.Host
+}
+
+func (a AI) TextualHost() string {
+	if a.Textual.Host != "" {
+		return a.Textual.Host
+	}
+	return a.Host
 }
 
 func (a AI) EmbedImagePath(path string) (Embedding, error) {
@@ -113,7 +133,7 @@ func (a AI) EmbedImageReader(r io.Reader) (Embedding, error) {
 
 	w.Close()
 
-	url := fmt.Sprintf("%s/image-embeddings", a.Host)
+	url := fmt.Sprintf("%s/image-embeddings", a.VisualHost())
 	res, err := http.Post(url, w.FormDataContentType(), &b)
 	if err != nil {
 		return nil, err
@@ -166,7 +186,7 @@ func (a AI) EmbedText(text string) (Embedding, error) {
 		return nil, err
 	}
 
-	url := fmt.Sprintf("%s/text-embeddings", a.Host)
+	url := fmt.Sprintf("%s/text-embeddings", a.TextualHost())
 	res, err := http.Post(url, "application/json", bytes.NewBuffer(b))
 	if err != nil {
 		return nil, err
