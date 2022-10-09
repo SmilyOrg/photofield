@@ -38,7 +38,6 @@
     <li><a href="#development-setup">Development Setup</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgements">Acknowledgements</a></li>
   </ol>
 </details>
@@ -285,9 +284,8 @@ docker exec -it photofield ./photofield -vacuum
 
 ### Prerequisites
 
-This is an example of how to list things you need to use the software and how to install them.
 * [Go] - for the backend / API server
-* [Node.js] - 
+* [Node.js] - for the frontend
 * [just] - to run common commands conveniently
 * [watchexec] - for auto-reloading the Go server
 * sh-like shell (e.g. sh, bash, busybox) - required by `just`
@@ -352,7 +350,11 @@ Distributed under the MIT License. See `LICENSE` for more information.
 * [Open Images Dataset][open-images-dataset]
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
 * [readme.so](https://readme.so/)
-
+* https://github.com/openai/CLIP/
+* https://github.com/josephrocca/openai-clip-js
+* https://github.com/Lednik7/CLIP-ONNX
+* https://pytorch.org/tutorials/advanced/super_resolution_with_onnxruntime.html
+* https://github.com/minimaxir/imgbeddings
 
 [Configuration]: #configuration
 

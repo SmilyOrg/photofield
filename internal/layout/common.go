@@ -17,6 +17,7 @@ const (
 	Timeline Type = "TIMELINE"
 	Square   Type = "SQUARE"
 	Wall     Type = "WALL"
+	Search   Type = "SEARCH"
 )
 
 type Layout struct {
@@ -33,8 +34,8 @@ type Section struct {
 }
 
 type SectionPhoto struct {
-	Photo *render.Photo
-	Size  image.Size
+	render.Photo
+	Size image.Size
 }
 
 type Photo struct {
@@ -155,7 +156,7 @@ func layoutFitRow(row []SectionPhoto, bounds render.Rect, imageSpacing float64) 
 	scale := (bounds.W - totalSpacing) / (rowWidth - totalSpacing)
 	x := firstRect.X
 	for i := range row {
-		photo := row[i]
+		photo := &row[i]
 		rect := photo.Photo.Sprite.Rect
 		photo.Photo.Sprite.Rect = render.Rect{
 			X: x,
@@ -180,15 +181,12 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 
 	row := make([]SectionPhoto, 0)
 
-	startIndex := len(scene.Photos)
-	for index, info := range section.infos {
-		sceneIndex := startIndex + index
-		scene.Photos = append(scene.Photos, render.Photo{
-			Id:     info.Id,
-			Sprite: render.Sprite{},
-		})
+	for _, info := range section.infos {
 		photo := SectionPhoto{
-			Photo: &scene.Photos[sceneIndex],
+			Photo: render.Photo{
+				Id:     info.Id,
+				Sprite: render.Sprite{},
+			},
 			Size: image.Size{
 				X: info.Width,
 				Y: info.Height,
@@ -200,6 +198,9 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 
 		if x+imageWidth > bounds.W {
 			scale := layoutFitRow(row, bounds, config.ImageSpacing)
+			for _, p := range row {
+				scene.Photos = append(scene.Photos, p.Photo)
+			}
 			row = nil
 			x = 0
 			y += config.ImageHeight*scale + config.LineSpacing
@@ -223,6 +224,9 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 			log.Printf("layout section %d\n", i)
 		}
 		i++
+	}
+	for _, p := range row {
+		scene.Photos = append(scene.Photos, p.Photo)
 	}
 	x = 0
 	y += config.ImageHeight + config.LineSpacing

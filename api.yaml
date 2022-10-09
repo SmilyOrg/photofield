@@ -96,6 +96,11 @@ paths:
           schema:
             $ref: "#/components/schemas/LayoutType"
 
+        - name: search
+          in: query
+          schema:
+            $ref: "#/components/schemas/Search"
+
       responses:
         "200":
           description: List of scenes created for the specified collection
@@ -417,6 +422,17 @@ paths:
                     items:
                       $ref: "#/components/schemas/Task"
 
+  /capabilities:
+    get:
+      description: Get the current capabilities of the system.
+      tags: ["System"]
+      responses:
+        "200":
+          description: Capabilities
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Capabilities"
 
 
 
@@ -481,6 +497,9 @@ components:
         loading:
           type: boolean
           description: True while the scene is loading and the dimensions are not yet known.
+        error:
+          type: string
+          description: Any error encountered while loading the scene
 
     Collection:
       type: object
@@ -533,6 +552,22 @@ components:
           minimum: 0
           example: 
           description: Number of items already processed.
+    
+    Capabilities:
+      type: object
+      required:
+        - search
+      properties:
+        search:
+          $ref: "#/components/schemas/Capability"
+          
+    Capability:
+      type: object
+      required:
+        - supported
+      properties:
+        supported:
+          type: boolean
           
     Region:
       type: object
@@ -570,6 +605,8 @@ components:
           $ref: "#/components/schemas/ImageHeight"
         layout:
           $ref: "#/components/schemas/LayoutType"
+        search:
+          $ref: "#/components/schemas/Search"
           
     TaskType:
       type: string
@@ -577,6 +614,7 @@ components:
         - INDEX
         - LOAD_META
         - LOAD_COLOR
+        - LOAD_AI
     
     CollectionId:
       type: string
@@ -629,6 +667,9 @@ components:
           minimum: 0
           example: 90000
     
+    Search:
+      type: string
+
     LayoutType:
       type: string
       enum:

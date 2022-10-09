@@ -43,6 +43,13 @@ grafana-export:
 pprof := "http://localhost:8080/debug/pprof"
 
 prof-cpu seconds="10":
+  mkdir -p profiles/cpu/
   filepath=profiles/cpu/cpu-$(date +"%F-%H%M%S").pprof && \
   curl --progress-bar -o $filepath {{pprof}}/profile?seconds={{seconds}} && \
+  go tool pprof -http=: $filepath
+
+prof-heap:
+  mkdir -p profiles/heap/
+  filepath=profiles/heap/heap-$(date +"%F-%H%M%S").pprof && \
+  curl --progress-bar -o $filepath {{pprof}}/heap && \
   go tool pprof -http=: $filepath

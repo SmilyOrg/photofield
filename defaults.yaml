@@ -29,12 +29,21 @@ render:
   # other use-cases.
   tile_size: 256
 
+ai:
+  # Host of an AI server providing machine learning features. Defining this
+  # will enable search functionality on collection pages.
+  # See https://github.com/SmilyOrg/photofield-ai on how to set it up
+  # host: http://localhost:8081
+
 media:
   # Extract metadata from this many files concurrently
   concurrent_meta_loads: 8
   
   # Extract prominent colors from this many files concurrently
   concurrent_color_loads: 4
+  
+  # Extract AI embeddings from this many files concurrently
+  concurrent_ai_loads: 8
   
   # Number of exiftool instances to run concurrently for metadata extraction
   exif_tool_count: 4

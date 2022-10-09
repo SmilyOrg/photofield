@@ -27,6 +27,8 @@ const (
 const (
 	TaskTypeINDEX TaskType = "INDEX"
 
+	TaskTypeLOADAI TaskType = "LOAD_AI"
+
 	TaskTypeLOADCOLOR TaskType = "LOAD_COLOR"
 
 	TaskTypeLOADMETA TaskType = "LOAD_META"
@@ -38,6 +40,16 @@ type Bounds struct {
 	True *float32 `json:"true,omitempty"`
 	W    *float32 `json:"w,omitempty"`
 	X    *float32 `json:"x,omitempty"`
+}
+
+// Capabilities defines model for Capabilities.
+type Capabilities struct {
+	Search Capability `json:"search"`
+}
+
+// Capability defines model for Capability.
+type Capability struct {
+	Supported bool `json:"supported"`
 }
 
 // Collection defines model for Collection.
@@ -90,7 +102,10 @@ type RegionId int
 
 // Scene defines model for Scene.
 type Scene struct {
-	Bounds    *Bounds `json:"bounds,omitempty"`
+	Bounds *Bounds `json:"bounds,omitempty"`
+
+	// Any error encountered while loading the scene
+	Error     *string `json:"error,omitempty"`
 	FileCount *int    `json:"file_count,omitempty"`
 	Id        SceneId `json:"id"`
 
@@ -107,10 +122,14 @@ type SceneParams struct {
 	ImageHeight  ImageHeight  `json:"image_height"`
 	Layout       LayoutType   `json:"layout"`
 	SceneWidth   SceneWidth   `json:"scene_width"`
+	Search       *Search      `json:"search,omitempty"`
 }
 
 // SceneWidth defines model for SceneWidth.
 type SceneWidth float32
+
+// Search defines model for Search.
+type Search string
 
 // Task defines model for Task.
 type Task struct {
@@ -151,6 +170,7 @@ type GetScenesParams struct {
 	SceneWidth   *SceneWidth  `json:"scene_width,omitempty"`
 	ImageHeight  *ImageHeight `json:"image_height,omitempty"`
 	Layout       *LayoutType  `json:"layout,omitempty"`
+	Search       *Search      `json:"search,omitempty"`
 }
 
 // PostScenesJSONBody defines parameters for PostScenes.
@@ -204,6 +224,9 @@ type PostTasksJSONRequestBody PostTasksJSONBody
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /capabilities)
+	GetCapabilities(w http.ResponseWriter, r *http.Request)
+
 	// (GET /collections)
 	GetCollections(w http.ResponseWriter, r *http.Request)
 
@@ -254,6 +277,21 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.HandlerFunc) http.HandlerFunc
+
+// GetCapabilities operation middleware
+func (siw *ServerInterfaceWrapper) GetCapabilities(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCapabilities(w, r)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
 
 // GetCollections operation middleware
 func (siw *ServerInterfaceWrapper) GetCollections(w http.ResponseWriter, r *http.Request) {
@@ -454,6 +492,17 @@ func (siw *ServerInterfaceWrapper) GetScenes(w http.ResponseWriter, r *http.Requ
 	err = runtime.BindQueryParameter("form", true, false, "layout", r.URL.Query(), &params.Layout)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter layout: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+	if paramValue := r.URL.Query().Get("search"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "search", r.URL.Query(), &params.Search)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter search: %s", err), http.StatusBadRequest)
 		return
 	}
 
@@ -884,6 +933,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		HandlerMiddlewares: options.Middlewares,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/capabilities", wrapper.GetCapabilities)
+	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/collections", wrapper.GetCollections)
 	})
