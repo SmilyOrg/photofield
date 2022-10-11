@@ -133,14 +133,15 @@ func NewSource(config Config, migrations embed.FS) *Source {
 		go source.ColorQueue.Run()
 
 		source.Clip = config.AI
-
-		source.AIQueue = queue.Queue{
-			ID:          "load_ai",
-			Name:        "load ai",
-			Worker:      source.loadInfosAI,
-			WorkerCount: 8,
+		if config.AI.Available() {
+			source.AIQueue = queue.Queue{
+				ID:          "load_ai",
+				Name:        "load ai",
+				Worker:      source.loadInfosAI,
+				WorkerCount: 8,
+			}
+			go source.AIQueue.Run()
 		}
-		go source.AIQueue.Run()
 	}
 
 	return &source
