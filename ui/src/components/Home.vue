@@ -3,12 +3,12 @@
     <page-title :title="pageTitle"></page-title>
     
     <div class="collections">
-      <collection-panel
+      <collection-link
         class="collection"
         v-for="c in collections"
         :key="c.id"
         :collection="c"
-      ></collection-panel>
+      ></collection-link>
     </div>
   </div>
 </template>
@@ -16,13 +16,13 @@
 <script>
 import { useApi } from '../api';
 import PageTitle from './PageTitle.vue';
-import CollectionPanel from './CollectionPanel.vue';
+import CollectionLink from './CollectionLink.vue';
 
 export default {
 
   components: {
     PageTitle,
-    CollectionPanel,
+    CollectionLink,
   },
 
   setup() {

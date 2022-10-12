@@ -15,6 +15,7 @@ import XYZ from 'ol/source/XYZ';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
+import equal from 'fast-deep-equal';
 
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
@@ -54,10 +55,7 @@ export default {
   async created() {
   },
   async mounted() {
-
     this.reset();
-  },
-  unmounted() {
   },
   watch: {
 
@@ -78,7 +76,8 @@ export default {
 
     debug: {
       deep: true,
-      handler() {
+      handler(newValue, oldValue) {
+        if (equal(newValue, oldValue)) return;
         this.reload();
       },
     },

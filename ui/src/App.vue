@@ -3,21 +3,51 @@
     <ui-top-app-bar
       class="top-bar"
       :class="{ immersive, search: searchActive }"
-      nav-id="menu"
       :fixed="true"
       contentSelector="#content"
-      @nav="drawer = !drawer"
     >
       <span class="title">
-        <router-link class="title-home" to="/">
-          Photos
-        </router-link>
-        <span v-if="collection" class="title-collection" @click="onTitleClick()">
-          <ui-icon>chevron_right</ui-icon> {{ collection.name }}
+        <span v-if="!collection">Photos</span>
+        <span
+          v-if="collection"
+          ref="title"
+          @mousedown="collectionExpandedPending = true"
+          @click="toggleFocus()"
+        >
+          {{ collection.name }}
+          <ui-icon class="inline">
+            {{ collectionExpanded ? 'expand_less' : 'expand_more' }}
+          </ui-icon>
         </span>
       </span>
 
+      <template #nav-icon>
+        <!-- <img src="/favicon-32x32.png" /> -->
+        <ui-icon-button @click="goHome()" class="inline">
+          {{ collection ? 'arrow_back' : 'home' }}
+        </ui-icon-button>
+      </template>
+
       <template #toolbar="{ toolbarItemClass }">
+
+        <collection-panel
+          class="collection-panel"
+          :class="{ hidden: !collectionExpanded }"
+          ref="collectionPanel"
+          :collections="collections"
+          :collection="collection"
+          :tasks="tasks"
+          :scene="scene"
+          tabindex="0"
+          @focusin="collectionExpanded = true"
+          @focusout="collectionExpandedPending = false; collectionExpanded = false"
+          @close="collectionExpanded = false"
+          @reindex="reindex"
+          @reload="reload"
+          @recreate-scene="recreateScene"
+          @simulate="simulate"
+        >
+        </collection-panel>
 
         <search-input
           v-if="capabilities?.search.supported"
@@ -25,92 +55,25 @@
           :modelValue="query.search"
           :error="scene?.error"
           @active="searchActive = $event"
-          @update:modelValue="setQuery('search', $event)"
+          @update:modelValue="setQuery({ search: $event })"
         ></search-input>
 
         <div class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
-          <span v-if="!tasks?.length">
+          <span class="empty" v-if="!tasks?.length">
             No background tasks running.
           </span>
-          <ui-list :type="2" :nonInteractive="true">
-            <ui-item
-              v-for="task in tasks"
-              :key="task.id"
-            >
-              <ui-item-text-content class="task-content" v-if="task.pending !== undefined && task.done !== undefined">
-                <ui-item-text1>{{ task.name }}</ui-item-text1>
-                <ui-item-text2>{{ task.done }} / {{ task.done + task.pending }} files</ui-item-text2>
-                <ui-progress
-                  class="task-progress"
-                  :progress="task.done / (task.done + task.pending)"
-                ></ui-progress>
-              </ui-item-text-content>
-              <ui-item-text-content class="task-content" v-else-if="task.pending !== undefined">
-                <ui-item-text1>{{ task.name }}</ui-item-text1>
-                <ui-item-text2>{{ task.pending }} remaining</ui-item-text2>
-                <ui-progress
-                  class="task-progress"
-                  active
-                ></ui-progress>
-              </ui-item-text-content>
-              <ui-item-text-content class="task-content" v-else-if="task.done !== undefined">
-                <ui-item-text1>{{ task.name }}</ui-item-text1>
-                <ui-item-text2>{{ task.done }} files</ui-item-text2>
-                <ui-progress
-                  class="task-progress"
-                  active
-                ></ui-progress>
-              </ui-item-text-content>
-            </ui-item>
-          </ui-list>
+          <task-list
+            :tasks="tasks"
+          ></task-list>
         </div>
-        <div class="settings" :class="{ hidden: !settingsExpanded, toolbarItemClass }">
-          <ui-select
-            :modelValue="query.layout"
-            @update:modelValue="setQuery('layout', $event)"
-            :options="layoutOptions"
-          >
-            Layout
-          </ui-select>
-          <div class="size-icons">
-            <ui-icon-button
-              icon="photo_size_select_small"
-              :class="{ active: query.image_height == '30' }"
-              @click="setQuery('image_height', 30)"
-              outlined
-            >
-            </ui-icon-button>
-            <ui-icon-button
-              icon="photo_size_select_large"
-              :class="{ active: query.image_height == '100' }"
-              @click="setQuery('image_height', query.image_height == 100 ? undefined : 100)"
-              outlined
-            >
-            </ui-icon-button>
-            <ui-icon-button
-              icon="photo_size_select_actual"
-              :class="{ active: query.image_height == '300' }"
-              @click="setQuery('image_height', 300)"
-              outlined
-            >
-            </ui-icon-button>
-          </div>
-          <expand-button
-            :expanded="settingsExtraExpanded"
-            @click="settingsExtraExpanded = !settingsExtraExpanded"
-          ></expand-button>
-          <div v-if="settingsExtraExpanded">
-            <ui-form-field>
-              <ui-checkbox v-model="settings.debug.overdraw"></ui-checkbox>
-              <label>Debug Overdraw</label>
-            </ui-form-field>
-            <ui-form-field>
-              <ui-checkbox v-model="settings.debug.thumbnails"></ui-checkbox>
-              <label>Debug Thumbnails</label>
-            </ui-form-field>
-          </div>
+        <div class="settings" :class="{ hidden: !collection || !settingsExpanded, toolbarItemClass }">
+          <display-settings
+            :query="query"
+            @query="setQuery($event)"
+          ></display-settings>
         </div>
         <ui-icon-button
+          v-if="collection"
           icon="settings"
           class="settings-toggle"
           :class="{ expanded: settingsExpanded, toolbarItemClass }"
@@ -131,61 +94,10 @@
         </ui-icon-button>
       </template>
     </ui-top-app-bar>
-    <ui-drawer class="sidebar" type="modal" nav-id="menu" v-model="drawer">
-      <template v-if="collection">
-        <ui-drawer-header>
-          <ui-drawer-title>{{ collection?.name }}</ui-drawer-title>
-          <ui-drawer-subtitle>
-            {{ fileCount }} files
-          </ui-drawer-subtitle>
-        </ui-drawer-header>
-        <ui-button @click="reindex()">Reindex files</ui-button>
-        <expand-button
-          :expanded="collectionExpanded"
-          @click="collectionExpanded = !collectionExpanded"
-        ></expand-button>
-        <template v-if="collectionExpanded">
-          <ui-button @click="recreateScene()">
-            Reload scene
-          </ui-button>
-          <ui-button @click="reload('LOAD_META')">Reload metadata</ui-button>
-          <ui-button @click="reload('LOAD_COLOR')">Reload colors</ui-button>
-          <ui-button @click="reload('LOAD_AI')">Reload ai</ui-button>
-          <ui-button @click="simulate()">
-            Simulate
-          </ui-button>
-        </template>
-      </template>
-      <ui-divider></ui-divider>
-      <ui-drawer-header>
-        <ui-drawer-title>Photos</ui-drawer-title>
-        <ui-drawer-subtitle>
-          {{ collections?.length }} collections
-        </ui-drawer-subtitle>
-      </ui-drawer-header>
-      <ui-drawer-content v-if="collections?.length > 0">
-        <ui-list>
-          <router-link
-            v-for="c in collections"
-            :key="c.id"
-            class="collection"
-            :to="'/collections/' + c.id"
-            @click="drawer = false"
-          >
-            <ui-item
-              :active="c.id == collection?.id"
-            >
-                {{ c.name }}
-            </ui-item>
-          </router-link>
-        </ui-list>
-      </ui-drawer-content>
-    </ui-drawer>
     <div id="content">
       <router-view
         class="viewer"
         ref="viewer"
-        :settings="settings"
         :class="{ simulating }"
         :fullpage="true"
         :scrollbar="scrollbar"
@@ -202,11 +114,14 @@
 
 <script>
 import { createTask, useApi, useTasks } from './api';
+import { computed, toRef } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import NaturalViewer from './components/NaturalViewer.vue'
 import ExpandButton from './components/ExpandButton.vue'
 import SearchInput from './components/SearchInput.vue'
-import { computed, toRef } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import DisplaySettings from './components/DisplaySettings.vue'
+import TaskList from './components/TaskList.vue';
+import CollectionPanel from './components/CollectionPanel.vue';
 
 export default {
   name: 'App',
@@ -214,7 +129,10 @@ export default {
     NaturalViewer,
     ExpandButton,
     SearchInput,
-  },
+    DisplaySettings,
+    TaskList,
+    CollectionPanel,
+},
   
   props: [
     "collectionId",
@@ -222,16 +140,10 @@ export default {
 
   data() {
     return {
-      settings: {
-        debug: {
-          overdraw: false,
-          thumbnails: false,
-        },
-      },
       settingsExpanded: false,
-      settingsExtraExpanded: false,
       tasksExpanded: false,
       collectionExpanded: false,
+      collectionExpandedPending: false,
       load: {
         image: 0,
       },
@@ -260,12 +172,21 @@ export default {
     const route = useRoute();
     const query = computed(() => route.query);
 
-    const setQuery = (key, value) => {
-      if (value == "" || (key == "layout" && value == "DEFAULT")) {
-        value = undefined;
-      }
+    const goHome = () => {
+      router.push("/");
+    }
+
+    const setQuery = (patch) => {
       const query = Object.assign({}, route.query);
-      query[key] = value;
+      Object.assign(query, patch);
+      for (const key in patch) {
+        if (Object.hasOwnProperty.call(patch, key)) {
+          const value = patch[key];
+          if (value == "" || (key == "layout" && value == "DEFAULT")) {
+            query[key] = undefined;
+          }
+        }
+      }
       router.push({ query });
     }
 
@@ -285,6 +206,7 @@ export default {
     const collection = computed(() => collectionId.value && fetchedCollection.value);
 
     return {
+      goHome,
       query,
       setQuery,
       layoutOptions,
@@ -341,20 +263,13 @@ export default {
       }
       return null;
     },
-    fileCount() {
-      if (this.collection) {
-        for (const task of this.tasks) {
-          if (task.type != "INDEX") continue;
-          if (task.collection_id != this.collection.id) continue;
-          return task.done.toLocaleString();
-        }
-      }
-      return this.scene?.file_count !== undefined ?
-        this.scene.file_count.toLocaleString() : 
-        null;
-    },
   },
   methods: {
+    toggleFocus() {
+      if (!this.collectionExpandedPending) return;
+      this.$refs.collectionPanel.$el.focus();
+      this.collectionExpandedPending = false;
+    },
     recreateScene() {
       this.$bus.emit("recreate-scene");
     },
@@ -403,8 +318,78 @@ export default {
 
 <style scoped>
 
-.title-collection i {
+.favicon {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+}
+
+.inline {
   vertical-align: sub;
+}
+
+.collection-panel {
+  opacity: 1;
+  position: absolute;
+  top: 44px;
+  left: 0px;
+  width: 100%;
+  max-height: calc(100vh - 120px);
+  transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  outline: none;
+  box-sizing: border-box;
+}
+
+@media screen and (min-width: 600px) {
+  .collection-panel {
+    left: 44px;
+  }
+}
+
+.collection-panel.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+}
+
+.settings-toggle {
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.settings-toggle.expanded {
+  transform: rotate(90deg);
+  width: max-content;
+}
+
+.settings {
+  transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 1;
+  position: absolute;
+  top: 0px;
+  right: 50px;
+}
+
+.settings.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(40px);
+}
+
+.tasks {
+  transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 1;
+  position: absolute;
+  top: 55px;
+  right: 10px;
+  z-index: 10;
+  background: var(--mdc-theme-background);
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+.tasks.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(40px);
 }
 
 .title-home {
@@ -413,13 +398,18 @@ export default {
 }
 
 .sidebar button {
-    padding: 20px 0;
-    margin: 2px 0;
+  padding: 20px 0;
+  margin: 2px 0;
 }
 
 .top-bar {
   background-color: white;
   --mdc-theme-on-primary: rgba(0,0,0,.87);
+  vertical-align: baseline;
+}
+
+.top-bar :deep(.mdc-top-app-bar__title) {
+  padding-left: 0px;
 }
 
 .top-bar :deep(.mdc-top-app-bar__section--align-start) {
@@ -434,12 +424,8 @@ export default {
   overflow: hidden;
 }
 
-.top-bar .mdc-select {
+.top-bar :deep(.mdc-select) {
   --mdc-theme-primary: white; 
-}
-
-.collection {
-  text-decoration: none;
 }
 
 button {
@@ -460,67 +446,6 @@ button {
   color: var(--mdc-theme-text-hint-on-background);
 }
 
-.settings-toggle {
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.settings-toggle.expanded {
-  transform: rotate(90deg);
-  width: max-content;
-}
-
-.settings {
-  transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-  opacity: 1;
-  position: absolute;
-  width: min-content;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  align-self: start;
-  background: var(--mdc-theme-background);
-  border-radius: 10px;
-  justify-content: center;
-  margin-top: -8px;
-  margin-right: 80px;
-  padding-bottom: 4px;
-}
-
-.settings > * {
-  margin: 4px 10px 0 10px;
-}
-
-.settings.hidden {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(40px);
-}
-
-.tasks {
-  transition: opacity 0.1s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-  opacity: 1;
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-wrap: wrap;
-  align-self: start;
-  background: var(--mdc-theme-background);
-  border-radius: 10px;
-  justify-content: center;
-  margin-top: 50px;
-  padding: 0px 10px;
-}
-
-.tasks.hidden {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(40px);
-}
-
-.task-content {
-  width: 100%;
-}
 
 .size-icons {
   display: flex;

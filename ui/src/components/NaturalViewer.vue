@@ -9,7 +9,7 @@
       :interactive="!nativeScroll && !panDisabled"
       :scene="scene"
       :tileSize="tileSize"
-      :debug="settings.debug"
+      :debug="debug"
       @viewer="overlayViewer = $event"
       @zoom="onZoom"
       @view="onView"
@@ -199,6 +199,16 @@ export default {
         search: route.query.search || undefined,
       }
     );
+
+    const debug = computed(() => {
+      const v = {};
+      for (const key in route.query) {
+        if (key.startsWith("debug_")) {
+          v[key] = route.query[key];
+        }
+      }
+      return v;
+    });
     
     const {
       items: scenes,
@@ -428,6 +438,7 @@ export default {
 
     return {
       query,
+      debug,
       nativeScroll,
       scrollbarUpdateRegion,
       reorientRegion,
