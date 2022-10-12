@@ -68,18 +68,14 @@ export async function createTask(type, id) {
   });
 }
 
-export function getTileUrl(sceneId, level, x, y, tileSize, debug) {
+export function getTileUrl(sceneId, level, x, y, tileSize, extraParams) {
   const params = {
     tile_size: tileSize,
     zoom: level,
     x,
     y,
+    ...extraParams,
   };
-  for (const key in debug) {
-    if (Object.hasOwnProperty.call(debug, key)) {
-      if (debug[key]) params[`debug_${key}`] = debug[key];
-    }
-  }
   let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params)}`;
   return url;
 }
