@@ -81,7 +81,7 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 
 	sceneMargin := 10.
 
-	scene.Bounds.W = layout.SceneWidth
+	scene.Bounds.W = layout.ViewportWidth
 
 	event := TimelineEvent{}
 	eventCount := 0

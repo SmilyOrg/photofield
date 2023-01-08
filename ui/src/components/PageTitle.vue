@@ -4,8 +4,9 @@ export default {
   watch: {
     title: {
       immediate: true,
-      handler() {
-        document.title = this.title;
+      handler(title) {
+        if (!title) return;
+        document.title = title;
       },
     },
   },

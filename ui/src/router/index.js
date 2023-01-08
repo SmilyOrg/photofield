@@ -1,7 +1,7 @@
 import { createWebHistory, createRouter } from "vue-router";
 import App from "../App.vue";
 import Home from "../components/Home.vue";
-import NaturalViewer from "../components/NaturalViewer.vue";
+import CollectionView from "../components/CollectionView.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,13 +20,13 @@ const router = createRouter({
         {
           name: "collection",
           path: "/collections/:collectionId",
-          component: NaturalViewer,
+          component: CollectionView,
           props: true,
         },
         {
           name: "region",
           path: "/collections/:collectionId/:regionId",
-          component: NaturalViewer,
+          component: CollectionView,
           props: true,
         },
       ],

@@ -35,11 +35,11 @@ func LayoutWall(layout Layout, collection collection.Collection, scene *render.S
 
 	edgeCount := int(math.Sqrt(float64(photoCount)))
 
-	scene.Bounds.W = layout.SceneWidth
+	scene.Bounds.W = layout.ViewportWidth
 	cols := edgeCount
 
 	layoutConfig := Layout{}
-	layoutConfig.ImageSpacing = layout.SceneWidth / float64(edgeCount) * 0.02
+	layoutConfig.ImageSpacing = layout.ViewportWidth / float64(edgeCount) * 0.02
 	layoutConfig.LineSpacing = layoutConfig.ImageSpacing
 
 	log.Printf("layout wall width %v cols %v\n", scene.Bounds.W, cols)

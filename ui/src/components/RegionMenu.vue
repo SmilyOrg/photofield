@@ -9,11 +9,10 @@
       <tile-viewer
         class="viewer"
         ref="viewer"
-        :interactive="false"
-        :immediate="false"
         :scene="scene"
-        :tileSize="tileSize"
         :view="region.bounds"
+        :viewport="viewport"
+        :tileSize="tileSize"
         :style="{ height: imageHeight + 'px' }"
       ></tile-viewer>
       <ui-card-media-content>
@@ -66,7 +65,9 @@ import copyImg from 'copy-image-clipboard';
 
 import TileViewer from './TileViewer.vue';
 import ExpandButton from './ExpandButton.vue';
-import { getFileBlob, getFileUrl, getThumbnailUrl } from '../api';
+import { getFileUrl, getThumbnailUrl } from '../api';
+import { ref } from 'vue';
+import { useViewport } from '../use';
 
 export default {
   props: ["region", "scene", "flipX", "flipY", "tileSize"],
@@ -76,6 +77,14 @@ export default {
     return {
       menuWidth: 240,
       expanded: false,
+    }
+  },
+  setup() {
+    const viewer = ref(null);
+    const viewport = useViewport(viewer);
+    return {
+      viewer,
+      viewport,
     }
   },
   computed: {

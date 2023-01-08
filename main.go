@@ -3,9 +3,11 @@ package main
 import (
 	"embed"
 	"encoding/binary"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	goimage "image"
+	"image/color"
 	"image/draw"
 	"image/png"
 	"io/fs"
@@ -187,7 +189,7 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 	c.ResetView()
 
 	img := r.CanvasImage
-	draw.Draw(img, img.Bounds(), &goimage.Uniform{canvas.White}, goimage.Point{}, draw.Src)
+	draw.Draw(img, img.Bounds(), &goimage.Uniform{r.BackgroundColor}, goimage.Point{}, draw.Src)
 
 	matrix := canvas.Identity.
 		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
@@ -198,7 +200,6 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 	c.SetFillColor(canvas.Black)
 
 	scene.Draw(r, c, scales, imageSource)
-
 }
 
 func getTilePool(config *render.Render) *sync.Pool {
@@ -330,14 +331,20 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sceneConfig := defaultSceneConfig
-	sceneConfig.Layout.SceneWidth = float64(data.SceneWidth)
-	sceneConfig.Layout.ImageHeight = float64(data.ImageHeight)
+	sceneConfig.Layout.ViewportWidth = float64(data.ViewportWidth)
+	sceneConfig.Layout.ViewportHeight = float64(data.ViewportHeight)
+	sceneConfig.Layout.ImageHeight = 0
+	if data.ImageHeight != nil {
+		sceneConfig.Layout.ImageHeight = float64(*data.ImageHeight)
+	}
 	if data.Layout != "" {
 		sceneConfig.Layout.Type = layout.Type(data.Layout)
 	}
 	if data.Search != nil {
 		sceneConfig.Scene.Search = string(*data.Search)
-		sceneConfig.Layout.Type = layout.Search
+		if sceneConfig.Layout.Type != layout.Strip {
+			sceneConfig.Layout.Type = layout.Search
+		}
 	}
 	collection := getCollectionById(string(data.CollectionId))
 	if collection == nil {
@@ -354,8 +361,11 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.GetScenesParams) {
 
 	sceneConfig := defaultSceneConfig
-	if params.SceneWidth != nil {
-		sceneConfig.Layout.SceneWidth = float64(*params.SceneWidth)
+	if params.ViewportWidth != nil {
+		sceneConfig.Layout.ViewportWidth = float64(*params.ViewportWidth)
+	}
+	if params.ViewportHeight != nil {
+		sceneConfig.Layout.ViewportHeight = float64(*params.ViewportHeight)
 	}
 	if params.ImageHeight != nil {
 		sceneConfig.Layout.ImageHeight = float64(*params.ImageHeight)
@@ -365,7 +375,9 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	}
 	if params.Search != nil {
 		sceneConfig.Scene.Search = string(*params.Search)
-		sceneConfig.Layout.Type = layout.Search
+		if sceneConfig.Layout.Type != layout.Strip {
+			sceneConfig.Layout.Type = layout.Search
+		}
 	}
 	collection := getCollectionById(string(params.CollectionId))
 	if collection == nil {
@@ -652,6 +664,20 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	zoom := params.Zoom
 	x := int(params.X)
 	y := int(params.Y)
+	render.BackgroundColor = color.White
+	if params.BackgroundColor != nil {
+		c, err := hex.DecodeString(strings.TrimPrefix(*params.BackgroundColor, "#"))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, "Invalid background color")
+			return
+		}
+		render.BackgroundColor = color.RGBA{
+			A: 0xFF,
+			R: c[0],
+			G: c[1],
+			B: c[2],
+		}
+	}
 
 	img, context := getTileImage(&render)
 	defer putTileImage(&render, img)
@@ -908,8 +934,9 @@ func loadConfiguration(path string) AppConfig {
 func addExampleScene() {
 	sceneConfig := defaultSceneConfig
 	sceneConfig.Scene.Id = "Tqcqtc6h69"
-	sceneConfig.Layout.SceneWidth = 800
-	sceneConfig.Layout.ImageHeight = 200
+	sceneConfig.Layout.ViewportWidth = 1920
+	sceneConfig.Layout.ViewportHeight = 1080
+	sceneConfig.Layout.ImageHeight = 300
 	sceneConfig.Collection = *getCollectionById("vacation-photos")
 	sceneSource.Add(sceneConfig, imageSource)
 }

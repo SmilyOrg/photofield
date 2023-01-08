@@ -1,6 +1,7 @@
 import useSWRV from "swrv";
 import { computed, watch, ref } from "vue";
 import qs from "qs";
+import { useRetry } from "./use";
 
 const host = import.meta.env.VITE_API_HOST || "/api";
 
@@ -49,8 +50,30 @@ export async function getRegions(sceneId, x, y, w, h) {
   return response.items;
 }
 
-export async function getRegion(id, sceneParams) {
-  return get(`/regions/${id}?${sceneParams}`);
+export async function getRegion(sceneId, id) {
+  return get(`/scenes/${sceneId}/regions/${id}`);
+}
+
+export async function getCenterRegion(sceneId, x, y, w, h) {
+  const regions = await getRegions(sceneId, x, y, w, h);
+  if (!regions) return null;
+  const cx = x + w*0.5;
+  const cy = y + h*0.5;
+  let minDistSq = Infinity;
+  let minRegion = null;
+  for (let i = 0; i < regions.length; i++) {
+    const region = regions[i];
+    const rcx = region.bounds.x + region.bounds.w*0.5;
+    const rcy = region.bounds.y + region.bounds.h*0.5;
+    const dx = rcx - cx;
+    const dy = rcy - cy;
+    const distSq = dx*dx + dy*dy;
+    if (distSq < minDistSq) {
+      minDistSq = distSq;
+      minRegion = region;
+    }
+  }
+  return minRegion;
 }
 
 export async function getCollections() {
@@ -68,10 +91,11 @@ export async function createTask(type, id) {
   });
 }
 
-export function getTileUrl(sceneId, level, x, y, tileSize, extraParams) {
+export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extraParams) {
   const params = {
     tile_size: tileSize,
     zoom: level,
+    background_color: backgroundColor,
     x,
     y,
     ...extraParams,
@@ -112,6 +136,80 @@ export function useApi(getUrl, config) {
     ...response,
     items,
     itemsMutate,
+  }
+}
+
+export function useScene({
+  collectionId,
+  layout,
+  imageHeight,
+  viewport,
+  search,
+}) {
+  
+  const sceneParams = computed(() =>
+    viewport?.width?.value &&
+    viewport?.height?.value &&
+    {
+      layout: layout.value,
+      image_height: imageHeight?.value || undefined,
+      collection_id: collectionId.value,
+      viewport_width: viewport.width.value,
+      viewport_height: viewport.height.value,
+      search: search?.value || undefined,
+    }
+  );
+
+  const {
+    items: scenes,
+    isValidating: scenesLoading,
+    itemsMutate: scenesMutate,
+  } = useApi(() => sceneParams.value && `/scenes?` + qs.stringify(sceneParams.value));
+
+  const scene = computed(() => {
+    const list = scenes?.value;
+    if (!list || list.length == 0) return null;
+    return list[0];
+  });
+
+  const recreateScenesInProgress = ref(0);
+  const recreateScene = async () => {
+    recreateScenesInProgress.value = recreateScenesInProgress.value + 1;
+    const params = sceneParams.value;
+    await scenesMutate(async () => ([await createScene(params)]));
+    recreateScenesInProgress.value = recreateScenesInProgress.value - 1;
+  }
+
+  watch(scenes, async newScene => {
+    // Create scene if a matching one hasn't been found
+    if (newScene?.length === 0) {
+      console.log("scene not found, creating...");
+      await recreateScene();
+    }
+  })
+
+  const { run, reset } = useRetry(scenesMutate);
+
+  const filesPerSecond = ref(0);
+  watch(scene, async (newValue, oldValue) => {
+    if (newValue?.loading) {
+      let prev = oldValue?.file_count || 0;
+      if (prev > newValue.file_count) {
+        prev = 0;
+      }
+      filesPerSecond.value = newValue.file_count - prev;
+      run();
+    } else {
+      reset();
+      filesPerSecond.value = 0;
+    }
+  })
+
+  return {
+    scene,
+    recreate: recreateScene,
+    loading: scenesLoading,
+    filesPerSecond,
   }
 }
 
@@ -165,3 +263,4 @@ export function useTasks() {
 export async function createScene(params) {
   return await post(`/scenes`, params);
 }
+

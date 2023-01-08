@@ -81,10 +81,15 @@ paths:
           schema:
             $ref: "#/components/schemas/CollectionId"
             
-        - name: scene_width
+        - name: viewport_width
           in: query
           schema:
-            $ref: "#/components/schemas/SceneWidth"
+            $ref: "#/components/schemas/ViewportWidth"
+
+        - name: viewport_height
+          in: query
+          schema:
+            $ref: "#/components/schemas/ViewportHeight"
 
         - name: image_height
           in: query
@@ -158,6 +163,12 @@ paths:
             type: integer
             minimum: 1
             example: 256
+            
+        - name: background_color
+          in: query
+          schema:
+            type: string
+            example: "#000000"
             
         - name: zoom
           in: query
@@ -593,14 +604,16 @@ components:
       type: object
       required:
         - collection_id
-        - scene_width
-        - image_height
+        - viewport_width
+        - viewport_height
         - layout
       properties:
         collection_id:
           $ref: "#/components/schemas/CollectionId"
-        scene_width:
-          $ref: "#/components/schemas/SceneWidth"
+        viewport_width:
+          $ref: "#/components/schemas/ViewportWidth"
+        viewport_height:
+          $ref: "#/components/schemas/ViewportHeight"
         image_height:
           $ref: "#/components/schemas/ImageHeight"
         layout:
@@ -628,10 +641,20 @@ components:
       type: string
       example: Tqcqtc6h69
 
-    SceneWidth:
+    ViewportWidth:
       type: number
       minimum: 0
       example: 1200
+
+    ViewportHeight:
+      type: number
+      minimum: 0
+      example: 800
+
+    ImageWidth:
+      type: number
+      minimum: 0
+      example: 400
 
     ImageHeight:
       type: number
@@ -677,6 +700,7 @@ components:
         - ALBUM
         - SQUARE
         - WALL
+        - STRIP
 
     Problem:
       type: object

@@ -86,7 +86,7 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 
 	sceneMargin := 10.
 
-	scene.Bounds.W = layout.SceneWidth
+	scene.Bounds.W = layout.ViewportWidth
 
 	event := AlbumEvent{
 		First: true,
@@ -96,7 +96,7 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 
 	rect := render.Rect{
 		X: sceneMargin,
-		Y: sceneMargin,
+		Y: sceneMargin + 64,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: 0,
 	}

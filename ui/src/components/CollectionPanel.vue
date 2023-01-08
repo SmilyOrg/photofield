@@ -2,75 +2,81 @@
   <div class="collection-panel">
     <collection-settings
       :collection="collection"
-      :scene="scene"
+      :scenes="scenes"
       :tasks="tasks"
       @reindex="emit('reindex')"
-      @reload="emit('reload', $event)"
-      @recreate-scene="emit('recreateScene')"
-      @simulate="emit('simulate')"
+      @expand="(expand = $event)"
     >
     </collection-settings>
-    
+        
     <ui-divider></ui-divider>
-
-    <ui-list
-      class="list"
-      v-if="collections?.length > 0"
-    >
-      <OverlayScrollbars class="scrollbar">
-        <router-link
-          v-for="c in collections"
-          :key="c.id"
-          class="no-decoration"
-          :to="'/collections/' + c.id"
-          @click="emit('close')"
+      
+    <OverlayScrollbars defer class="scrollbar">
+      <div class="scrollable">
+        <collection-debug
+          v-if="expand"
+          :collection="collection"
+          :scenes="scenes"
+          :tasks="tasks"
+          @reload="emit('reload', $event)"
         >
-          <ui-item
-            :active="c.id == collection?.id"
-          >
-              {{ c.name }}
-          </ui-item>
-        </router-link>
-      </OverlayScrollbars>
-    </ui-list>
+        </collection-debug>
+  
+        <ui-list
+          class="list"
+          v-if="collections?.length > 0"
+        >
+            <router-link
+              v-for="c in collections"
+              :key="c.id"
+              class="no-decoration"
+              :to="'/collections/' + c.id"
+              @click="emit('close')"
+            >
+              <ui-item
+                :active="c.id == collection?.id"
+              >
+                  {{ c.name }}
+              </ui-item>
+            </router-link>
+        </ui-list>
+      </div>
+    </OverlayScrollbars>
   </div>
 </template>
 
 <script setup>
 import CollectionSettings from './CollectionSettings.vue';
-import TaskList from './TaskList.vue';
-import { onMounted, ref, watch } from 'vue';
+import CollectionDebug from './CollectionDebug.vue';
+import { ref } from 'vue';
 import { OverlayScrollbarsComponent as OverlayScrollbars } from "overlayscrollbars-vue";
 
 const props = defineProps({
     collections: Array,
     collection: Object,
-    scene: Object,
+    scenes: Array,
     tasks: Array,
 });
-
-console.log(props)
 
 const emit = defineEmits([
     "close",
     "reindex",
     "reload",
-    "recreateScene",
-    "simulate",
 ]);
+
+const expand = ref(false);
 
 </script>
 
 <style scoped>
 
 .collection-panel {
-  max-width: 400px;
+  max-width: 600px;
   background: var(--mdc-theme-background);
   border-radius: 10px;
   padding: 0 16px 16px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
 }
 
 .no-decoration {
@@ -82,11 +88,17 @@ const emit = defineEmits([
 }
 
 .list {
-  flex-basis: 600px;
+  height: 100%;
 }
 
 .scrollbar {
-  height: 100%;
+  flex-basis: 600px;
+}
+
+.scrollable {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 </style>
