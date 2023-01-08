@@ -1,6 +1,7 @@
 package render
 
 import (
+	"image/color"
 	"math"
 	"sync"
 	"time"
@@ -13,8 +14,9 @@ import (
 )
 
 type Render struct {
-	TileSize          int     `json:"tile_size"`
-	MaxSolidPixelArea float64 `json:"max_solid_pixel_area"`
+	TileSize          int         `json:"tile_size"`
+	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
+	BackgroundColor   color.Color `json:"background_color"`
 	LogDraws          bool
 	DebugOverdraw     bool
 	DebugThumbnails   bool

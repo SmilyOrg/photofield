@@ -104,6 +104,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 		case layout.Wall:
 			layout.LayoutWall(config.Layout, config.Collection, &scene, imageSource)
 
+		case layout.Strip:
+			layout.LayoutStrip(config.Layout, config.Collection, &scene, imageSource)
+
 		case layout.Search:
 			layout.LayoutSearch(config.Layout, config.Collection, &scene, imageSource)
 
@@ -190,9 +193,15 @@ func sceneConfigEqual(a SceneConfig, b SceneConfig) bool {
 		}
 	}
 
-	if a.Layout.SceneWidth != 0 &&
-		b.Layout.SceneWidth != 0 &&
-		a.Layout.SceneWidth != b.Layout.SceneWidth {
+	if a.Layout.ViewportWidth != 0 &&
+		b.Layout.ViewportWidth != 0 &&
+		a.Layout.ViewportWidth != b.Layout.ViewportWidth {
+		return false
+	}
+
+	if a.Layout.ViewportHeight != 0 &&
+		b.Layout.ViewportHeight != 0 &&
+		a.Layout.ViewportHeight != b.Layout.ViewportHeight {
 		return false
 	}
 

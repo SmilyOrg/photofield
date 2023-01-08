@@ -130,3 +130,14 @@ export function LatestFetcher() {
     return json;
   }
 }
+
+export function viewCenterSquared(a, b) {
+  if (!a || !b) return null;
+  const acx = a.x + a.w * 0.5;
+  const acy = a.y + a.h * 0.5;
+  const bcx = b.x + b.w * 0.5;
+  const bcy = b.y + b.h * 0.5;
+  const dx = bcx - acx;
+  const dy = bcy - acy;
+  return dx*dx + dy*dy;
+}

@@ -53,7 +53,7 @@ func (rect Rect) String() string {
 	return fmt.Sprintf("%3.3f %3.3f %3.3f %3.3f", rect.X, rect.Y, rect.W, rect.H)
 }
 
-func (rect Rect) FitInside(container Rect) Rect {
+func (rect Rect) FitInside(container Rect) (out Rect) {
 	imageRatio := rect.W / rect.H
 
 	var scale float64
@@ -63,12 +63,11 @@ func (rect Rect) FitInside(container Rect) Rect {
 		scale = container.H / rect.H
 	}
 
-	return Rect{
-		X: container.X,
-		Y: container.Y,
-		W: rect.W * scale,
-		H: rect.H * scale,
-	}
+	out.W = rect.W * scale
+	out.H = rect.H * scale
+	out.X = container.X + (container.W-out.W)*0.5
+	out.Y = container.Y + (container.H-out.H)*0.5
+	return out
 }
 
 func (rect Rect) GetMatrix() canvas.Matrix {

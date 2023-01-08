@@ -1,5 +1,10 @@
 <template>
-  <div class="container" ref="container" tabindex="1">
+  <div
+    class="container"
+    ref="container"
+    :style="{ backgroundColor }"
+    tabindex="1"
+  >
     <div class="tileViewer" ref="map"></div>
     <photo-skeleton
       v-if="loading"
@@ -15,12 +20,14 @@ import XYZ from 'ol/source/XYZ';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
+import { defaults as defaultInteractions, DragPan, MouseWheelZoom } from 'ol/interaction';
 import equal from 'fast-deep-equal';
 
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
 import { getTileUrl } from '../api';
+import Kinetic from 'ol/Kinetic';
 
 export default {
 
@@ -32,29 +39,30 @@ export default {
     api: String,
     scene: Object,
     interactive: Boolean,
+    pan: Boolean,
+    zoom: Boolean,
+    zoomTransition: Boolean,
+    kinetic: Boolean,
     tileSize: Number,
     view: Object,
+    backgroundColor: String,
     debug: Object,
     loading: Boolean,
+    viewport: Object,
   },
 
-  emits: ["zoom", "click", "view", "reset", "load", "key-down", "viewer"],
+  emits: ["zoom", "click", "view", "move-end", "reset", "load-end", "key-down", "viewer"],
 
   data() {
     return {
       viewer: null,
       maxZoom: 30,
-      latestView: {
-        x: 0,
-        y: 0,
-        w: 0,
-        h: 0,
-      }
     }
   },
   async created() {
   },
   async mounted() {
+    this.latestView = null;
     this.reset();
   },
   watch: {
@@ -86,6 +94,24 @@ export default {
       this.setInteractive(interactive);
     },
 
+    pan: {
+      immediate: true,
+      handler(newValue) {
+        this.dragPan?.setActive(newValue);
+      }
+    },
+
+    zoom: {
+      immediate: true,
+      handler(newValue) {
+        this.mouseWheelZoom?.setActive(newValue);
+      }
+    },
+
+    kinetic(kinetic) {
+      this.setKinetic(kinetic);
+    },
+
     view(view) {
       this.setView(view);
     },
@@ -106,7 +132,19 @@ export default {
       if (width < 1) width = 1;
       if (height < 1) height = 1;
       return [0, 0, width, height];
-    }
+    },
+    minViewportZoom() {
+      if (!this.v || !this.viewport.width.value) {
+        return 0;
+      }
+      const extent = this.extentFromView({
+        x: 0,
+        y: 0,
+        w: this.viewport.width.value,
+        h: this.viewport.height.value,
+      });
+      return this.v.getZoomForResolution(this.v.getResolutionForExtent(extent));
+    },
   },
   methods: {
 
@@ -122,6 +160,19 @@ export default {
         height = width / sceneAspect;
       }
       return { width, height }
+    },
+
+    getTiledImageZoomAtSize(width, height) {
+      let sceneAspect;
+      if (width < height) {
+        sceneAspect = width / height;
+      } else {
+        sceneAspect = height / width;
+      }
+
+      const power = width / this.tileSize;
+      const zoom = Math.sqrt(power);
+      return zoom;
     },
 
     initOpenLayers(element) {
@@ -159,19 +210,31 @@ export default {
 
       // Limit minimum size loaded to avoid
       // loading tiled images with very little content
-      let minZoom = 0;
-      const minTiledImageWidth = 10;
-      for (let i = 0; i < this.maxZoom; i++) {
-        const zoomSize = this.getTiledImageSizeAtZoom(i);
-        if (zoomSize.width >= minTiledImageWidth) {
-          minZoom = i;
-          break;
-        }
-      }
+      // let minZoom = 0;
+      // const minTiledImageWidth = 10;
+      // for (let i = 0; i < this.maxZoom; i++) {
+      //   const zoomSize = this.getTiledImageSizeAtZoom(i);
+      //   if (zoomSize.width >= minTiledImageWidth) {
+      //     minZoom = i;
+      //     break;
+      //   }
+      // }
 
-      const sceneSmallerThanViewport =
-        this.scene.bounds.w < element.clientWidth ||
-        this.scene.bounds.h < element.clientHeight;
+      const dragPan = new DragPan();
+      const mouseWheelZoom = new MouseWheelZoom();
+      const interactions = defaultInteractions({
+        dragPan: false,
+        mouseWheelZoom: false,
+      }).extend([
+        dragPan,
+        mouseWheelZoom,
+      ]);
+      this.interactions = interactions;
+      this.dragPan = dragPan;
+      this.dragPan.setActive(this.pan);
+
+      this.mouseWheelZoom = mouseWheelZoom;
+      this.mouseWheelZoom.setActive(this.zoom);
 
       this.map = new Map({
         target: element,
@@ -181,23 +244,39 @@ export default {
           center: [extent[2]/2, extent[3]],
           projection,
           zoom: 0,
-          minZoom,
+          minZoom: 0,
           maxZoom: this.maxZoom,
           enableRotation: false,
           extent,
           smoothExtentConstraint: false,
-          showFullExtent: sceneSmallerThanViewport,
+          showFullExtent: true,
         }),
         controls: [],
+        interactions,
+        moveTolerance: 4,
       });
       this.map.on("click", event => this.onClick(event));
       this.map.on("movestart", event => this.onMoveStart(event));
       this.map.on("moveend", event => this.onMoveEnd(event));
-
+      this.map.on("loadend", event => this.onLoadEnd(event));
+      
       this.v = this.map.getView();
 
-      this.setInteractive(this.interactive);
-      this.setView(this.view || this.latestView);
+      this.v.setMinZoom(this.minViewportZoom);
+
+      this.v.on('change:center', this.onCenterChange);
+      this.v.on('change:resolution', this.onResolutionChange);
+
+      if (this.latestView) {
+        const latestView = this.latestView;
+        this.latestView = null;
+        this.setView(latestView);
+        this.latestView = latestView;
+      } else if (this.view) {
+        this.setView(this.view);
+      }
+
+      this.setKinetic(this.kinetic);
       this.$emit("viewer", this.map);
 
     },
@@ -209,9 +288,25 @@ export default {
       }
     },
 
+    setKinetic(kinetic) {
+      if (!!this.dragPanKinetic == kinetic) {
+        return;
+      }
+      this.dragPanKinetic = kinetic ? new Kinetic(-0.004, 0.1, 200) : undefined;
+      if (this.dragPan) {
+        this.interactions.remove(this.dragPan);
+      }
+      this.dragPan = new DragPan({
+        kinetic: this.dragPanKinetic,
+      });
+      this.interactions.push(this.dragPan);
+      this.dragPan.setActive(this.pan);
+    },
+
     onClick(event) {
       if (!this.interactive) return;
       const coords = this.viewFromCoordinate(event.coordinate);
+      if (!coords) return;
       this.$emit("click", coords);
     },
 
@@ -220,43 +315,39 @@ export default {
     },
 
     onMoveEnd(event) {
-      if (!this.interactive) return;
+      const visibleExtent = this.v.calculateExtent(this.map.getSize());
+      const view = this.viewFromExtent(visibleExtent);
+      if (!view) return;
+      this.$emit("move-end", view);
+    },
 
-      if (!this.scene) return;
-      if (!this.moveStartEvent) throw new Error("Missing moveStartEvent");
+    onLoadEnd() {
+      this.$emit("load-end");
+    },
 
-      const startState = this.moveStartEvent.frameState.viewState;
-      const endState = event.frameState.viewState;
+    onCenterChange(event) {
+      const visibleExtent = this.v.calculateExtent(this.map.getSize());
+      const view = this.viewFromExtent(visibleExtent);
+      if (!view) return;
+      this.latestView = view;
+      this.$emit("view", view);
+    },
 
-      const zoomChange = startState.zoom != endState.zoom;
-      const panChange = startState.center[0] != endState.center[0] || startState.center[1] != endState.center[1];
-
-      // console.log(endState.zoom)
-
-      if (!zoomChange && !panChange) {
-        return;
-      }
+    onResolutionChange(event) {
 
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
+      if (!view) return;
       this.latestView = view;
-    
-      if (zoomChange) {
-        const viewWidthZoom = this.scene.bounds.w / view.w;
-        const viewHeightZoom = this.scene.bounds.w / view.h;
-        const viewMinZoom = Math.min(viewWidthZoom, viewHeightZoom);
-        this.$emit("zoom", viewMinZoom);
-      }
-
-      if (panChange) {
-        this.$emit("view", view);
-      }
+      this.$emit("view", view);
     },
 
     reset() {
       if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
       if (this.map) {
         this.map.dispose();
+        this.dragPan = null;
+        this.dragPanKinetic = null;
       }
       this.initOpenLayers(this.$refs.map);
     },
@@ -267,7 +358,7 @@ export default {
 
     tileUrlFunction([z, x, y], pixelRatio, proj) {
       if (!this.scene) return;
-      return getTileUrl(this.scene.id, z, x, y, this.tileSize, this.debug);
+      return getTileUrl(this.scene.id, z, x, y, this.tileSize, this.backgroundColor, this.debug);
     },
 
     elementToViewportCoordinates(eventOrPoint) {
@@ -292,8 +383,26 @@ export default {
       return [tx, ty-th, tx+tw, ty];
     },
 
+    zoomFromView(view) {
+      if (!view) return null;
+      const vw = view.w;
+      const vh = view.h;
+      const sw = this.scene.bounds.w;
+      const sh = this.scene.bounds.h;
+      const [mw, mh] = this.map.getSize();
+      const zw = mw / vw;
+      const zh = mh / vh;
+      return Math.min(zw, zh);
+    },
+
+    viewDistance(a, b) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      return Math.sqrt(dx*dx + dy*dy);
+    },
+
     viewFromExtent(extent) {
-      if (!this.scene) throw new Error("Scene not found");
+      if (!this.scene) return null;
       const fullExtent = this.projection.getExtent();
       const fw = fullExtent[2] - fullExtent[0];
       const fh = fullExtent[3] - fullExtent[1];
@@ -312,7 +421,7 @@ export default {
     },
 
     viewFromCoordinate(coord) {
-      if (!this.scene) throw new Error("Scene not found");
+      if (!this.scene) return null;
       const fullExtent = this.projection.getExtent();
       const fw = fullExtent[2] - fullExtent[0];
       const fh = fullExtent[3] - fullExtent[1];
@@ -326,8 +435,12 @@ export default {
       }
     },
 
+    setPendingAnimationTime(t) {
+      this.pendingAnimationTime = t;
+    },
+
     setView(view, options) {
-    
+
       if (!this.map) {
         console.warn("Map not initialized yet, setting pending view", view);
         this.pendingView = { view, options };
@@ -335,21 +448,32 @@ export default {
       }
 
       if (!this.scene) {
-        console.warn("Scene missing", view);
+        console.warn("Scene missing, view", view);
         return;
       }
 
-      if (this.scene.bounds.w == 0) {
-        console.warn("Scene has zero width, ignoring", this.scene);
+      if (this.scene.loading) {
+        console.warn("Scene loading, setting pending view", view);
+        this.pendingView = { view, options };
         return;
       }
 
-      if (this.pendingView && !view) {
+      if (this.scene.bounds.w == 0 || this.scene.bounds.h == 0) {
+        console.warn("Scene has zero width or height, ignoring", this.scene);
+        return;
+      }
+
+      if (!view && this.pendingView) {
         view = this.pendingView.view;
         options = this.pendingView.options;
         console.warn("Using pending view", view);
       }
       this.pendingView = null;
+
+      if (!view) {
+        console.warn("View missing");
+        return;
+      }
 
       if (
         this.latestView && view &&
@@ -362,13 +486,33 @@ export default {
         return;
       }
       
+      if (this.zoomTransition && this.latestView) {
+        const prevZoom = this.zoomFromView(this.latestView);
+        const zoom = this.zoomFromView(view);
+        const zoomDiff = Math.abs(zoom - prevZoom);
+        if (zoomDiff > 1e-4 && !options) {
+          const t = zoomDiff * 0.05;
+          options = { animationTime: t }
+        }
+      }
+
       this.latestView = view;
-      // console.log(view);
+      if (this.pendingAnimationTime && !options) {
+        options = { animationTime: this.pendingAnimationTime }
+      }
+      this.pendingAnimationTime = null;
+
+      if (this.v.getAnimating()) {
+        this.v.cancelAnimations();
+      }
 
       const targetExtent = this.extentFromView(view);
       
       const fitOpts = options ? {
         duration: options.animationTime*1000,
+        easing: function(t) {
+          return 1 - Math.pow(1 - t, 10)
+        },
       } : undefined;
 
       this.v.fit(targetExtent, fitOpts);

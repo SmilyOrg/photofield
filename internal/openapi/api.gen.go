@@ -18,6 +18,8 @@ const (
 
 	LayoutTypeSQUARE LayoutType = "SQUARE"
 
+	LayoutTypeSTRIP LayoutType = "STRIP"
+
 	LayoutTypeTIMELINE LayoutType = "TIMELINE"
 
 	LayoutTypeWALL LayoutType = "WALL"
@@ -118,15 +120,13 @@ type SceneId string
 
 // SceneParams defines model for SceneParams.
 type SceneParams struct {
-	CollectionId CollectionId `json:"collection_id"`
-	ImageHeight  ImageHeight  `json:"image_height"`
-	Layout       LayoutType   `json:"layout"`
-	SceneWidth   SceneWidth   `json:"scene_width"`
-	Search       *Search      `json:"search,omitempty"`
+	CollectionId   CollectionId   `json:"collection_id"`
+	ImageHeight    *ImageHeight   `json:"image_height,omitempty"`
+	Layout         LayoutType     `json:"layout"`
+	Search         *Search        `json:"search,omitempty"`
+	ViewportHeight ViewportHeight `json:"viewport_height"`
+	ViewportWidth  ViewportWidth  `json:"viewport_width"`
 }
-
-// SceneWidth defines model for SceneWidth.
-type SceneWidth float32
 
 // Search defines model for Search.
 type Search string
@@ -154,6 +154,12 @@ type TaskType string
 // TileCoord defines model for TileCoord.
 type TileCoord int
 
+// ViewportHeight defines model for ViewportHeight.
+type ViewportHeight float32
+
+// ViewportWidth defines model for ViewportWidth.
+type ViewportWidth float32
+
 // FileIdPathParam defines model for FileIdPathParam.
 type FileIdPathParam FileId
 
@@ -166,11 +172,12 @@ type SizePathParam string
 // GetScenesParams defines parameters for GetScenes.
 type GetScenesParams struct {
 	// Collection ID
-	CollectionId CollectionId `json:"collection_id"`
-	SceneWidth   *SceneWidth  `json:"scene_width,omitempty"`
-	ImageHeight  *ImageHeight `json:"image_height,omitempty"`
-	Layout       *LayoutType  `json:"layout,omitempty"`
-	Search       *Search      `json:"search,omitempty"`
+	CollectionId   CollectionId    `json:"collection_id"`
+	ViewportWidth  *ViewportWidth  `json:"viewport_width,omitempty"`
+	ViewportHeight *ViewportHeight `json:"viewport_height,omitempty"`
+	ImageHeight    *ImageHeight    `json:"image_height,omitempty"`
+	Layout         *LayoutType     `json:"layout,omitempty"`
+	Search         *Search         `json:"search,omitempty"`
 }
 
 // PostScenesJSONBody defines parameters for PostScenes.
@@ -193,6 +200,7 @@ type GetScenesSceneIdRegionsParams struct {
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
 type GetScenesSceneIdTilesParams struct {
 	TileSize        int       `json:"tile_size"`
+	BackgroundColor *string   `json:"background_color,omitempty"`
 	Zoom            int       `json:"zoom"`
 	X               TileCoord `json:"x"`
 	Y               TileCoord `json:"y"`
@@ -462,14 +470,25 @@ func (siw *ServerInterfaceWrapper) GetScenes(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// ------------- Optional query parameter "scene_width" -------------
-	if paramValue := r.URL.Query().Get("scene_width"); paramValue != "" {
+	// ------------- Optional query parameter "viewport_width" -------------
+	if paramValue := r.URL.Query().Get("viewport_width"); paramValue != "" {
 
 	}
 
-	err = runtime.BindQueryParameter("form", true, false, "scene_width", r.URL.Query(), &params.SceneWidth)
+	err = runtime.BindQueryParameter("form", true, false, "viewport_width", r.URL.Query(), &params.ViewportWidth)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid format for parameter scene_width: %s", err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Invalid format for parameter viewport_width: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "viewport_height" -------------
+	if paramValue := r.URL.Query().Get("viewport_height"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "viewport_height", r.URL.Query(), &params.ViewportHeight)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter viewport_height: %s", err), http.StatusBadRequest)
 		return
 	}
 
@@ -761,6 +780,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, true, "tile_size", r.URL.Query(), &params.TileSize)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter tile_size: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "background_color" -------------
+	if paramValue := r.URL.Query().Get("background_color"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "background_color", r.URL.Query(), &params.BackgroundColor)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter background_color: %s", err), http.StatusBadRequest)
 		return
 	}
 

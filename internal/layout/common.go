@@ -18,14 +18,16 @@ const (
 	Square   Type = "SQUARE"
 	Wall     Type = "WALL"
 	Search   Type = "SEARCH"
+	Strip    Type = "STRIP"
 )
 
 type Layout struct {
-	Type         Type `json:"type"`
-	SceneWidth   float64
-	ImageHeight  float64
-	ImageSpacing float64
-	LineSpacing  float64
+	Type           Type `json:"type"`
+	ViewportWidth  float64
+	ViewportHeight float64
+	ImageHeight    float64
+	ImageSpacing   float64
+	LineSpacing    float64
 }
 
 type Section struct {

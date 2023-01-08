@@ -29,7 +29,7 @@ func LayoutSearch(layout Layout, collection collection.Collection, scene *render
 	sceneMargin := 10.
 	falloff := 5.
 
-	scene.Bounds.W = layout.SceneWidth
+	scene.Bounds.W = layout.ViewportWidth
 
 	rect := render.Rect{
 		X: sceneMargin,

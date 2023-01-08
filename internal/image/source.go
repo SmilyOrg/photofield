@@ -42,6 +42,17 @@ type SimilarityInfo struct {
 	Similarity float32
 }
 
+func SimilarityInfosToSourcedInfos(sinfos <-chan SimilarityInfo) <-chan SourcedInfo {
+	out := make(chan SourcedInfo)
+	go func() {
+		for sinfo := range sinfos {
+			out <- sinfo.SourcedInfo
+		}
+		close(out)
+	}()
+	return out
+}
+
 type CacheConfig struct {
 	MaxSize string `json:"max_size"`
 }

@@ -37,15 +37,13 @@
           :collections="collections"
           :collection="collection"
           :tasks="tasks"
-          :scene="scene"
+          :scenes="scenes"
           tabindex="0"
           @focusin="collectionExpanded = true"
           @focusout="collectionExpandedPending = false; collectionExpanded = false"
           @close="collectionExpanded = false"
           @reindex="reindex"
           @reload="reload"
-          @recreate-scene="recreateScene"
-          @simulate="simulate"
         >
         </collection-panel>
 
@@ -98,11 +96,10 @@
       <router-view
         class="viewer"
         ref="viewer"
-        :class="{ simulating }"
         :fullpage="true"
         :scrollbar="scrollbar"
         @load="onLoad"
-        @scene="v => scene = v"
+        @scenes="v => scenes = v"
         @immersive="onImmersive"
         @tasks="tasks => viewerTasks = tasks"
         @reindex="() => reindex()"
@@ -116,17 +113,16 @@
 import { createTask, useApi, useTasks } from './api';
 import { computed, toRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import NaturalViewer from './components/NaturalViewer.vue'
 import ExpandButton from './components/ExpandButton.vue'
 import SearchInput from './components/SearchInput.vue'
 import DisplaySettings from './components/DisplaySettings.vue'
 import TaskList from './components/TaskList.vue';
 import CollectionPanel from './components/CollectionPanel.vue';
+import { useEventBus } from '@vueuse/core';
 
 export default {
   name: 'App',
   components: {
-    NaturalViewer,
     ExpandButton,
     SearchInput,
     DisplaySettings,
@@ -148,11 +144,11 @@ export default {
         image: 0,
       },
       drawer: false,
-      simulating: false,
       immersive: false,
       collectionMenuOpen: false,
       scrollbar: null,
       scene: null,
+      scenes: [],
       viewerTasks: null,
       searchActive: false,
     }
@@ -205,6 +201,8 @@ export default {
 
     const collection = computed(() => collectionId.value && fetchedCollection.value);
 
+    const recreateEvent = useEventBus("recreate-scene");
+
     return {
       goHome,
       query,
@@ -218,6 +216,7 @@ export default {
       collection,
       collections,
       capabilities,
+      recreateEvent,
     }
   },
   async mounted() {
@@ -271,7 +270,7 @@ export default {
       this.collectionExpandedPending = false;
     },
     recreateScene() {
-      this.$bus.emit("recreate-scene");
+      this.recreateEvent.emit();
     },
     async reindex() {
       await createTask("INDEX", this.collection?.id);
@@ -301,16 +300,6 @@ export default {
           visibility: immersive ? "hidden" : "auto",
         },
       })
-    },
-    async simulate() {
-      this.drawer = false;
-      this.simulating = true;
-      const done = () => {
-        this.simulating = false;
-        this.$bus.off("simulate-done", done);
-      }
-      this.$bus.on("simulate-done", done);
-      this.$bus.emit("simulate-run");
     }
   }
 }
@@ -406,6 +395,11 @@ export default {
   background-color: white;
   --mdc-theme-on-primary: rgba(0,0,0,.87);
   vertical-align: baseline;
+  transition: transform 0.2s;
+}
+
+.top-bar.immersive {
+  transform: translateY(-80px);
 }
 
 .top-bar :deep(.mdc-top-app-bar__title) {
@@ -432,9 +426,6 @@ button {
   --mdc-theme-primary: black;
 }
 
-.top-bar.immersive {
-  transform: translateY(-80px);
-}
 
 .title {
   cursor: pointer;
@@ -488,11 +479,6 @@ button {
 
 .viewer {
   height: calc(100vh - 64px);
-}
-
-.viewer.simulating {
-  width: 1280px;
-  height: 720px;
 }
 
 </style>

@@ -247,14 +247,9 @@ quirks that exist in the current version.
   * `Escape` or pinch out to get back to the list of photos
 * Zoom in/out directly with `Ctrl/Cmd`+`Wheel`
 * Pinch-to-zoom on touch devices
-  * ⚠ You have to currently tap to zoom first - this is undesirable behavior, but
-    fixing it is a little tricky right now.
 * Press/hold `Arrow Left` or `Arrow Right` to quickly switch between photos
-  * There is currently no other easy way to do this and that's not great,
-    especially on touch-only devices.
-* Right-click or long-tap as usual to open context menu. It's custom due to the
-  fact that the native one is not useful for common use-cases as the images
-  aren't loaded individually.
+* Right-click or long-tap as usual to open a custom context menu allowing you to
+  copy or download original photos or thumbnails.
   
   ![context menu](docs/assets/context-menu.png)
   
