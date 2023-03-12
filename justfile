@@ -34,6 +34,12 @@ db-add migration_file_name:
 db *args:
   migrate -database sqlite://data/photofield.cache.db -path db/migrations {{args}}
 
+dbt-add migration_file_name:
+  migrate create -ext sql -dir db/migrations-thumbs -seq {{migration_file_name}}
+
+dbt *args:
+  migrate -database sqlite://data/photofield.thumbs.db -path db/migrations-thumbs {{args}}
+
 api-codegen:
   oapi-codegen -generate="types,chi-server" -package=openapi api.yaml > internal/openapi/api.gen.go
 
