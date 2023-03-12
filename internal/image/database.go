@@ -153,7 +153,7 @@ func (source *Database) migrate(migrations embed.FS) {
 	if dirty {
 		dirtystr = " (dirty)"
 	}
-	log.Printf("database version %v%s, migrating if needed", version, dirtystr)
+	log.Printf("cache database version %v%s, migrating if needed", version, dirtystr)
 
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
@@ -1044,7 +1044,6 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 		}
 
 		sql += ";"
-		println(sql)
 
 		stmt := conn.Prep(sql)
 		bindIndex := 1

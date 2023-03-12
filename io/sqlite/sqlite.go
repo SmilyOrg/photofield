@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"image/jpeg"
 	"log"
+	"net/http"
+	"path/filepath"
 	"photofield/internal/metrics"
 	"photofield/io"
 	"time"
@@ -16,6 +18,10 @@ import (
 
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
+	"github.com/golang-migrate/migrate/v4/source/httpfs"
 )
 
 var (
@@ -57,17 +63,121 @@ func New(path string, migrations embed.FS) *Source {
 	source := Source{
 		path: path,
 	}
-	// source.migrate(migrations)
+	source.migrate(migrations)
 
-	source.pool, err = sqlitex.Open(source.path, 0, 10)
+	poolSize := 10
+	source.pool, err = sqlitex.Open(source.path, 0, poolSize)
 	if err != nil {
 		panic(err)
+	}
+	conns := make([]*sqlite.Conn, poolSize)
+	for i := 0; i < poolSize; i++ {
+		conns[i] = source.pool.Get(context.Background())
+		setPragma(conns[i], "synchronous", "NORMAL")
+		assertPragma(conns[i], "synchronous", 1)
+	}
+	for i := 0; i < poolSize; i++ {
+		source.pool.Put(conns[i])
 	}
 
 	source.pending = make(chan Thumb, 100)
 	go source.writePending()
 
 	return &source
+}
+
+func setPragma(conn *sqlite.Conn, name string, value interface{}) error {
+	sql := fmt.Sprintf("PRAGMA %s = %v;", name, value)
+	return sqlitex.ExecuteTransient(conn, sql, &sqlitex.ExecOptions{})
+}
+
+func assertPragma(conn *sqlite.Conn, name string, value interface{}) error {
+	sql := fmt.Sprintf("PRAGMA %s;", name)
+	return sqlitex.ExecuteTransient(conn, sql, &sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			expected := fmt.Sprintf("%v", value)
+			actual := stmt.GetText(name)
+			if expected != actual {
+				return fmt.Errorf("unable to initialize %s to %v, got back %v", name, expected, actual)
+			}
+			return nil
+		},
+	})
+}
+
+func (s *Source) init() {
+	flags := sqlite.OpenReadWrite |
+		sqlite.OpenCreate |
+		sqlite.OpenURI |
+		sqlite.OpenNoMutex
+
+	conn, err := sqlite.OpenConn(s.path, flags)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	// Optimized for 256px jpeg thumbnails
+	pageSize := 16384
+	err = setPragma(conn, "page_size", pageSize)
+	if err != nil {
+		panic(err)
+	}
+
+	// Vacuum to apply page size
+	err = sqlitex.ExecuteTransient(conn, "VACUUM;", &sqlitex.ExecOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	err = assertPragma(conn, "page_size", pageSize)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *Source) migrate(migrations embed.FS) {
+	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations-thumbs")
+	if err != nil {
+		panic(err)
+	}
+	url := fmt.Sprintf("sqlite://%v", filepath.ToSlash(s.path))
+	m, err := migrate.NewWithSourceInstance(
+		"migrations-thumbs",
+		dbsource,
+		url,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	version, dirty, err := m.Version()
+	if err != nil && err != migrate.ErrNilVersion {
+		panic(err)
+	}
+
+	if err == migrate.ErrNilVersion {
+		s.init()
+	}
+
+	dirtystr := ""
+	if dirty {
+		dirtystr = " (dirty)"
+	}
+	log.Printf("thumbs database version %v%s, migrating if needed", version, dirtystr)
+
+	err = m.Up()
+	if err != nil && err != migrate.ErrNoChange {
+		panic(err)
+	}
+
+	serr, derr := m.Close()
+	if serr != nil {
+		panic(serr)
+	}
+	if derr != nil {
+		panic(derr)
+	}
 }
 
 func (s *Source) Write(id uint32, bytes []byte) error {
@@ -78,21 +188,13 @@ func (s *Source) Write(id uint32, bytes []byte) error {
 	return nil
 }
 
-func (s *Source) open() *sqlite.Conn {
-	c, err := sqlite.OpenConn(s.path, 0)
-	if err != nil {
-		panic(err)
-	}
-	return c
-}
-
 func (s *Source) writePending() {
-	c := s.open()
-	defer c.Close()
+	c := s.pool.Get(context.Background())
+	defer s.pool.Put(c)
 
 	insert := c.Prep(`
-		INSERT OR REPLACE INTO thumb256(id, data)
-		VALUES (?, ?);`)
+		INSERT OR REPLACE INTO thumb256(id, created_at_unix, data)
+		VALUES (?, ?, ?);`)
 	defer insert.Reset()
 
 	lastCommit := time.Now()
@@ -109,8 +211,11 @@ func (s *Source) writePending() {
 			inTransaction = true
 		}
 
+		now := time.Now()
+
 		insert.BindInt64(1, int64(t.Id))
-		insert.BindBytes(2, t.Bytes)
+		insert.BindInt64(2, now.Unix())
+		insert.BindBytes(3, t.Bytes)
 		_, err := insert.Step()
 		if err != nil {
 			log.Printf("Unable to insert image for %d: %s\n", t.Id, err)
@@ -205,11 +310,11 @@ func (s *Source) Decode(ctx context.Context, r goio.Reader) io.Result {
 
 func (s *Source) Set(ctx context.Context, id io.ImageId, path string, r io.Result) bool {
 	var b bytes.Buffer
-	return s.SetWithBuffer(ctx, id, path, b, r)
+	return s.SetWithBuffer(ctx, id, path, &b, r)
 }
 
-func (s *Source) SetWithBuffer(ctx context.Context, id io.ImageId, path string, b bytes.Buffer, r io.Result) bool {
-	w := bufio.NewWriter(&b)
+func (s *Source) SetWithBuffer(ctx context.Context, id io.ImageId, path string, b *bytes.Buffer, r io.Result) bool {
+	w := bufio.NewWriter(b)
 	s.Encode(ctx, r, w)
 	s.Write(uint32(id), b.Bytes())
 	return true

@@ -20,24 +20,9 @@ func (source *Source) indexContents(in <-chan interface{}) {
 			time.Sleep(1 * time.Second)
 		}
 
-		// id := io.ImageId(iduint)
 		m := elem.(MissingInfo)
 		id := io.ImageId(m.Id)
 		path := m.Path
-		// path, err := source.GetImagePath(ImageId(id))
-		// if err != nil {
-		// 	log.Println("Unable to find image path", err, path)
-		// 	continue
-		// }
-		// log.Println("preprocess", id, path, m.Color, m.Embedding)
-		// r := source.ThumbnailSource.Get(ctx, id, path)
-
-		// var thumbReader io.Reader
-
-		// allDone := metrics.Elapsed(fmt.Sprintf("preprocess %v all", id))
-		// getDone := metrics.Elapsed(fmt.Sprintf("preprocess %v get", id))
-
-		// source.ThumbnailSource.GetReader(ctx, id, path, func(rd *bytes.Reader, err error) {
 
 		done := false
 		for _, src := range source.ThumbnailSources {
@@ -46,7 +31,7 @@ func (source *Source) indexContents(in <-chan interface{}) {
 					return
 				}
 
-				// log.Printf("index contents %d sourced from %s\n", id, src.(io.Source).Name())
+				// log.Printf("index contents source %s path %s\n", src.(io.Source).Name(), path)
 				source.indexContentsReader(ctx, m, src, nil, rs)
 				done = true
 			})
@@ -57,7 +42,7 @@ func (source *Source) indexContents(in <-chan interface{}) {
 
 		// Generate thumbnail if none loaded
 		if !done {
-			// log.Printf("index contents %d generate\n", id)
+			// log.Printf("index contents generate %s\n", path)
 			img, rs, err := source.indexContentsGenerate(ctx, id, path)
 			if err != nil {
 				log.Println("Unable to generate image thumbnail", err)
@@ -118,7 +103,7 @@ func (source *Source) indexContentsGenerate(ctx context.Context, id io.ImageId, 
 
 		// Save thumbnail
 		var b bytes.Buffer
-		ok := source.ThumbnailSink.SetWithBuffer(ctx, id, path, b, r)
+		ok := source.ThumbnailSink.SetWithBuffer(ctx, id, path, &b, r)
 		if !ok {
 			return r.Image, nil, fmt.Errorf("unable to save %s", path)
 		}

@@ -14,8 +14,7 @@ type Queue struct {
 	queue       *queue.Queue
 	ID          string
 	Name        string
-	Worker      func(<-chan uint32)
-	WorkerElem  func(<-chan interface{})
+	Worker      func(<-chan interface{})
 	WorkerCount int
 }
 
@@ -36,40 +35,26 @@ func (q *Queue) Run() {
 
 	logging := false
 
-	ids := make(chan uint32)
-	defer close(ids)
-
-	elems := make(chan interface{})
-	defer close(elems)
+	items := make(chan interface{})
+	defer close(items)
 
 	if q.WorkerCount == 0 {
 		q.WorkerCount = 1
 	}
 	for i := 0; i < q.WorkerCount; i++ {
 		if q.Worker != nil {
-			go q.Worker(ids)
-		}
-		if q.WorkerElem != nil {
-			go q.WorkerElem(elems)
+			go q.Worker(items)
 		}
 	}
 
 	for {
 		if q.Worker != nil {
-			id := q.queue.Pop().(uint32)
-			if id == 0 {
+			item := q.queue.Pop()
+			if item == nil {
 				log.Printf("%s queue stopping\n", q.Name)
 				return
 			}
-			ids <- id
-		}
-		if q.WorkerElem != nil {
-			elem := q.queue.Pop()
-			if elem == nil {
-				log.Printf("%s queue stopping\n", q.Name)
-				return
-			}
-			elems <- elem
+			items <- item
 		}
 		doneCounter.Inc()
 
@@ -109,27 +94,11 @@ func (q *Queue) Length() int {
 	return q.queue.Length()
 }
 
-func (q *Queue) Append(id uint32) {
+func (q *Queue) AppendItems(items <-chan interface{}) {
 	if q.queue == nil {
 		return
 	}
-	q.queue.Append(id)
-}
-
-func (q *Queue) AppendChan(ids <-chan uint32) {
-	if q.queue == nil {
-		return
-	}
-	for id := range ids {
-		q.queue.Append(id)
-	}
-}
-
-func (q *Queue) AppendElems(elems <-chan interface{}) {
-	if q.queue == nil {
-		return
-	}
-	for elem := range elems {
-		q.queue.Append(elem)
+	for item := range items {
+		q.queue.Append(item)
 	}
 }

@@ -66,6 +66,9 @@ var defaults AppConfig
 //go:embed db/migrations
 var migrations embed.FS
 
+//go:embed db/migrations-thumbs
+var migrationsThumbs embed.FS
+
 //go:embed fonts/Roboto/Roboto-Regular.ttf
 var robotoRegular []byte
 
@@ -997,7 +1000,7 @@ func main() {
 	defaultSceneConfig.Render = appConfig.Render
 	tileRequestConfig = appConfig.TileRequests
 
-	imageSource = image.NewSource(appConfig.Media, migrations)
+	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs)
 	defer imageSource.Close()
 
 	if *vacuumPtr {

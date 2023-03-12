@@ -158,7 +158,7 @@ type Source struct {
 	// AIQueue queue.Queue
 }
 
-func NewSource(config Config, migrations embed.FS) *Source {
+func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *Source {
 	source := Source{}
 	source.Config = config
 	source.decoder = NewDecoder(config.ExifToolCount)
@@ -179,7 +179,7 @@ func NewSource(config Config, migrations embed.FS) *Source {
 	source.Ristretto = ioristretto.New()
 
 	ffmpegPath := ffmpeg.FindPath()
-	sqliteSource := sqlite.New(config.DatabaseThumbsPath, embed.FS{})
+	sqliteSource := sqlite.New(config.DatabaseThumbsPath, migrationsThumbs)
 
 	source.ThumbnailSources = []io.ReadDecoder{
 		sqliteSource,
@@ -292,34 +292,18 @@ func NewSource(config Config, migrations embed.FS) *Source {
 		source.MetaQueue = queue.Queue{
 			ID:          "index_metadata",
 			Name:        "index metadata",
-			WorkerElem:  source.indexMetadata,
+			Worker:      source.indexMetadata,
 			WorkerCount: config.ConcurrentMetaLoads,
 		}
 		go source.MetaQueue.Run()
 
-		// source.ColorQueue = queue.Queue{
-		// 	ID:          "load_color",
-		// 	Name:        "load color",
-		// 	Worker:      source.loadInfosColor,
-		// 	WorkerCount: config.ConcurrentColorLoads,
-		// }
-		// go source.ColorQueue.Run()
-
 		source.Clip = config.AI
-		// if config.AI.Available() {
-		// 	source.AIQueue = queue.Queue{
-		// 		ID:          "load_ai",
-		// 		Name:        "load ai",
-		// 		Worker:      source.loadInfosAI,
-		// 		WorkerCount: 8,
-		// 	}
-		// 	// go source.AIQueue.Run()
 		// }
 
 		source.ContentsQueue = queue.Queue{
 			ID:          "index_contents",
 			Name:        "index contents",
-			WorkerElem:  source.indexContents,
+			Worker:      source.indexContents,
 			WorkerCount: 8,
 		}
 		go source.ContentsQueue.Run()
@@ -499,11 +483,11 @@ func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 // }
 
 func (source *Source) IndexMetadata(dirs []string, maxPhotos int, force Missing) {
-	source.MetaQueue.AppendElems(MissingInfoToInterface(source.ListMissingMetadata(dirs, maxPhotos, force)))
+	source.MetaQueue.AppendItems(MissingInfoToInterface(source.ListMissingMetadata(dirs, maxPhotos, force)))
 }
 
 func (source *Source) IndexContents(dirs []string, maxPhotos int, force Missing) {
-	source.ContentsQueue.AppendElems(MissingInfoToInterface(source.ListMissingContents(dirs, maxPhotos, force)))
+	source.ContentsQueue.AppendItems(MissingInfoToInterface(source.ListMissingContents(dirs, maxPhotos, force)))
 }
 
 func (source *Source) GetDir(dir string) Info {
