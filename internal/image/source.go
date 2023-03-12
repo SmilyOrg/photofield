@@ -290,7 +290,7 @@ func NewSource(config Config, migrations embed.FS) *Source {
 	} else {
 
 		source.MetaQueue = queue.Queue{
-			ID:          "load_meta",
+			ID:          "index_metadata",
 			Name:        "index metadata",
 			WorkerElem:  source.indexMetadata,
 			WorkerCount: config.ConcurrentMetaLoads,

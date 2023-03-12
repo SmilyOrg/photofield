@@ -624,11 +624,11 @@ components:
     TaskType:
       type: string
       enum:
-        - INDEX
-        - LOAD_META
-        - LOAD_COLOR
-        - LOAD_AI
+        - INDEX_FILES
+        - INDEX_METADATA
         - INDEX_CONTENTS
+        - INDEX_CONTENTS_COLOR
+        - INDEX_CONTENTS_AI
     
     CollectionId:
       type: string

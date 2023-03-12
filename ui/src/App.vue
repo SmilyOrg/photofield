@@ -273,7 +273,7 @@ export default {
       this.recreateEvent.emit();
     },
     async reindex() {
-      await createTask("INDEX", this.collection?.id);
+      await createTask("INDEX_FILES", this.collection?.id);
       await this.remoteTasksUpdateUntilDone();
       this.recreateScene();
     },

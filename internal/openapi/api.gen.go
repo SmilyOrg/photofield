@@ -27,15 +27,15 @@ const (
 
 // Defines values for TaskType.
 const (
-	TaskTypeINDEX TaskType = "INDEX"
-
 	TaskTypeINDEXCONTENTS TaskType = "INDEX_CONTENTS"
 
-	TaskTypeLOADAI TaskType = "LOAD_AI"
+	TaskTypeINDEXCONTENTSAI TaskType = "INDEX_CONTENTS_AI"
 
-	TaskTypeLOADCOLOR TaskType = "LOAD_COLOR"
+	TaskTypeINDEXCONTENTSCOLOR TaskType = "INDEX_CONTENTS_COLOR"
 
-	TaskTypeLOADMETA TaskType = "LOAD_META"
+	TaskTypeINDEXFILES TaskType = "INDEX_FILES"
+
+	TaskTypeINDEXMETADATA TaskType = "INDEX_METADATA"
 )
 
 // Bounds defines model for Bounds.
