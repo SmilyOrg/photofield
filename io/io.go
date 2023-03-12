@@ -81,9 +81,11 @@ type Result struct {
 
 type Source interface {
 	Name() string
+	Ext() string
 	Size(original Size) Size
 	Rotate() bool
 	GetDurationEstimate(original Size) time.Duration
+	Exists(ctx context.Context, id ImageId, path string) bool
 	Get(ctx context.Context, id ImageId, path string) Result
 }
 

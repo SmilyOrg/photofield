@@ -766,33 +766,13 @@ func (*Api) GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, i
 }
 
 func (*Api) GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
-
-	// imagePath, err := imageSource.GetImagePath(image.ImageId(id))
-	// if err == image.ErrNotFound {
-	// 	problem(w, r, http.StatusNotFound, "Path not found")
-	// 	return
-	// }
-
-	// path := ""
-	// thumbnails := imageSource.GetApplicableThumbnails(imagePath)
-	// for i := range thumbnails {
-	// 	thumbnail := thumbnails[i]
-	// 	candidatePath := thumbnail.GetPath(imagePath)
-	// 	if !imageSource.Exists(candidatePath) {
-	// 		continue
-	// 	}
-	// 	if thumbnail.Name != string(size) {
-	// 		continue
-	// 	}
-	// 	path = candidatePath
-	// }
-
-	// if path == "" || !imageSource.Exists(path) {
-	problem(w, r, http.StatusNotFound, "Variant not found")
-	return
-	// }
-
-	// http.ServeFile(w, r, path)
+	imageSource.GetImageReader(image.ImageId(id), string(size), func(rs io.ReadSeeker, err error) {
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+		http.ServeContent(w, r, string(filename), time.Time{}, rs)
+	})
 }
 
 func AddPrefix(prefix string) func(next http.Handler) http.Handler {

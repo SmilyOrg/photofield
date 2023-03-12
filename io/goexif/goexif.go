@@ -23,6 +23,10 @@ func (e Exif) Name() string {
 	return "goexif"
 }
 
+func (e Exif) Ext() string {
+	return ".jpg"
+}
+
 func (e Exif) Size(size io.Size) io.Size {
 	return io.Size{X: 256, Y: 256}.Fit(size, io.FitInside)
 }
@@ -36,6 +40,16 @@ func (e Exif) GetDurationEstimate(size io.Size) time.Duration {
 
 func (e Exif) Rotate() bool {
 	return false
+}
+
+func (e Exif) Exists(ctx context.Context, id io.ImageId, path string) bool {
+	exists := false
+	e.Reader(ctx, id, path, func(r goio.ReadSeeker, err error) {
+		if r != nil || err == nil {
+			exists = true
+		}
+	})
+	return exists
 }
 
 func (e Exif) Get(ctx context.Context, id io.ImageId, path string) io.Result {

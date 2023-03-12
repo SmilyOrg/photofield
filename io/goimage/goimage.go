@@ -21,7 +21,11 @@ type Image struct {
 }
 
 func (o Image) Name() string {
-	return "image"
+	return "original"
+}
+
+func (o Image) Ext() string {
+	return ""
 }
 
 func (o Image) Resized() bool {
@@ -61,6 +65,10 @@ func resize(img image.Image, maxWidth, maxHeight int) image.Image {
 	resized := image.NewRGBA(image.Rect(0, 0, desiredW, desiredH))
 	draw.ApproxBiLinear.Scale(resized, resized.Bounds(), img, img.Bounds(), draw.Src, nil)
 	return resized
+}
+
+func (o Image) Exists(ctx context.Context, id io.ImageId, path string) bool {
+	return true
 }
 
 func (o Image) Get(ctx context.Context, id io.ImageId, path string) io.Result {

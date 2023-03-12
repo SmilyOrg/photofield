@@ -3,7 +3,9 @@ package thumb
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"text/template"
 	"time"
@@ -84,6 +86,10 @@ func (t Thumb) Name() string {
 	return fmt.Sprintf("thumb-%dx%d-%s", t.Width, t.Height, t.ThumbName)
 }
 
+func (t Thumb) Ext() string {
+	return filepath.Ext(t.resolvePath(""))
+}
+
 func (t Thumb) Rotate() bool {
 	return true
 }
@@ -110,6 +116,11 @@ func (t *Thumb) resolvePath(originalPath string) string {
 		panic(err)
 	}
 	return rendered.String()
+}
+
+func (t Thumb) Exists(ctx context.Context, id io.ImageId, path string) bool {
+	_, err := os.Stat(t.resolvePath(path))
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 func (t Thumb) Get(ctx context.Context, id io.ImageId, path string) io.Result {

@@ -11,8 +11,9 @@ import (
 	"strconv"
 	"time"
 
-	_ "image/jpeg"
-	_ "image/png"
+	goio "io"
+
+	"image/jpeg"
 )
 
 // type ForceOriginalAspectRatio string
@@ -67,6 +68,10 @@ func (f FFmpeg) Name() string {
 	return fmt.Sprintf("ffmpeg-%dx%d-%s%s", f.Width, f.Height, fit, found)
 }
 
+func (f FFmpeg) Ext() string {
+	return ".jpg"
+}
+
 func (f FFmpeg) Size(size io.Size) io.Size {
 	return io.Size{X: f.Width, Y: f.Height}.Fit(size, f.Fit)
 }
@@ -102,14 +107,10 @@ func (f FFmpeg) FilterGraph() string {
 	)
 }
 
-func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
-
+func (f FFmpeg) exec(ctx context.Context, id io.ImageId, path string) (*exec.Cmd, error) {
 	if f.Path == "" {
-		return io.Result{Error: ErrMissingBinary}
+		return nil, ErrMissingBinary
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
 
 	cmd := exec.CommandContext(
 		ctx,
@@ -127,6 +128,22 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 		"-an", // no audio
 		"-",
 	)
+	return cmd, nil
+}
+
+func (f FFmpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
+	return true
+}
+
+func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cmd, err := f.exec(ctx, id, path)
+	if err != nil {
+		return io.Result{Error: err}
+	}
+
 	// println(cmd.String())
 	b, err := cmd.Output()
 	err = formatErr(err, "ffmpeg")
@@ -157,6 +174,62 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 		Rect:   image.Rect(0, 0, pam.Width, pam.Height),
 	}
 	return io.Result{Image: image.Image(&rgba)}
+}
+
+func (f FFmpeg) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cmd, err := f.exec(ctx, id, path)
+	if err != nil {
+		fn(nil, err)
+		return
+	}
+
+	// println(cmd.String())
+	b, err := cmd.Output()
+	err = formatErr(err, "ffmpeg")
+	if err != nil {
+		fn(nil, err)
+		return
+	}
+
+	pam, err := readPAM(b)
+	if err != nil {
+		fn(nil, err)
+		return
+	}
+
+	if pam.Depth != 4 {
+		fn(nil, fmt.Errorf("unexpected depth %d", pam.Depth))
+		return
+	}
+
+	if pam.MaxValue != 255 {
+		fn(nil, fmt.Errorf("unexpected max value %d", pam.MaxValue))
+		return
+	}
+
+	if pam.Width < 0 || pam.Height < 0 {
+		fn(nil, fmt.Errorf("unexpected size %d x %d", pam.Width, pam.Height))
+		return
+	}
+
+	rgba := image.RGBA{
+		Pix:    pam.Bytes,
+		Stride: 4 * pam.Width,
+		Rect:   image.Rect(0, 0, pam.Width, pam.Height),
+	}
+
+	var buf bytes.Buffer
+	err = jpeg.Encode(&buf, &rgba, nil)
+	if err != nil {
+		fn(nil, err)
+		return
+	}
+
+	r := bytes.NewReader(buf.Bytes())
+	fn(r, nil)
 }
 
 func (f FFmpeg) Set(ctx context.Context, id io.ImageId, path string, r io.Result) bool {

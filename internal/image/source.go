@@ -1,11 +1,15 @@
 package image
 
 import (
+	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"log"
 	"path/filepath"
 	"strings"
+
+	goio "io"
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
@@ -498,20 +502,35 @@ func (source *Source) GetDirsCount(dirs []string) int {
 	return count
 }
 
-// func (source *Source) GetApplicableThumbnails(path string) []Thumbnail {
-// 	thumbs := make([]Thumbnail, 0, len(source.Thumbnails))
-// 	pathExt := strings.ToLower(filepath.Ext(path))
-// 	for _, t := range source.Thumbnails {
-// 		supported := false
-// 		for _, ext := range t.Extensions {
-// 			if pathExt == ext {
-// 				supported = true
-// 				break
-// 			}
-// 		}
-// 		if supported {
-// 			thumbs = append(thumbs, t)
-// 		}
-// 	}
-// 	return thumbs
-// }
+func (source *Source) GetImageReader(id ImageId, sourceName string, fn func(r goio.ReadSeeker, err error)) {
+	ctx := context.TODO()
+	path, err := source.GetImagePath(id)
+	if err != nil {
+		fn(nil, err)
+		return
+	}
+	found := false
+	for _, s := range source.Sources {
+		if s.Name() != sourceName {
+			continue
+		}
+		r, ok := s.(io.Reader)
+		if !ok {
+			continue
+		}
+		r.Reader(ctx, io.ImageId(id), path, func(r goio.ReadSeeker, err error) {
+			println(id, sourceName, s.Name(), r, ok, err)
+			if err != nil {
+				return
+			}
+			found = true
+			fn(r, nil)
+		})
+		if found {
+			break
+		}
+	}
+	if !found {
+		fn(nil, fmt.Errorf("unable to find image %d using %s", id, sourceName))
+	}
+}

@@ -43,6 +43,10 @@ func (s *Source) Name() string {
 	return "sqlite"
 }
 
+func (s *Source) Ext() string {
+	return ".jpg"
+}
+
 func (s *Source) GetDurationEstimate(size io.Size) time.Duration {
 	return 879 * time.Microsecond // SSD
 	// return 958 * time.Microsecond // HDD
@@ -266,6 +270,16 @@ func (s *Source) writePending() {
 			inTransaction = false
 		}
 	}
+}
+
+func (s *Source) Exists(ctx context.Context, id io.ImageId, path string) bool {
+	exists := false
+	s.Reader(ctx, id, path, func(r goio.ReadSeeker, err error) {
+		if r != nil && err == nil {
+			exists = true
+		}
+	})
+	return exists
 }
 
 func (s *Source) Get(ctx context.Context, id io.ImageId, path string) io.Result {

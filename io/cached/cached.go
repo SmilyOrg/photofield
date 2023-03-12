@@ -7,6 +7,8 @@ import (
 	"photofield/io/ristretto"
 	"time"
 
+	goio "io"
+
 	"golang.org/x/sync/singleflight"
 )
 
@@ -17,7 +19,11 @@ type Cached struct {
 }
 
 func (c *Cached) Name() string {
-	return fmt.Sprintf("%s (cached)", c.Source.Name())
+	return c.Source.Name()
+}
+
+func (c *Cached) Ext() string {
+	return c.Source.Ext()
 }
 
 func (c *Cached) Size(size io.Size) io.Size {
@@ -30,6 +36,10 @@ func (c *Cached) GetDurationEstimate(size io.Size) time.Duration {
 
 func (c *Cached) Rotate() bool {
 	return false
+}
+
+func (c *Cached) Exists(ctx context.Context, id io.ImageId, path string) bool {
+	return c.Source.Exists(ctx, id, path)
 }
 
 func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result {
@@ -47,6 +57,15 @@ func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result 
 	// fmt.Printf("%v cache set\n", id)
 	// println("saved to cache", s)
 	return r
+}
+
+func (c *Cached) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
+	r, ok := c.Source.(io.Reader)
+	if !ok {
+		fn(nil, fmt.Errorf("reader not supported by %s", c.Source.Name()))
+		return
+	}
+	r.Reader(ctx, id, path, fn)
 }
 
 func (c *Cached) load(ctx context.Context, id io.ImageId, path string) io.Result {
