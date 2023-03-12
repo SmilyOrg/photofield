@@ -16,7 +16,7 @@ func (source *Source) indexContents(in <-chan interface{}) {
 	ctx := context.TODO()
 	for elem := range in {
 
-		for source.MetaQueue.Length() > 0 {
+		for source.metadataQueue.Length() > 0 {
 			time.Sleep(1 * time.Second)
 		}
 
@@ -25,7 +25,7 @@ func (source *Source) indexContents(in <-chan interface{}) {
 		path := m.Path
 
 		done := false
-		for _, src := range source.ThumbnailSources {
+		for _, src := range source.thumbnailSources {
 			src.Reader(ctx, id, path, func(rs goio.ReadSeeker, err error) {
 				if err != nil {
 					return
@@ -66,7 +66,7 @@ func (source *Source) indexContentsReader(ctx context.Context, m MissingInfo, sr
 
 		// Extract colors
 		if img != nil {
-			color, err := source.ExtractProminentColor(img)
+			color, err := extractProminentColor(img)
 			if err != nil {
 				log.Println("Unable to extract image color", err, m.Path)
 			} else {
@@ -93,7 +93,7 @@ func (source *Source) indexContentsReader(ctx context.Context, m MissingInfo, sr
 
 func (source *Source) indexContentsGenerate(ctx context.Context, id io.ImageId, path string) (image.Image, *bytes.Reader, error) {
 	errs := make([]error, 0)
-	for _, gen := range source.ThumbnailGenerators {
+	for _, gen := range source.thumbnailGenerators {
 		// Generate thumbnail
 		r := gen.Get(ctx, id, path)
 		if r.Image == nil || r.Error != nil {
@@ -103,7 +103,7 @@ func (source *Source) indexContentsGenerate(ctx context.Context, id io.ImageId, 
 
 		// Save thumbnail
 		var b bytes.Buffer
-		ok := source.ThumbnailSink.SetWithBuffer(ctx, id, path, &b, r)
+		ok := source.thumbnailSink.SetWithBuffer(ctx, id, path, &b, r)
 		if !ok {
 			return r.Image, nil, fmt.Errorf("unable to save %s", path)
 		}

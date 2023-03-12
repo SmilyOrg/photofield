@@ -188,6 +188,14 @@ func (s *Source) Write(id uint32, bytes []byte) error {
 	return nil
 }
 
+func (s *Source) Delete(id uint32) error {
+	s.pending <- Thumb{
+		Id:    id,
+		Bytes: nil,
+	}
+	return nil
+}
+
 func (s *Source) writePending() {
 	c := s.pool.Get(context.Background())
 	defer s.pool.Put(c)
@@ -196,6 +204,10 @@ func (s *Source) writePending() {
 		INSERT OR REPLACE INTO thumb256(id, created_at_unix, data)
 		VALUES (?, ?, ?);`)
 	defer insert.Reset()
+
+	delete := c.Prep(`
+		DELETE FROM thumb256 WHERE id = ?;`)
+	defer delete.Reset()
 
 	lastCommit := time.Now()
 	lastOptimize := time.Time{}
@@ -213,14 +225,23 @@ func (s *Source) writePending() {
 
 		now := time.Now()
 
-		insert.BindInt64(1, int64(t.Id))
-		insert.BindInt64(2, now.Unix())
-		insert.BindBytes(3, t.Bytes)
-		_, err := insert.Step()
-		if err != nil {
-			log.Printf("Unable to insert image for %d: %s\n", t.Id, err)
+		if t.Bytes == nil {
+			delete.BindInt64(1, int64(t.Id))
+			_, err := delete.Step()
+			if err != nil {
+				log.Printf("Unable to delete image %d: %s\n", t.Id, err)
+			}
+			delete.Reset()
+		} else {
+			insert.BindInt64(1, int64(t.Id))
+			insert.BindInt64(2, now.Unix())
+			insert.BindBytes(3, t.Bytes)
+			_, err := insert.Step()
+			if err != nil {
+				log.Printf("Unable to insert image %d: %s\n", t.Id, err)
+			}
+			insert.Reset()
 		}
-		insert.Reset()
 
 		sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
 		if inTransaction && (sinceLastCommitSeconds >= 10 || len(s.pending) == 0) {

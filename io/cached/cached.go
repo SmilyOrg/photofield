@@ -11,9 +11,9 @@ import (
 )
 
 type Cached struct {
-	Source    io.Source
-	Ristretto ristretto.Ristretto
-	loading   singleflight.Group
+	Source  io.Source
+	Cache   ristretto.Ristretto
+	loading singleflight.Group
 }
 
 func (c *Cached) Name() string {
@@ -33,7 +33,7 @@ func (c *Cached) Rotate() bool {
 }
 
 func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result {
-	r := c.Ristretto.GetWithName(ctx, id, c.Source.Name())
+	r := c.Cache.GetWithName(ctx, id, c.Source.Name())
 	// fmt.Printf("%v %v\n", r.Image, r.Error)
 	if r.Image != nil || r.Error != nil {
 		// fmt.Printf("%v cache found\n", id)
@@ -56,7 +56,7 @@ func (c *Cached) load(ctx context.Context, id io.ImageId, path string) io.Result
 		// fmt.Printf("%p %v %s %v cache get begin\n", c, c.Source, c.Source.Name(), id)
 		r := c.Source.Get(ctx, id, path)
 		// fmt.Printf("%p %v %s %v cache get end\n", c, c.Source, c.Source.Name(), id)
-		c.Ristretto.SetWithName(ctx, id, c.Source.Name(), r)
+		c.Cache.SetWithName(ctx, id, c.Source.Name(), r)
 		// fmt.Printf("%v cache set\n", id)
 		return r, nil
 	})

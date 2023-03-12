@@ -6,7 +6,6 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
@@ -62,6 +61,11 @@ type Missing struct {
 	Metadata  bool
 	Color     bool
 	Embedding bool
+}
+
+type IdPath struct {
+	Id   ImageId
+	Path string
 }
 
 type MissingInfo struct {
@@ -131,31 +135,23 @@ type Source struct {
 
 	Sources                 io.Sources
 	SourcesLatencyHistogram *prometheus.HistogramVec
-	Ristretto               ioristretto.Ristretto
 
 	decoder  *Decoder
 	database *Database
 
+	imageCache      ioristretto.Ristretto
 	imageInfoCache  InfoCache
-	imageCache      ImageCache
 	pathCache       PathCache
 	fileExistsCache *ristretto.Cache
 
-	imagesLoading      sync.Map
-	imagesLoadingCount int
+	metadataQueue queue.Queue
+	contentsQueue queue.Queue
 
-	MetaQueue queue.Queue
-	// ColorQueue    queue.Queue
-	ContentsQueue queue.Queue
-
-	// ThumbnailSource  *sqlite.Source
-	ThumbnailSources []io.ReadDecoder
-	// ThumbnailGenerator  io.Source
-	ThumbnailGenerators io.Sources
-	ThumbnailSink       *sqlite.Source
+	thumbnailSources    []io.ReadDecoder
+	thumbnailGenerators io.Sources
+	thumbnailSink       *sqlite.Source
 
 	Clip clip.Clip
-	// AIQueue queue.Queue
 }
 
 func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *Source {
@@ -164,7 +160,6 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.decoder = NewDecoder(config.ExifToolCount)
 	source.database = NewDatabase(config.DatabasePath, migrations)
 	source.imageInfoCache = newInfoCache()
-	source.imageCache = newImageCache(config.Caches)
 	source.fileExistsCache = newFileExistsCache()
 	source.pathCache = newPathCache()
 
@@ -176,12 +171,12 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 		[]string{"source"},
 	)
 
-	source.Ristretto = ioristretto.New()
+	source.imageCache = ioristretto.New()
 
 	ffmpegPath := ffmpeg.FindPath()
 	sqliteSource := sqlite.New(config.DatabaseThumbsPath, migrationsThumbs)
 
-	source.ThumbnailSources = []io.ReadDecoder{
+	source.thumbnailSources = []io.ReadDecoder{
 		sqliteSource,
 		thumb.New(
 			"SM",
@@ -200,9 +195,9 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 		),
 	}
 
-	source.ThumbnailSink = sqliteSource
+	source.thumbnailSink = sqliteSource
 
-	source.ThumbnailGenerators =
+	source.thumbnailGenerators =
 		io.Sources{
 			ffmpeg.FFmpeg{
 				Path:   ffmpegPath,
@@ -280,8 +275,8 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 
 	for i := 0; i < len(source.Sources); i++ {
 		source.Sources[i] = &cached.Cached{
-			Source:    source.Sources[i],
-			Ristretto: source.Ristretto,
+			Source: source.Sources[i],
+			Cache:  source.imageCache,
 		}
 	}
 
@@ -289,24 +284,24 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 		log.Printf("skipping load info")
 	} else {
 
-		source.MetaQueue = queue.Queue{
+		source.metadataQueue = queue.Queue{
 			ID:          "index_metadata",
 			Name:        "index metadata",
 			Worker:      source.indexMetadata,
 			WorkerCount: config.ConcurrentMetaLoads,
 		}
-		go source.MetaQueue.Run()
+		go source.metadataQueue.Run()
 
 		source.Clip = config.AI
 		// }
 
-		source.ContentsQueue = queue.Queue{
+		source.contentsQueue = queue.Queue{
 			ID:          "index_contents",
 			Name:        "index contents",
 			Worker:      source.indexContents,
 			WorkerCount: 8,
 		}
-		go source.ContentsQueue.Run()
+		go source.contentsQueue.Run()
 
 	}
 
@@ -473,21 +468,20 @@ func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 		// time.Sleep(10 * time.Millisecond)
 		counter <- 1
 	}
-	source.database.DeleteNonexistent(dir, indexed)
+	for ip := range source.database.ListNonexistent(dir, indexed) {
+		source.database.Write(ip.Path, Info{}, Delete)
+		source.thumbnailSink.Delete(uint32(ip.Id))
+	}
 	source.database.SetIndexed(dir)
 	source.database.WaitForCommit()
 }
 
-// func (source *Source) IndexAI(dirs []string, maxPhotos int) {
-// 	source.AIQueue.AppendChan(IdsToUint32(source.ListMissingEmbeddingIds(dirs, maxPhotos)))
-// }
-
 func (source *Source) IndexMetadata(dirs []string, maxPhotos int, force Missing) {
-	source.MetaQueue.AppendItems(MissingInfoToInterface(source.ListMissingMetadata(dirs, maxPhotos, force)))
+	source.metadataQueue.AppendItems(MissingInfoToInterface(source.ListMissingMetadata(dirs, maxPhotos, force)))
 }
 
 func (source *Source) IndexContents(dirs []string, maxPhotos int, force Missing) {
-	source.ContentsQueue.AppendItems(MissingInfoToInterface(source.ListMissingContents(dirs, maxPhotos, force)))
+	source.contentsQueue.AppendItems(MissingInfoToInterface(source.ListMissingContents(dirs, maxPhotos, force)))
 }
 
 func (source *Source) GetDir(dir string) Info {
@@ -504,20 +498,20 @@ func (source *Source) GetDirsCount(dirs []string) int {
 	return count
 }
 
-func (source *Source) GetApplicableThumbnails(path string) []Thumbnail {
-	thumbs := make([]Thumbnail, 0, len(source.Thumbnails))
-	pathExt := strings.ToLower(filepath.Ext(path))
-	for _, t := range source.Thumbnails {
-		supported := false
-		for _, ext := range t.Extensions {
-			if pathExt == ext {
-				supported = true
-				break
-			}
-		}
-		if supported {
-			thumbs = append(thumbs, t)
-		}
-	}
-	return thumbs
-}
+// func (source *Source) GetApplicableThumbnails(path string) []Thumbnail {
+// 	thumbs := make([]Thumbnail, 0, len(source.Thumbnails))
+// 	pathExt := strings.ToLower(filepath.Ext(path))
+// 	for _, t := range source.Thumbnails {
+// 		supported := false
+// 		for _, ext := range t.Extensions {
+// 			if pathExt == ext {
+// 				supported = true
+// 				break
+// 			}
+// 		}
+// 		if supported {
+// 			thumbs = append(thumbs, t)
+// 		}
+// 	}
+// 	return thumbs
+// }

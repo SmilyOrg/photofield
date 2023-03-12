@@ -2,9 +2,12 @@ package image
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"time"
 )
+
+type Size = image.Point
 
 type Info struct {
 	Width, Height int

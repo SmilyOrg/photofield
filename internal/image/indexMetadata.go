@@ -9,7 +9,9 @@ func (source *Source) indexMetadata(in <-chan interface{}) {
 		m := elem.(MissingInfo)
 		id := m.Id
 		path := m.Path
-		info, err := source.LoadInfoMeta(path)
+
+		var info Info
+		err := source.decoder.DecodeInfo(path, &info)
 		if err != nil {
 			fmt.Println("Unable to load image info meta", err, path)
 			continue

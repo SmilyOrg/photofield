@@ -22,18 +22,6 @@ type Bitmap struct {
 	Orientation image.Orientation
 }
 
-func (bitmap *Bitmap) Draw(rimg draw.Image, c *canvas.Context, scales Scales, source *image.Source) error {
-	if bitmap.Sprite.IsVisible(c, scales) {
-		image, _, err := source.GetImage(bitmap.Path)
-		if err != nil {
-			return err
-		}
-
-		bitmap.DrawImage(rimg, image, c)
-	}
-	return nil
-}
-
 func fitInside(cw float64, ch float64, w float64, h float64) (float64, float64) {
 	r := w / h
 	cr := cw / ch

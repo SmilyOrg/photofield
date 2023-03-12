@@ -1,7 +1,6 @@
 package layout
 
 import (
-	"fmt"
 	"log"
 	"path/filepath"
 	"photofield/internal/image"
@@ -76,35 +75,35 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 
 	originalPath := photo.GetPath(source)
 	info := source.GetInfo(photo.Id)
-	originalSize := image.Size{
-		X: info.Width,
-		Y: info.Height,
-	}
+	// originalSize := image.Size{
+	// 	X: info.Width,
+	// 	Y: info.Height,
+	// }
 	isVideo := source.IsSupportedVideo(originalPath)
 	extension := strings.ToLower(filepath.Ext(originalPath))
 	filename := filepath.Base(originalPath)
 
-	thumbnailTemplates := source.GetApplicableThumbnails(originalPath)
+	// thumbnailTemplates := source.GetApplicableThumbnails(originalPath)
 	var thumbnails []RegionThumbnail
-	for i := range thumbnailTemplates {
-		thumbnail := &thumbnailTemplates[i]
-		thumbnailPath := thumbnail.GetPath(originalPath)
-		if source.Exists(thumbnailPath) {
-			thumbnailSize := thumbnail.Fit(originalSize)
-			basename := strings.TrimSuffix(filename, extension)
-			thumbnailFilename := fmt.Sprintf(
-				"%s_%s%s",
-				basename, thumbnail.Name, filepath.Ext(thumbnailPath),
-			)
-			thumbnails = append(thumbnails, RegionThumbnail{
-				Name:     thumbnail.Name,
-				Width:    thumbnailSize.X,
-				Height:   thumbnailSize.Y,
-				Filename: thumbnailFilename,
-			})
-			println("t", thumbnailSize.X)
-		}
-	}
+	// for i := range thumbnailTemplates {
+	// 	thumbnail := &thumbnailTemplates[i]
+	// 	thumbnailPath := thumbnail.GetPath(originalPath)
+	// 	if source.Exists(thumbnailPath) {
+	// 		thumbnailSize := thumbnail.Fit(originalSize)
+	// 		basename := strings.TrimSuffix(filename, extension)
+	// 		thumbnailFilename := fmt.Sprintf(
+	// 			"%s_%s%s",
+	// 			basename, thumbnail.Name, filepath.Ext(thumbnailPath),
+	// 		)
+	// 		thumbnails = append(thumbnails, RegionThumbnail{
+	// 			Name:     thumbnail.Name,
+	// 			Width:    thumbnailSize.X,
+	// 			Height:   thumbnailSize.Y,
+	// 			Filename: thumbnailFilename,
+	// 		})
+	// 		println("t", thumbnailSize.X)
+	// 	}
+	// }
 
 	return render.Region{
 		Id:     id,

@@ -602,14 +602,24 @@ func (source *Database) WaitForCommit() {
 	defer source.transactionMutex.RUnlock()
 }
 
-func (source *Database) DeleteNonexistent(dir string, m map[string]struct{}) {
+func (source *Database) ListNonexistent(dir string, paths map[string]struct{}) <-chan IdPath {
 	source.WaitForCommit()
-	// TODO delete prefixes
-	for path := range source.ListPaths([]string{dir}, 0) {
-		_, exists := m[path]
-		if !exists {
-			source.Write(path, Info{}, Delete)
+	out := make(chan IdPath, 1000)
+	go func() {
+		for ip := range source.ListIdPaths([]string{dir}, 0) {
+			_, exists := paths[ip.Path]
+			if !exists {
+				out <- ip
+			}
 		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) DeleteNonexistent(dir string, paths map[string]struct{}) {
+	for ip := range source.ListNonexistent(dir, paths) {
+		source.Write(ip.Path, Info{}, Delete)
 	}
 }
 
@@ -843,6 +853,72 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 				break
 			}
 			out <- stmt.ColumnText(0)
+		}
+
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListIdPaths(dirs []string, limit int) <-chan IdPath {
+	out := make(chan IdPath, 10000)
+	go func() {
+		defer metrics.Elapsed("list id paths sqlite")()
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT infos.id, str || filename as path
+			FROM infos
+			JOIN prefix ON path_prefix_id == prefix.id
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		if limit > 0 {
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		bindIndex := 1
+		defer stmt.Reset()
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			ip := IdPath{
+				Id:   ImageId(stmt.ColumnInt64(0)),
+				Path: stmt.ColumnText(1),
+			}
+			out <- ip
 		}
 
 		close(out)
