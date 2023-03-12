@@ -102,6 +102,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 				Height:   thumbnailSize.Y,
 				Filename: thumbnailFilename,
 			})
+			println("t", thumbnailSize.X)
 		}
 	}
 
@@ -215,6 +216,8 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 			float64(photo.Size.X),
 			float64(photo.Size.Y),
 		)
+
+		// println(photo.GetPath(source), photo.Sprite.Rect.String(), bounds.X, bounds.Y, x, y, config.ImageHeight, photo.Size.X, photo.Size.Y)
 
 		row = append(row, photo)
 

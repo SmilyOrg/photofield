@@ -117,6 +117,9 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 			break
 		}
 
+		// path, _ := source.GetImagePath(info.Id)
+		// println(path, info.Width, info.Height)
+
 		photoTime := info.DateTime
 		elapsed := photoTime.Sub(lastPhotoTime)
 		if elapsed > 1*time.Hour {

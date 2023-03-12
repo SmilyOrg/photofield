@@ -628,6 +628,7 @@ components:
         - LOAD_META
         - LOAD_COLOR
         - LOAD_AI
+        - INDEX_CONTENTS
     
     CollectionId:
       type: string

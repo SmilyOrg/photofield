@@ -94,6 +94,7 @@ var indexTasks sync.Map
 var loadMetaOffset int64
 var loadColorOffset int64
 var loadAIOffset int64
+var indexContentsOffset int64
 
 var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
@@ -495,6 +496,11 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 		Id:   "load-ai",
 		Name: "Comprehending photos (AI)",
 	}
+	indexContentsTask := Task{
+		Type: string(openapi.TaskTypeINDEXCONTENTS),
+		Id:   "index-contents",
+		Name: "Indexing contents",
+	}
 
 	metrics, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
@@ -508,6 +514,8 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 		gatherIntFromMetric(&loadColorTask.Done, metric, "pf_load_color_done")
 		gatherIntFromMetric(&loadAITask.Pending, metric, "pf_load_ai_pending")
 		gatherIntFromMetric(&loadAITask.Done, metric, "pf_load_ai_done")
+		gatherIntFromMetric(&indexContentsTask.Pending, metric, "pf_index_contents_pending")
+		gatherIntFromMetric(&indexContentsTask.Done, metric, "pf_index_contents_done")
 	}
 
 	if loadMetaTask.Pending > 0 {
@@ -530,6 +538,13 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 		tasks = append(tasks, loadAITask)
 	} else {
 		atomic.StoreInt64(&loadAIOffset, int64(loadAITask.Done))
+	}
+	if indexContentsTask.Pending > 0 {
+		offset := atomic.LoadInt64(&indexContentsOffset)
+		indexContentsTask.Done -= int(offset)
+		tasks = append(tasks, indexContentsTask)
+	} else {
+		atomic.StoreInt64(&indexContentsOffset, int64(indexContentsTask.Done))
 	}
 
 	sort.Slice(tasks, func(i, j int) bool {
@@ -572,7 +587,10 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case openapi.TaskTypeLOADMETA:
-		imageSource.MetaQueue.AppendChan(collection.GetIdsUint32(imageSource))
+		// imageSource.MetaQueue.AppendChan(collection.GetIdsUint32(imageSource))
+		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{
+			Metadata: true,
+		})
 		task := Task{
 			Id:           fmt.Sprintf("load-meta-%v", collection.Id),
 			CollectionId: collection.Id,
@@ -581,7 +599,10 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeLOADCOLOR:
-		imageSource.ColorQueue.AppendChan(collection.GetIdsUint32(imageSource))
+		// imageSource.ColorQueue.AppendChan(collection.GetIdsUint32(imageSource))
+		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
+			Color: true,
+		})
 		task := Task{
 			Id:           fmt.Sprintf("load-color-%v", collection.Id),
 			CollectionId: collection.Id,
@@ -590,7 +611,10 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeLOADAI:
-		imageSource.AIQueue.AppendChan(collection.GetIdsUint32(imageSource))
+		// imageSource.AIQueue.AppendChan(collection.GetIdsUint32(imageSource))
+		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
+			Embedding: true,
+		})
 		task := Task{
 			Id:           fmt.Sprintf("load-ai-%v", collection.Id),
 			CollectionId: collection.Id,
@@ -888,10 +912,12 @@ func indexCollection(collection *collection.Collection) {
 	go func() {
 		log.Printf("indexing %s\n", collection.Id)
 		for _, dir := range collection.Dirs {
-			log.Printf("indexing %s %s\n", collection.Id, dir)
+			log.Printf("indexing %s dir %s\n", collection.Id, dir)
 			imageSource.IndexFiles(dir, collection.IndexLimit, counter)
 		}
-		imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
+		// imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
+		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{})
+		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{})
 		close(counter)
 	}()
 }
@@ -1020,6 +1046,7 @@ func main() {
 
 	appConfig := loadConfiguration(configurationPath)
 	appConfig.Media.DatabasePath = filepath.Join(dataDir, "photofield.cache.db")
+	appConfig.Media.DatabaseThumbsPath = filepath.Join(dataDir, "photofield.thumbs.db")
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]

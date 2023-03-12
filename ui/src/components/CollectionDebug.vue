@@ -5,6 +5,7 @@
       <ui-button @click="emit('reload', 'LOAD_META')">Reindex EXIF</ui-button>
       <ui-button @click="emit('reload', 'LOAD_COLOR')">Reindex colors</ui-button>
       <ui-button @click="emit('reload', 'LOAD_AI')">Reindex AI</ui-button>
+      <ui-button @click="emit('reload', 'INDEX_CONTENTS')">Reindex contents</ui-button>
       <task-list :tasks="metadataTasks"></task-list>
     </p>
     

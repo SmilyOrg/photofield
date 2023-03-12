@@ -1,6 +1,10 @@
 package render
 
-import "github.com/tdewolff/canvas"
+import (
+	"math"
+
+	"github.com/tdewolff/canvas"
+)
 
 type Sprite struct {
 	Rect Rect
@@ -14,6 +18,9 @@ func (sprite *Sprite) PlaceFitHeight(
 	contentHeight float64,
 ) {
 	scale := fitHeight / contentHeight
+	if math.IsNaN(scale) || math.IsInf(scale, 0) {
+		scale = 1
+	}
 
 	sprite.Rect = Rect{
 		X: x,

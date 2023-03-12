@@ -18,6 +18,7 @@ type Thumbnail struct {
 	PathTemplateRaw string `json:"path"`
 	PathTemplate    *template.Template
 	Exif            string   `json:"exif"`
+	FFmpeg          bool     `json:"ffmpeg"`
 	Extensions      []string `json:"extensions"`
 
 	SizeTypeRaw string `json:"fit"`
@@ -45,8 +46,10 @@ func (thumbnail *Thumbnail) Init() {
 		}
 	} else if thumbnail.Exif != "" {
 		// No setup required
+	} else if thumbnail.FFmpeg {
+		// No setup required
 	} else {
-		panic("thumbnail path or exif name must be specified")
+		panic("thumbnail path, exif name, or ffmpeg must be specified")
 	}
 
 	switch thumbnail.SizeTypeRaw {

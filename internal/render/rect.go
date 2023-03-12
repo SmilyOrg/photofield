@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	goimage "image"
+	"math"
 	"photofield/internal/image"
 
 	"github.com/tdewolff/canvas"
@@ -242,5 +243,19 @@ func (rect Rect) GetPixelZoomDist(c *canvas.Context, size image.Size) float64 {
 		return zoom * 3
 	} else {
 		return -zoom
+	}
+}
+
+func (rect Rect) RenderedSize(c *canvas.Context, size image.Size) image.Size {
+	r := canvas.Rect{
+		X: 0,
+		Y: 0,
+		W: rect.W,
+		H: rect.W * float64(size.Y) / float64(size.X),
+	}
+	t := r.Transform(c.View())
+	return image.Size{
+		X: int(math.Round(t.W)),
+		Y: int(math.Round(t.H)),
 	}
 }

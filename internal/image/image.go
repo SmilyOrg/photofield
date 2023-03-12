@@ -1,10 +1,14 @@
 package image
 
 import (
+	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"io"
+	"log"
 	"os"
+	"photofield/ffmpeg"
 	"photofield/internal/codec"
 	"strings"
 	"time"
@@ -73,30 +77,51 @@ func (source *Source) Acquire(key string, path string, thumbnail *Thumbnail) (im
 		return imageRef.image, Info{}, imageRef.err
 	} else {
 		// log.Printf("%v not found, loading, mutex locked\n", key)
-		var image image.Image
+		var img image.Image
 		info := Info{}
 		var err error
 		if thumbnail == nil {
-			// log.Printf("%v loading\n", key)
-			image, err = source.LoadImage(path)
+			log.Printf("%v loading\n", key)
+			img, err = source.LoadImage(path)
 		} else {
 			thumbnailPath := thumbnail.GetPath(path)
 			if thumbnailPath != "" {
-				// log.Printf("%v loading thumbnail path %v\n", key, thumbnailPath)
-				image, err = source.LoadImage(thumbnailPath)
+				log.Printf("%v loading thumbnail path %v\n", key, thumbnailPath)
+				img, err = source.LoadImage(thumbnailPath)
+			} else if thumbnail.Exif != "" {
+				log.Printf("%v loading embedded %v\n", key, thumbnail.Exif)
+				img, info, err = source.decoder.DecodeImage(path, thumbnail.Exif)
+			} else if thumbnail.FFmpeg {
+				log.Printf("%v loading ffmpeg\n", key)
+				foar := ffmpeg.Decrease
+				switch thumbnail.SizeType {
+				case FitInside:
+					foar = ffmpeg.Decrease
+				case FitOutside:
+					foar = ffmpeg.Increase
+				}
+				var c image.Config
+				img, c, err = ffmpeg.Decode(
+					context.TODO(),
+					path,
+					thumbnail.Width,
+					thumbnail.Height,
+					foar,
+				)
+				info.Width = c.Width
+				info.Height = c.Height
 			} else {
-				// log.Printf("%v loading embedded %v\n", key, thumbnail.Exif)
-				image, info, err = source.decoder.DecodeImage(path, thumbnail.Exif)
+				err = fmt.Errorf("unsupported thumbnail configuration %s", thumbnail.Name)
 			}
 		}
 		imageRef := imageRef{
-			image: image,
+			image: img,
 			err:   err,
 		}
 		loading.imageRef = imageRef
 		// log.Printf("%v loaded, closing channel\n", key)
 		close(loading.loaded)
-		return image, info, err
+		return img, info, err
 	}
 }
 
@@ -150,9 +175,13 @@ func (source *Source) LoadImageColor(path string) (color.RGBA, error) {
 	if err != nil {
 		return color.RGBA{}, err
 	}
-	centroids, err := prominentcolor.KmeansWithAll(1, colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, prominentcolor.GetDefaultMasks())
+	return source.ExtractProminentColor(colorImage)
+}
+
+func (source *Source) ExtractProminentColor(img image.Image) (color.RGBA, error) {
+	centroids, err := prominentcolor.KmeansWithAll(1, img, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, prominentcolor.GetDefaultMasks())
 	if err != nil {
-		centroids, err = prominentcolor.KmeansWithAll(1, colorImage, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, make([]prominentcolor.ColorBackgroundMask, 0))
+		centroids, err = prominentcolor.KmeansWithAll(1, img, prominentcolor.ArgumentDefault, prominentcolor.DefaultSize, make([]prominentcolor.ColorBackgroundMask, 0))
 		if err != nil {
 			return color.RGBA{}, err
 		}

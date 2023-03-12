@@ -29,6 +29,8 @@ const (
 const (
 	TaskTypeINDEX TaskType = "INDEX"
 
+	TaskTypeINDEXCONTENTS TaskType = "INDEX_CONTENTS"
+
 	TaskTypeLOADAI TaskType = "LOAD_AI"
 
 	TaskTypeLOADCOLOR TaskType = "LOAD_COLOR"

@@ -111,7 +111,7 @@ func newImageCache(caches Caches) ImageCache {
 	if err != nil {
 		panic(err)
 	}
-	metrics.AddRistretto("image_cache", cache)
+	// metrics.AddRistretto("image_cache", cache)
 	return ImageCache{
 		cache: cache,
 	}

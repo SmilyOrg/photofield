@@ -925,3 +925,163 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 	}()
 	return out
 }
+
+func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-chan MissingInfo {
+	out := make(chan MissingInfo, 1000)
+	go func() {
+		defer metrics.Elapsed("list missing sqlite")()
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT infos.id, str || filename as path`
+
+		type condition struct {
+			inputs []string
+			output string
+		}
+
+		conds := make([]condition, 0)
+		if opts.Metadata {
+			conds = append(conds, condition{
+				inputs: []string{
+					"width",
+					"height",
+					"orientation",
+					"created_at_unix",
+				},
+				output: "missing_metadata",
+			})
+		}
+		if opts.Color {
+			conds = append(conds, condition{
+				inputs: []string{"color"},
+				output: "missing_color",
+			})
+		}
+		if opts.Embedding {
+			conds = append(conds, condition{
+				inputs: []string{"file_id"},
+				output: "missing_embedding",
+			})
+		}
+
+		for _, c := range conds {
+			sql += `,
+			`
+			for i, input := range c.inputs {
+				sql += fmt.Sprintf("%s IS NULL ", input)
+				if i < len(c.inputs)-1 {
+					sql += "OR "
+				}
+			}
+			sql += fmt.Sprintf("AS %s", c.output)
+		}
+
+		sql += `
+			FROM infos
+			INNER JOIN prefix ON prefix.id = path_prefix_id
+		`
+
+		if opts.Embedding {
+			sql += `
+				LEFT JOIN clip_emb ON clip_emb.file_id = infos.id
+			`
+		}
+
+		sql += `
+			WHERE
+			path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		if len(conds) > 0 {
+			sql += `
+				AND (
+			`
+
+			for i, c := range conds {
+				sql += fmt.Sprintf("%s ", c.output)
+				if i < len(conds)-1 {
+					sql += `OR 
+					`
+				}
+			}
+			// for i, c := range conds {
+			// 	for j, input := range c.inputs {
+			// 		sql += fmt.Sprintf("%s IS NULL ", input)
+			// 		if j < len(c.inputs)-1 {
+			// 			sql += "OR "
+			// 		}
+			// 	}
+			// 	if i < len(conds)-1 {
+			// 		sql += "OR "
+			// 	}
+			// 	sql += `
+			// 	`
+			// }
+			sql += `
+				)
+			`
+		}
+
+		if limit > 0 {
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+		println(sql)
+
+		stmt := conn.Prep(sql)
+		bindIndex := 1
+		defer stmt.Reset()
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			r := MissingInfo{
+				Id:   (ImageId)(stmt.ColumnInt64(0)),
+				Path: stmt.ColumnText(1),
+			}
+			i := 2
+			if opts.Color {
+				r.Color = stmt.ColumnBool(i)
+				i++
+			}
+			if opts.Embedding {
+				r.Embedding = stmt.ColumnBool(i)
+				i++
+			}
+			out <- r
+		}
+
+		close(out)
+	}()
+	return out
+}

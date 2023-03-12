@@ -132,15 +132,15 @@ func (source *Source) GetInfo(id ImageId) Info {
 	}
 
 	startTime = time.Now()
-	needsColor := result.NeedsColor()
-	if needsMeta || needsColor {
-		if needsMeta {
-			source.MetaQueue.Append(uint32(id))
-		}
-		if needsColor {
-			source.ColorQueue.Append(uint32(id))
-		}
-	}
+	// needsColor := result.NeedsColor()
+	// if needsMeta || needsColor {
+	// 	if needsMeta {
+	// 		source.MetaQueue.Append(uint32(id))
+	// 	}
+	// 	if needsColor {
+	// 		source.ColorQueue.Append(uint32(id))
+	// 	}
+	// }
 	addPendingMs := time.Since(startTime).Milliseconds()
 
 	if found && !needsMeta {
