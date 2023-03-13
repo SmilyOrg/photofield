@@ -1,6 +1,5 @@
 <template>
   <div
-    v-if="region"
     class="controls"
     :class="{ visible: !idle }"
   >

@@ -43,6 +43,7 @@
 
     <controls
       class="controls"
+      v-if="region"
       :region="region"
       :scene="scene"
       @navigate="navigate($event)"
