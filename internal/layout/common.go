@@ -8,6 +8,7 @@ import (
 	"photofield/internal/image"
 	"photofield/internal/render"
 	"photofield/io"
+	"sort"
 	"strings"
 	"time"
 )
@@ -53,10 +54,11 @@ type PhotoRegionSource struct {
 }
 
 type RegionThumbnail struct {
-	Name     string `json:"name"`
-	Width    int    `json:"width"`
-	Height   int    `json:"height"`
-	Filename string `json:"filename"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Filename    string `json:"filename"`
 }
 
 type PhotoRegionData struct {
@@ -104,12 +106,24 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 			basename, s.Name(), ext,
 		)
 		thumbnails = append(thumbnails, RegionThumbnail{
-			Name:     s.Name(),
-			Width:    size.X,
-			Height:   size.Y,
-			Filename: filename,
+			Name:        s.Name(),
+			DisplayName: s.DisplayName(),
+			Width:       size.X,
+			Height:      size.Y,
+			Filename:    filename,
 		})
 	}
+
+	sort.Slice(thumbnails, func(i, j int) bool {
+		a := &thumbnails[i]
+		b := &thumbnails[j]
+		aa := a.Width * a.Height
+		bb := b.Width * b.Height
+		if aa != bb {
+			return aa < bb
+		}
+		return a.Name < b.Name
+	})
 
 	return render.Region{
 		Id:     id,

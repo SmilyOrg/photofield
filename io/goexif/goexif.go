@@ -23,6 +23,10 @@ func (e Exif) Name() string {
 	return "goexif"
 }
 
+func (e Exif) DisplayName() string {
+	return "EXIF Thumbnail"
+}
+
 func (e Exif) Ext() string {
 	return ".jpg"
 }

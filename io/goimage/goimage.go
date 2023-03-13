@@ -24,6 +24,10 @@ func (o Image) Name() string {
 	return "original"
 }
 
+func (o Image) DisplayName() string {
+	return "Original"
+}
+
 func (o Image) Ext() string {
 	return ""
 }

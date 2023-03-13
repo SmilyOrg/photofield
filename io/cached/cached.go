@@ -22,6 +22,10 @@ func (c *Cached) Name() string {
 	return c.Source.Name()
 }
 
+func (c *Cached) DisplayName() string {
+	return c.Source.DisplayName()
+}
+
 func (c *Cached) Ext() string {
 	return c.Source.Ext()
 }

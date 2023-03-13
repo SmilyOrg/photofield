@@ -68,6 +68,10 @@ func (f FFmpeg) Name() string {
 	return fmt.Sprintf("ffmpeg-%dx%d-%s%s", f.Width, f.Height, fit, found)
 }
 
+func (f FFmpeg) DisplayName() string {
+	return "FFmpeg JPEG"
+}
+
 func (f FFmpeg) Ext() string {
 	return ".jpg"
 }
@@ -107,10 +111,17 @@ func (f FFmpeg) FilterGraph() string {
 	)
 }
 
-func (f FFmpeg) exec(ctx context.Context, id io.ImageId, path string) (*exec.Cmd, error) {
+func (f FFmpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
+	return true
+}
+
+func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	if f.Path == "" {
-		return nil, ErrMissingBinary
+		return io.Result{Error: ErrMissingBinary}
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
 	cmd := exec.CommandContext(
 		ctx,
@@ -128,21 +139,6 @@ func (f FFmpeg) exec(ctx context.Context, id io.ImageId, path string) (*exec.Cmd
 		"-an", // no audio
 		"-",
 	)
-	return cmd, nil
-}
-
-func (f FFmpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
-	return true
-}
-
-func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	cmd, err := f.exec(ctx, id, path)
-	if err != nil {
-		return io.Result{Error: err}
-	}
 
 	// println(cmd.String())
 	b, err := cmd.Output()
@@ -177,59 +173,19 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 }
 
 func (f FFmpeg) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	cmd, err := f.exec(ctx, id, path)
-	if err != nil {
-		fn(nil, err)
+	r := f.Get(ctx, id, path)
+	if r.Error != nil {
+		fn(nil, r.Error)
 		return
 	}
-
-	// println(cmd.String())
-	b, err := cmd.Output()
-	err = formatErr(err, "ffmpeg")
-	if err != nil {
-		fn(nil, err)
-		return
-	}
-
-	pam, err := readPAM(b)
-	if err != nil {
-		fn(nil, err)
-		return
-	}
-
-	if pam.Depth != 4 {
-		fn(nil, fmt.Errorf("unexpected depth %d", pam.Depth))
-		return
-	}
-
-	if pam.MaxValue != 255 {
-		fn(nil, fmt.Errorf("unexpected max value %d", pam.MaxValue))
-		return
-	}
-
-	if pam.Width < 0 || pam.Height < 0 {
-		fn(nil, fmt.Errorf("unexpected size %d x %d", pam.Width, pam.Height))
-		return
-	}
-
-	rgba := image.RGBA{
-		Pix:    pam.Bytes,
-		Stride: 4 * pam.Width,
-		Rect:   image.Rect(0, 0, pam.Width, pam.Height),
-	}
-
 	var buf bytes.Buffer
-	err = jpeg.Encode(&buf, &rgba, nil)
+	err := jpeg.Encode(&buf, r.Image, nil)
 	if err != nil {
 		fn(nil, err)
 		return
 	}
-
-	r := bytes.NewReader(buf.Bytes())
-	fn(r, nil)
+	rd := bytes.NewReader(buf.Bytes())
+	fn(rd, nil)
 }
 
 func (f FFmpeg) Set(ctx context.Context, id io.ImageId, path string, r io.Result) bool {

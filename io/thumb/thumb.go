@@ -86,6 +86,10 @@ func (t Thumb) Name() string {
 	return fmt.Sprintf("thumb-%dx%d-%s", t.Width, t.Height, t.ThumbName)
 }
 
+func (t Thumb) DisplayName() string {
+	return "Pregenerated thumbnail"
+}
+
 func (t Thumb) Ext() string {
 	return filepath.Ext(t.resolvePath(""))
 }

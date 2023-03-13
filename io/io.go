@@ -81,6 +81,7 @@ type Result struct {
 
 type Source interface {
 	Name() string
+	DisplayName() string
 	Ext() string
 	Size(original Size) Size
 	Rotate() bool

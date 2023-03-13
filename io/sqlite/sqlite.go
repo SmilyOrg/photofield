@@ -43,6 +43,10 @@ func (s *Source) Name() string {
 	return "sqlite"
 }
 
+func (s *Source) DisplayName() string {
+	return "Internal thumbnail"
+}
+
 func (s *Source) Ext() string {
 	return ".jpg"
 }
