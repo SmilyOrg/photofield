@@ -49,9 +49,9 @@
 
         <search-input
           v-if="capabilities?.search.supported"
-          :loading="query.search && scene?.loading"
+          :loading="query.search && scrollScene?.loading"
           :modelValue="query.search"
-          :error="scene?.error"
+          :error="scrollScene?.error"
           @active="searchActive = $event"
           @update:modelValue="setQuery({ search: $event })"
         ></search-input>
@@ -147,7 +147,6 @@ export default {
       immersive: false,
       collectionMenuOpen: false,
       scrollbar: null,
-      scene: null,
       scenes: [],
       viewerTasks: null,
       searchActive: false,
@@ -261,6 +260,9 @@ export default {
         return -1;
       }
       return null;
+    },
+    scrollScene() {
+      return this.scenes?.find(scene => scene.name == "Scroll");
     },
   },
   methods: {

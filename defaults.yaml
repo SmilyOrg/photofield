@@ -69,7 +69,10 @@ media:
       max_size: 256Mi
     
   # File extensions to index on the file system
-  extensions: [".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng"]
+  extensions: [
+    ".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng",
+    ".mp4",
+  ]
 
   # Used to extract dates from file names as a heuristic in case of missing or
   # metadata or metadata yet to be loaded.

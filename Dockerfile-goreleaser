@@ -1,5 +1,5 @@
-FROM alpine:3.14
-RUN apk add --no-cache exiftool>12.06-r0
+FROM alpine:latest
+RUN apk add --no-cache exiftool ffmpeg
 
 WORKDIR /app
 COPY photofield ./
