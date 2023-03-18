@@ -24,6 +24,7 @@ import Plyr from 'plyr';
 import { isCloseClick } from '../utils';
 
 const originalQualitySize = 1000000;
+const qualities = [originalQualitySize, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
 export default {
 
@@ -49,19 +50,7 @@ export default {
       settings: ["captions", "quality", "speed", "loop"],
       quality: {
         default: originalQualitySize,
-        options: [
-          originalQualitySize,
-          4320,
-          2880,
-          2160,
-          1440,
-          1080,
-          720,
-          576,
-          480,
-          360,
-          240,
-        ]
+        options: qualities,
       },
       i18n: {
         qualityLabel: {
@@ -95,6 +84,19 @@ export default {
     this.player.source = this.source;
   },
 
+  unmounted() {
+    if (!this.player) return;
+    this.player.off("ready", this.onReady);
+    this.player.off("loadstart", this.onLoadStart);
+    this.player.off("canplay", this.onCanPlay);
+    this.player.off("playing", this.onPlaying);
+    this.player.off("play", this.onPlay);
+    this.player.off("pause", this.onPause);
+    this.player.off("error", this.onError);
+    this.player.destroy();
+    this.player = null;
+  },
+
   computed: {
     source() {
       return {
@@ -108,11 +110,14 @@ export default {
         .concat(
           this.region?.data?.thumbnails
             ?.filter(thumbnail => thumbnail.filename.endsWith(".mp4"))
-            .map(thumbnail => ({
-              src: getThumbnailUrl(this.region.data.id, thumbnail.name, this.region.data.filename),
-              size: thumbnail.height,
+            .sort((a, b) => b.height - a.height)
+            .map((thumbnail, index) => ({
+              src: getThumbnailUrl(this.region.data.id, thumbnail.name, thumbnail.filename),
+              size: qualities.length - 1 - index,
+              width: thumbnail.width,
+              height: thumbnail.height,
             })) || []
-        ),
+        )
       }
     }
   },
@@ -152,21 +157,29 @@ export default {
       this.loading--;
       if (this.loading < 0) this.loading = 0;
       if (this.loading === 0) {
-        this.show = true;
-        this.player.toggleControls(false);
+        if (this.player.media.videoWidth > 0 && this.player.media.videoHeight > 0) {
+          this.show = true;
+        } else {
+          console.warn("Video playback no image detected", this.player.media.videoWidth, this.player.media.videoHeight);
+          this.nextQuality();
+        }
       }
     },
     onError(event) {
       console.error("Video playback error", event);
       if (!this.hasPlayed) {
-        const qualityConfig = this.player.config.quality;
-        const qualitySelected = qualityConfig.selected;
-        const qualities = this.source.sources.map(source => source.size);
-        const qualityIndex = qualities.findIndex(option => option == qualitySelected);
-        if (qualityIndex < qualities.length - 1) {
-          this.player.quality = qualities[qualityIndex + 1];
-        }
+        this.nextQuality();
       }
+    },
+    nextQuality() {
+      const config = this.player.config.quality;
+      const selected = config.selected;
+      const qualities = this.source.sources.map(source => source.size);
+      const index = qualities.findIndex(option => option == selected);
+      if (index < qualities.length - 1) {
+        this.player.quality = qualities[index + 1];
+      }
+      console.log("Switching to next quality", qualities, selected, "->", this.player.quality)
     },
     onPlaying() {
       this.hasPlayed = true;

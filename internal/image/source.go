@@ -275,6 +275,20 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 			Height: 4096,
 			Fit:    io.FitInside,
 		},
+		thumb.New(
+			"FM",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4",
+			io.FitOutside,
+			720,
+			720,
+		),
+		thumb.New(
+			"H264",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4",
+			io.OriginalSize,
+			4096,
+			4096,
+		),
 	}
 
 	for i := 0; i < len(source.Sources); i++ {
