@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 	"time"
 
 	goio "io"
 
-	_ "image/jpeg"
-	_ "image/png"
+	"image/jpeg"
+	"image/png"
 
 	"photofield/io"
 	"photofield/io/goimage"
@@ -73,13 +74,26 @@ func New(
 	Width int,
 	Height int,
 ) *Thumb {
-	return &Thumb{
+	t := &Thumb{
 		ThumbName:    name,
 		PathTemplate: template.Must(template.New("").Parse(pathTemplate)),
 		Fit:          fit,
 		Width:        Width,
 		Height:       Height,
 	}
+
+	// Optimized jpeg/png case, case insensitive
+	ext := strings.ToLower(filepath.Ext(pathTemplate))
+
+	switch ext {
+	case ".jpg", ".jpeg":
+		t.goimage.Decoder = jpeg.Decode
+
+	case ".png":
+		t.goimage.Decoder = png.Decode
+	}
+
+	return t
 }
 
 func (t Thumb) Name() string {

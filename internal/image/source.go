@@ -533,7 +533,7 @@ func (source *Source) GetImageReader(id ImageId, sourceName string, fn func(r go
 			continue
 		}
 		r.Reader(ctx, io.ImageId(id), path, func(r goio.ReadSeeker, err error) {
-			println(id, sourceName, s.Name(), r, ok, err)
+			// println(id, sourceName, s.Name(), r, ok, err)
 			if err != nil {
 				return
 			}

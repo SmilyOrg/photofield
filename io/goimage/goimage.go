@@ -16,8 +16,9 @@ import (
 )
 
 type Image struct {
-	Width  int
-	Height int
+	Width   int
+	Height  int
+	Decoder func(goio.Reader) (image.Image, error)
 }
 
 func (o Image) Name() string {
@@ -82,7 +83,13 @@ func (o Image) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	}
 	defer f.Close()
 
-	img, _, err := image.Decode(f)
+	var img image.Image
+	if o.Decoder != nil {
+		img, err = o.Decoder(f)
+	} else {
+		img, _, err = image.Decode(f)
+	}
+
 	if o.Resized() && err == nil {
 		img = resize(img, o.Width, o.Height)
 	}
