@@ -101,7 +101,7 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	// 	photo.Draw(config, scene, c, scales, source)
 	// }
 
-	concurrent := 4
+	concurrent := 10
 	photoCount := len(scene.Photos)
 	if photoCount < concurrent {
 		concurrent = photoCount

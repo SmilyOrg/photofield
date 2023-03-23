@@ -872,10 +872,6 @@ func loadConfiguration(path string) AppConfig {
 		}
 	}
 
-	for i := range appConfig.Media.Thumbnails {
-		appConfig.Media.Thumbnails[i].Init()
-	}
-
 	appConfig.Media.AI = appConfig.AI
 
 	return appConfig
@@ -969,8 +965,7 @@ func main() {
 	configurationPath := filepath.Join(dataDir, "configuration.yaml")
 
 	appConfig := loadConfiguration(configurationPath)
-	appConfig.Media.DatabasePath = filepath.Join(dataDir, "photofield.cache.db")
-	appConfig.Media.DatabaseThumbsPath = filepath.Join(dataDir, "photofield.thumbs.db")
+	appConfig.Media.DataDir = dataDir
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]

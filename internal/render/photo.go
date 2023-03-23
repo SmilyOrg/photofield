@@ -16,20 +16,6 @@ type Photo struct {
 	Sprite Sprite
 }
 
-type Variant struct {
-	Thumbnail   *image.Thumbnail
-	Orientation image.Orientation
-	ZoomDist    float64
-}
-
-func (variant Variant) String() string {
-	name := "original"
-	if variant.Thumbnail != nil {
-		name = variant.Thumbnail.Name
-	}
-	return fmt.Sprintf("%0.2f %v", variant.ZoomDist, name)
-}
-
 func (photo *Photo) GetSize(source *image.Source) image.Size {
 	info := source.GetInfo(photo.Id)
 	return image.Size{X: info.Width, Y: info.Height}
@@ -88,12 +74,12 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 		elapsed := time.Since(start).Microseconds()
 
 		img, err := r.Image, r.Error
-		if r.Orientation == io.SourceInfoOrientation {
-			r.Orientation = io.Orientation(info.Orientation)
-		}
-
 		if img == nil || err != nil {
 			continue
+		}
+
+		if r.Orientation == io.SourceInfoOrientation {
+			r.Orientation = io.Orientation(info.Orientation)
 		}
 
 		source.SourcesLatencyHistogram.WithLabelValues(s.Name()).Observe(float64(elapsed))

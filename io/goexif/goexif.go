@@ -17,6 +17,9 @@ import (
 
 type Exif struct {
 	// Tag string `json:"tag"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+	Fit    io.AspectRatioFit
 }
 
 func (e Exif) Name() string {
@@ -32,7 +35,7 @@ func (e Exif) Ext() string {
 }
 
 func (e Exif) Size(size io.Size) io.Size {
-	return io.Size{X: 256, Y: 256}.Fit(size, io.FitInside)
+	return io.Size{X: e.Width, Y: e.Height}.Fit(size, e.Fit)
 }
 
 func (e Exif) GetDurationEstimate(size io.Size) time.Duration {

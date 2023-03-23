@@ -7,15 +7,34 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/goccy/go-yaml"
 )
 
 type AspectRatioFit int32
 
+func (f *AspectRatioFit) UnmarshalYAML(b []byte) error {
+	var s string
+	if err := yaml.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	switch strings.ToUpper(s) {
+	default:
+		*f = OriginalSize
+	case "INSIDE":
+		*f = FitInside
+	case "OUTSIDE":
+		*f = FitOutside
+	}
+	return nil
+}
+
 const (
+	OriginalSize AspectRatioFit = iota
 	FitOutside   AspectRatioFit = iota
 	FitInside    AspectRatioFit = iota
-	OriginalSize AspectRatioFit = iota
 )
 
 type Orientation int8

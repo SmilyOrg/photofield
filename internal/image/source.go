@@ -15,13 +15,9 @@ import (
 	"photofield/internal/metrics"
 	"photofield/internal/queue"
 	"photofield/io"
-	"photofield/io/cached"
 	"photofield/io/ffmpeg"
-	"photofield/io/goexif"
-	ioimage "photofield/io/goimage"
 	ioristretto "photofield/io/ristretto"
 	"photofield/io/sqlite"
-	"photofield/io/thumb"
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/docker/go-units"
@@ -111,9 +107,8 @@ type Caches struct {
 }
 
 type Config struct {
-	DatabasePath       string
-	DatabaseThumbsPath string
-	AI                 clip.AI
+	DataDir string
+	AI      clip.AI
 
 	ExifToolCount        int  `json:"exif_tool_count"`
 	SkipLoadInfo         bool `json:"skip_load_info"`
@@ -121,11 +116,12 @@ type Config struct {
 	ConcurrentColorLoads int  `json:"concurrent_color_loads"`
 	ConcurrentAILoads    int  `json:"concurrent_ai_loads"`
 
-	ListExtensions []string    `json:"extensions"`
-	DateFormats    []string    `json:"date_formats"`
-	Images         FileConfig  `json:"images"`
-	Videos         FileConfig  `json:"videos"`
-	Thumbnails     []Thumbnail `json:"thumbnails"`
+	ListExtensions []string        `json:"extensions"`
+	DateFormats    []string        `json:"date_formats"`
+	Images         FileConfig      `json:"images"`
+	Videos         FileConfig      `json:"videos"`
+	Sources        SourceConfigs   `json:"sources"`
+	Thumbnail      ThumbnailConfig `json:"thumbnail"`
 
 	Caches Caches `json:"caches"`
 }
@@ -143,7 +139,6 @@ type Source struct {
 	decoder  *Decoder
 	database *Database
 
-	imageCache      ioristretto.Ristretto
 	imageInfoCache  InfoCache
 	pathCache       PathCache
 	fileExistsCache *ristretto.Cache
@@ -162,7 +157,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source := Source{}
 	source.Config = config
 	source.decoder = NewDecoder(config.ExifToolCount)
-	source.database = NewDatabase(config.DatabasePath, migrations)
+	source.database = NewDatabase(filepath.Join(config.DataDir, "photofield.cache.db"), migrations)
 	source.imageInfoCache = newInfoCache()
 	source.fileExistsCache = newFileExistsCache()
 	source.pathCache = newPathCache()
@@ -175,128 +170,50 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 		[]string{"source"},
 	)
 
-	source.imageCache = ioristretto.New()
-
-	ffmpegPath := ffmpeg.FindPath()
-	sqliteSource := sqlite.New(config.DatabaseThumbsPath, migrationsThumbs)
-
-	source.thumbnailSources = []io.ReadDecoder{
-		sqliteSource,
-		thumb.New(
-			"SM",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg",
-			io.FitOutside,
-			240,
-			240,
-		),
-		goexif.Exif{},
-		thumb.New(
-			"S",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg",
-			io.FitInside,
-			120,
-			120,
-		),
+	env := SourceEnvironment{
+		FFmpegPath: ffmpeg.FindPath(),
+		Migrations: migrationsThumbs,
+		ImageCache: ioristretto.New(),
+		DataDir:    config.DataDir,
 	}
 
-	source.thumbnailSink = sqliteSource
+	// Sources used for rendering
+	srcs, err := config.Sources.NewSources(&env)
+	if err != nil {
+		log.Fatalf("failed to create sources: %s", err)
+	}
+	source.Sources = srcs
 
-	source.thumbnailGenerators =
-		io.Sources{
-			ffmpeg.FFmpeg{
-				Path:   ffmpegPath,
-				Width:  256,
-				Height: 256,
-				Fit:    io.FitInside,
-			},
-			ioimage.Image{
-				Width:  256,
-				Height: 256,
-			},
+	// Further sources should not be cached
+	env.ImageCache = nil
+
+	tsrcs, err := config.Thumbnail.Sources.NewSources(&env)
+	if err != nil {
+		log.Fatalf("failed to create thumbnail sources: %s", err)
+	}
+	for _, s := range tsrcs {
+		rd, ok := s.(io.ReadDecoder)
+		if !ok {
+			log.Fatalf("source %s does not implement io.ReadDecoder", s.Name())
 		}
-
-	source.Sources = io.Sources{
-		// ioristretto.New(),
-		sqliteSource,
-		goexif.Exif{},
-		// cached.Cached{Source: goexif.Exif{}, Ristretto: source.Ristretto},
-		thumb.New(
-			"S",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg",
-			io.FitInside,
-			120,
-			120,
-		),
-		thumb.New(
-			"SM",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg",
-			io.FitOutside,
-			240,
-			240,
-		),
-		thumb.New(
-			"M",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg",
-			io.FitOutside,
-			320,
-			320,
-		),
-		thumb.New(
-			"B",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg",
-			io.FitInside,
-			640,
-			640,
-		),
-		thumb.New(
-			"XL",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg",
-			io.FitOutside,
-			1280,
-			1280,
-		),
-		// exiftool.New("ThumbnailImage"),
-		ioimage.Image{},
-		ffmpeg.FFmpeg{
-			Path:   ffmpegPath,
-			Width:  256,
-			Height: 256,
-			Fit:    io.FitInside,
-		},
-		ffmpeg.FFmpeg{
-			Path:   ffmpegPath,
-			Width:  1280,
-			Height: 1280,
-			Fit:    io.FitInside,
-		},
-		ffmpeg.FFmpeg{
-			Path:   ffmpegPath,
-			Width:  4096,
-			Height: 4096,
-			Fit:    io.FitInside,
-		},
-		thumb.New(
-			"FM",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4",
-			io.FitOutside,
-			720,
-			720,
-		),
-		thumb.New(
-			"H264",
-			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4",
-			io.OriginalSize,
-			4096,
-			4096,
-		),
+		source.thumbnailSources = append(source.thumbnailSources, rd)
 	}
 
-	for i := 0; i < len(source.Sources); i++ {
-		source.Sources[i] = &cached.Cached{
-			Source: source.Sources[i],
-			Cache:  source.imageCache,
-		}
+	gens, err := config.Thumbnail.Generators.NewSources(&env)
+	if err != nil {
+		log.Fatalf("failed to create thumbnail generators: %s", err)
 	}
+	source.thumbnailGenerators = gens
+
+	sink, err := config.Thumbnail.Sink.NewSource(&env)
+	if err != nil {
+		log.Fatalf("failed to create thumbnail sink: %s", err)
+	}
+	sqliteSink, ok := sink.(*sqlite.Source)
+	if !ok {
+		log.Fatalf("thumbnail sink %s is not a sqlite source", sink.Name())
+	}
+	source.thumbnailSink = sqliteSink
 
 	if config.SkipLoadInfo {
 		log.Printf("skipping load info")

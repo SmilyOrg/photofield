@@ -36,7 +36,7 @@ func (ids IdWithSize) String() string {
 	return fmt.Sprintf("%6d %4d %4d", ids.Id, ids.Size.X, ids.Size.Y)
 }
 
-func New() Ristretto {
+func New() *Ristretto {
 	maxSizeBytes := int64(256000000)
 	cache, err := drist.NewCache(&drist.Config{
 		NumCounters: 1e6,          // number of keys to track frequency of
@@ -50,7 +50,7 @@ func New() Ristretto {
 		panic(err)
 	}
 	metrics.AddRistretto("image_cache", cache)
-	return Ristretto{
+	return &Ristretto{
 		cache: cache,
 	}
 }
