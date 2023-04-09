@@ -17,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -38,6 +39,7 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/joho/godotenv"
 	"github.com/lpar/gzipped"
+	"github.com/pyroscope-io/client/pyroscope"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
@@ -958,7 +960,6 @@ func IndexHTML() func(next http.Handler) http.Handler {
 }
 
 func main() {
-
 	startupTime = time.Now()
 
 	versionPtr := flag.Bool("version", false, "print version and exit")
@@ -974,6 +975,38 @@ func main() {
 	log.Printf("photofield %s", version)
 
 	loadEnv()
+
+	if os.Getenv("PYROSCOPE_HOST") != "" {
+		log.Printf("pyroscope enabled at %s", os.Getenv("PYROSCOPE_HOST"))
+
+		// These 2 lines are only required if you're using mutex or block profiling
+		// Read the explanation below for how to set these rates:
+		runtime.SetMutexProfileFraction(5)
+		runtime.SetBlockProfileRate(5)
+
+		pyroscope.Start(pyroscope.Config{
+			ApplicationName: "photofield",
+			ServerAddress:   os.Getenv("PYROSCOPE_HOST"),
+			Logger:          nil,
+			AuthToken:       os.Getenv("PYROSCOPE_AUTH_TOKEN"),
+			Tags:            map[string]string{"hostname": os.Getenv("HOSTNAME")},
+			ProfileTypes: []pyroscope.ProfileType{
+				// these profile types are enabled by default:
+				pyroscope.ProfileCPU,
+				pyroscope.ProfileAllocObjects,
+				pyroscope.ProfileAllocSpace,
+				pyroscope.ProfileInuseObjects,
+				pyroscope.ProfileInuseSpace,
+
+				// these profile types are optional:
+				pyroscope.ProfileGoroutines,
+				pyroscope.ProfileMutexCount,
+				pyroscope.ProfileMutexDuration,
+				pyroscope.ProfileBlockCount,
+				pyroscope.ProfileBlockDuration,
+			},
+		})
+	}
 
 	if err := yaml.Unmarshal(defaultsYaml, &defaults); err != nil {
 		panic(err)
