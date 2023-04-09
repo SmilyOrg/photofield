@@ -11,6 +11,7 @@ import (
 
 	"photofield/internal/clip"
 	"photofield/internal/image"
+	"photofield/io"
 )
 
 type Render struct {
@@ -18,8 +19,10 @@ type Render struct {
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
 	BackgroundColor   color.Color `json:"background_color"`
 	LogDraws          bool
-	DebugOverdraw     bool
-	DebugThumbnails   bool
+
+	Sources         io.Sources
+	DebugOverdraw   bool
+	DebugThumbnails bool
 
 	Zoom        int
 	CanvasImage draw.Image

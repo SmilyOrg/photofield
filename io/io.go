@@ -32,9 +32,9 @@ func (f *AspectRatioFit) UnmarshalYAML(b []byte) error {
 }
 
 const (
-	OriginalSize AspectRatioFit = iota
-	FitOutside   AspectRatioFit = iota
-	FitInside    AspectRatioFit = iota
+	OriginalSize AspectRatioFit = iota + 1
+	FitOutside
+	FitInside
 )
 
 type Orientation int8
@@ -153,8 +153,10 @@ func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
 		cost := sizecost + durcost
 		// fmt.Printf("%4d %30s %12s %12s %12s %12d %12f %10s %12f %12f\n", i, s.Name(), original, target, ssize, sarea, sizecost, dur, durcost, cost)
 		costs[i] = SourceCost{
-			Source: s,
-			Cost:   cost,
+			Source:            s,
+			EstimatedArea:     sarea,
+			EstimatedDuration: dur,
+			Cost:              cost,
 		}
 	}
 	return costs
@@ -162,7 +164,9 @@ func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
 
 type SourceCost struct {
 	Source
-	Cost float64
+	EstimatedArea     int64
+	EstimatedDuration time.Duration
+	Cost              float64
 }
 
 type SourceCosts []SourceCost

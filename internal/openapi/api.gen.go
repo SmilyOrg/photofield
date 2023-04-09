@@ -206,6 +206,7 @@ type GetScenesSceneIdTilesParams struct {
 	Zoom            int       `json:"zoom"`
 	X               TileCoord `json:"x"`
 	Y               TileCoord `json:"y"`
+	Sources         *[]string `json:"sources,omitempty"`
 	DebugOverdraw   *bool     `json:"debug_overdraw,omitempty"`
 	DebugThumbnails *bool     `json:"debug_thumbnails,omitempty"`
 }
@@ -835,6 +836,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, true, "y", r.URL.Query(), &params.Y)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter y: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "sources" -------------
+	if paramValue := r.URL.Query().Get("sources"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", false, false, "sources", r.URL.Query(), &params.Sources)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter sources: %s", err), http.StatusBadRequest)
 		return
 	}
 

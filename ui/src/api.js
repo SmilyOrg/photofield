@@ -100,7 +100,7 @@ export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extr
     y,
     ...extraParams,
   };
-  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params)}`;
+  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
   return url;
 }
 

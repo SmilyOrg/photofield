@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"photofield/io"
 	"photofield/io/cached"
+	"photofield/io/configured"
 	"photofield/io/ffmpeg"
 	"photofield/io/filtered"
 	"photofield/io/goexif"
@@ -16,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/imdario/mergo"
 )
 
 const (
@@ -41,12 +43,29 @@ func (t *SourceType) UnmarshalYAML(b []byte) error {
 
 type SourceConfig struct {
 	Name       string            `json:"name"`
+	Cost       configured.Cost   `json:"cost"`
 	Type       SourceType        `json:"type"`
 	Path       string            `json:"path"`
 	Width      int               `json:"width"`
 	Height     int               `json:"height"`
 	Fit        io.AspectRatioFit `json:"fit"`
 	Extensions []string          `json:"extensions"`
+}
+
+type SourceTypeMap map[SourceType]SourceConfig
+
+func (smt *SourceTypeMap) UnmarshalYAML(b []byte) error {
+	var m map[SourceType]SourceConfig
+	if err := yaml.Unmarshal(b, &m); err != nil {
+		return err
+	}
+	*smt = make(map[SourceType]SourceConfig)
+	for st, sc := range m {
+		st = SourceType(strings.ToUpper(string(st)))
+		sc.Type = st
+		(*smt)[st] = sc
+	}
+	return nil
 }
 
 type ThumbnailConfig struct {
@@ -57,14 +76,26 @@ type ThumbnailConfig struct {
 
 // SourceEnvironment is the environment for creating sources
 type SourceEnvironment struct {
-	DataDir    string
-	FFmpegPath string
-	Migrations embed.FS
-	ImageCache *ristretto.Ristretto
-	Databases  map[string]*sqlite.Source
+	SourceTypes SourceTypeMap
+	DataDir     string
+	FFmpegPath  string
+	Migrations  embed.FS
+	ImageCache  *ristretto.Ristretto
+	Databases   map[string]*sqlite.Source
 }
 
 func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
+	// Merge the source config with the source type config
+	if st, ok := env.SourceTypes[c.Type]; ok {
+		// println("merging source config with source type config", c.Type, st.Type, st.Cost.Time, st.Cost.TimePerResizedMegapixel, st.Cost.TimePerOriginalMegapixel)
+		err := mergo.Merge(&c, &st)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var s io.Source
+
 	switch c.Type {
 
 	case SourceTypeSqlite:
@@ -72,48 +103,76 @@ func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
 		if ok {
 			return existing, nil
 		}
-		s := sqlite.New(
+		if c.Path == "" {
+			return nil, fmt.Errorf("missing path for SQLITE source")
+		}
+		sq := sqlite.New(
 			filepath.Join(env.DataDir, c.Path),
 			env.Migrations,
 		)
 		if env.Databases == nil {
 			env.Databases = make(map[string]*sqlite.Source)
 		}
-		env.Databases[c.Path] = s
-		return s, nil
+		env.Databases[c.Path] = sq
+		s = sq
 
 	case SourceTypeGoexif:
-		return goexif.Exif{
+		s = goexif.Exif{
 			Width:  c.Width,
 			Height: c.Height,
-		}, nil
+		}
 
 	case SourceTypeThumb:
-		return thumb.New(
+		s = thumb.New(
 			c.Name,
 			c.Path,
 			c.Fit,
 			c.Width,
 			c.Height,
-		), nil
+		)
 
 	case SourceTypeImage:
-		return goimage.Image{
+		s = goimage.Image{
 			Width:  c.Width,
 			Height: c.Height,
-		}, nil
+		}
 
 	case SourceTypeFFmpeg:
-		return ffmpeg.FFmpeg{
+		s = ffmpeg.FFmpeg{
 			Path:   env.FFmpegPath,
 			Width:  c.Width,
 			Height: c.Height,
 			Fit:    c.Fit,
-		}, nil
+		}
 
 	default:
 		return nil, fmt.Errorf("unknown source type: %s", c.Type)
 	}
+
+	if env.ImageCache != nil {
+		// Add caching layer
+		s = &cached.Cached{
+			Source: s,
+			Cache:  *env.ImageCache,
+		}
+	}
+	// Add filtering layer
+	if len(c.Extensions) > 0 {
+		s = &filtered.Filtered{
+			Source:     s,
+			Extensions: c.Extensions,
+		}
+	}
+
+	s = configured.New(
+		c.Name,
+		c.Cost,
+		s,
+	)
+
+	// println(s.Name(), c.Cost.Time.String(), c.Cost.TimePerOriginalMegapixel.String(), c.Cost.TimePerResizedMegapixel.String())
+
+	return s, nil
 }
 
 type SourceConfigs []SourceConfig
@@ -126,20 +185,6 @@ func (cfgs SourceConfigs) NewSources(env *SourceEnvironment) ([]io.Source, error
 		s, err := c.NewSource(env)
 		if err != nil {
 			return nil, err
-		}
-		if env.ImageCache != nil {
-			// Add caching layer
-			s = &cached.Cached{
-				Source: s,
-				Cache:  *env.ImageCache,
-			}
-		}
-		// Add filtering layer
-		if len(c.Extensions) > 0 {
-			s = &filtered.Filtered{
-				Source:     s,
-				Extensions: c.Extensions,
-			}
 		}
 		sources = append(sources, s)
 	}

@@ -57,6 +57,7 @@ import (
 	"photofield/internal/openapi"
 	"photofield/internal/render"
 	"photofield/internal/scene"
+	pfio "photofield/io"
 )
 
 //go:embed defaults.yaml
@@ -641,6 +642,26 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 
 	render := defaultSceneConfig.Render
 	render.TileSize = params.TileSize
+	if params.Sources != nil {
+		render.Sources = make(pfio.Sources, len(*params.Sources))
+		for _, src := range imageSource.Sources {
+			for i, name := range *params.Sources {
+				if src.Name() == name {
+					if render.Sources[i] != nil {
+						problem(w, r, http.StatusBadRequest, "Duplicate source")
+						return
+					}
+					render.Sources[i] = src
+				}
+			}
+		}
+		for _, src := range render.Sources {
+			if src == nil {
+				problem(w, r, http.StatusBadRequest, "Unknown source")
+				return
+			}
+		}
+	}
 	if params.DebugOverdraw != nil {
 		render.DebugOverdraw = *params.DebugOverdraw
 	}

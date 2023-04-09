@@ -19,7 +19,6 @@ import (
 	ioristretto "photofield/io/ristretto"
 	"photofield/io/sqlite"
 
-	"github.com/dgraph-io/ristretto"
 	"github.com/docker/go-units"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -120,6 +119,7 @@ type Config struct {
 	DateFormats    []string        `json:"date_formats"`
 	Images         FileConfig      `json:"images"`
 	Videos         FileConfig      `json:"videos"`
+	SourceTypes    SourceTypeMap   `json:"source_types"`
 	Sources        SourceConfigs   `json:"sources"`
 	Thumbnail      ThumbnailConfig `json:"thumbnail"`
 
@@ -133,15 +133,16 @@ type FileConfig struct {
 type Source struct {
 	Config
 
-	Sources                 io.Sources
-	SourcesLatencyHistogram *prometheus.HistogramVec
+	Sources                                    io.Sources
+	SourceLatencyHistogram                     *prometheus.HistogramVec
+	SourcePerOriginalMegapixelLatencyHistogram *prometheus.HistogramVec
+	SourcePerResizedMegapixelLatencyHistogram  *prometheus.HistogramVec
 
 	decoder  *Decoder
 	database *Database
 
-	imageInfoCache  InfoCache
-	pathCache       PathCache
-	fileExistsCache *ristretto.Cache
+	imageInfoCache InfoCache
+	pathCache      PathCache
 
 	metadataQueue queue.Queue
 	contentsQueue queue.Queue
@@ -159,10 +160,9 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.decoder = NewDecoder(config.ExifToolCount)
 	source.database = NewDatabase(filepath.Join(config.DataDir, "photofield.cache.db"), migrations)
 	source.imageInfoCache = newInfoCache()
-	source.fileExistsCache = newFileExistsCache()
 	source.pathCache = newPathCache()
 
-	source.SourcesLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	source.SourceLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Name:      "source_latency",
 		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
@@ -170,11 +170,28 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 		[]string{"source"},
 	)
 
+	source.SourcePerOriginalMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: metrics.Namespace,
+		Name:      "source_per_original_megapixel_latency",
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+	},
+		[]string{"source"},
+	)
+
+	source.SourcePerResizedMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: metrics.Namespace,
+		Name:      "source_per_resized_megapixel_latency",
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+	},
+		[]string{"source"},
+	)
+
 	env := SourceEnvironment{
-		FFmpegPath: ffmpeg.FindPath(),
-		Migrations: migrationsThumbs,
-		ImageCache: ioristretto.New(),
-		DataDir:    config.DataDir,
+		SourceTypes: config.SourceTypes,
+		FFmpegPath:  ffmpeg.FindPath(),
+		Migrations:  migrationsThumbs,
+		ImageCache:  ioristretto.New(),
+		DataDir:     config.DataDir,
 	}
 
 	// Sources used for rendering

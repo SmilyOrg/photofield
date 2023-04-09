@@ -117,7 +117,7 @@ func (t Thumb) Size(size io.Size) io.Size {
 }
 
 func (t Thumb) GetDurationEstimate(size io.Size) time.Duration {
-	return 31 * time.Nanosecond * time.Duration(t.Size(size).Area())
+	return 31 * time.Nanosecond * time.Duration(size.Area())
 }
 
 func (t *Thumb) resolvePath(originalPath string) string {

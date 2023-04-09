@@ -189,6 +189,15 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/TileCoord"
+
+        - name: sources
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
             
         - name: debug_overdraw
           in: query
@@ -674,6 +683,10 @@ components:
       type: integer
       minimum: 0
       example: 0
+
+    Sources:
+      type: array
+
 
     Bounds:
       type: object
