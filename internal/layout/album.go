@@ -77,7 +77,7 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 	limit := collection.Limit
 
 	infos := collection.GetInfos(source, image.ListOptions{
-		OrderBy: image.DateAsc,
+		OrderBy: image.ListOrder(layout.Order),
 		Limit:   limit,
 	})
 

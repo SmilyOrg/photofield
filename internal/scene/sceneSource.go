@@ -215,9 +215,17 @@ func sceneConfigEqual(a SceneConfig, b SceneConfig) bool {
 		return false
 	}
 
-	return a.Layout.Type != "" &&
+	if a.Layout.Type != "" &&
 		b.Layout.Type != "" &&
-		a.Layout.Type == b.Layout.Type
+		a.Layout.Type != b.Layout.Type {
+		return false
+	}
+
+	if a.Layout.Order != b.Layout.Order {
+		return false
+	}
+
+	return true
 }
 
 func (source *SceneSource) GetScenesWithConfig(config SceneConfig) []*render.Scene {

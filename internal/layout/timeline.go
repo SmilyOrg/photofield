@@ -72,7 +72,7 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 	limit := collection.Limit
 
 	infos := collection.GetInfos(source, image.ListOptions{
-		OrderBy: image.DateDesc,
+		OrderBy: image.ListOrder(layout.Order),
 		Limit:   limit,
 	})
 

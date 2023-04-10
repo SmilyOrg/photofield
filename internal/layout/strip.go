@@ -26,7 +26,7 @@ func LayoutStrip(layout Layout, collection collection.Collection, scene *render.
 		)
 	} else {
 		infos = collection.GetInfos(source, image.ListOptions{
-			OrderBy: image.DateAsc,
+			OrderBy: image.ListOrder(layout.Order),
 			Limit:   limit,
 		})
 	}

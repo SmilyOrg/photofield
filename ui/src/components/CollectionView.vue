@@ -6,6 +6,7 @@
       :interactive="!stripVisible"
       :collectionId="collectionId"
       :layout="layout"
+      :sort="sort"
       :imageHeight="imageHeight"
       :search="search"
       :debug="debug"
@@ -22,6 +23,7 @@
       :class="{ visible: stripVisible }"
       :interactive="stripVisible"
       :collectionId="collectionId"
+      :sort="sort"
       :regionId="transitionRegionId || regionId"
       :search="search"
       :debug="debug"
@@ -42,6 +44,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import StripViewer from './StripViewer.vue';
 import ScrollViewer from './ScrollViewer.vue';
+import { useApi } from '../api';
 
 const props = defineProps([
   "collectionId",
@@ -94,8 +97,21 @@ const scenes = computed(() => {
 });
 watch(scenes, scenes => emit("scenes", scenes));
 
+const { data: collection } = useApi(
+  () => collectionId.value && `/collections/${collectionId.value}`
+);
+
 const layout = computed(() => {
-  return route.query.layout;
+  return route.query.layout || collection.value?.layout || undefined;
+})
+
+const sort = computed(() => {
+  switch (layout.value) {
+    case "TIMELINE":
+      return "-date";
+    default:
+      return "+date";
+  }
 })
 
 const imageHeight = computed(() => {

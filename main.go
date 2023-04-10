@@ -345,14 +345,32 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sceneConfig := defaultSceneConfig
+
+	collection := getCollectionById(string(data.CollectionId))
+	if collection == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+	sceneConfig.Collection = *collection
+
 	sceneConfig.Layout.ViewportWidth = float64(data.ViewportWidth)
 	sceneConfig.Layout.ViewportHeight = float64(data.ViewportHeight)
 	sceneConfig.Layout.ImageHeight = 0
 	if data.ImageHeight != nil {
 		sceneConfig.Layout.ImageHeight = float64(*data.ImageHeight)
 	}
+	if sceneConfig.Collection.Layout != "" {
+		sceneConfig.Layout.Type = layout.Type(sceneConfig.Collection.Layout)
+	}
 	if data.Layout != "" {
 		sceneConfig.Layout.Type = layout.Type(data.Layout)
+	}
+	if data.Sort != nil {
+		sceneConfig.Layout.Order = layout.OrderFromSort(string(*data.Sort))
+		if sceneConfig.Layout.Order == layout.None {
+			problem(w, r, http.StatusBadRequest, "Invalid sort")
+			return
+		}
 	}
 	if data.Search != nil {
 		sceneConfig.Scene.Search = string(*data.Search)
@@ -360,12 +378,6 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 			sceneConfig.Layout.Type = layout.Search
 		}
 	}
-	collection := getCollectionById(string(data.CollectionId))
-	if collection == nil {
-		problem(w, r, http.StatusBadRequest, "Collection not found")
-		return
-	}
-	sceneConfig.Collection = *collection
 
 	scene := sceneSource.Add(sceneConfig, imageSource)
 
@@ -386,6 +398,13 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	}
 	if params.Layout != nil {
 		sceneConfig.Layout.Type = layout.Type(*params.Layout)
+	}
+	if params.Sort != nil {
+		sceneConfig.Layout.Order = layout.OrderFromSort(string(*params.Sort))
+		if sceneConfig.Layout.Order == layout.None {
+			problem(w, r, http.StatusBadRequest, "Invalid sort")
+			return
+		}
 	}
 	if params.Search != nil {
 		sceneConfig.Scene.Search = string(*params.Search)

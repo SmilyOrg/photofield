@@ -83,6 +83,7 @@ const props = defineProps({
   interactive: Boolean,
   collectionId: String,
   regionId: String,
+  sort: String,
   search: String,
   debug: Object,
   fullpage: Boolean,
@@ -101,6 +102,7 @@ const {
   interactive,
   regionId,
   collectionId,
+  sort,
   search,
   debug,
 } = toRefs(props);
@@ -120,6 +122,7 @@ const viewport = useViewport(container);
 
 const { scene, recreate: recreateScene } = useScene({
   layout: ref("STRIP"),
+  sort,
   collectionId,
   viewport,
   search,

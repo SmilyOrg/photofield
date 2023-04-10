@@ -126,12 +126,16 @@ type SceneParams struct {
 	ImageHeight    *ImageHeight   `json:"image_height,omitempty"`
 	Layout         LayoutType     `json:"layout"`
 	Search         *Search        `json:"search,omitempty"`
+	Sort           *Sort          `json:"sort,omitempty"`
 	ViewportHeight ViewportHeight `json:"viewport_height"`
 	ViewportWidth  ViewportWidth  `json:"viewport_width"`
 }
 
 // Search defines model for Search.
 type Search string
+
+// Sort defines model for Sort.
+type Sort string
 
 // Task defines model for Task.
 type Task struct {
@@ -179,6 +183,7 @@ type GetScenesParams struct {
 	ViewportHeight *ViewportHeight `json:"viewport_height,omitempty"`
 	ImageHeight    *ImageHeight    `json:"image_height,omitempty"`
 	Layout         *LayoutType     `json:"layout,omitempty"`
+	Sort           *Sort           `json:"sort,omitempty"`
 	Search         *Search         `json:"search,omitempty"`
 }
 
@@ -514,6 +519,17 @@ func (siw *ServerInterfaceWrapper) GetScenes(w http.ResponseWriter, r *http.Requ
 	err = runtime.BindQueryParameter("form", true, false, "layout", r.URL.Query(), &params.Layout)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter layout: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+	if paramValue := r.URL.Query().Get("sort"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter sort: %s", err), http.StatusBadRequest)
 		return
 	}
 

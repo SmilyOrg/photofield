@@ -101,6 +101,11 @@ paths:
           schema:
             $ref: "#/components/schemas/LayoutType"
 
+        - name: sort
+          in: query
+          schema:
+            $ref: "#/components/schemas/Sort"
+
         - name: search
           in: query
           schema:
@@ -629,6 +634,8 @@ components:
           $ref: "#/components/schemas/LayoutType"
         search:
           $ref: "#/components/schemas/Search"
+        sort:
+          $ref: "#/components/schemas/Sort"
           
     TaskType:
       type: string
@@ -705,6 +712,9 @@ components:
           example: 90000
     
     Search:
+      type: string
+
+    Sort:
       type: string
 
     LayoutType:

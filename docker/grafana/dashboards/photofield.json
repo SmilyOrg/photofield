@@ -213,32 +213,7 @@
           },
           "unit": "µs"
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "sqlite"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -692,7 +667,7 @@
           "refId": "A"
         }
       ],
-      "title": "Loading",
+      "title": "Index",
       "type": "row"
     },
     {
@@ -754,14 +729,15 @@
             "uid": "RmeUbDMnz"
           },
           "exemplar": true,
-          "expr": "label_replace({__name__=~\"pf_load_${loader}_pending\"}, \"name\", \"$1\", \"__name__\", \"pf_load_(.*)_pending\")",
+          "expr": "label_replace({__name__=~\"pf_index_${indexer}_pending\"}, \"name\", \"$1\", \"__name__\", \"pf_index_(.*)_pending\")",
           "hide": false,
           "interval": "",
           "legendFormat": "{{name}}",
+          "range": true,
           "refId": "B"
         }
       ],
-      "title": "Pending Loads",
+      "title": "Pending",
       "type": "stat"
     },
     {
@@ -818,7 +794,7 @@
             "uid": "RmeUbDMnz"
           },
           "exemplar": true,
-          "expr": "rate(pf_load_meta_done[10s])",
+          "expr": "rate(pf_index_metadata_done[10s])",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -826,7 +802,7 @@
           "refId": "B"
         }
       ],
-      "title": "Meta Load Rate",
+      "title": "Metadata Indexing Rate",
       "type": "stat"
     },
     {
@@ -883,7 +859,7 @@
             "uid": "RmeUbDMnz"
           },
           "exemplar": true,
-          "expr": "rate(pf_load_color_done[10s])",
+          "expr": "rate(pf_index_contents_done[10s])",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -891,7 +867,7 @@
           "refId": "B"
         }
       ],
-      "title": "Color Load Rate",
+      "title": "Contents Indexing Rate",
       "type": "stat"
     },
     {
@@ -1946,7 +1922,7 @@
       "type": "row"
     }
   ],
-  "refresh": "",
+  "refresh": "2s",
   "revision": 1,
   "schemaVersion": 38,
   "style": "dark",
@@ -2001,7 +1977,7 @@
       },
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": [
             "All"
           ],
@@ -2011,8 +1987,9 @@
         },
         "hide": 0,
         "includeAll": true,
+        "label": "",
         "multi": true,
-        "name": "loader",
+        "name": "indexer",
         "options": [
           {
             "selected": true,
@@ -2021,16 +1998,16 @@
           },
           {
             "selected": false,
-            "text": "meta",
-            "value": "meta"
+            "text": "metadata",
+            "value": "metadata"
           },
           {
             "selected": false,
-            "text": "color",
-            "value": "color"
+            "text": "contents",
+            "value": "contents"
           }
         ],
-        "query": "meta,color",
+        "query": "metadata,contents",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
@@ -2097,7 +2074,7 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
