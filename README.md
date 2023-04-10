@@ -54,8 +54,8 @@ Photofield is a photo viewer built to mainly push the limits of what is possible
 in terms of the number of photos visible at the same time and at the speed at
 which they are displayed. The goal is to be as fast or faster than Google Photos
 on commodity hardware while displaying more photos at the same time. It is
-non-invasive and at this point meant to be used to complement other photo
-gallery software.
+non-invasive and can be used either completely standalone or complementing other
+photo gallery software.
 
 
 ### Features
@@ -86,13 +86,16 @@ layouts.
   able to search for photo contents using words like "beach sunset", "a couple
   kissing", or "cat eyes".
   ![semantic search for "cat eyes"](docs/assets/semantic-search.jpg)
-* **Reuse of existing thumbnails**. Do you have hundreds of gigabytes of
-  existing thumbnails from an existing system? Me too! Let's just reuse those.
-  Here are the currently supported thumbnail sources:
+* **Flexible media/thumbnail system**. Do you have hundreds of gigabytes of existing
+  thumbnails from an existing system? Me too! Let's reuse those. Don't have any?
+  No worries, they will be generated automatically to speed up display. Here are
+  the currently supported thumbnail sources:
+  * Bespoke SQLite thumbnail database - `photofield.thumbs.db`.
   * Synology Moments / Photo Station auto-generated thumbnails in `@eaDir`.
-  * Embedded JPEG thumbnails (`ThumbnailImage` Exif tag).
-  * Limited support for extension via `thumbnails` section of
-    the [Configuration].
+  * Embedded JPEG thumbnails - `ThumbnailImage` Exif tag.
+  * Native Go [image](https://pkg.go.dev/image) package.
+  * FFmpeg on-the-fly conversion - thumbnails and full sized variants.
+  * Configurable via the `sources` section of the [Configuration].
   * Please [open an issue] for other systems, bonus points for an idea on how to
     integrate!
 * **Single file binary**. Thanks to [Go] and [GoReleaser], all the dependencies
@@ -112,7 +115,6 @@ transcoding supported right now.
 
 ### Limitations
 
-* **No thumbnail generation**. Only pre-generated thumbnails are supported.
 * **No photo details (yet)**. There is no way to show metadata of a photo in the
 UI at this point.
 * **Not optimized for many clients**. As a lot of the normally client-side
@@ -172,7 +174,7 @@ default. For further configuration, create a `configuration.yaml` in the
   services:
 
     photofield:
-      image: ghcr.io/smilyorg/photofield
+      image: ghcr.io/smilyorg/photofield:latest
       ports:
         - 8080:8080
       volumes:

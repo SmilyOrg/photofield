@@ -44,20 +44,6 @@ func newInfoCache() InfoCache {
 	}
 }
 
-func newFileExistsCache() *ristretto.Cache {
-	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e7,     // number of keys to track frequency of (10M).
-		MaxCost:     1 << 24, // maximum cost of cache (16MB).
-		BufferItems: 64,      // number of keys per Get buffer.
-		Metrics:     true,
-	})
-	if err != nil {
-		panic(err)
-	}
-	metrics.AddRistretto("file_exists_cache", cache)
-	return cache
-}
-
 type PathCache struct {
 	cache *ristretto.Cache
 }

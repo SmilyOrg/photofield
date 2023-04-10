@@ -155,26 +155,52 @@ media:
   #   fit: The aspect ratio fit to use while resizing
   #   path: Path to the FFmpeg binary, uses the one in PATH if not set
   #
-  sources:
-    
-    # Internal thumbnail database
-    - type: sqlite
+  source_types:
+    sqlite:
       path: photofield.thumbs.db
-    
-    # Embedded JPEG thumbnails
-    - type: goexif
+      cost:
+        time: 5ms
+
+    goexif:
       extensions: [".jpg", ".jpeg"]
       width: 256
       height: 256
       fit: "INSIDE"
+      cost:
+        time: 30ms # 15ms + extra cost
+
+    image:
+      extensions: [".jpg", ".jpeg", ".png"]
+      cost:
+        time_per_original_megapixel: 90ms
+
+    thumb:
+      fit: "INSIDE"
+      cost:
+        time_per_resized_megapixel: 140ms
+
+    ffmpeg:
+      fit: "INSIDE"
+      cost:
+        time_per_original_megapixel: 220ms
+      
+
+  sources:
+    
+    # Internal thumbnail database
+    - type: sqlite
+
+    
+    # Embedded JPEG thumbnails
+    - type: goexif
     
     # Native image decoding
     - type: image
-      extensions: [".jpg", ".jpeg", ".png"]
 
-    #
+
+    # 
     # Synology Moments / Photo Station thumbnails
-    #
+    # 
     - name: S
       type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
@@ -264,7 +290,6 @@ media:
     sources:
       # Internal thumbnail database
       - type: sqlite
-        path: photofield.thumbs.db
     
       # Synology Moments / Photo Station thumbnail
       - name: SM
@@ -277,10 +302,6 @@ media:
       
       # Embedded JPEG thumbnails
       - type: goexif
-        extensions: [".jpg", ".jpeg"]
-        width: 256
-        height: 256
-        fit: "INSIDE"
     
       # Synology Moments / Photo Station thumbnail
       - name: S
@@ -304,7 +325,6 @@ media:
 
       # Native decoding (resized to 256px x 256px)
       - type: image
-        extensions: [".jpg", ".jpeg", ".png"]
         width: 256
         height: 256
 
@@ -312,4 +332,3 @@ media:
     # so that it persists and can be reused while rendering.
     sink:
       type: sqlite
-      path: photofield.thumbs.db

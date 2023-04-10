@@ -100,7 +100,7 @@ export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extr
     y,
     ...extraParams,
   };
-  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params)}`;
+  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
   return url;
 }
 
@@ -142,6 +142,7 @@ export function useApi(getUrl, config) {
 export function useScene({
   collectionId,
   layout,
+  sort,
   imageHeight,
   viewport,
   search,
@@ -152,6 +153,7 @@ export function useScene({
     viewport?.height?.value &&
     {
       layout: layout.value,
+      sort: sort.value,
       image_height: imageHeight?.value || undefined,
       collection_id: collectionId.value,
       viewport_width: viewport.width.value,

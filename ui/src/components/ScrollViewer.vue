@@ -78,6 +78,7 @@ const props = defineProps({
   collectionId: String,
   regionId: String,
   layout: String,
+  sort: String,
   imageHeight: Number,
   search: String,
   debug: Object,
@@ -100,6 +101,7 @@ const {
   collectionId,
   scrollbar,
   layout,
+  sort,
   imageHeight,
   search,
   debug,
@@ -112,6 +114,7 @@ const lastView = ref(null);
 
 const { scene, recreate: recreateScene, filesPerSecond } = useScene({
   layout,
+  sort,
   collectionId,
   imageHeight,
   viewport,

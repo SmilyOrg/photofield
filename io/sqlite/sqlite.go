@@ -52,8 +52,8 @@ func (s *Source) Ext() string {
 }
 
 func (s *Source) GetDurationEstimate(size io.Size) time.Duration {
-	return 879 * time.Microsecond // SSD
-	// return 958 * time.Microsecond // HDD
+	// return 879 * time.Microsecond // SSD
+	return 958 * time.Microsecond // HDD
 }
 
 func (s *Source) Rotate() bool {
@@ -147,7 +147,7 @@ func (s *Source) init() {
 func (s *Source) migrate(migrations embed.FS) {
 	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations-thumbs")
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to create migrate source: %v", err)
 	}
 	url := fmt.Sprintf("sqlite://%v", filepath.ToSlash(s.path))
 	m, err := migrate.NewWithSourceInstance(
@@ -156,7 +156,7 @@ func (s *Source) migrate(migrations embed.FS) {
 		url,
 	)
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to create migrate instance for %s: %v", s.path, err)
 	}
 
 	version, dirty, err := m.Version()

@@ -3,25 +3,33 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
         "type": "dashboard"
       }
     ]
   },
   "editable": true,
-  "gnetId": null,
+  "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1674068728123,
   "links": [],
+  "liveNow": false,
   "panels": [
     {
       "cards": {
-        "cardPadding": 0,
-        "cardRound": null
+        "cardPadding": 0
       },
       "color": {
         "cardColor": "#FADE2A",
@@ -31,7 +39,25 @@
         "mode": "spectrum"
       },
       "dataFormat": "tsbuckets",
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -46,10 +72,51 @@
         "show": false
       },
       "maxDataPoints": 100,
-      "pluginVersion": "8.0.6",
+      "options": {
+        "calculate": false,
+        "calculation": {},
+        "cellGap": 1,
+        "cellValues": {},
+        "color": {
+          "exponent": 0.5,
+          "fill": "#FADE2A",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Turbo",
+          "steps": 128
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": false
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "showValue": "never",
+        "tooltip": {
+          "show": true,
+          "yHistogram": false
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "reverse": false,
+          "unit": "s"
+        }
+      },
+      "pluginVersion": "9.4.7",
       "reverseYBuckets": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "sum(increase(pf_http_latency_bucket{path=\"$path\"}[10s])) by (le)",
           "format": "heatmap",
@@ -68,35 +135,546 @@
       "xAxis": {
         "show": true
       },
-      "xBucketNumber": null,
-      "xBucketSize": null,
       "yAxis": {
-        "decimals": null,
         "format": "s",
         "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
+        "show": true
       },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
+      "yBucketBound": "auto"
     },
     {
-      "datasource": "Prometheus",
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 8
       },
-      "id": 143,
-      "title": "Loading",
+      "id": 233,
+      "panels": [],
+      "title": "Sources",
       "type": "row"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisGridShow": false,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "log": 10,
+              "type": "log"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 9
+      },
+      "id": 214,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "histogram_quantile(0.90, sum(rate(pf_source_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Image Load Latency (p90)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisGridShow": false,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "log": 10,
+              "type": "log"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 9
+      },
+      "id": 230,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "histogram_quantile(0.90, sum(rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Image Load Latency per Original Megapixel (p90)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisGridShow": false,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "log": 10,
+              "type": "log"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 9
+      },
+      "id": 231,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "histogram_quantile(0.90, sum(rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Image Load Latency per Resized Megapixel (p90)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text"
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 17
+      },
+      "id": 249,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false
+      },
+      "pluginVersion": "9.4.7",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sort(histogram_quantile(0.90, sum(rate(pf_source_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
+          "format": "time_series",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Image Load Latency (p90)",
+      "transformations": [],
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 17
+      },
+      "id": 250,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false
+      },
+      "pluginVersion": "9.4.7",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sort(histogram_quantile(0.90, sum(rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
+          "format": "time_series",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Image Load Latency per Original Megapixel (p90)",
+      "transformations": [],
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 17
+      },
+      "id": 251,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false
+      },
+      "pluginVersion": "9.4.7",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sort(histogram_quantile(0.90, sum(rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
+          "format": "time_series",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Image Load Latency per Resized Megapixel (p90)",
+      "transformations": [],
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 143,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "refId": "A"
+        }
+      ],
+      "title": "Index",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -124,7 +702,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 26
       },
       "id": 93,
       "options": {
@@ -142,23 +720,31 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "repeatDirection": "h",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
-          "expr": "label_replace({__name__=~\"pf_load_${loader}_pending\"}, \"name\", \"$1\", \"__name__\", \"pf_load_(.*)_pending\")",
+          "expr": "label_replace({__name__=~\"pf_index_${indexer}_pending\"}, \"name\", \"$1\", \"__name__\", \"pf_index_(.*)_pending\")",
           "hide": false,
           "interval": "",
           "legendFormat": "{{name}}",
+          "range": true,
           "refId": "B"
         }
       ],
-      "title": "Pending Loads",
+      "title": "Pending",
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -182,7 +768,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 9
+        "y": 26
       },
       "id": 109,
       "options": {
@@ -200,12 +786,15 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
-      "repeat": null,
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
-          "expr": "rate(pf_load_meta_done[10s])",
+          "expr": "rate(pf_index_metadata_done[10s])",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -213,11 +802,14 @@
           "refId": "B"
         }
       ],
-      "title": "Meta Load Rate",
+      "title": "Metadata Indexing Rate",
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -241,7 +833,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 9
+        "y": 26
       },
       "id": 126,
       "options": {
@@ -259,11 +851,15 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
-          "expr": "rate(pf_load_color_done[10s])",
+          "expr": "rate(pf_index_contents_done[10s])",
           "hide": false,
           "instant": false,
           "interval": "",
@@ -271,92 +867,38 @@
           "refId": "B"
         }
       ],
-      "title": "Color Load Rate",
+      "title": "Contents Indexing Rate",
       "type": "stat"
     },
     {
-      "cards": {
-        "cardPadding": null,
-        "cardRound": null
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
       },
-      "color": {
-        "cardColor": "#b4ff00",
-        "colorScale": "sqrt",
-        "colorScheme": "interpolateTurbo",
-        "exponent": 0.5,
-        "mode": "spectrum"
-      },
-      "dataFormat": "tsbuckets",
-      "datasource": "Prometheus",
-      "description": "",
-      "gridPos": {
-        "h": 7,
-        "w": 24,
-        "x": 0,
-        "y": 14
-      },
-      "heatmap": {},
-      "hideZeroBuckets": false,
-      "highlightCards": true,
-      "id": 166,
-      "legend": {
-        "show": false
-      },
-      "maxDataPoints": 100,
-      "pluginVersion": "8.0.6",
-      "repeat": "source",
-      "repeatDirection": "v",
-      "reverseYBuckets": false,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum(increase(pf_source_latency_bucket{source=\"$source\"}[10s])) by (le)",
-          "format": "heatmap",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{le}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Latency for $source",
-      "tooltip": {
-        "show": true,
-        "showHistogram": false
-      },
-      "type": "heatmap",
-      "xAxis": {
-        "show": true
-      },
-      "xBucketNumber": null,
-      "xBucketSize": null,
-      "yAxis": {
-        "decimals": null,
-        "format": "µs",
-        "logBase": 1,
-        "max": null,
-        "min": null,
-        "show": true,
-        "splitFactor": null
-      },
-      "yBucketBound": "auto",
-      "yBucketNumber": null,
-      "yBucketSize": null
-    },
-    {
-      "datasource": "Prometheus",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 31
       },
       "id": 56,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "System",
       "type": "row"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -384,7 +926,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 50
+        "y": 32
       },
       "id": 38,
       "options": {
@@ -402,9 +944,13 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "rate(process_cpu_seconds_total[2s])",
           "interval": "",
@@ -416,7 +962,10 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -444,7 +993,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 50
+        "y": 32
       },
       "id": 25,
       "options": {
@@ -462,9 +1011,13 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "go_memstats_alloc_bytes",
           "interval": "",
@@ -476,7 +1029,10 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -500,7 +1056,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 32
       },
       "id": 33,
       "options": {
@@ -518,9 +1074,13 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "rate(go_memstats_mallocs_total[10s])",
           "hide": false,
@@ -529,6 +1089,10 @@
           "refId": "B"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "rate(go_memstats_frees_total[10s])",
           "hide": false,
@@ -541,7 +1105,10 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -569,7 +1136,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 55
+        "y": 37
       },
       "id": 37,
       "options": {
@@ -587,9 +1154,13 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "go_goroutines",
           "interval": "",
@@ -597,6 +1168,10 @@
           "refId": "A"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "go_threads",
           "hide": false,
@@ -609,7 +1184,10 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -637,7 +1215,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 55
+        "y": 37
       },
       "id": 35,
       "options": {
@@ -655,9 +1233,13 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "go_gc_duration_seconds{quantile=~\"0.75|1\"}",
           "hide": false,
@@ -671,7 +1253,10 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -701,11 +1286,13 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 60
+        "y": 42
       },
       "id": 75,
       "options": {
         "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -717,9 +1304,13 @@
         "showUnfilled": true,
         "text": {}
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "label_replace({__name__=~\"pf_${cache}_cache_ratio\"}, \"name\", \"$1\", \"__name__\", \"pf_(.*)_cache_ratio\")",
           "format": "time_series",
@@ -730,6 +1321,10 @@
           "refId": "A"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "{__name__=~\"pf_${cache}_cache_cost_active\"}",
           "hide": true,
@@ -744,7 +1339,10 @@
       "type": "bargauge"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -769,7 +1367,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 60
+        "y": 42
       },
       "id": 92,
       "options": {
@@ -787,9 +1385,13 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "8.0.6",
+      "pluginVersion": "9.4.7",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "exemplar": true,
           "expr": "label_replace({__name__=~\"pf_${cache}_cache_cost_active\"}, \"name\", \"$1\", \"__name__\", \"pf_(.*)_cache_cost_active\")",
           "hide": false,
@@ -805,17 +1407,23 @@
     },
     {
       "collapsed": true,
-      "datasource": "Prometheus",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 66
+        "y": 48
       },
       "id": 12,
       "panels": [
         {
-          "datasource": "Prometheus",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -856,8 +1464,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -889,7 +1496,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 47
           },
           "id": 13,
           "options": {
@@ -898,7 +1505,8 @@
                 "last"
               ],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "showLegend": true
             },
             "tooltip": {
               "mode": "single"
@@ -906,6 +1514,10 @@
           },
           "targets": [
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "pf_${cache}_cache_ratio",
               "hide": false,
@@ -914,6 +1526,10 @@
               "refId": "A"
             },
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "pf_${cache}_cache_cost_active",
               "hide": false,
@@ -927,7 +1543,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -966,8 +1585,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -982,14 +1600,15 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 47
           },
           "id": 17,
           "options": {
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "showLegend": true
             },
             "tooltip": {
               "mode": "single"
@@ -997,6 +1616,10 @@
           },
           "targets": [
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_sets_dropped[1m])",
               "interval": "",
@@ -1004,6 +1627,10 @@
               "refId": "A"
             },
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_sets_rejected[1m])",
               "hide": false,
@@ -1012,6 +1639,10 @@
               "refId": "B"
             },
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_gets_dropped[1m])",
               "hide": false,
@@ -1020,6 +1651,10 @@
               "refId": "C"
             },
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_gets_kept[1m])",
               "hide": false,
@@ -1032,7 +1667,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1071,8 +1709,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1087,14 +1724,15 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 29
+            "y": 53
           },
           "id": 14,
           "options": {
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "showLegend": true
             },
             "tooltip": {
               "mode": "single"
@@ -1102,6 +1740,10 @@
           },
           "targets": [
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_keys_added[1m])",
               "interval": "",
@@ -1109,6 +1751,10 @@
               "refId": "A"
             },
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "-rate(pf_${cache}_cache_keys_evicted[1m])",
               "hide": false,
@@ -1117,6 +1763,10 @@
               "refId": "B"
             },
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_keys_updated[1m])",
               "hide": false,
@@ -1129,7 +1779,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1168,8 +1821,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -1210,14 +1862,15 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 29
+            "y": 53
           },
           "id": 15,
           "options": {
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "showLegend": true
             },
             "tooltip": {
               "mode": "single"
@@ -1225,6 +1878,10 @@
           },
           "targets": [
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_cost_added[1m])",
               "instant": false,
@@ -1233,6 +1890,10 @@
               "refId": "A"
             },
             {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
               "exemplar": true,
               "expr": "-rate(pf_${cache}_cache_cost_evicted[1m])",
               "hide": false,
@@ -1248,18 +1909,27 @@
         }
       ],
       "repeat": "cache",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "$cache cache",
       "type": "row"
     }
   ],
   "refresh": "2s",
-  "schemaVersion": 30,
+  "revision": 1,
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [],
   "templating": {
     "list": [
       {
-        "allValue": null,
         "current": {
           "selected": false,
           "text": [
@@ -1269,11 +1939,8 @@
             "$__all"
           ]
         },
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": true,
-        "label": null,
         "multi": true,
         "name": "cache",
         "options": [
@@ -1299,24 +1966,18 @@
           },
           {
             "selected": false,
-            "text": "file_exists",
-            "value": "file_exists"
-          },
-          {
-            "selected": false,
             "text": "path",
             "value": "path"
           }
         ],
-        "query": "scene,image,image_info,file_exists,path",
+        "query": "scene,image,image_info,path",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
       },
       {
-        "allValue": null,
         "current": {
-          "selected": false,
+          "selected": true,
           "text": [
             "All"
           ],
@@ -1324,13 +1985,11 @@
             "$__all"
           ]
         },
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": true,
-        "label": null,
+        "label": "",
         "multi": true,
-        "name": "loader",
+        "name": "indexer",
         "options": [
           {
             "selected": true,
@@ -1339,31 +1998,31 @@
           },
           {
             "selected": false,
-            "text": "meta",
-            "value": "meta"
+            "text": "metadata",
+            "value": "metadata"
           },
           {
             "selected": false,
-            "text": "color",
-            "value": "color"
+            "text": "contents",
+            "value": "contents"
           }
         ],
-        "query": "meta,color",
+        "query": "metadata,contents",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
       },
       {
-        "allValue": null,
         "current": {
           "selected": false,
           "text": "/scenes/{scene_id}/tiles",
           "value": "/scenes/{scene_id}/tiles"
         },
-        "datasource": "Prometheus",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "RmeUbDMnz"
+        },
         "definition": "label_values(path)",
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "",
@@ -1381,20 +2040,25 @@
         "type": "query"
       },
       {
-        "allValue": null,
+        "allValue": "",
         "current": {
           "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
-        "datasource": "Prometheus",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "RmeUbDMnz"
+        },
         "definition": "label_values(source)",
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "",
-        "multi": false,
+        "multi": true,
         "name": "source",
         "options": [],
         "query": {
@@ -1410,7 +2074,7 @@
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -1432,5 +2096,6 @@
   "timezone": "",
   "title": "Photofield",
   "uid": "9sQ5hGGnk",
-  "version": 7
+  "version": 13,
+  "weekStart": ""
 }

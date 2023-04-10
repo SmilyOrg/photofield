@@ -13,7 +13,7 @@ import (
 func LayoutWall(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
 
 	infos := collection.GetInfos(source, image.ListOptions{
-		OrderBy: image.DateAsc,
+		OrderBy: image.ListOrder(layout.Order),
 		Limit:   collection.Limit,
 	})
 
@@ -34,6 +34,9 @@ func LayoutWall(layout Layout, collection collection.Collection, scene *render.S
 	photoCount := len(section.infos)
 
 	edgeCount := int(math.Sqrt(float64(photoCount)))
+	if edgeCount < 1 {
+		edgeCount = 1
+	}
 
 	scene.Bounds.W = layout.ViewportWidth
 	cols := edgeCount
@@ -51,7 +54,7 @@ func LayoutWall(layout Layout, collection collection.Collection, scene *render.S
 
 	rows := int(math.Ceil(float64(photoCount) / float64(cols)))
 
-	scene.Bounds.H = math.Ceil(float64(rows)) * (imageHeight + layoutConfig.LineSpacing)
+	scene.Bounds.H = float64(rows) * (imageHeight + layoutConfig.LineSpacing)
 
 	sceneMargin := 10.
 	layoutConfig.ImageHeight = imageHeight

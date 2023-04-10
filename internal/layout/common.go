@@ -24,8 +24,28 @@ const (
 	Strip    Type = "STRIP"
 )
 
+type Order int
+
+const (
+	None     Order = iota
+	DateAsc  Order = iota
+	DateDesc Order = iota
+)
+
+func OrderFromSort(s string) Order {
+	switch s {
+	case "+date":
+		return DateAsc
+	case "-date":
+		return DateDesc
+	default:
+		return None
+	}
+}
+
 type Layout struct {
-	Type           Type `json:"type"`
+	Type           Type  `json:"type"`
+	Order          Order `json:"order"`
 	ViewportWidth  float64
 	ViewportHeight float64
 	ImageHeight    float64

@@ -154,15 +154,6 @@ export default {
   },
   setup(props) {
     const collectionId = toRef(props, "collectionId");
-    const layoutOptions = computed(() => {
-      return [
-        { label: `Default`, value: "DEFAULT" },
-        { label: "Album", value: "ALBUM" },
-        { label: "Timeline", value: "TIMELINE" },
-        { label: "Wall", value: "WALL" },
-      ]
-    })
-
     const router = useRouter();
     const route = useRoute();
     const query = computed(() => route.query);
@@ -206,7 +197,6 @@ export default {
       goHome,
       query,
       setQuery,
-      layoutOptions,
       remoteTasks,
       remoteTasksUpdateUntilDone,
       indexTasks,

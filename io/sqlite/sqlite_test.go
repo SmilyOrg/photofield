@@ -5,6 +5,7 @@ import (
 	"embed"
 	"os"
 	"path"
+	"photofield/io"
 	"testing"
 )
 
@@ -22,11 +23,11 @@ func TestRoundtrip(t *testing.T) {
 	id := uint32(1)
 
 	s.Write(id, bytes)
-	img, err := s.Load(context.Background(), id)
-	if err != nil {
-		t.Fatal(err)
+	r := s.Get(context.Background(), io.ImageId(id), p)
+	if r.Error != nil {
+		t.Fatal(r.Error)
 	}
-	b := img.Bounds()
+	b := r.Image.Bounds()
 	if b.Dx() != 256 || b.Dy() != 171 {
 		t.Errorf("unexpected size %d x %d", b.Dx(), b.Dy())
 	}

@@ -101,6 +101,11 @@ paths:
           schema:
             $ref: "#/components/schemas/LayoutType"
 
+        - name: sort
+          in: query
+          schema:
+            $ref: "#/components/schemas/Sort"
+
         - name: search
           in: query
           schema:
@@ -189,6 +194,15 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/TileCoord"
+
+        - name: sources
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
             
         - name: debug_overdraw
           in: query
@@ -620,6 +634,8 @@ components:
           $ref: "#/components/schemas/LayoutType"
         search:
           $ref: "#/components/schemas/Search"
+        sort:
+          $ref: "#/components/schemas/Sort"
           
     TaskType:
       type: string
@@ -675,6 +691,10 @@ components:
       minimum: 0
       example: 0
 
+    Sources:
+      type: array
+
+
     Bounds:
       type: object
       properties:
@@ -692,6 +712,9 @@ components:
           example: 90000
     
     Search:
+      type: string
+
+    Sort:
       type: string
 
     LayoutType:

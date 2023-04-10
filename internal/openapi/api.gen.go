@@ -126,12 +126,16 @@ type SceneParams struct {
 	ImageHeight    *ImageHeight   `json:"image_height,omitempty"`
 	Layout         LayoutType     `json:"layout"`
 	Search         *Search        `json:"search,omitempty"`
+	Sort           *Sort          `json:"sort,omitempty"`
 	ViewportHeight ViewportHeight `json:"viewport_height"`
 	ViewportWidth  ViewportWidth  `json:"viewport_width"`
 }
 
 // Search defines model for Search.
 type Search string
+
+// Sort defines model for Sort.
+type Sort string
 
 // Task defines model for Task.
 type Task struct {
@@ -179,6 +183,7 @@ type GetScenesParams struct {
 	ViewportHeight *ViewportHeight `json:"viewport_height,omitempty"`
 	ImageHeight    *ImageHeight    `json:"image_height,omitempty"`
 	Layout         *LayoutType     `json:"layout,omitempty"`
+	Sort           *Sort           `json:"sort,omitempty"`
 	Search         *Search         `json:"search,omitempty"`
 }
 
@@ -206,6 +211,7 @@ type GetScenesSceneIdTilesParams struct {
 	Zoom            int       `json:"zoom"`
 	X               TileCoord `json:"x"`
 	Y               TileCoord `json:"y"`
+	Sources         *[]string `json:"sources,omitempty"`
 	DebugOverdraw   *bool     `json:"debug_overdraw,omitempty"`
 	DebugThumbnails *bool     `json:"debug_thumbnails,omitempty"`
 }
@@ -513,6 +519,17 @@ func (siw *ServerInterfaceWrapper) GetScenes(w http.ResponseWriter, r *http.Requ
 	err = runtime.BindQueryParameter("form", true, false, "layout", r.URL.Query(), &params.Layout)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter layout: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+	if paramValue := r.URL.Query().Get("sort"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter sort: %s", err), http.StatusBadRequest)
 		return
 	}
 
@@ -835,6 +852,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, true, "y", r.URL.Query(), &params.Y)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter y: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "sources" -------------
+	if paramValue := r.URL.Query().Get("sources"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", false, false, "sources", r.URL.Query(), &params.Sources)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter sources: %s", err), http.StatusBadRequest)
 		return
 	}
 

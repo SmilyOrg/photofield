@@ -17,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -38,6 +39,7 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/joho/godotenv"
 	"github.com/lpar/gzipped"
+	"github.com/pyroscope-io/client/pyroscope"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
@@ -57,6 +59,7 @@ import (
 	"photofield/internal/openapi"
 	"photofield/internal/render"
 	"photofield/internal/scene"
+	pfio "photofield/io"
 )
 
 //go:embed defaults.yaml
@@ -342,14 +345,32 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sceneConfig := defaultSceneConfig
+
+	collection := getCollectionById(string(data.CollectionId))
+	if collection == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+	sceneConfig.Collection = *collection
+
 	sceneConfig.Layout.ViewportWidth = float64(data.ViewportWidth)
 	sceneConfig.Layout.ViewportHeight = float64(data.ViewportHeight)
 	sceneConfig.Layout.ImageHeight = 0
 	if data.ImageHeight != nil {
 		sceneConfig.Layout.ImageHeight = float64(*data.ImageHeight)
 	}
+	if sceneConfig.Collection.Layout != "" {
+		sceneConfig.Layout.Type = layout.Type(sceneConfig.Collection.Layout)
+	}
 	if data.Layout != "" {
 		sceneConfig.Layout.Type = layout.Type(data.Layout)
+	}
+	if data.Sort != nil {
+		sceneConfig.Layout.Order = layout.OrderFromSort(string(*data.Sort))
+		if sceneConfig.Layout.Order == layout.None {
+			problem(w, r, http.StatusBadRequest, "Invalid sort")
+			return
+		}
 	}
 	if data.Search != nil {
 		sceneConfig.Scene.Search = string(*data.Search)
@@ -357,12 +378,6 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 			sceneConfig.Layout.Type = layout.Search
 		}
 	}
-	collection := getCollectionById(string(data.CollectionId))
-	if collection == nil {
-		problem(w, r, http.StatusBadRequest, "Collection not found")
-		return
-	}
-	sceneConfig.Collection = *collection
 
 	scene := sceneSource.Add(sceneConfig, imageSource)
 
@@ -383,6 +398,13 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	}
 	if params.Layout != nil {
 		sceneConfig.Layout.Type = layout.Type(*params.Layout)
+	}
+	if params.Sort != nil {
+		sceneConfig.Layout.Order = layout.OrderFromSort(string(*params.Sort))
+		if sceneConfig.Layout.Order == layout.None {
+			problem(w, r, http.StatusBadRequest, "Invalid sort")
+			return
+		}
 	}
 	if params.Search != nil {
 		sceneConfig.Scene.Search = string(*params.Search)
@@ -641,6 +663,26 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 
 	render := defaultSceneConfig.Render
 	render.TileSize = params.TileSize
+	if params.Sources != nil {
+		render.Sources = make(pfio.Sources, len(*params.Sources))
+		for _, src := range imageSource.Sources {
+			for i, name := range *params.Sources {
+				if src.Name() == name {
+					if render.Sources[i] != nil {
+						problem(w, r, http.StatusBadRequest, "Duplicate source")
+						return
+					}
+					render.Sources[i] = src
+				}
+			}
+		}
+		for _, src := range render.Sources {
+			if src == nil {
+				problem(w, r, http.StatusBadRequest, "Unknown source")
+				return
+			}
+		}
+	}
 	if params.DebugOverdraw != nil {
 		render.DebugOverdraw = *params.DebugOverdraw
 	}
@@ -937,7 +979,6 @@ func IndexHTML() func(next http.Handler) http.Handler {
 }
 
 func main() {
-
 	startupTime = time.Now()
 
 	versionPtr := flag.Bool("version", false, "print version and exit")
@@ -953,6 +994,38 @@ func main() {
 	log.Printf("photofield %s", version)
 
 	loadEnv()
+
+	if os.Getenv("PYROSCOPE_HOST") != "" {
+		log.Printf("pyroscope enabled at %s", os.Getenv("PYROSCOPE_HOST"))
+
+		// These 2 lines are only required if you're using mutex or block profiling
+		// Read the explanation below for how to set these rates:
+		runtime.SetMutexProfileFraction(5)
+		runtime.SetBlockProfileRate(5)
+
+		pyroscope.Start(pyroscope.Config{
+			ApplicationName: "photofield",
+			ServerAddress:   os.Getenv("PYROSCOPE_HOST"),
+			Logger:          nil,
+			AuthToken:       os.Getenv("PYROSCOPE_AUTH_TOKEN"),
+			Tags:            map[string]string{"hostname": os.Getenv("HOSTNAME")},
+			ProfileTypes: []pyroscope.ProfileType{
+				// these profile types are enabled by default:
+				pyroscope.ProfileCPU,
+				pyroscope.ProfileAllocObjects,
+				pyroscope.ProfileAllocSpace,
+				pyroscope.ProfileInuseObjects,
+				pyroscope.ProfileInuseSpace,
+
+				// these profile types are optional:
+				pyroscope.ProfileGoroutines,
+				pyroscope.ProfileMutexCount,
+				pyroscope.ProfileMutexDuration,
+				pyroscope.ProfileBlockCount,
+				pyroscope.ProfileBlockDuration,
+			},
+		})
+	}
 
 	if err := yaml.Unmarshal(defaultsYaml, &defaults); err != nil {
 		panic(err)

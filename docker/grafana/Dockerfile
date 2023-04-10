@@ -1,3 +1,3 @@
-FROM grafana/grafana:8.0.6
+FROM grafana/grafana:9.4.7
 COPY provisioning /provisioning
 COPY dashboards /var/lib/grafana/dashboards

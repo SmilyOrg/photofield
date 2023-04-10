@@ -63,7 +63,11 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	size := info.Size()
 	rsize := photo.Sprite.Rect.RenderedSize(c, size)
 
-	sources := source.Sources.EstimateCost(io.Size(size), io.Size(rsize))
+	srcs := source.Sources
+	if config.Sources != nil {
+		srcs = config.Sources
+	}
+	sources := srcs.EstimateCost(io.Size(size), io.Size(rsize))
 	sources.Sort()
 	for i, s := range sources {
 		if drawn {
@@ -71,18 +75,21 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 		}
 		start := time.Now()
 		r := s.Get(context.TODO(), io.ImageId(photo.Id), path)
-		elapsed := time.Since(start).Microseconds()
+		elapsed := time.Since(start)
 
 		img, err := r.Image, r.Error
 		if img == nil || err != nil {
 			continue
 		}
 
+		name := s.Name()
+		source.SourceLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed.Microseconds()))
+		source.SourcePerOriginalMegapixelLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed) * 1e6 / (float64(size.X) * float64(size.Y)))
+		source.SourcePerResizedMegapixelLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed) * 1e6 / float64(s.EstimatedArea))
+
 		if r.Orientation == io.SourceInfoOrientation {
 			r.Orientation = io.Orientation(info.Orientation)
 		}
-
-		source.SourcesLatencyHistogram.WithLabelValues(s.Name()).Observe(float64(elapsed))
 
 		bitmap := Bitmap{
 			Sprite:      photo.Sprite,
