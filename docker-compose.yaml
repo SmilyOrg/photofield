@@ -10,6 +10,7 @@ services:
       - "traefik.http.services.photofield.loadbalancer.server.port=8080"
     volumes:
       - ./data/configuration.docker.yaml:/app/data/configuration.yaml:ro
+      - ./photos:/photos:ro
     restart: "no"
 
   prometheus:

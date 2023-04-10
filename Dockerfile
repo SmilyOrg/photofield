@@ -1,7 +1,7 @@
 ###
 # Client
 ###
-FROM node:16-alpine3.14 as node-builder
+FROM node:18-alpine as node-builder
 WORKDIR /ui
 
 # install deps
@@ -17,7 +17,7 @@ RUN npm run build
 ###
 # Server
 ###
-FROM golang:1.17-alpine AS go-builder
+FROM golang:1-alpine AS go-builder
 # RUN apk add --no-cache gcc libffi-dev musl-dev libjpeg-turbo-dev
 
 WORKDIR /go/src/app
@@ -30,6 +30,7 @@ RUN go mod download
 COPY *.go ./
 COPY defaults.yaml ./
 COPY internal ./internal
+COPY io ./io
 COPY db ./db
 COPY fonts ./fonts
 # RUN go install -tags libjpeg .
@@ -41,9 +42,9 @@ RUN go install -tags embedstatic .
 ###
 # Runtime
 ###
-FROM alpine:3.14
+FROM alpine:latest
 # RUN apk add --no-cache exiftool>12.06-r0 libjpeg-turbo
-RUN apk add --no-cache exiftool>12.06-r0
+RUN apk add --no-cache exiftool ffmpeg
 
 COPY --from=go-builder /go/bin/ /app
 

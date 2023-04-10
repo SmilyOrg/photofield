@@ -20,7 +20,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"io"
@@ -67,6 +66,9 @@ var defaults AppConfig
 //go:embed db/migrations
 var migrations embed.FS
 
+//go:embed db/migrations-thumbs
+var migrationsThumbs embed.FS
+
 //go:embed fonts/Roboto/Roboto-Regular.ttf
 var robotoRegular []byte
 
@@ -90,10 +92,7 @@ var imageSource *image.Source
 var sceneSource *scene.SceneSource
 var collections []collection.Collection
 
-var indexTasks sync.Map
-var loadMetaOffset int64
-var loadColorOffset int64
-var loadAIOffset int64
+var globalTasks sync.Map
 
 var tileRequestsOut chan struct{}
 var tileRequests []TileRequest
@@ -124,6 +123,18 @@ type Task struct {
 	CollectionId string `json:"collection_id"`
 	Done         int    `json:"done"`
 	Pending      int    `json:"pending,omitempty"`
+	Offset       int    `json:"-"`
+	Queue        string `json:"-"`
+}
+
+func (t *Task) Counter() chan<- int {
+	counter := make(chan int, 10)
+	go func() {
+		for add := range counter {
+			t.Done += add
+		}
+	}()
+	return counter
 }
 
 type TileWriter func(w io.Writer) error
@@ -237,11 +248,11 @@ func getCollectionById(id string) *collection.Collection {
 	return nil
 }
 
-func getIndexTask(collection *collection.Collection) Task {
+func newFileIndexTask(collection *collection.Collection) Task {
 	return Task{
-		Type:         string(openapi.TaskTypeINDEX),
-		Id:           fmt.Sprintf("index-%v", collection.Id),
-		Name:         fmt.Sprintf("Indexing %v", collection.Name),
+		Type:         string(openapi.TaskTypeINDEXFILES),
+		Id:           fmt.Sprintf("index-files-%v", collection.Id),
+		Name:         fmt.Sprintf("Indexing files %v", collection.Name),
 		CollectionId: collection.Id,
 		Done:         0,
 	}
@@ -468,69 +479,42 @@ func gatherIntFromMetric(value *int, metric *io_prometheus_client.MetricFamily, 
 
 func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetTasksParams) {
 
-	tasks := make([]Task, 0)
-
-	if params.Type == nil || *params.Type == openapi.TaskTypeINDEX {
-		indexTasks.Range(func(key, value interface{}) bool {
-			task := value.(Task)
-			if params.CollectionId == nil || task.CollectionId == string(*params.CollectionId) {
-				tasks = append(tasks, task)
-			}
-			return true
-		})
-	}
-
-	loadMetaTask := Task{
-		Type: string(openapi.TaskTypeLOADMETA),
-		Id:   "load-meta",
-		Name: "Extracting metadata",
-	}
-	loadColorTask := Task{
-		Type: string(openapi.TaskTypeLOADCOLOR),
-		Id:   "load-color",
-		Name: "Extracting colors",
-	}
-	loadAITask := Task{
-		Type: string(openapi.TaskTypeLOADAI),
-		Id:   "load-ai",
-		Name: "Comprehending photos (AI)",
-	}
-
 	metrics, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
 		problem(w, r, http.StatusInternalServerError, "Unable to gather metrics")
 		return
 	}
-	for _, metric := range metrics {
-		gatherIntFromMetric(&loadMetaTask.Pending, metric, "pf_load_meta_pending")
-		gatherIntFromMetric(&loadMetaTask.Done, metric, "pf_load_meta_done")
-		gatherIntFromMetric(&loadColorTask.Pending, metric, "pf_load_color_pending")
-		gatherIntFromMetric(&loadColorTask.Done, metric, "pf_load_color_done")
-		gatherIntFromMetric(&loadAITask.Pending, metric, "pf_load_ai_pending")
-		gatherIntFromMetric(&loadAITask.Done, metric, "pf_load_ai_done")
-	}
 
-	if loadMetaTask.Pending > 0 {
-		offset := atomic.LoadInt64(&loadMetaOffset)
-		loadMetaTask.Done -= int(offset)
-		tasks = append(tasks, loadMetaTask)
-	} else {
-		atomic.StoreInt64(&loadMetaOffset, int64(loadMetaTask.Done))
-	}
-	if loadColorTask.Pending > 0 {
-		offset := atomic.LoadInt64(&loadColorOffset)
-		loadColorTask.Done -= int(offset)
-		tasks = append(tasks, loadColorTask)
-	} else {
-		atomic.StoreInt64(&loadColorOffset, int64(loadColorTask.Done))
-	}
-	if loadAITask.Pending > 0 {
-		offset := atomic.LoadInt64(&loadAIOffset)
-		loadAITask.Done -= int(offset)
-		tasks = append(tasks, loadAITask)
-	} else {
-		atomic.StoreInt64(&loadAIOffset, int64(loadAITask.Done))
-	}
+	tasks := make([]Task, 0)
+	globalTasks.Range(func(key, value interface{}) bool {
+		t := value.(Task)
+
+		add := true
+		if params.Type != nil && t.Type != string(*params.Type) {
+			add = false
+		}
+		if params.CollectionId != nil && t.CollectionId != string(*params.CollectionId) {
+			add = false
+		}
+
+		if t.Queue != "" {
+			for _, m := range metrics {
+				gatherIntFromMetric(&t.Pending, m, fmt.Sprintf("pf_%s_pending", t.Queue))
+				gatherIntFromMetric(&t.Done, m, fmt.Sprintf("pf_%s_done", t.Queue))
+			}
+			if t.Pending > 0 {
+				t.Done -= t.Offset
+			} else {
+				t.Offset = t.Done
+				globalTasks.Store(t.Id, t)
+				add = false
+			}
+		}
+		if add {
+			tasks = append(tasks, t)
+		}
+		return true
+	})
 
 	sort.Slice(tasks, func(i, j int) bool {
 		a := tasks[i]
@@ -560,42 +544,45 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 
 	switch data.Type {
 
-	case openapi.TaskTypeINDEX:
-		task := getIndexTask(collection)
-		stored, loaded := indexTasks.LoadOrStore(collection.Id, task)
-		task = stored.(Task)
-		if loaded {
+	case openapi.TaskTypeINDEXFILES:
+		task, existing := indexCollection(collection)
+		if existing {
 			respond(w, r, http.StatusConflict, task)
 		} else {
 			respond(w, r, http.StatusAccepted, task)
-			indexCollection(collection)
 		}
 
-	case openapi.TaskTypeLOADMETA:
-		imageSource.MetaQueue.AppendChan(collection.GetIdsUint32(imageSource))
-		task := Task{
-			Id:           fmt.Sprintf("load-meta-%v", collection.Id),
-			CollectionId: collection.Id,
-			Name:         fmt.Sprintf("Extracting metadata from %v", collection.Name),
-		}
+	case openapi.TaskTypeINDEXMETADATA:
+		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{
+			Metadata: true,
+		})
+		stored, _ := globalTasks.Load("index-metadata")
+		task := stored.(Task)
 		respond(w, r, http.StatusAccepted, task)
 
-	case openapi.TaskTypeLOADCOLOR:
-		imageSource.ColorQueue.AppendChan(collection.GetIdsUint32(imageSource))
-		task := Task{
-			Id:           fmt.Sprintf("load-color-%v", collection.Id),
-			CollectionId: collection.Id,
-			Name:         fmt.Sprintf("Extracting colors from %v", collection.Name),
-		}
+	case openapi.TaskTypeINDEXCONTENTS:
+		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
+			Color:     true,
+			Embedding: true,
+		})
+		stored, _ := globalTasks.Load("index-contents")
+		task := stored.(Task)
 		respond(w, r, http.StatusAccepted, task)
 
-	case openapi.TaskTypeLOADAI:
-		imageSource.AIQueue.AppendChan(collection.GetIdsUint32(imageSource))
-		task := Task{
-			Id:           fmt.Sprintf("load-ai-%v", collection.Id),
-			CollectionId: collection.Id,
-			Name:         fmt.Sprintf("Comprehending (AI) %v", collection.Name),
-		}
+	case openapi.TaskTypeINDEXCONTENTSCOLOR:
+		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
+			Color: true,
+		})
+		stored, _ := globalTasks.Load("index-contents")
+		task := stored.(Task)
+		respond(w, r, http.StatusAccepted, task)
+
+	case openapi.TaskTypeINDEXCONTENTSAI:
+		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
+			Embedding: true,
+		})
+		stored, _ := globalTasks.Load("index-contents")
+		task := stored.(Task)
 		respond(w, r, http.StatusAccepted, task)
 
 	default:
@@ -779,33 +766,13 @@ func (*Api) GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, i
 }
 
 func (*Api) GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, size openapi.SizePathParam, filename openapi.FilenamePathParam) {
-
-	imagePath, err := imageSource.GetImagePath(image.ImageId(id))
-	if err == image.ErrNotFound {
-		problem(w, r, http.StatusNotFound, "Path not found")
-		return
-	}
-
-	path := ""
-	thumbnails := imageSource.GetApplicableThumbnails(imagePath)
-	for i := range thumbnails {
-		thumbnail := thumbnails[i]
-		candidatePath := thumbnail.GetPath(imagePath)
-		if !imageSource.Exists(candidatePath) {
-			continue
+	imageSource.GetImageReader(image.ImageId(id), string(size), func(rs io.ReadSeeker, err error) {
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, err.Error())
+			return
 		}
-		if thumbnail.Name != string(size) {
-			continue
-		}
-		path = candidatePath
-	}
-
-	if path == "" || !imageSource.Exists(path) {
-		problem(w, r, http.StatusNotFound, "Variant not found")
-		return
-	}
-
-	http.ServeFile(w, r, path)
+		http.ServeContent(w, r, string(filename), time.Time{}, rs)
+	})
 }
 
 func AddPrefix(prefix string) func(next http.Handler) http.Handler {
@@ -854,46 +821,29 @@ func expandCollections(collections *[]collection.Collection) {
 	*collections = expanded
 }
 
-func indexCollections(collections *[]collection.Collection) (ok bool) {
-	go func() {
-		for _, collection := range *collections {
-			counter := make(chan int, 10)
-			go func(id string, counter chan int) {
-				task := getIndexTask(&collection)
-				for add := range counter {
-					task.Done += add
-					indexTasks.Store(id, task)
-				}
-				indexTasks.Delete(id)
-			}(collection.Id, counter)
-			for _, dir := range collection.Dirs {
-				imageSource.IndexFiles(dir, collection.IndexLimit, counter)
-			}
-			close(counter)
-		}
-	}()
-	return true
-}
+func indexCollection(collection *collection.Collection) (task Task, existing bool) {
+	task = newFileIndexTask(collection)
+	stored, existing := globalTasks.LoadOrStore(task.Id, task)
+	task = stored.(Task)
+	if existing {
+		return
+	}
 
-func indexCollection(collection *collection.Collection) {
-	counter := make(chan int, 10)
+	counter := task.Counter()
+
 	go func() {
-		task := getIndexTask(collection)
-		for add := range counter {
-			task.Done += add
-			indexTasks.Store(collection.Id, task)
-		}
-		indexTasks.Delete(collection.Id)
-	}()
-	go func() {
-		log.Printf("indexing %s\n", collection.Id)
+		log.Printf("indexing files %s\n", collection.Id)
 		for _, dir := range collection.Dirs {
-			log.Printf("indexing %s %s\n", collection.Id, dir)
+			log.Printf("indexing files %s dir %s\n", collection.Id, dir)
 			imageSource.IndexFiles(dir, collection.IndexLimit, counter)
 		}
-		imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
+		// imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
+		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{})
+		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{})
+		globalTasks.Delete(task.Id)
 		close(counter)
 	}()
+	return
 }
 
 func loadConfiguration(path string) AppConfig {
@@ -920,10 +870,6 @@ func loadConfiguration(path string) AppConfig {
 		if collection.Limit > 0 && collection.IndexLimit == 0 {
 			collection.IndexLimit = collection.Limit
 		}
-	}
-
-	for i := range appConfig.Media.Thumbnails {
-		appConfig.Media.Thumbnails[i].Init()
 	}
 
 	appConfig.Media.AI = appConfig.AI
@@ -1019,7 +965,7 @@ func main() {
 	configurationPath := filepath.Join(dataDir, "configuration.yaml")
 
 	appConfig := loadConfiguration(configurationPath)
-	appConfig.Media.DatabasePath = filepath.Join(dataDir, "photofield.cache.db")
+	appConfig.Media.DataDir = dataDir
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]
@@ -1029,7 +975,7 @@ func main() {
 	defaultSceneConfig.Render = appConfig.Render
 	tileRequestConfig = appConfig.TileRequests
 
-	imageSource = image.NewSource(appConfig.Media, migrations)
+	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs)
 	defer imageSource.Close()
 
 	if *vacuumPtr {
@@ -1070,6 +1016,22 @@ func main() {
 		}
 		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
 	}
+
+	metadataTask := Task{
+		Type:  string(openapi.TaskTypeINDEXMETADATA),
+		Id:    "index-metadata",
+		Name:  "Indexing metadata",
+		Queue: "index_metadata",
+	}
+	globalTasks.Store(metadataTask.Id, metadataTask)
+
+	contentsTask := Task{
+		Type:  string(openapi.TaskTypeINDEXCONTENTS),
+		Id:    "index-contents",
+		Name:  "Indexing contents",
+		Queue: "index_contents",
+	}
+	globalTasks.Store(contentsTask.Id, contentsTask)
 
 	// renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 

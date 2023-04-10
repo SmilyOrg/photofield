@@ -63,6 +63,11 @@ func (source *Source) ListSimilar(dirs []string, embedding clip.Embedding, optio
 	out := make(chan SimilarityInfo, 1000)
 	go func() {
 		defer metrics.Elapsed("list similar")()
+		defer close(out)
+
+		if embedding == nil {
+			return
+		}
 
 		// Prepare search term embedding
 		similars := make([]similar, 0, 1000)
@@ -152,8 +157,6 @@ func (source *Source) ListSimilar(dirs []string, embedding clip.Embedding, optio
 			}
 		}
 		done()
-
-		close(out)
 	}()
 	return out
 }

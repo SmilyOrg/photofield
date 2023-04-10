@@ -14,7 +14,7 @@ type Queue struct {
 	queue       *queue.Queue
 	ID          string
 	Name        string
-	Worker      func(<-chan uint32)
+	Worker      func(<-chan interface{})
 	WorkerCount int
 }
 
@@ -35,24 +35,27 @@ func (q *Queue) Run() {
 
 	logging := false
 
-	ids := make(chan uint32)
-	defer close(ids)
+	items := make(chan interface{})
+	defer close(items)
 
 	if q.WorkerCount == 0 {
 		q.WorkerCount = 1
 	}
 	for i := 0; i < q.WorkerCount; i++ {
-		go q.Worker(ids)
+		if q.Worker != nil {
+			go q.Worker(items)
+		}
 	}
 
 	for {
-		id := q.queue.Pop().(uint32)
-		if id == 0 {
-			log.Printf("%s queue stopping\n", q.Name)
-			return
+		if q.Worker != nil {
+			item := q.queue.Pop()
+			if item == nil {
+				log.Printf("%s queue stopping\n", q.Name)
+				return
+			}
+			items <- item
 		}
-
-		ids <- id
 		doneCounter.Inc()
 
 		now := time.Now()
@@ -79,23 +82,23 @@ func (q *Queue) Run() {
 
 		if logging {
 			// log.Printf("image info load for id %5d, %5d pending, %5d ms get file, %5d ms set db, %5d ms set cache\n", id, len(backlog), fileGetMs, dbSetMs, cacheSetMs)
-			log.Printf("%s queue id %5d, %5d pending\n", q.Name, id, q.queue.Length())
+			log.Printf("%s queue %5d pending\n", q.Name, q.queue.Length())
 		}
 	}
 }
 
-func (q *Queue) Append(id uint32) {
+func (q *Queue) Length() int {
 	if q.queue == nil {
-		return
+		return 0
 	}
-	q.queue.Append(id)
+	return q.queue.Length()
 }
 
-func (q *Queue) AppendChan(ids <-chan uint32) {
+func (q *Queue) AppendItems(items <-chan interface{}) {
 	if q.queue == nil {
 		return
 	}
-	for id := range ids {
-		q.queue.Append(id)
+	for item := range items {
+		q.queue.Append(item)
 	}
 }

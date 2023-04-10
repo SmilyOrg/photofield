@@ -13,10 +13,6 @@ import (
 
 func LayoutSearch(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
 
-	if scene.SearchEmbedding == nil {
-		return
-	}
-
 	limit := collection.Limit
 
 	infos := collection.GetSimilar(source, scene.SearchEmbedding, image.ListOptions{

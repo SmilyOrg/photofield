@@ -153,7 +153,7 @@ func (source *Database) migrate(migrations embed.FS) {
 	if dirty {
 		dirtystr = " (dirty)"
 	}
-	log.Printf("database version %v%s, migrating if needed", version, dirtystr)
+	log.Printf("cache database version %v%s, migrating if needed", version, dirtystr)
 
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
@@ -602,14 +602,24 @@ func (source *Database) WaitForCommit() {
 	defer source.transactionMutex.RUnlock()
 }
 
-func (source *Database) DeleteNonexistent(dir string, m map[string]struct{}) {
+func (source *Database) ListNonexistent(dir string, paths map[string]struct{}) <-chan IdPath {
 	source.WaitForCommit()
-	// TODO delete prefixes
-	for path := range source.ListPaths([]string{dir}, 0) {
-		_, exists := m[path]
-		if !exists {
-			source.Write(path, Info{}, Delete)
+	out := make(chan IdPath, 1000)
+	go func() {
+		for ip := range source.ListIdPaths([]string{dir}, 0) {
+			_, exists := paths[ip.Path]
+			if !exists {
+				out <- ip
+			}
 		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) DeleteNonexistent(dir string, paths map[string]struct{}) {
+	for ip := range source.ListNonexistent(dir, paths) {
+		source.Write(ip.Path, Info{}, Delete)
 	}
 }
 
@@ -850,6 +860,72 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 	return out
 }
 
+func (source *Database) ListIdPaths(dirs []string, limit int) <-chan IdPath {
+	out := make(chan IdPath, 10000)
+	go func() {
+		defer metrics.Elapsed("list id paths sqlite")()
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT infos.id, str || filename as path
+			FROM infos
+			JOIN prefix ON path_prefix_id == prefix.id
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		if limit > 0 {
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		bindIndex := 1
+		defer stmt.Reset()
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			ip := IdPath{
+				Id:   ImageId(stmt.ColumnInt64(0)),
+				Path: stmt.ColumnText(1),
+			}
+			out <- ip
+		}
+
+		close(out)
+	}()
+	return out
+}
+
 func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool) <-chan ImageId {
 	out := make(chan ImageId, 10000)
 	go func() {
@@ -919,6 +995,165 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 				break
 			}
 			out <- (ImageId)(stmt.ColumnInt64(0))
+		}
+
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-chan MissingInfo {
+	out := make(chan MissingInfo, 1000)
+	go func() {
+		defer metrics.Elapsed("list missing sqlite")()
+
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT infos.id, str || filename as path`
+
+		type condition struct {
+			inputs []string
+			output string
+		}
+
+		conds := make([]condition, 0)
+		if opts.Metadata {
+			conds = append(conds, condition{
+				inputs: []string{
+					"width",
+					"height",
+					"orientation",
+					"created_at_unix",
+				},
+				output: "missing_metadata",
+			})
+		}
+		if opts.Color {
+			conds = append(conds, condition{
+				inputs: []string{"color"},
+				output: "missing_color",
+			})
+		}
+		if opts.Embedding {
+			conds = append(conds, condition{
+				inputs: []string{"file_id"},
+				output: "missing_embedding",
+			})
+		}
+
+		for _, c := range conds {
+			sql += `,
+			`
+			for i, input := range c.inputs {
+				sql += fmt.Sprintf("%s IS NULL ", input)
+				if i < len(c.inputs)-1 {
+					sql += "OR "
+				}
+			}
+			sql += fmt.Sprintf("AS %s", c.output)
+		}
+
+		sql += `
+			FROM infos
+			INNER JOIN prefix ON prefix.id = path_prefix_id
+		`
+
+		if opts.Embedding {
+			sql += `
+				LEFT JOIN clip_emb ON clip_emb.file_id = infos.id
+			`
+		}
+
+		sql += `
+			WHERE
+			path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		if len(conds) > 0 {
+			sql += `
+				AND (
+			`
+
+			for i, c := range conds {
+				sql += fmt.Sprintf("%s ", c.output)
+				if i < len(conds)-1 {
+					sql += `OR 
+					`
+				}
+			}
+			// for i, c := range conds {
+			// 	for j, input := range c.inputs {
+			// 		sql += fmt.Sprintf("%s IS NULL ", input)
+			// 		if j < len(c.inputs)-1 {
+			// 			sql += "OR "
+			// 		}
+			// 	}
+			// 	if i < len(conds)-1 {
+			// 		sql += "OR "
+			// 	}
+			// 	sql += `
+			// 	`
+			// }
+			sql += `
+				)
+			`
+		}
+
+		if limit > 0 {
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		bindIndex := 1
+		defer stmt.Reset()
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			r := MissingInfo{
+				Id:   (ImageId)(stmt.ColumnInt64(0)),
+				Path: stmt.ColumnText(1),
+			}
+			i := 2
+			if opts.Color {
+				r.Color = stmt.ColumnBool(i)
+				i++
+			}
+			if opts.Embedding {
+				r.Embedding = stmt.ColumnBool(i)
+				i++
+			}
+			out <- r
 		}
 
 		close(out)

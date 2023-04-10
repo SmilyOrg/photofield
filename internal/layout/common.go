@@ -1,11 +1,14 @@
 package layout
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"path/filepath"
 	"photofield/internal/image"
 	"photofield/internal/render"
+	"photofield/io"
+	"sort"
 	"strings"
 	"time"
 )
@@ -51,10 +54,11 @@ type PhotoRegionSource struct {
 }
 
 type RegionThumbnail struct {
-	Name     string `json:"name"`
-	Width    int    `json:"width"`
-	Height   int    `json:"height"`
-	Filename string `json:"filename"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Filename    string `json:"filename"`
 }
 
 type PhotoRegionData struct {
@@ -76,34 +80,50 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 
 	originalPath := photo.GetPath(source)
 	info := source.GetInfo(photo.Id)
-	originalSize := image.Size{
+
+	originalSize := io.Size{
 		X: info.Width,
 		Y: info.Height,
 	}
 	isVideo := source.IsSupportedVideo(originalPath)
-	extension := strings.ToLower(filepath.Ext(originalPath))
+	extension := filepath.Ext(originalPath)
 	filename := filepath.Base(originalPath)
+	basename := strings.TrimSuffix(filename, extension)
 
-	thumbnailTemplates := source.GetApplicableThumbnails(originalPath)
 	var thumbnails []RegionThumbnail
-	for i := range thumbnailTemplates {
-		thumbnail := &thumbnailTemplates[i]
-		thumbnailPath := thumbnail.GetPath(originalPath)
-		if source.Exists(thumbnailPath) {
-			thumbnailSize := thumbnail.Fit(originalSize)
-			basename := strings.TrimSuffix(filename, extension)
-			thumbnailFilename := fmt.Sprintf(
-				"%s_%s%s",
-				basename, thumbnail.Name, filepath.Ext(thumbnailPath),
-			)
-			thumbnails = append(thumbnails, RegionThumbnail{
-				Name:     thumbnail.Name,
-				Width:    thumbnailSize.X,
-				Height:   thumbnailSize.Y,
-				Filename: thumbnailFilename,
-			})
+
+	for _, s := range source.Sources {
+		if !s.Exists(context.TODO(), io.ImageId(id), originalPath) {
+			continue
 		}
+		size := s.Size(originalSize)
+		ext := s.Ext()
+		if ext == "" {
+			ext = extension
+		}
+		filename := fmt.Sprintf(
+			"%s_%s%s",
+			basename, s.Name(), ext,
+		)
+		thumbnails = append(thumbnails, RegionThumbnail{
+			Name:        s.Name(),
+			DisplayName: s.DisplayName(),
+			Width:       size.X,
+			Height:      size.Y,
+			Filename:    filename,
+		})
 	}
+
+	sort.Slice(thumbnails, func(i, j int) bool {
+		a := &thumbnails[i]
+		b := &thumbnails[j]
+		aa := a.Width * a.Height
+		bb := b.Width * b.Height
+		if aa != bb {
+			return aa < bb
+		}
+		return a.Name < b.Name
+	})
 
 	return render.Region{
 		Id:     id,
@@ -215,6 +235,8 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 			float64(photo.Size.X),
 			float64(photo.Size.Y),
 		)
+
+		// println(photo.GetPath(source), photo.Sprite.Rect.String(), bounds.X, bounds.Y, x, y, config.ImageHeight, photo.Size.X, photo.Size.Y)
 
 		row = append(row, photo)
 

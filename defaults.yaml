@@ -69,7 +69,10 @@ media:
       max_size: 256Mi
     
   # File extensions to index on the file system
-  extensions: [".jpg", ".jpeg", ".png", ".mp4"]
+  extensions: [
+    ".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng",
+    ".mp4",
+  ]
 
   # Used to extract dates from file names as a heuristic in case of missing or
   # metadata or metadata yet to be loaded.
@@ -77,68 +80,111 @@ media:
   date_formats: ["20060201_150405"]
   images:
     # Extensions to use to understand a file to be an image
-    extensions: [".jpg", ".jpeg", ".png", ".gif"]
+    # extensions: [".jpg", ".jpeg", ".png", ".gif"]
+    extensions: [".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng"]
 
   videos:
     extensions: [".mp4"]
 
-  # Pre-generated thumbnail configuration, these thumbnails will be used to
-  # greatly speed up the rendering
-  thumbnails:
-
-    # name: Short thumbnail type name
-    #
-    # path: Path template where to find the thumbnail.
-    #   {{.Dir}} is replaced by the parent directory of the original photo
-    #   {{.Filename}} is replaced by the original photo filename
-    #
-    # fit: Aspect ratio fit of the thumbnail in case it doesn't match the
-    #      original photo.
-    #
-    #   INSIDE
-    #     The thumbnail size is the maximum size of each dimension, so in case
-    #     of different aspect ratios, one dimension will always be smaller.
-    #
-    #   OUTSIDE
-    #     The thumbnail size is the minimum size of each dimension, so in case
-    #     of different aspect ratios, one dimension will always be bigger.
-    #
-    #   ORIGINAL
-    #     The size of the thumbnail is equal the size of the original. Mostly
-    #     useful for transcoded or differently encoded files.
-    #
-    # width
-    # height: Predefined thumbnail dimensions used to pick the most
-    #         appropriately-sized thumbnail for the zoom level. 
-    # 
-    # extra_cost: Additional weight to add when picking the closest thumbnail.
-    #             Higher number means that other thumbnails will be preferred
-    #             if they exist.
-
-    #
-    # Embedded JPEG thumbnail
-    #
-    - name: exif-thumb
-      exif: ThumbnailImage
+  # 
+  # Media source configuration
+  # 
+  # Configures the different ways to load originals, photo variants,
+  # thumbnails, transcoded images, etc. For each photo, during loading or
+  # rendering, the most appropriate source is selected. The criteria include
+  # desired and expected dimensions, expected loading time, and possibly others.
+  # 
+  # As a result, this configuration can have a large effect on the speed of
+  # the application.
+  # 
+  # The following source types are supported:
+  #   SQLITE, GOEXIF, THUMB, IMAGE, FFMPEG
+  # 
+  # Common properties include:
+  # 
+  #   type: Case-insensitive source type (see above)
+  # 
+  #   extensions: File extensions supported by this source - the source will be
+  #               skipped during selection if unsupported
+  # 
+  #   width, height: Expected dimensions of the provided images. These can be
+  #                  approximate in case it's not possible to know them upfront.
+  #                  Used during source selection to decide which source to pick.
+  #                  Some sources can have either hard-coded dimensions (e.g. sqlite)
+  #                  or assume the dimensions of the source file instead (e.g. image).
+  #
+  #   fit: Aspect ratio fit of the provided image in case it doesn't match the
+  #        original file. Not supported by all sources.
+  #
+  #     INSIDE
+  #       The thumbnail size is the maximum size of each dimension, so in case
+  #       of different aspect ratios, one dimension will always be smaller.
+  #
+  #     OUTSIDE
+  #       The thumbnail size is the minimum size of each dimension, so in case
+  #       of different aspect ratios, one dimension will always be bigger.
+  #
+  #     ORIGINAL
+  #       The size of the thumbnail is equal the size of the original. Mostly
+  #       useful for transcoded or differently encoded files.
+  # 
+  # 
+  # Additional per-source properties are:
+  # 
+  # SQLITE - internal thumbnail database
+  #   type: sqlite
+  #   path: File path relative to the data dir of the sqlite database containing
+  #         the thumbnails
+  # 
+  # GOEXIF - thumbnails embedded in JPEG EXIF metadata
+  #   type: goexif
+  # 
+  # IMAGE - native image loading
+  #   type: image
+  #   width, height: Resize the image after loading (can be slow)
+  #   extensions: Supported source file extensions
+  # 
+  # THUMB - pregenerated thumbnail files
+  #   name: Short thumbnail type name
+  #   path: Path template where to find the thumbnail
+  #     {{.Dir}} is replaced by the parent directory of the original photo
+  #     {{.Filename}} is replaced by the original photo filename
+  # 
+  # FFMPEG - transcoded images via FFmpeg
+  #   width, height: Dimensions to which the source media should be resized
+  #   fit: The aspect ratio fit to use while resizing
+  #   path: Path to the FFmpeg binary, uses the one in PATH if not set
+  #
+  sources:
+    
+    # Internal thumbnail database
+    - type: sqlite
+      path: photofield.thumbs.db
+    
+    # Embedded JPEG thumbnails
+    - type: goexif
       extensions: [".jpg", ".jpeg"]
-      fit: INSIDE
-      width: 120
-      height: 120
-      # It's expensive to extract, so this makes it more of a last resort, but
-      # still a lot better than loading the original photo.
-      extra_cost: 10
-      
+      width: 256
+      height: 256
+      fit: "INSIDE"
+    
+    # Native image decoding
+    - type: image
+      extensions: [".jpg", ".jpeg", ".png"]
+
     #
     # Synology Moments / Photo Station thumbnails
     #
     - name: S
+      type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
       extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
-      fit: INSIDE
+      fit: "INSIDE"
       width: 120
       height: 120
       
     - name: SM
+      type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg"
       extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
       fit: OUTSIDE
@@ -146,6 +192,7 @@ media:
       height: 240
       
     - name: M
+      type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg"
       extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
       fit: OUTSIDE
@@ -153,6 +200,7 @@ media:
       height: 320
       
     - name: B
+      type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg"
       extensions: [".jpg", ".jpeg", ".png", ".gif"]
       fit: INSIDE
@@ -160,6 +208,7 @@ media:
       height: 640
       
     - name: XL
+      type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg"
       extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
       fit: OUTSIDE
@@ -170,6 +219,7 @@ media:
     # Synology Moments / Photo Station video variants
     #
     - name: FM
+      type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
       extensions: [".mp4"]
       fit: OUTSIDE
@@ -177,6 +227,89 @@ media:
       height: 720
       
     - name: H264
+      type: thumb
       path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4"
       extensions: [".mp4"]
       fit: ORIGINAL
+
+    # 
+    # FFmpeg on-the-fly decoding
+    # 
+    - type: ffmpeg
+      width: 256
+      height: 256
+      fit: INSIDE
+
+    - type: ffmpeg
+      width: 1280
+      height: 1280
+      fit: INSIDE
+
+    - type: ffmpeg
+      width: 4096
+      height: 4096
+      fit: INSIDE
+
+
+  # These sources are used for handling small thumbnails specifically for
+  # specific purposes.
+  thumbnail:
+
+    # Thumbnail sources used for extracting colors and AI embeddings
+    # 200 - 300px is likely ideal as it's small enough to process quickly,
+    # but big enough to retain some details.
+    # 
+    # The sources here are ordered and the first source that returns
+    # a valid image is used.
+    sources:
+      # Internal thumbnail database
+      - type: sqlite
+        path: photofield.thumbs.db
+    
+      # Synology Moments / Photo Station thumbnail
+      - name: SM
+        type: thumb
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg"
+        extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+        fit: OUTSIDE
+        width: 240
+        height: 240
+      
+      # Embedded JPEG thumbnails
+      - type: goexif
+        extensions: [".jpg", ".jpeg"]
+        width: 256
+        height: 256
+        fit: "INSIDE"
+    
+      # Synology Moments / Photo Station thumbnail
+      - name: S
+        type: thumb
+        path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
+        extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+        fit: "INSIDE"
+        width: 120
+        height: 120
+
+
+    # If a thumbnail is not found among the sources above,
+    # it is generated with the first working generator.
+    generators:
+      
+      # FFmpeg decoding
+      - type: ffmpeg
+        width: 256
+        height: 256
+        fit: INSIDE
+
+      # Native decoding (resized to 256px x 256px)
+      - type: image
+        extensions: [".jpg", ".jpeg", ".png"]
+        width: 256
+        height: 256
+
+    # The sink is used to save the generated thumbnail above
+    # so that it persists and can be reused while rendering.
+    sink:
+      type: sqlite
+      path: photofield.thumbs.db

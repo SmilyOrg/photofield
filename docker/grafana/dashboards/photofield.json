@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "iteration": 1654108832702,
+  "iteration": 1674068728123,
   "links": [],
   "panels": [
     {
@@ -275,12 +275,81 @@
       "type": "stat"
     },
     {
+      "cards": {
+        "cardPadding": null,
+        "cardRound": null
+      },
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateTurbo",
+        "exponent": 0.5,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": "Prometheus",
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "heatmap": {},
+      "hideZeroBuckets": false,
+      "highlightCards": true,
+      "id": 166,
+      "legend": {
+        "show": false
+      },
+      "maxDataPoints": 100,
+      "pluginVersion": "8.0.6",
+      "repeat": "source",
+      "repeatDirection": "v",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "sum(increase(pf_source_latency_bucket{source=\"$source\"}[10s])) by (le)",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Latency for $source",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "xBucketNumber": null,
+      "xBucketSize": null,
+      "yAxis": {
+        "decimals": null,
+        "format": "µs",
+        "logBase": 1,
+        "max": null,
+        "min": null,
+        "show": true,
+        "splitFactor": null
+      },
+      "yBucketBound": "auto",
+      "yBucketNumber": null,
+      "yBucketSize": null
+    },
+    {
       "datasource": "Prometheus",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 49
       },
       "id": 56,
       "title": "System",
@@ -315,7 +384,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 15
+        "y": 50
       },
       "id": 38,
       "options": {
@@ -375,7 +444,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 15
+        "y": 50
       },
       "id": 25,
       "options": {
@@ -431,7 +500,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 50
       },
       "id": 33,
       "options": {
@@ -500,7 +569,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 20
+        "y": 55
       },
       "id": 37,
       "options": {
@@ -568,7 +637,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 20
+        "y": 55
       },
       "id": 35,
       "options": {
@@ -632,7 +701,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 60
       },
       "id": 75,
       "options": {
@@ -700,7 +769,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 25
+        "y": 60
       },
       "id": 92,
       "options": {
@@ -741,7 +810,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 66
       },
       "id": 12,
       "panels": [
@@ -1192,7 +1261,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": [
             "All"
           ],
@@ -1287,7 +1356,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "/scenes/{scene_id}/tiles",
           "value": "/scenes/{scene_id}/tiles"
         },
@@ -1303,6 +1372,33 @@
         "options": [],
         "query": {
           "query": "label_values(path)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "allValue": null,
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(source)",
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": true,
+        "label": "",
+        "multi": false,
+        "name": "source",
+        "options": [],
+        "query": {
+          "query": "label_values(source)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -1336,5 +1432,5 @@
   "timezone": "",
   "title": "Photofield",
   "uid": "9sQ5hGGnk",
-  "version": 6
+  "version": 7
 }

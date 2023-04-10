@@ -1,11 +1,12 @@
 <template>
   <div class="collection-debug">
-    <h3>Metadata</h3>
+    <h3>Index</h3>
     <p>
-      <ui-button @click="emit('reload', 'LOAD_META')">Reindex EXIF</ui-button>
-      <ui-button @click="emit('reload', 'LOAD_COLOR')">Reindex colors</ui-button>
-      <ui-button @click="emit('reload', 'LOAD_AI')">Reindex AI</ui-button>
-      <task-list :tasks="metadataTasks"></task-list>
+      <ui-button @click="emit('reload', 'INDEX_METADATA')">Reindex metadata</ui-button>
+      <ui-button @click="emit('reload', 'INDEX_CONTENTS')">Reindex color & AI</ui-button>
+      <ui-button @click="emit('reload', 'INDEX_CONTENTS_COLOR')">Reindex color</ui-button>
+      <ui-button @click="emit('reload', 'INDEX_CONTENTS_AI')">Reindex AI</ui-button>
+      <task-list :tasks="indexTasks"></task-list>
     </p>
     
     <h3>Display Layout</h3>
@@ -49,8 +50,8 @@ const {
   scenes,
 } = toRefs(props);
 
-const metadataTasks = computed(() => {
-  return tasks.value?.filter(task => task?.type?.startsWith("LOAD_"));
+const indexTasks = computed(() => {
+  return tasks.value?.filter(task => task?.type?.startsWith("INDEX_"));
 });
 
 const ago = (at) => {

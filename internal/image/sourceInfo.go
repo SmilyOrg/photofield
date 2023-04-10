@@ -9,70 +9,6 @@ import (
 	"time"
 )
 
-func (source *Source) loadInfosMeta(ids <-chan uint32) {
-	for iduint := range ids {
-		id := ImageId(iduint)
-		path, err := source.GetImagePath(id)
-		if err != nil {
-			fmt.Println("Unable to find image path", err, path)
-			continue
-		}
-		info, err := source.LoadInfoMeta(path)
-		if err != nil {
-			fmt.Println("Unable to load image info meta", err, path)
-			continue
-		}
-		source.database.Write(path, info, UpdateMeta)
-		source.imageInfoCache.Delete(id)
-	}
-}
-
-func (source *Source) loadInfosColor(ids <-chan uint32) {
-	for iduint := range ids {
-		id := ImageId(iduint)
-		path, err := source.GetImagePath(id)
-		if err != nil {
-			fmt.Println("Unable to find image path", err, path)
-			continue
-		}
-		info, err := source.LoadInfoColor(path)
-		if err != nil {
-			fmt.Println("Unable to load image info color", err, path)
-			continue
-		}
-		source.database.Write(path, info, UpdateColor)
-		source.imageInfoCache.Delete(id)
-	}
-}
-
-func (source *Source) loadInfosAI(ids <-chan uint32) {
-	for iduint := range ids {
-		id := ImageId(iduint)
-		path, err := source.GetImagePath(id)
-		if err != nil {
-			fmt.Println("Unable to find image path", err, path)
-			continue
-		}
-
-		minSize := 200
-		f, err := source.OpenSmallestThumbnail(path, minSize)
-		if err != nil {
-			fmt.Println("Unable to load smallest image", err, path)
-			continue
-		}
-
-		embedding, err := source.Clip.EmbedImageReader(f)
-		f.Close()
-
-		if err != nil {
-			fmt.Println("Unable to get image embedding", err, path)
-			continue
-		}
-
-		source.database.WriteAI(id, embedding)
-	}
-}
-
 func (source *Source) heuristicFromPath(path string) (Info, error) {
 	var info Info
 
@@ -131,18 +67,6 @@ func (source *Source) GetInfo(id ImageId) Info {
 		}
 	}
 
-	startTime = time.Now()
-	needsColor := result.NeedsColor()
-	if needsMeta || needsColor {
-		if needsMeta {
-			source.MetaQueue.Append(uint32(id))
-		}
-		if needsColor {
-			source.ColorQueue.Append(uint32(id))
-		}
-	}
-	addPendingMs := time.Since(startTime).Milliseconds()
-
 	if found && !needsMeta {
 		return info
 	}
@@ -170,7 +94,7 @@ func (source *Source) GetInfo(id ImageId) Info {
 	logging = totalMs > 1000
 
 	if logging {
-		log.Printf("image info %5d ms get cache, %5d ms get db, %5d ms add pending, %5d ms get heuristic, %5d ms set cache\n", cacheGetMs, dbGetMs, addPendingMs, heuristicGetMs, cacheSetMs)
+		log.Printf("image info %5d ms get cache, %5d ms get db, %5d ms get heuristic, %5d ms set cache\n", cacheGetMs, dbGetMs, heuristicGetMs, cacheSetMs)
 	}
 	return info
 }

@@ -144,6 +144,7 @@ export default {
 
 .thumbnails {
   display: flex;
+  flex-wrap: wrap;
   padding: 0 12px;
 }
 

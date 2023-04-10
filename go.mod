@@ -30,6 +30,7 @@ require (
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	github.com/x448/float16 v0.8.4
 	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	zombiezen.com/go/sqlite v0.10.1
 )
 
@@ -46,6 +47,7 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/pprof v0.0.0-20210226084205-cbba55b83ad5 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gosimple/unidecode v1.0.0 // indirect
