@@ -94,7 +94,7 @@ func (a AI) TextualHost() string {
 }
 
 func (a AI) EmbedImagePath(path string) (Embedding, error) {
-	if !a.Available() {
+	if !a.Available() || a.TextualHost() == "" {
 		return nil, ErrNotAvailable
 	}
 
@@ -114,7 +114,7 @@ func (a AI) EmbedImagePath(path string) (Embedding, error) {
 }
 
 func (a AI) EmbedImageReader(r io.Reader) (Embedding, error) {
-	if !a.Available() {
+	if !a.Available() || a.VisualHost() == "" {
 		return nil, ErrNotAvailable
 	}
 

@@ -142,7 +142,7 @@ func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
 		if targetArea > sarea {
 			// areacost = math.Sqrt(float64(targetArea)-float64(sarea)) * 3
 			// areacost = math.Sqrt(float64(targetArea)-float64(sarea)) * 3
-			sizecost *= 7
+			sizecost *= 15
 		}
 		// dx := float64(target.X - ssize.X)
 		// dy := float64(target.Y - ssize.Y)

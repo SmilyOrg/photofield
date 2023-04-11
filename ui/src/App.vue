@@ -48,7 +48,7 @@
         </collection-panel>
 
         <search-input
-          v-if="capabilities?.search.supported"
+          v-if="capabilities?.search.supported && collection"
           :loading="query.search && scrollScene?.loading"
           :modelValue="query.search"
           :error="scrollScene?.error"
