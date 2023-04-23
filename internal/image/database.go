@@ -179,7 +179,7 @@ func (source *Database) writePendingInfosSqlite() {
 	defer upsertPrefix.Finalize()
 
 	updateMeta := conn.Prep(`
-		INSERT INTO infos(path_prefix_id, filename, width, height, orientation, created_at_unix, created_at_tz_offset)
+		INSERT INTO infos(path_prefix_id, filename, width, height, orientation, created_at_unix, created_at_tz_offset, latitude, longitude, location)
 		SELECT
 			id as path_prefix_id,
 			? as filename,
@@ -187,13 +187,19 @@ func (source *Database) writePendingInfosSqlite() {
 			? as height,
 			? orientation,
 			? as created_at_unix,
-			? as created_at_tz_offset
+			? as created_at_tz_offset,
+			? as latitude,
+			? as longitude,
+			? as location
 		FROM prefix
 		WHERE str == ?
 		ON CONFLICT(path_prefix_id, filename) DO UPDATE SET
 			width=excluded.width,
 			height=excluded.height,
 			orientation=excluded.orientation,
+			latitude=excluded.latitude,
+			longitude=excluded.longitude,
+			location=excluded.location,
 			created_at_unix=excluded.created_at_unix,
 			created_at_tz_offset=excluded.created_at_tz_offset;`)
 	defer updateMeta.Finalize()
@@ -297,7 +303,10 @@ func (source *Database) writePendingInfosSqlite() {
 			updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
 			updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
 			updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
-			updateMeta.BindText(7, dir)
+			updateMeta.BindFloat(7, imageInfo.Latitude)
+			updateMeta.BindFloat(8, imageInfo.Longitude)
+			updateMeta.BindText(9, imageInfo.Location)
+			updateMeta.BindText(10, dir)
 
 			_, err := updateMeta.Step()
 			if err != nil {

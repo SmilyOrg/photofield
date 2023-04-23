@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"math"
 
 	"github.com/mostlygeek/go-exiftool"
 )
@@ -54,6 +55,9 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 		"-TimeStamp",
 		"-FileModifyDate",
 		"-FileCreateDate",
+		// Location Info
+		"-GPSLatitude",
+		"-GPSLongitude",
 	)
 	if err != nil {
 		return err
@@ -63,6 +67,8 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 	rotation := ""
 	imageWidth := ""
 	imageHeight := ""
+	latitude := ""
+	longitude := ""
 
 	// var gpsTime time.Time
 
@@ -86,6 +92,11 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 			imageWidth = value
 		case "ImageHeight":
 			imageHeight = value
+		case "GPSLatitude":
+			latitude = value
+		case "GPSLongitude":
+			longitude = value
+		
 		// case "GPSDateTime":
 		// 	gpsTime, _ = parseDateTime(value)
 		default:
@@ -131,11 +142,25 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 		info.Orientation = getOrientationFromRotation(rotation)
 	}
 
+	if latitude != "" {
+		info.Latitude, err = strconv.ParseFloat(latitude, 64)
+		if err != nil {
+			info.Latitude = math.NaN()
+		}
+	}
+
+	if longitude != "" {
+		info.Longitude, err = strconv.ParseFloat(longitude, 64)
+		if err != nil {
+			info.Longitude = math.NaN()
+		}
+	}
+
 	if info.Orientation.SwapsDimensions() {
 		info.Width, info.Height = info.Height, info.Width
 	}
 
-	// println(path, info.Width, info.Height, info.DateTime.String())
+	println(path, info.Width, info.Height, info.DateTime.String(), info.Latitude, info.Longitude)
 
 	return nil
 }

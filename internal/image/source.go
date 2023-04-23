@@ -22,6 +22,8 @@ import (
 	"github.com/docker/go-units"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/sams96/rgeo"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -140,6 +142,7 @@ type Source struct {
 
 	decoder  *Decoder
 	database *Database
+	rg		 *rgeo.Rgeo
 
 	imageInfoCache InfoCache
 	pathCache      PathCache
@@ -161,6 +164,15 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.database = NewDatabase(filepath.Join(config.DataDir, "photofield.cache.db"), migrations)
 	source.imageInfoCache = newInfoCache()
 	source.pathCache = newPathCache()
+	
+	r, err := rgeo.New(rgeo.Provinces10, rgeo.Cities10)
+
+	if err != nil {
+		// Handle error
+		fmt.Println("RGEO ERR", err)
+	} else {
+		source.rg = r
+	}
 
 	source.SourceLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,

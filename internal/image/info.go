@@ -14,6 +14,9 @@ type Info struct {
 	DateTime      time.Time
 	Color         uint32
 	Orientation   Orientation
+	Latitude	  float64
+	Longitude     float64
+	Location	  string
 }
 
 func (info *Info) Size() Size {
@@ -21,12 +24,13 @@ func (info *Info) Size() Size {
 }
 
 func (info *Info) String() string {
-	return fmt.Sprintf("width: %v, height: %v, date: %v, color: %08x, orientation: %s",
+	return fmt.Sprintf("width: %v, height: %v, date: %v, color: %08x, orientation: %s, location: %s",
 		info.Width,
 		info.Height,
 		info.DateTime.String(),
 		info.Color,
 		info.Orientation,
+		info.Location,
 	)
 }
 
