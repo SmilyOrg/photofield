@@ -7,8 +7,10 @@ import (
 	"image"
 	"log"
 	"os/exec"
+	"path/filepath"
 	"photofield/io"
 	"strconv"
+	"strings"
 	"time"
 
 	goio "io"
@@ -99,20 +101,36 @@ func (f FFmpeg) ForceOriginalAspectRatio() string {
 	return "unknown"
 }
 
-func (f FFmpeg) FilterGraph() string {
-	if f.Fit == io.OriginalSize {
+func (f FFmpeg) FilterGraph(raw bool) string {
+	vf := []string{}
+
+	// RAW files brightness hack
+	if raw {
+		vf = append(vf, "eq=brightness=1.1:saturation=3:contrast=3.4:gamma=2")
+	}
+
+	if f.Fit != io.OriginalSize {
+		foar := f.ForceOriginalAspectRatio()
+		vf = append(vf, fmt.Sprintf(
+			"scale='min(iw,%d)':'min(ih,%d)':force_original_aspect_ratio=%s",
+			// "scale_npp='min(iw,%d)':'min(ih,%d)':force_original_aspect_ratio=%s",
+			f.Width, f.Height, foar,
+		))
+	}
+
+	if len(vf) == 0 {
 		return "null"
 	}
-	foar := f.ForceOriginalAspectRatio()
-	return fmt.Sprintf(
-		"scale='min(iw,%d)':'min(ih,%d)':force_original_aspect_ratio=%s",
-		// "scale_npp='min(iw,%d)':'min(ih,%d)':force_original_aspect_ratio=%s",
-		f.Width, f.Height, foar,
-	)
+	return strings.Join(vf, ",")
 }
 
 func (f FFmpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return true
+}
+
+func isRawFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".cr2" || ext == ".nef" || ext == ".dng"
 }
 
 func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
@@ -123,6 +141,8 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	raw := isRawFile(path)
+
 	cmd := exec.CommandContext(
 		ctx,
 		f.Path,
@@ -130,7 +150,7 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 		"-loglevel", "error",
 		"-i", path,
 		"-vframes", "1",
-		"-vf", f.FilterGraph(),
+		"-vf", f.FilterGraph(raw),
 		// "-q:v", "2",
 		// "-f", "image2pipe", // jpeg
 		"-c:v", "pam",
