@@ -23,15 +23,15 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.0.0
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/pyroscope-io/client v0.7.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sheerun/queue v1.0.1
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	github.com/x448/float16 v0.8.4
-	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/image v0.7.0
+	golang.org/x/sync v0.1.0
 	zombiezen.com/go/sqlite v0.10.1
 )
 
@@ -39,7 +39,7 @@ require (
 	github.com/ByteArena/poly2tri-go v0.0.0-20170716161910-d102ad91854f // indirect
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/buger/jsonparser v1.0.0 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
@@ -71,10 +71,10 @@ require (
 	github.com/tdewolff/parse/v2 v2.4.2 // indirect
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/mod v0.4.2 // indirect
-	golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab // indirect
-	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/tools v0.1.2 // indirect
+	golang.org/x/mod v0.8.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/tools v0.6.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
