@@ -432,7 +432,7 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-		SELECT width, height, orientation, color, created_at
+		SELECT width, height, orientation, color, created_at, location
 		FROM infos
 		WHERE id == ?;`)
 	defer stmt.Reset()
@@ -459,6 +459,8 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 	info.DateTime, _ = time.Parse(dateFormat, stmt.ColumnText(4))
 	info.DateTimeNull = stmt.ColumnType(4) == sqlite.TypeNull
 
+	info.Location = stmt.ColumnText(5)
+
 	return info, true
 }
 
@@ -470,7 +472,7 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 		defer source.pool.Put(conn)
 
 		sql := `
-		SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset
+		SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset, location
 		FROM infos
 		WHERE id IN (`
 
@@ -512,6 +514,8 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
+
+			info.Location = stmt.ColumnText(7)
 
 			out <- info
 		}
@@ -647,7 +651,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset
+			SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset, location
 			FROM infos
 			WHERE path_prefix_id IN (
 				SELECT id
@@ -721,6 +725,8 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
+
+			info.Location = stmt.ColumnText(7)
 
 			out <- info
 		}

@@ -20,6 +20,8 @@ type TimelineEvent struct {
 	FirstOnDay bool
 	LastOnDay  bool
 	Section    Section
+	Location   string
+
 }
 
 func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, scene *render.Scene, source *image.Source) render.Rect {
@@ -41,7 +43,7 @@ func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, 
 
 	startTimeFormat += "   15:04"
 
-	headerText := event.StartTime.Format(startTimeFormat)
+	headerText := event.StartTime.Format(startTimeFormat) + " " + event.Location
 
 	duration := event.EndTime.Sub(event.StartTime)
 	if duration >= 1*time.Minute {
@@ -105,9 +107,11 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 
 	index := 0
 	for info := range infos {
+		event.Location = event.Location + info.Location
 		if limit > 0 && index >= limit {
 			break
 		}
+
 
 		photoTime := info.DateTime
 		elapsed := lastPhotoTime.Sub(photoTime)

@@ -22,6 +22,7 @@ type AlbumEvent struct {
 	LastOnDay  bool
 	Elapsed    time.Duration
 	Section    Section
+	Location   string
 }
 
 func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene *render.Scene, source *image.Source) render.Rect {
