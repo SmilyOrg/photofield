@@ -9,7 +9,7 @@
       <span class="title">
         <span v-if="!collection">Photos</span>
         <span
-          v-if="collection"
+          v-else-if="!selecting"
           ref="title"
           @mousedown="collectionExpandedPending = true"
           @click="toggleFocus()"
@@ -19,12 +19,17 @@
             {{ collectionExpanded ? 'expand_less' : 'expand_more' }}
           </ui-icon>
         </span>
+        <span
+          v-else
+        >
+          Selection
+        </span>
       </span>
 
       <template #nav-icon>
         <!-- <img src="/favicon-32x32.png" /> -->
-        <ui-icon-button @click="goHome()" class="inline">
-          {{ collection ? 'arrow_back' : 'home' }}
+        <ui-icon-button @click="goBack()" class="inline">
+          {{ collection ? selecting ? 'close' : 'arrow_back' : 'home' }}
         </ui-icon-button>
       </template>
 
@@ -157,9 +162,19 @@ export default {
     const router = useRouter();
     const route = useRoute();
     const query = computed(() => route.query);
+    const selecting = computed(() => !!query.value.select_tag);
 
-    const goHome = () => {
-      router.push("/");
+    const goBack = () => {
+      if (selecting) {
+        router.replace({
+          query: {
+            ...query.value,
+            select_tag: undefined,
+          }
+        });
+      } else {
+        router.push("/");
+      }
     }
 
     const setQuery = (patch) => {
@@ -194,9 +209,10 @@ export default {
     const recreateEvent = useEventBus("recreate-scene");
 
     return {
-      goHome,
+      goBack,
       query,
       setQuery,
+      selecting,
       remoteTasks,
       remoteTasksUpdateUntilDone,
       indexTasks,

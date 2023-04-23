@@ -60,6 +60,7 @@ import (
 	"photofield/internal/render"
 	"photofield/internal/scene"
 	pfio "photofield/io"
+	"photofield/tag"
 )
 
 //go:embed defaults.yaml
@@ -683,6 +684,21 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 			}
 		}
 	}
+
+	if params.SelectTag != nil {
+		t, err := tag.FromNameRev(string(*params.SelectTag))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, "Invalid tag id")
+			return
+		}
+		id, ok := imageSource.GetTagId(t.Name)
+		if !ok {
+			problem(w, r, http.StatusBadRequest, "Unknown tag")
+			return
+		}
+		render.Selected = imageSource.GetTagImageIds(id)
+	}
+
 	if params.DebugOverdraw != nil {
 		render.DebugOverdraw = *params.DebugOverdraw
 	}
@@ -783,6 +799,109 @@ func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sc
 	}
 
 	respond(w, r, http.StatusOK, region)
+}
+
+func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
+
+	data := &openapi.TagsPost{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if data.Selection == nil {
+		problem(w, r, http.StatusBadRequest, "Only selection supported")
+		return
+	}
+
+	if data.CollectionId == nil {
+		problem(w, r, http.StatusBadRequest, "collection_id required")
+		return
+	}
+
+	t, err := tag.NewSelection(string(*data.CollectionId))
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	imageSource.AddTag(t.Name)
+
+	tag, exists := imageSource.GetTag(t.Name)
+	if !exists {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respond(w, r, http.StatusCreated, struct {
+		Id openapi.TagId `json:"id"`
+	}{
+		Id: openapi.TagId(tag.NameRev()),
+	})
+}
+
+func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
+
+	data := &openapi.TagFilesPost{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	t, err := imageSource.GetTagFromNameRev(string(id))
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ids := make(chan image.ImageId, 100)
+	if data.SceneId != nil && data.Bounds != nil {
+		scene := sceneSource.GetSceneById(string(*data.SceneId), imageSource)
+		if scene == nil {
+			problem(w, r, http.StatusBadRequest, "Scene not found")
+			return
+		}
+
+		bounds := render.Rect{
+			X: float64(data.Bounds.X),
+			Y: float64(data.Bounds.Y),
+			W: float64(data.Bounds.W),
+			H: float64(data.Bounds.H),
+		}
+
+		go func() {
+			defer close(ids)
+			photos := scene.GetVisiblePhotos(bounds)
+			for p := range photos {
+				ids <- image.ImageId(p.Id)
+			}
+		}()
+	} else if data.FileId != nil {
+		go func() {
+			defer close(ids)
+			ids <- image.ImageId(*data.FileId)
+		}()
+	} else {
+		problem(w, r, http.StatusBadRequest, "Either scene_id+bounds or file_id required")
+		return
+	}
+
+	var rev int
+	switch data.Op {
+	case "ADD":
+		rev, err = imageSource.AddTagIds(t.Id, ids)
+	case "SUBTRACT":
+		rev, err = imageSource.RemoveTagIds(t.Id, ids)
+	case "INVERT":
+		rev, err = imageSource.InvertTagIds(t.Id, ids)
+	}
+	t.Revision = rev
+
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respond(w, r, http.StatusOK, t)
 }
 
 func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {

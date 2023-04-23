@@ -3,6 +3,7 @@ package render
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"log"
 	"photofield/internal/image"
 	"photofield/io"
@@ -41,18 +42,25 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
-func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) {
-
+func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool) {
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
 	if pixelArea < config.MaxSolidPixelArea {
 		style := c.Style
+
+		scale := 1.
+		if selected {
+			style := c.Style
+			style.FillColor = color.RGBA{0xe4, 0xf2, 0xff, 0xff}
+			photo.Sprite.DrawWithStyle(c, style)
+			scale = 0.8
+		}
 
 		// TODO: this can be a bottleneck for lots of images
 		// if it ends up hitting the database for each individual image
 		info := source.GetInfo(photo.Id)
 		style.FillColor = info.GetColor()
 
-		photo.Sprite.DrawWithStyle(c, style)
+		photo.Sprite.DrawInsetWithStyle(c, style, (1-scale)*photo.Sprite.Rect.W)
 		return
 	}
 
@@ -96,7 +104,15 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			Orientation: image.Orientation(r.Orientation),
 		}
 
-		bitmap.DrawImage(config.CanvasImage, img, c)
+		scale := 1.
+		if selected {
+			style := c.Style
+			style.FillColor = color.RGBA{0xe4, 0xf2, 0xff, 0xff}
+			bitmap.Sprite.DrawWithStyle(c, style)
+			scale = 0.8
+		}
+
+		bitmap.DrawImage(config.CanvasImage, img, c, scale)
 		drawn = true
 
 		if source.IsSupportedVideo(path) {

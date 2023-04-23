@@ -22,6 +22,7 @@ require (
 	github.com/lpar/gzipped v1.1.0
 	github.com/matoous/go-nanoid/v2 v2.0.0
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
+	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0

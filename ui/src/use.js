@@ -116,7 +116,7 @@ export function useRegion({ scene, id }) {
     return !!(scene?.value?.id && !scene.value.loading && id.value);
   });
 
-  const { data, isValidating } = useApi(() => 
+  const { data, isValidating, mutate } = useApi(() => 
     valid.value &&
     `/scenes/${scene.value.id}/regions/${id.value}`
   );
@@ -141,6 +141,7 @@ export function useRegion({ scene, id }) {
 
   return {
     region,
+    mutate,
   };
 }
 
@@ -234,7 +235,7 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
     },
   });
 
-  const { region } = useRegion({
+  const { region, mutate } = useRegion({
     scene,
     id: index,
   });
@@ -254,6 +255,7 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
     region,
     navigate,
     exit,
+    mutate,
   }
 }
 

@@ -47,6 +47,7 @@
       :region="region"
       :scene="scene"
       @navigate="navigate($event)"
+      @favorite="favorite($event)"
       @exit="resetZoomOrExit()"
     ></controls>
 
@@ -69,8 +70,8 @@
 <script setup>
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus, useMousePressed, useNow, useRefHistory } from '@vueuse/core';
-import { computed, nextTick, ref, toRef, toRefs, watch, watchEffect } from 'vue';
-import { useApi, useScene, getCenterRegion } from '../api';
+import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { useApi, useScene, getCenterRegion, postTagFiles } from '../api';
 import { useSeekableRegion, useViewport, useViewDelta, useContextMenu } from '../use.js';
 import { viewCenterSquared } from '../utils.js';
 import Controls from './Controls.vue';
@@ -134,12 +135,24 @@ useEventBus("recreate-scene").on(scene => {
   recreateScene();
 });
 
-
-const { region, navigate, exit } = useSeekableRegion({
+const { region, navigate, exit, mutate: updateRegion } = useSeekableRegion({
   scene,
   collectionId,
   regionId,
 });
+
+const favorite = async (tag) => {
+  const tagId = tag?.id || "fav:r0";
+  const fileId = region.value?.data?.id;
+  if (!fileId) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "INVERT",
+    file_id: fileId,
+  });
+  await updateRegion();
+}
 
 watch(region, r => emit("region", r), { immediate: true });
 
