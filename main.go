@@ -188,9 +188,25 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 	if 1 < scene.Bounds.W/scene.Bounds.H {
 		scale = tileSize / scene.Bounds.W
 		tx += (scale*scene.Bounds.W - tileSize) * 0.5
+
+		// Explicit to avoid floating point precision issues
+		r.CanvasRect = render.Rect{
+			X: float64(x) * scene.Bounds.W / float64(zoomPower),
+			Y: float64(y) * scene.Bounds.W / float64(zoomPower),
+			W: scene.Bounds.W / float64(zoomPower),
+			H: scene.Bounds.W / float64(zoomPower),
+		}
 	} else {
 		scale = tileSize / scene.Bounds.H
 		ty += (scale*scene.Bounds.H - tileSize) * 0.5
+
+		// Explicit to avoid floating point precision issues
+		r.CanvasRect = render.Rect{
+			X: float64(x) * scene.Bounds.H / float64(zoomPower),
+			Y: float64(y) * scene.Bounds.H / float64(zoomPower),
+			W: scene.Bounds.H / float64(zoomPower),
+			H: scene.Bounds.H / float64(zoomPower),
+		}
 	}
 
 	scale *= float64(zoomPower)

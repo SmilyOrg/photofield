@@ -25,6 +25,7 @@ type Render struct {
 	DebugThumbnails bool
 
 	Zoom        int
+	CanvasRect  Rect
 	CanvasImage draw.Image
 }
 
@@ -99,25 +100,13 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 		solid.Draw(c, scales)
 	}
 
-	// for i := range scene.Photos {
-	// 	photo := &scene.Photos[i]
-	// 	photo.Draw(config, scene, c, scales, source)
-	// }
-
 	concurrent := 10
 	photoCount := len(scene.Photos)
 	if photoCount < concurrent {
 		concurrent = photoCount
 	}
 
-	// startTime := time.Now()
-
-	tileRect := Rect{X: 0, Y: 0, W: (float64)(config.TileSize), H: (float64)(config.TileSize)}
-	tileToCanvas := c.View().Inv()
-	tileCanvasRect := tileRect.Transform(tileToCanvas)
-	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
-
-	visiblePhotos := scene.GetVisiblePhotos(tileCanvasRect, math.MaxInt32)
+	visiblePhotos := scene.GetVisiblePhotos(config.CanvasRect, math.MaxInt32)
 	visiblePhotoCount := 0
 
 	wg := &sync.WaitGroup{}
@@ -130,9 +119,6 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	for i := 0; i < concurrent; i++ {
 		visiblePhotoCount += <-counts
 	}
-
-	// micros := time.Since(startTime).Microseconds()
-	// log.Printf("scene draw %5d / %5d photos, %6d μs all, %.2f μs / photo\n", visiblePhotoCount, photoCount, micros, float64(micros)/float64(visiblePhotoCount))
 
 	for i := range scene.Texts {
 		text := &scene.Texts[i]
