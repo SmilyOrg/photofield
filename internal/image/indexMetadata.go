@@ -27,7 +27,9 @@ func (source *Source) indexMetadata(in <-chan interface{}) {
 				fmt.Println("RGEO ERR", err)
 			}
 			fmt.Println("RGeo", loc.City, loc.Province, loc.Country)
-			if loc.City != "" {
+			if loc.City == "" && loc.Country == "" {
+				info.Location = ""
+			} else if loc.City != "" {
 				info.Location = fmt.Sprintf("%s, %s, %s", loc.City, loc.Province, loc.Country)
 			} else {
 				info.Location = fmt.Sprintf("%s, %s", loc.Province, loc.Country)

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"math"
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
@@ -303,8 +304,13 @@ func (source *Database) writePendingInfosSqlite() {
 			updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
 			updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
 			updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
-			updateMeta.BindFloat(7, imageInfo.Latitude)
-			updateMeta.BindFloat(8, imageInfo.Longitude)
+			if math.IsNaN(imageInfo.Latitude) {
+				updateMeta.BindNull(7)
+				updateMeta.BindNull(8)
+			} else {
+				updateMeta.BindFloat(7, imageInfo.Latitude)
+				updateMeta.BindFloat(8, imageInfo.Longitude)
+			}
 			updateMeta.BindText(9, imageInfo.Location)
 			updateMeta.BindText(10, dir)
 
