@@ -113,10 +113,6 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 			break
 		}
 
-		if info.Location != "" {
-			locations[info.Location] = true
-		}
-
 		photoTime := info.DateTime
 		elapsed := lastPhotoTime.Sub(photoTime)
 		if elapsed > 30*time.Minute {
@@ -140,6 +136,9 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 		lastPhotoTime = photoTime
 
 		event.Section.infos = append(event.Section.infos, info)
+		if info.Location != "" {
+			locations[info.Location] = true
+		}
 
 		layoutCounter.Set(index)
 		index++
@@ -150,13 +149,19 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 	if len(event.Section.infos) > 0 {
 		event.StartTime = lastPhotoTime
 		for location := range locations {
-			event.Location = event.Location + ", " + location
+			if event.Location != "" {
+				event.Location = event.Location + ", " + location
+			} else {
+				event.Location = location
+			}
 		}
 		
 		locations = make(map[string]bool)
 		rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
+		event.Location = ""
 		eventCount++
 	}
+
 
 	log.Printf("layout events %d\n", eventCount)
 

@@ -142,7 +142,7 @@ type Source struct {
 
 	decoder  *Decoder
 	database *Database
-	rg		 *rgeo.Rgeo
+	rg       *rgeo.Rgeo
 
 	imageInfoCache InfoCache
 	pathCache      PathCache

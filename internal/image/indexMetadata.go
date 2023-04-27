@@ -23,11 +23,8 @@ func (source *Source) indexMetadata(in <-chan interface{}) {
 		if !math.IsNaN(info.Latitude) {
 			loc, err := source.rg.ReverseGeocode([]float64{info.Longitude, info.Latitude})
 			if err != nil {
-				// Handle error
-				fmt.Println("RGEO ERR", err)
-			}
-			fmt.Println("RGeo", loc.City, loc.Province, loc.Country)
-			if loc.City == "" && loc.Country == "" {
+				info.Location = ""
+			} else if loc.City == "" && loc.Country == "" {
 				info.Location = ""
 			} else if loc.City != "" {
 				info.Location = fmt.Sprintf("%s, %s, %s", loc.City, loc.Province, loc.Country)

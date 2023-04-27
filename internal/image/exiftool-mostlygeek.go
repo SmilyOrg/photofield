@@ -160,8 +160,6 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 		info.Width, info.Height = info.Height, info.Width
 	}
 
-	println(path, info.Width, info.Height, info.DateTime.String(), info.Latitude, info.Longitude)
-
 	return nil
 }
 
