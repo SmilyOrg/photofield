@@ -1,17 +1,28 @@
 <template>
   <div
     class="controls"
-    :class="{ visible: !idle }"
+    :class="{ visible: !idle || showTags }"
   >
     <div class="nav exit" @click="exit()">
       <ui-icon light class="icon" size="32">arrow_back</ui-icon>
     </div>
     <div class="toolbar">
       <!-- <ui-icon light class="icon" size="32" @click="$event => download()">download</ui-icon> -->
+      <ui-icon light class="icon" size="32" @click="showTags = !showTags">
+        tag
+      </ui-icon>
       <ui-icon light class="icon" size="32" @click="$event => onFavorite()">
         {{ favorite ? "favorite" : "favorite_outline" }}
       </ui-icon>
     </div>
+    <Tags
+      v-if="showTags"
+      class="tags"
+      :region="region"
+      :tags="region?.data?.tags"
+      @add="addTag($event)"
+      @remove="removeTag($event)"
+    ></Tags>
     <!-- <Downloads class="downloads" :region="region"></Downloads> -->
     <!-- <div class="nav left" @click="left()">
       <ui-icon light class="icon" size="48">chevron_left</ui-icon>
@@ -25,7 +36,8 @@
 <script setup>
 import { onKeyStroke, useIdle } from '@vueuse/core';
 import Downloads from './Downloads.vue';
-import { computed, toRefs } from 'vue';
+import Tags from './Tags.vue';
+import { computed, ref, toRefs } from 'vue';
 
 const props = defineProps({
   region: Object,
@@ -39,12 +51,16 @@ const emit = defineEmits([
   "navigate",
   "exit",
   "favorite",
+  "add-tag",
+  "remove-tag",
 ]);
 
 const { idle } = useIdle(5000, {
   events: ["mousemove"],
   initialState: false,
 });
+
+const showTags = ref(false);
 
 const favorite = computed(() => {
   return region.value?.data?.tags?.find(tag => tag.name == "fav");
@@ -64,6 +80,14 @@ const exit = () => {
 
 const onFavorite = () => {
   emit("favorite", favorite.value);
+}
+
+const addTag = (tag) => {
+  emit("add-tag", tag);
+}
+
+const removeTag = (tag) => {
+  emit("remove-tag", tag);
 }
 
 onKeyStroke(["ArrowLeft"], left);
@@ -134,6 +158,14 @@ onKeyStroke(["Escape"], exit);
   padding: 20px;
   text-shadow: #000 0px 0px 2px;
   color: white;
+}
+
+.tags {
+  position: absolute;
+  top: 60px;
+  right: 10px;
+  pointer-events: all;
+  width: 300px;
 }
 
 .downloads {

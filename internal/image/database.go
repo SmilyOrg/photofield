@@ -92,6 +92,11 @@ type EmbeddingsResult struct {
 	clip.Embedding
 }
 
+type TagIdRange struct {
+	Id tag.Id
+	IdRange
+}
+
 func (info *InfoExistence) NeedsMeta() bool {
 	return info.SizeNull || info.OrientationNull || info.DateTimeNull
 }
@@ -235,11 +240,7 @@ func (source *Database) writePendingInfosSqlite() {
 	delete := conn.Prep(`
 		DELETE
 		FROM infos
-		WHERE path_prefix_id == (
-			SELECT id
-			FROM prefix
-			WHERE str == ?
-		) AND filename == ?;`)
+		WHERE id == ?;`)
 	defer delete.Finalize()
 
 	upsertIndex := conn.Prep(`
@@ -382,11 +383,49 @@ func (source *Database) writePendingInfosSqlite() {
 			}
 
 		case Delete:
-			dir, file := filepath.Split(imageInfo.Path)
+			id := ImageId(imageInfo.Id)
 
-			delete.BindText(1, dir)
-			delete.BindText(2, file)
+			// Delete image tags
+			for r := range source.ListImageTagRanges(id) {
+				ids := NewIds()
+				ids.Add(r.IdRange)
+				ids.SubtractInt(int(id))
 
+				min := r.Low
+				len := r.High - r.Low
+				deleteTagRange.BindInt64(1, int64(r.Id))
+				deleteTagRange.BindInt64(2, int64(min))
+				deleteTagRange.BindInt64(3, int64(len))
+				_, err := deleteTagRange.Step()
+				if err != nil {
+					log.Printf("Unable to delete tag range %d: %s\n", r.Id, err.Error())
+					continue
+				}
+				err = deleteTagRange.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				for nr := range ids.RangeChan() {
+					min := nr.Low
+					len := nr.High - nr.Low
+					insertTagRange.BindInt64(1, int64(r.Id))
+					insertTagRange.BindInt64(2, int64(min))
+					insertTagRange.BindInt64(3, int64(len))
+					_, err := insertTagRange.Step()
+					if err != nil {
+						log.Printf("Unable to insert tag range %d: %s\n", r.Id, err.Error())
+						continue
+					}
+					err = insertTagRange.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+			}
+
+			// Delete image info
+			delete.BindInt64(1, int64(id))
 			_, err := delete.Step()
 			if err != nil {
 				log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
@@ -707,6 +746,14 @@ func (source *Database) Write(path string, info Info, writeType InfoWriteType) e
 	return nil
 }
 
+func (source *Database) Delete(id ImageId) error {
+	source.pending <- &InfoWrite{
+		Id:   int64(id),
+		Type: Delete,
+	}
+	return nil
+}
+
 func (source *Database) WriteAI(id ImageId, embedding clip.Embedding) error {
 	source.pending <- &InfoWrite{
 		Id:        int64(id),
@@ -849,6 +896,39 @@ func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
 	return out
 }
 
+func (source *Database) ListImageTagRanges(id ImageId) <-chan TagIdRange {
+	out := make(chan TagIdRange, 100)
+	go func() {
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		stmt := conn.Prep(`
+		SELECT tag_id, file_id, len
+		FROM infos_tag
+		WHERE :file_id >= file_id AND :file_id <= file_id + len;`)
+		defer stmt.Reset()
+
+		stmt.BindInt64(1, int64(id))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			tagId := tag.Id(stmt.ColumnInt(0))
+			min := stmt.ColumnInt(1)
+			len := stmt.ColumnInt(2)
+			out <- TagIdRange{
+				Id:      tagId,
+				IdRange: IdFromTo(min, min+len),
+			}
+		}
+		close(out)
+	}()
+	return out
+}
+
 func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
@@ -933,20 +1013,72 @@ func (source *Database) GetTagRevision(id tag.Id) (int, error) {
 	return stmt.ColumnInt(0), nil
 }
 
+const defaultTagConditions string = `
+	AND name NOT LIKE 'sys:%'
+`
+
 func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 	out := make(chan tag.Tag, 100)
 	go func() {
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
 
-		stmt := conn.Prep(`
+		sql := `
 		SELECT id, name, revision
 		FROM infos_tag
 		JOIN tag ON infos_tag.tag_id = tag.id
-		WHERE :file_id >= file_id AND :file_id <= file_id + len;`)
+		WHERE :file_id >= file_id AND :file_id <= file_id + len
+		`
+
+		sql += defaultTagConditions
+
+		sql += `;`
+
+		stmt := conn.Prep(sql)
 		defer stmt.Reset()
 
 		stmt.BindInt64(1, int64(id))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing tags: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			out <- tag.Tag{
+				Id:       tag.Id(stmt.ColumnInt(0)),
+				Name:     stmt.ColumnText(1),
+				Revision: stmt.ColumnInt(2),
+			}
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
+	out := make(chan tag.Tag, 100)
+	go func() {
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+		SELECT id, name, revision
+		FROM tag
+		WHERE name LIKE ?
+		`
+
+		sql += defaultTagConditions
+
+		sql += `
+		ORDER BY name ASC
+		LIMIT ?;`
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		stmt.BindText(1, "%"+q+"%")
+		stmt.BindInt64(2, int64(limit))
 
 		for {
 			if exists, err := stmt.Step(); err != nil {
@@ -983,12 +1115,6 @@ func (source *Database) ListNonexistent(dir string, paths map[string]struct{}) <
 		close(out)
 	}()
 	return out
-}
-
-func (source *Database) DeleteNonexistent(dir string, paths map[string]struct{}) {
-	for ip := range source.ListNonexistent(dir, paths) {
-		source.Write(ip.Path, Info{}, Delete)
-	}
 }
 
 func (source *Database) SetIndexed(dir string) {

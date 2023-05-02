@@ -394,6 +394,20 @@ paths:
           $ref: "#/components/responses/FileNotFound"
 
   /tags:
+    get:
+      description: Retrieve a list of tags
+      tags: ["Tags"]
+      parameters:
+        - $ref: "#/components/parameters/SearchParam"
+      responses:
+        "200":
+          description: List of tags retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
     post:
       description: Add tag
       tags: ["Tags"]
@@ -410,7 +424,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Tag"
-    
+
   /tags/{id}/files:
     post:
       description: Perform an operation on the files for this specific tag.
@@ -518,6 +532,13 @@ components:
             $ref: "#/components/schemas/File"
 
   parameters:
+    SearchParam:
+      name: q
+      in: query
+      description: Search custom text query
+      schema:
+        $ref: "#/components/schemas/Search"
+
     TagIdPathParam:
       name: id
       in: path

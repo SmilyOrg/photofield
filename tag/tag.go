@@ -36,7 +36,7 @@ func NewSelection(collectionId string) (Tag, error) {
 		return t, err
 	}
 
-	t.Name = fmt.Sprintf("select:col:%s:%s", collectionId, rand)
+	t.Name = fmt.Sprintf("sys:select:col:%s:%s", collectionId, rand)
 	return t, nil
 }
 

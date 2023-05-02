@@ -49,6 +49,8 @@
       @navigate="navigate($event)"
       @favorite="favorite($event)"
       @exit="resetZoomOrExit()"
+      @add-tag="addTag($event)"
+      @remove-tag="removeTag($event)"
     ></controls>
 
     <ContextMenu
@@ -141,15 +143,38 @@ const { region, navigate, exit, mutate: updateRegion } = useSeekableRegion({
   regionId,
 });
 
+const fileId = computed(() => region.value?.data?.id);
+
 const favorite = async (tag) => {
   const tagId = tag?.id || "fav:r0";
-  const fileId = region.value?.data?.id;
-  if (!fileId) {
+  if (!fileId.value) {
     return;
   }
   await postTagFiles(tagId, {
     op: "INVERT",
-    file_id: fileId,
+    file_id: fileId.value,
+  });
+  await updateRegion();
+}
+
+const addTag = async (tagId) => {
+  if (!fileId.value || !tagId) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "ADD",
+    file_id: fileId.value,
+  });
+  await updateRegion();
+}
+
+const removeTag = async (tagId) => {
+  if (!fileId.value || !tagId) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "SUBTRACT",
+    file_id: fileId.value,
   });
   await updateRegion();
 }

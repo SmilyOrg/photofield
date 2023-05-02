@@ -165,7 +165,7 @@ export default {
     const selecting = computed(() => !!query.value.select_tag);
 
     const goBack = () => {
-      if (selecting) {
+      if (selecting.value) {
         router.replace({
           query: {
             ...query.value,
@@ -173,7 +173,9 @@ export default {
           }
         });
       } else {
-        router.push("/");
+        router.replace({
+          path: "/",
+        });
       }
     }
 

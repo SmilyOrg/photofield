@@ -20,10 +20,12 @@ type Render struct {
 	BackgroundColor   color.Color `json:"background_color"`
 	LogDraws          bool
 
-	Sources         io.Sources
+	Sources io.Sources
+
+	Selected image.Ids
+
 	DebugOverdraw   bool
 	DebugThumbnails bool
-	Selected        image.Ids
 
 	Zoom        int
 	CanvasImage draw.Image

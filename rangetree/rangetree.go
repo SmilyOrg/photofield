@@ -62,6 +62,10 @@ func (t *Tree) AddInt(x int) {
 	t.Add(Range{Low: x, High: x})
 }
 
+func (t *Tree) SubtractInt(x int) {
+	t.Subtract(Range{Low: x, High: x})
+}
+
 func (t *Tree) InvertInt(x int) {
 	if t.Contains(x) {
 		t.Subtract(Range{Low: x, High: x})

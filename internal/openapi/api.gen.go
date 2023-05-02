@@ -207,6 +207,9 @@ type FileIdPathParam FileId
 // FilenamePathParam defines model for FilenamePathParam.
 type FilenamePathParam string
 
+// SearchParam defines model for SearchParam.
+type SearchParam Search
+
 // SizePathParam defines model for SizePathParam.
 type SizePathParam string
 
@@ -255,6 +258,12 @@ type GetScenesSceneIdTilesParams struct {
 	SelectTag       *string `json:"select_tag,omitempty"`
 	DebugOverdraw   *bool   `json:"debug_overdraw,omitempty"`
 	DebugThumbnails *bool   `json:"debug_thumbnails,omitempty"`
+}
+
+// GetTagsParams defines parameters for GetTags.
+type GetTagsParams struct {
+	// Search custom text query
+	Q *SearchParam `json:"q,omitempty"`
 }
 
 // PostTagsJSONBody defines parameters for PostTags.
@@ -331,6 +340,9 @@ type ServerInterface interface {
 
 	// (GET /scenes/{scene_id}/tiles)
 	GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdTilesParams)
+
+	// (GET /tags)
+	GetTags(w http.ResponseWriter, r *http.Request, params GetTagsParams)
 
 	// (POST /tags)
 	PostTags(w http.ResponseWriter, r *http.Request)
@@ -969,6 +981,37 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	handler(w, r.WithContext(ctx))
 }
 
+// GetTags operation middleware
+func (siw *ServerInterfaceWrapper) GetTags(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTagsParams
+
+	// ------------- Optional query parameter "q" -------------
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter q: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTags(w, r, params)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
 // PostTags operation middleware
 func (siw *ServerInterfaceWrapper) PostTags(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1142,6 +1185,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/tiles", wrapper.GetScenesSceneIdTiles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tags", wrapper.GetTags)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tags", wrapper.PostTags)

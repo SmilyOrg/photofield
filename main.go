@@ -662,22 +662,22 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		return
 	}
 
-	render := defaultSceneConfig.Render
-	render.TileSize = params.TileSize
+	rn := defaultSceneConfig.Render
+	rn.TileSize = params.TileSize
 	if params.Sources != nil {
-		render.Sources = make(pfio.Sources, len(*params.Sources))
+		rn.Sources = make(pfio.Sources, len(*params.Sources))
 		for _, src := range imageSource.Sources {
 			for i, name := range *params.Sources {
 				if src.Name() == name {
-					if render.Sources[i] != nil {
+					if rn.Sources[i] != nil {
 						problem(w, r, http.StatusBadRequest, "Duplicate source")
 						return
 					}
-					render.Sources[i] = src
+					rn.Sources[i] = src
 				}
 			}
 		}
-		for _, src := range render.Sources {
+		for _, src := range rn.Sources {
 			if src == nil {
 				problem(w, r, http.StatusBadRequest, "Unknown source")
 				return
@@ -696,27 +696,27 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 			problem(w, r, http.StatusBadRequest, "Unknown tag")
 			return
 		}
-		render.Selected = imageSource.GetTagImageIds(id)
+		rn.Selected = imageSource.GetTagImageIds(id)
 	}
 
 	if params.DebugOverdraw != nil {
-		render.DebugOverdraw = *params.DebugOverdraw
+		rn.DebugOverdraw = *params.DebugOverdraw
 	}
 	if params.DebugThumbnails != nil {
-		render.DebugThumbnails = *params.DebugThumbnails
+		rn.DebugThumbnails = *params.DebugThumbnails
 	}
 
 	zoom := params.Zoom
 	x := int(params.X)
 	y := int(params.Y)
-	render.BackgroundColor = color.White
+	rn.BackgroundColor = color.White
 	if params.BackgroundColor != nil {
 		c, err := hex.DecodeString(strings.TrimPrefix(*params.BackgroundColor, "#"))
 		if err != nil {
 			problem(w, r, http.StatusBadRequest, "Invalid background color")
 			return
 		}
-		render.BackgroundColor = color.RGBA{
+		rn.BackgroundColor = color.RGBA{
 			A: 0xFF,
 			R: c[0],
 			G: c[1],
@@ -724,11 +724,11 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		}
 	}
 
-	img, context := getTileImage(&render)
-	defer putTileImage(&render, img)
-	render.CanvasImage = img
-	render.Zoom = zoom
-	drawTile(context, &render, scene, zoom, x, y)
+	img, context := getTileImage(&rn)
+	defer putTileImage(&rn, img)
+	rn.CanvasImage = img
+	rn.Zoom = zoom
+	drawTile(context, &rn, scene, zoom, x, y)
 
 	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	codec.EncodeJpeg(w, img)
@@ -801,6 +801,25 @@ func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sc
 	respond(w, r, http.StatusOK, region)
 }
 
+func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTagsParams) {
+
+	q := ""
+	if params.Q != nil {
+		q = string(*params.Q)
+	}
+
+	tags := make([]tag.Tag, 0)
+	for t := range imageSource.ListTags(q, 10) {
+		tags = append(tags, t)
+	}
+
+	respond(w, r, http.StatusOK, struct {
+		Items []tag.Tag `json:"items"`
+	}{
+		Items: tags,
+	})
+}
+
 func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
 
 	data := &openapi.TagsPost{}
@@ -847,7 +866,7 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		return
 	}
 
-	t, err := imageSource.GetTagFromNameRev(string(id))
+	t, err := imageSource.GetOrCreateTagFromNameRev(string(id))
 	if err != nil {
 		problem(w, r, http.StatusBadRequest, err.Error())
 		return
@@ -893,6 +912,9 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		rev, err = imageSource.RemoveTagIds(t.Id, ids)
 	case "INVERT":
 		rev, err = imageSource.InvertTagIds(t.Id, ids)
+	default:
+		problem(w, r, http.StatusBadRequest, "Invalid op")
+		return
 	}
 	t.Revision = rev
 
