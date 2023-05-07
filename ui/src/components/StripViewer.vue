@@ -46,6 +46,7 @@
       v-if="region"
       :region="region"
       :scene="scene"
+      :tags-enabled="tagsSupported"
       @navigate="navigate($event)"
       @favorite="favorite($event)"
       @exit="resetZoomOrExit()"
@@ -120,6 +121,9 @@ const container = ref(null);
 const {
   data: collection,
 } = useApi(() => collectionId && `/collections/${collectionId.value}`);
+
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 
 const viewport = useViewport(container);
 

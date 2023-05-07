@@ -8,10 +8,22 @@
     </div>
     <div class="toolbar">
       <!-- <ui-icon light class="icon" size="32" @click="$event => download()">download</ui-icon> -->
-      <ui-icon light class="icon" size="32" @click="showTags = !showTags">
+      <ui-icon
+        v-if="tagsEnabled"
+        light
+        class="icon"
+        size="32"
+        @click="showTags = !showTags"
+      >
         tag
       </ui-icon>
-      <ui-icon light class="icon" size="32" @click="$event => onFavorite()">
+      <ui-icon
+        v-if="tagsEnabled"
+        light
+        class="icon"
+        size="32"
+        @click="$event => onFavorite()"
+      >
         {{ favorite ? "favorite" : "favorite_outline" }}
       </ui-icon>
     </div>
@@ -41,6 +53,7 @@ import { computed, ref, toRefs } from 'vue';
 
 const props = defineProps({
   region: Object,
+  tagsEnabled: Boolean,
 });
 
 const {

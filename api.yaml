@@ -651,8 +651,11 @@ components:
       type: object
       required:
         - search
+        - tags
       properties:
         search:
+          $ref: "#/components/schemas/Capability"
+        tags:
           $ref: "#/components/schemas/Capability"
           
     Capability:

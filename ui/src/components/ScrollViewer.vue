@@ -68,7 +68,7 @@
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus } from '@vueuse/core';
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { getRegion, getRegions, useScene, addTag, postTagFiles } from '../api';
+import { getRegion, getRegions, useScene, addTag, postTagFiles, useApi } from '../api';
 import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
@@ -142,6 +142,9 @@ const { region } = useSeekableRegion({
   collectionId,
   regionId,
 })
+
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 
 const contextMenu = ref(null);
 const {
@@ -220,6 +223,7 @@ const view = computed(() => {
 });
 
 const selectBounds = async (op, bounds) => {
+  if (!tagsSupported.value) return;
   let id = selectTagId.value;
   if (!id) {
     const tag = await addTag({
@@ -239,7 +243,7 @@ const selectBounds = async (op, bounds) => {
 
 const onClick = async (event) => {
   if (!event) return false;
-  if (selectTagId.value || event.originalEvent.ctrlKey) {
+  if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
     await selectBounds("INVERT", {
       x: event.x,
       y: event.y,

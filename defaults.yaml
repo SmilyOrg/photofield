@@ -45,6 +45,13 @@ ai:
   # textual:
     # host: http://localhost:8081
 
+tags:
+  # Enable tagging support in the UI.
+  # Tags are currently only stored in the (cache) database, so they will
+  # be lost if it's deleted. Consider this alpha-level functionality.
+  #
+  # enable: true
+
 media:
   # Extract metadata from this many files concurrently
   concurrent_meta_loads: 8

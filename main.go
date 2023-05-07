@@ -67,6 +67,8 @@ import (
 var defaultsYaml []byte
 var defaults AppConfig
 
+var tagsEnabled bool
+
 //go:embed db/migrations
 var migrations embed.FS
 
@@ -618,6 +620,9 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 		Search: openapi.Capability{
 			Supported: imageSource.AI.Available(),
 		},
+		Tags: openapi.Capability{
+			Supported: tagsEnabled,
+		},
 	})
 }
 
@@ -989,6 +994,7 @@ type AppConfig struct {
 	Render       render.Render           `json:"render"`
 	Media        image.Config            `json:"media"`
 	AI           clip.AI                 `json:"ai"`
+	Tags         tag.Config              `json:"tags"`
 	TileRequests TileRequestConfig       `json:"tile_requests"`
 }
 
@@ -1180,6 +1186,8 @@ func main() {
 
 	appConfig := loadConfiguration(configurationPath)
 	appConfig.Media.DataDir = dataDir
+
+	tagsEnabled = appConfig.Tags.Enabled
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]

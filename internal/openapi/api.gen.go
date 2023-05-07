@@ -58,6 +58,7 @@ type Bounds struct {
 // Capabilities defines model for Capabilities.
 type Capabilities struct {
 	Search Capability `json:"search"`
+	Tags   Capability `json:"tags"`
 }
 
 // Capability defines model for Capability.
