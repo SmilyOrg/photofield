@@ -60,11 +60,14 @@ import (
 	"photofield/internal/render"
 	"photofield/internal/scene"
 	pfio "photofield/io"
+	"photofield/tag"
 )
 
 //go:embed defaults.yaml
 var defaultsYaml []byte
 var defaults AppConfig
+
+var tagsEnabled bool
 
 //go:embed db/migrations
 var migrations embed.FS
@@ -188,25 +191,9 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 	if 1 < scene.Bounds.W/scene.Bounds.H {
 		scale = tileSize / scene.Bounds.W
 		tx += (scale*scene.Bounds.W - tileSize) * 0.5
-
-		// Explicit to avoid floating point precision issues
-		r.CanvasRect = render.Rect{
-			X: float64(x) * scene.Bounds.W / float64(zoomPower),
-			Y: float64(y) * scene.Bounds.W / float64(zoomPower),
-			W: scene.Bounds.W / float64(zoomPower),
-			H: scene.Bounds.W / float64(zoomPower),
-		}
 	} else {
 		scale = tileSize / scene.Bounds.H
 		ty += (scale*scene.Bounds.H - tileSize) * 0.5
-
-		// Explicit to avoid floating point precision issues
-		r.CanvasRect = render.Rect{
-			X: float64(x) * scene.Bounds.H / float64(zoomPower),
-			Y: float64(y) * scene.Bounds.H / float64(zoomPower),
-			W: scene.Bounds.H / float64(zoomPower),
-			H: scene.Bounds.H / float64(zoomPower),
-		}
 	}
 
 	scale *= float64(zoomPower)
@@ -633,6 +620,9 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 		Search: openapi.Capability{
 			Supported: imageSource.AI.Available(),
 		},
+		Tags: openapi.Capability{
+			Supported: tagsEnabled,
+		},
 	})
 }
 
@@ -677,46 +667,61 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		return
 	}
 
-	render := defaultSceneConfig.Render
-	render.TileSize = params.TileSize
+	rn := defaultSceneConfig.Render
+	rn.TileSize = params.TileSize
 	if params.Sources != nil {
-		render.Sources = make(pfio.Sources, len(*params.Sources))
+		rn.Sources = make(pfio.Sources, len(*params.Sources))
 		for _, src := range imageSource.Sources {
 			for i, name := range *params.Sources {
 				if src.Name() == name {
-					if render.Sources[i] != nil {
+					if rn.Sources[i] != nil {
 						problem(w, r, http.StatusBadRequest, "Duplicate source")
 						return
 					}
-					render.Sources[i] = src
+					rn.Sources[i] = src
 				}
 			}
 		}
-		for _, src := range render.Sources {
+		for _, src := range rn.Sources {
 			if src == nil {
 				problem(w, r, http.StatusBadRequest, "Unknown source")
 				return
 			}
 		}
 	}
+
+	if params.SelectTag != nil {
+		t, err := tag.FromNameRev(string(*params.SelectTag))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, "Invalid tag id")
+			return
+		}
+		id, ok := imageSource.GetTagId(t.Name)
+		if !ok {
+			problem(w, r, http.StatusBadRequest, "Unknown tag")
+			return
+		}
+		rn.Selected = imageSource.GetTagImageIds(id)
+	}
+
 	if params.DebugOverdraw != nil {
-		render.DebugOverdraw = *params.DebugOverdraw
+		rn.DebugOverdraw = *params.DebugOverdraw
 	}
 	if params.DebugThumbnails != nil {
-		render.DebugThumbnails = *params.DebugThumbnails
+		rn.DebugThumbnails = *params.DebugThumbnails
 	}
 
 	zoom := params.Zoom
 	x := int(params.X)
 	y := int(params.Y)
-	render.BackgroundColor = color.White
+	rn.BackgroundColor = color.White
 	if params.BackgroundColor != nil {
 		c, err := hex.DecodeString(strings.TrimPrefix(*params.BackgroundColor, "#"))
 		if err != nil {
 			problem(w, r, http.StatusBadRequest, "Invalid background color")
 			return
 		}
-		render.BackgroundColor = color.RGBA{
+		rn.BackgroundColor = color.RGBA{
 			A: 0xFF,
 			R: c[0],
 			G: c[1],
@@ -724,11 +729,11 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		}
 	}
 
-	img, context := getTileImage(&render)
-	defer putTileImage(&render, img)
-	render.CanvasImage = img
-	render.Zoom = zoom
-	drawTile(context, &render, scene, zoom, x, y)
+	img, context := getTileImage(&rn)
+	defer putTileImage(&rn, img)
+	rn.CanvasImage = img
+	rn.Zoom = zoom
+	drawTile(context, &rn, scene, zoom, x, y)
 
 	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	codec.EncodeJpeg(w, img)
@@ -801,6 +806,131 @@ func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sc
 	respond(w, r, http.StatusOK, region)
 }
 
+func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTagsParams) {
+
+	q := ""
+	if params.Q != nil {
+		q = string(*params.Q)
+	}
+
+	tags := make([]tag.Tag, 0)
+	for t := range imageSource.ListTags(q, 10) {
+		tags = append(tags, t)
+	}
+
+	respond(w, r, http.StatusOK, struct {
+		Items []tag.Tag `json:"items"`
+	}{
+		Items: tags,
+	})
+}
+
+func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
+
+	data := &openapi.TagsPost{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if data.Selection == nil {
+		problem(w, r, http.StatusBadRequest, "Only selection supported")
+		return
+	}
+
+	if data.CollectionId == nil {
+		problem(w, r, http.StatusBadRequest, "collection_id required")
+		return
+	}
+
+	t, err := tag.NewSelection(string(*data.CollectionId))
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	imageSource.AddTag(t.Name)
+
+	tag, exists := imageSource.GetTag(t.Name)
+	if !exists {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respond(w, r, http.StatusCreated, struct {
+		Id openapi.TagId `json:"id"`
+	}{
+		Id: openapi.TagId(tag.NameRev()),
+	})
+}
+
+func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
+
+	data := &openapi.TagFilesPost{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	t, err := imageSource.GetOrCreateTagFromNameRev(string(id))
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ids := make(chan image.ImageId, 100)
+	if data.SceneId != nil && data.Bounds != nil {
+		scene := sceneSource.GetSceneById(string(*data.SceneId), imageSource)
+		if scene == nil {
+			problem(w, r, http.StatusBadRequest, "Scene not found")
+			return
+		}
+
+		bounds := render.Rect{
+			X: float64(data.Bounds.X),
+			Y: float64(data.Bounds.Y),
+			W: float64(data.Bounds.W),
+			H: float64(data.Bounds.H),
+		}
+
+		go func() {
+			defer close(ids)
+			photos := scene.GetVisiblePhotos(bounds)
+			for p := range photos {
+				ids <- image.ImageId(p.Id)
+			}
+		}()
+	} else if data.FileId != nil {
+		go func() {
+			defer close(ids)
+			ids <- image.ImageId(*data.FileId)
+		}()
+	} else {
+		problem(w, r, http.StatusBadRequest, "Either scene_id+bounds or file_id required")
+		return
+	}
+
+	var rev int
+	switch data.Op {
+	case "ADD":
+		rev, err = imageSource.AddTagIds(t.Id, ids)
+	case "SUBTRACT":
+		rev, err = imageSource.RemoveTagIds(t.Id, ids)
+	case "INVERT":
+		rev, err = imageSource.InvertTagIds(t.Id, ids)
+	default:
+		problem(w, r, http.StatusBadRequest, "Invalid op")
+		return
+	}
+	t.Revision = rev
+
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respond(w, r, http.StatusOK, t)
+}
+
 func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {
 
 	path, err := imageSource.GetImagePath(image.ImageId(id))
@@ -864,6 +994,7 @@ type AppConfig struct {
 	Render       render.Render           `json:"render"`
 	Media        image.Config            `json:"media"`
 	AI           clip.AI                 `json:"ai"`
+	Tags         tag.Config              `json:"tags"`
 	TileRequests TileRequestConfig       `json:"tile_requests"`
 }
 
@@ -1055,6 +1186,8 @@ func main() {
 
 	appConfig := loadConfiguration(configurationPath)
 	appConfig.Media.DataDir = dataDir
+
+	tagsEnabled = appConfig.Tags.Enabled
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]

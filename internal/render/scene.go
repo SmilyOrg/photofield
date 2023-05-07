@@ -20,12 +20,14 @@ type Render struct {
 	BackgroundColor   color.Color `json:"background_color"`
 	LogDraws          bool
 
-	Sources         io.Sources
+	Sources io.Sources
+
+	Selected image.Ids
+
 	DebugOverdraw   bool
 	DebugThumbnails bool
 
 	Zoom        int
-	CanvasRect  Rect
 	CanvasImage draw.Image
 }
 
@@ -53,6 +55,7 @@ type Fonts struct {
 
 type RegionSource interface {
 	GetRegionsFromBounds(Rect, *Scene, RegionConfig) []Region
+	GetRegionChanFromBounds(Rect, *Scene, RegionConfig) <-chan Region
 	GetRegionById(int, *Scene, RegionConfig) Region
 }
 
@@ -87,7 +90,8 @@ type PhotoRef struct {
 func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *Render, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *image.Source) {
 	count := 0
 	for photoRef := range photoRefs {
-		photoRef.Photo.Draw(config, scene, c, scales, source)
+		selected := config.Selected.Contains(int(photoRef.Photo.Id))
+		photoRef.Photo.Draw(config, scene, c, scales, source, selected)
 		count++
 	}
 	wg.Done()
@@ -100,13 +104,25 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 		solid.Draw(c, scales)
 	}
 
+	// for i := range scene.Photos {
+	// 	photo := &scene.Photos[i]
+	// 	photo.Draw(config, scene, c, scales, source)
+	// }
+
 	concurrent := 10
 	photoCount := len(scene.Photos)
 	if photoCount < concurrent {
 		concurrent = photoCount
 	}
 
-	visiblePhotos := scene.GetVisiblePhotos(config.CanvasRect, math.MaxInt32)
+	// startTime := time.Now()
+
+	tileRect := Rect{X: 0, Y: 0, W: (float64)(config.TileSize), H: (float64)(config.TileSize)}
+	tileToCanvas := c.View().Inv()
+	tileCanvasRect := tileRect.Transform(tileToCanvas)
+	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
+
+	visiblePhotos := scene.GetVisiblePhotoRefs(tileCanvasRect, 0)
 	visiblePhotoCount := 0
 
 	wg := &sync.WaitGroup{}
@@ -119,6 +135,9 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	for i := 0; i < concurrent; i++ {
 		visiblePhotoCount += <-counts
 	}
+
+	// micros := time.Since(startTime).Microseconds()
+	// log.Printf("scene draw %5d / %5d photos, %6d μs all, %.2f μs / photo\n", visiblePhotoCount, photoCount, micros, float64(micros)/float64(visiblePhotoCount))
 
 	for i := range scene.Texts {
 		text := &scene.Texts[i]
@@ -168,10 +187,13 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []image.ImageId) {
 	scene.FileCount = len(scene.Photos)
 }
 
-func (scene *Scene) GetVisiblePhotos(view Rect, maxCount int) <-chan PhotoRef {
+func (scene *Scene) GetVisiblePhotoRefs(view Rect, maxCount int) <-chan PhotoRef {
 	out := make(chan PhotoRef)
 	go func() {
 		count := 0
+		if maxCount == 0 {
+			maxCount = len(scene.Photos)
+		}
 		for i := range scene.Photos {
 			photo := &scene.Photos[i]
 			if photo.Sprite.Rect.IsVisible(view) {
@@ -183,6 +205,20 @@ func (scene *Scene) GetVisiblePhotos(view Rect, maxCount int) <-chan PhotoRef {
 				if count >= maxCount {
 					break
 				}
+			}
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (scene *Scene) GetVisiblePhotos(view Rect) <-chan Photo {
+	out := make(chan Photo, 100)
+	go func() {
+		for i := range scene.Photos {
+			photo := &scene.Photos[i]
+			if photo.Sprite.Rect.IsVisible(view) {
+				out <- *photo
 			}
 		}
 		close(out)
@@ -209,6 +245,17 @@ func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region
 		bounds,
 		scene,
 		query,
+	)
+}
+
+func (scene *Scene) GetRegionChan(bounds Rect) <-chan Region {
+	if scene.RegionSource == nil {
+		return nil
+	}
+	return scene.RegionSource.GetRegionChanFromBounds(
+		bounds,
+		scene,
+		RegionConfig{},
 	)
 }
 

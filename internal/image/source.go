@@ -18,6 +18,7 @@ import (
 	"photofield/io/ffmpeg"
 	ioristretto "photofield/io/ristretto"
 	"photofield/io/sqlite"
+	"photofield/tag"
 
 	"github.com/docker/go-units"
 	"github.com/prometheus/client_golang/prometheus"
@@ -421,7 +422,7 @@ func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 		counter <- 1
 	}
 	for ip := range source.database.ListNonexistent(dir, indexed) {
-		source.database.Write(ip.Path, Info{}, Delete)
+		source.database.Delete(ip.Id)
 		source.thumbnailSink.Delete(uint32(ip.Id))
 	}
 	source.database.SetIndexed(dir)
@@ -481,4 +482,82 @@ func (source *Source) GetImageReader(id ImageId, sourceName string, fn func(r go
 	if !found {
 		fn(nil, fmt.Errorf("unable to find image %d using %s", id, sourceName))
 	}
+}
+
+func (source *Source) AddTag(name string) {
+	done, _ := source.database.AddTag(name)
+	<-done
+}
+
+func (source *Source) GetTag(name string) (tag.Tag, bool) {
+	return source.database.GetTagByName(name)
+}
+
+func (source *Source) ListImageTags(id ImageId) <-chan tag.Tag {
+	out := make(chan tag.Tag, 100)
+	go func() {
+		defer close(out)
+		for tag := range source.database.ListImageTags(id) {
+			out <- tag
+		}
+	}()
+	return out
+}
+
+func (source *Source) ListTags(q string, limit int) <-chan tag.Tag {
+	return source.database.ListTags(q, limit)
+}
+
+func (source *Source) AddTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
+	ids := NewIds()
+	for id := range ch {
+		ids.AddInt(int(id))
+	}
+	rev, err = source.database.AddTagIds(id, ids)
+	return
+}
+
+func (source *Source) RemoveTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
+	ids := NewIds()
+	for id := range ch {
+		ids.AddInt(int(id))
+	}
+	rev, err = source.database.RemoveTagIds(id, ids)
+	return
+}
+
+func (source *Source) InvertTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
+	ids := NewIds()
+	for id := range ch {
+		ids.AddInt(int(id))
+	}
+	rev, err = source.database.InvertTagIds(id, ids)
+	return
+}
+
+func (source *Source) GetTagId(name string) (tag.Id, bool) {
+	return source.database.GetTagId(name)
+}
+
+func (source *Source) GetOrCreateTagFromNameRev(nameRev string) (tag.Tag, error) {
+	t, err := tag.FromNameRev(nameRev)
+	if err != nil {
+		return tag.Tag{}, err
+	}
+	id, ok := source.GetTagId(t.Name)
+	if ok {
+		t.Id = id
+	} else {
+		source.AddTag(t.Name)
+		id, ok := source.GetTagId(t.Name)
+		if !ok {
+			return tag.Tag{}, ErrNotFound
+		}
+		t.Id = id
+	}
+	return t, nil
+}
+
+func (source *Source) GetTagImageIds(id tag.Id) Ids {
+	return source.database.GetTagImageIds(id)
 }

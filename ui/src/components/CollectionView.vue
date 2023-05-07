@@ -12,6 +12,8 @@
       :debug="debug"
       :fullpage="true"
       :scrollbar="scrollbar"
+      :selectTagId="selectTagId"
+      @selectTagId="onSelectTagId"
       @region="onScrollRegion"
       @scene="scrollScene = $event"
     >
@@ -104,6 +106,19 @@ const { data: collection } = useApi(
 const layout = computed(() => {
   return route.query.layout || collection.value?.layout || undefined;
 })
+
+const selectTagId = computed(() => {
+  return route.query.select_tag || undefined;
+})
+
+const onSelectTagId = (id) => {
+  router.replace({
+    query: {
+      ...route.query,
+      select_tag: id,
+    }
+  });
+}
 
 const sort = computed(() => {
   switch (layout.value) {

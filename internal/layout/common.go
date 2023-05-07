@@ -8,6 +8,7 @@ import (
 	"photofield/internal/image"
 	"photofield/internal/render"
 	"photofield/io"
+	"photofield/tag"
 	"sort"
 	"strings"
 	"time"
@@ -81,6 +82,10 @@ type RegionThumbnail struct {
 	Filename    string `json:"filename"`
 }
 
+type RegionTag struct {
+	Id string `json:"id"`
+}
+
 type PhotoRegionData struct {
 	Id         int               `json:"id"`
 	Path       string            `json:"path"`
@@ -91,6 +96,7 @@ type PhotoRegionData struct {
 	Height     int               `json:"height"`
 	CreatedAt  string            `json:"created_at"`
 	Thumbnails []RegionThumbnail `json:"thumbnails"`
+	Tags       []tag.Tag         `json:"tags"`
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
 }
 
@@ -145,6 +151,11 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 		return a.Name < b.Name
 	})
 
+	tags := make([]tag.Tag, 0)
+	for tag := range source.ListImageTags(photo.Id) {
+		tags = append(tags, tag)
+	}
+
 	return render.Region{
 		Id:     id,
 		Bounds: photo.Sprite.Rect,
@@ -158,13 +169,14 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 			Height:     info.Height,
 			CreatedAt:  info.DateTime.Format(time.RFC3339),
 			Thumbnails: thumbnails,
+			Tags:       tags,
 		},
 	}
 }
 
 func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, scene *render.Scene, regionConfig render.RegionConfig) []render.Region {
 	regions := make([]render.Region, 0)
-	photos := scene.GetVisiblePhotos(rect, regionConfig.Limit)
+	photos := scene.GetVisiblePhotoRefs(rect, regionConfig.Limit)
 	for photo := range photos {
 		regions = append(regions, regionSource.getRegionFromPhoto(
 			1+photo.Index,
@@ -173,6 +185,22 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, sce
 		))
 	}
 	return regions
+}
+
+func (regionSource PhotoRegionSource) GetRegionChanFromBounds(rect render.Rect, scene *render.Scene, regionConfig render.RegionConfig) <-chan render.Region {
+	out := make(chan render.Region)
+	go func() {
+		photos := scene.GetVisiblePhotoRefs(rect, regionConfig.Limit)
+		for photo := range photos {
+			out <- regionSource.getRegionFromPhoto(
+				1+photo.Index,
+				photo.Photo,
+				scene, regionConfig,
+			)
+		}
+		close(out)
+	}()
+	return out
 }
 
 func (regionSource PhotoRegionSource) GetRegionById(id int, scene *render.Scene, regionConfig render.RegionConfig) render.Region {

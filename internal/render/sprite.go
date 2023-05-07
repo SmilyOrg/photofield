@@ -73,6 +73,14 @@ func (sprite *Sprite) DrawWithStyle(c *canvas.Context, style canvas.Style) {
 	)
 }
 
+func (sprite *Sprite) DrawInsetWithStyle(c *canvas.Context, style canvas.Style, width float64) {
+	c.RenderPath(
+		canvas.Rectangle(sprite.Rect.W-width*2, sprite.Rect.H-width*2),
+		style,
+		c.View().Mul(sprite.Rect.GetMatrix().Translate(width, width)),
+	)
+}
+
 func (sprite *Sprite) DrawText(config *Render, c *canvas.Context, scales Scales, font *canvas.FontFace, txt string) {
 	text := NewTextFromRect(sprite.Rect, font, txt)
 	text.Draw(config, c, scales)

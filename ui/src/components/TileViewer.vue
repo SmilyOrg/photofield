@@ -3,6 +3,7 @@
     class="container"
     ref="container"
     :style="{ backgroundColor }"
+    :class="{ interactive }"
     tabindex="1"
   >
     <div class="tileViewer" ref="map"></div>
@@ -20,7 +21,8 @@ import XYZ from 'ol/source/XYZ';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
-import { defaults as defaultInteractions, DragPan, MouseWheelZoom } from 'ol/interaction';
+import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
+import {MAC} from 'ol/src/has.js';
 import equal from 'fast-deep-equal';
 
 import PhotoSkeleton from './PhotoSkeleton.vue';
@@ -28,6 +30,17 @@ import PhotoSkeleton from './PhotoSkeleton.vue';
 import "ol/ol.css";
 import { getTileUrl } from '../api';
 import Kinetic from 'ol/Kinetic';
+
+function ctrlWithMaybeShift(mapBrowserEvent) {
+  const originalEvent = /** @type {KeyboardEvent|MouseEvent|TouchEvent} */ (
+    mapBrowserEvent.originalEvent
+  );
+  return (
+    !originalEvent.altKey &&
+    (MAC ? originalEvent.metaKey : originalEvent.ctrlKey)
+  );
+};
+
 
 export default {
 
@@ -46,12 +59,24 @@ export default {
     tileSize: Number,
     view: Object,
     backgroundColor: String,
+    selectTagId: String,
     debug: Object,
     loading: Boolean,
     viewport: Object,
   },
 
-  emits: ["zoom", "click", "view", "move-end", "reset", "load-end", "key-down", "viewer"],
+  emits: [
+    "zoom",
+    "click",
+    "pointer-down",
+    "view",
+    "move-end",
+    "reset",
+    "load-end",
+    "key-down",
+    "viewer",
+    "box-select"
+  ],
 
   data() {
     return {
@@ -116,6 +141,10 @@ export default {
       this.setView(view);
     },
 
+    selectTagId() {
+      this.reload();
+    },
+
   },
   computed: {
     pointerTarget() {
@@ -175,6 +204,30 @@ export default {
       return zoom;
     },
 
+    createSource() {
+      return new XYZ({
+        tileUrlFunction: this.tileUrlFunction,
+        crossOrigin: "Anonymous",
+        projection: this.projection,
+        tileSize: [this.tileSize, this.tileSize],
+        wrapX: false,
+        // zDirection: -1,
+        // zDi
+        // imageSmoothing: false,
+        // interpolate: false,
+        opaque: true,
+        transition: 100,
+        // transition: 0,
+      });
+    },
+
+    createLayer(source) {
+      return new TileLayer({
+        preload: Infinity,
+        source,
+      });
+    },
+
     initOpenLayers(element) {
 
       const extent = this.projectionExtent;
@@ -186,26 +239,10 @@ export default {
       });
       this.projection = projection;
 
-      const source = new XYZ({
-        tileUrlFunction: this.tileUrlFunction,
-        crossOrigin: "Anonymous",
-        projection,
-        tileSize: [this.tileSize, this.tileSize],
-        wrapX: false,
-        // zDirection: -1,
-        // zDi
-        // imageSmoothing: false,
-        // interpolate: false,
-        opaque: true,
-        transition: 100,
-        // transition: 0,
-      });
+      const source = this.createSource();
       this.source = source;
 
-      const layer = new TileLayer({
-        preload: Infinity,
-        source,
-      });
+      const layer = this.createLayer(source);
       this.layer = layer;
 
       // Limit minimum size loaded to avoid
@@ -222,12 +259,21 @@ export default {
 
       const dragPan = new DragPan();
       const mouseWheelZoom = new MouseWheelZoom();
+      const dragBox = new DragBox({
+        condition: ctrlWithMaybeShift,
+      });
+      dragBox.on('boxend', event => {
+        this.onBoxSelect(event, dragBox.getGeometry().getExtent())
+      });
+
       const interactions = defaultInteractions({
         dragPan: false,
         mouseWheelZoom: false,
+        doubleClickZoom: false,
       }).extend([
         dragPan,
         mouseWheelZoom,
+        dragBox,
       ]);
       this.interactions = interactions;
       this.dragPan = dragPan;
@@ -307,7 +353,10 @@ export default {
       if (!this.interactive) return;
       const coords = this.viewFromCoordinate(event.coordinate);
       if (!coords) return;
-      this.$emit("click", coords);
+      this.$emit("click", {
+        ...coords,
+        originalEvent: event.originalEvent,
+      });
     },
 
     onMoveStart(event) {
@@ -334,12 +383,18 @@ export default {
     },
 
     onResolutionChange(event) {
-
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
       this.latestView = view;
       this.$emit("view", view);
+    },
+
+    onBoxSelect(event, extent) {
+      const shift = event.mapBrowserEvent.originalEvent.shiftKey;
+      const view = this.viewFromExtent(extent);
+      if (!view) return;
+      this.$emit("box-select", view, shift);
     },
 
     reset() {
@@ -353,12 +408,37 @@ export default {
     },
 
     reload() {
-      this.source.refresh();
+      const oldLayer = this.layer;
+      const oldSource = this.source;
+      const newSource = this.createSource();
+      this.source = newSource;
+      const newLayer = this.createLayer(newSource);
+      this.layer = newLayer;
+      const cleanup = () => {
+        this.map.removeLayer(oldLayer);
+        oldSource.dispose();
+        oldLayer.dispose();
+        this.map.un("loadend", cleanup);
+      };
+      this.map.on("loadend", cleanup);
+      this.map.addLayer(newLayer);
     },
 
     tileUrlFunction([z, x, y], pixelRatio, proj) {
       if (!this.scene) return;
-      return getTileUrl(this.scene.id, z, x, y, this.tileSize, this.backgroundColor, this.debug);
+      const extra = {
+        ...this.debug,
+      }
+      if (this.selectTagId) {
+        extra.select_tag = this.selectTagId;
+      }
+      return getTileUrl(
+        this.scene.id,
+        z, x, y,
+        this.tileSize,
+        this.backgroundColor,
+        extra,
+      );
     },
 
     elementToViewportCoordinates(eventOrPoint) {
@@ -532,6 +612,10 @@ export default {
 .container {
   position: relative;
   /* padding-top: 60px; */
+}
+
+.interactive {
+  cursor: pointer;
 }
 
 .skeleton {
