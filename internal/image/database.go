@@ -48,16 +48,18 @@ type Database struct {
 type InfoWriteType int32
 
 const (
-	AppendPath   InfoWriteType = iota
-	UpdateMeta   InfoWriteType = iota
-	UpdateColor  InfoWriteType = iota
-	UpdateAI     InfoWriteType = iota
-	Delete       InfoWriteType = iota
-	Index        InfoWriteType = iota
-	AddTag       InfoWriteType = iota
-	AddTagIds    InfoWriteType = iota
-	RemoveTagIds InfoWriteType = iota
-	InvertTagIds InfoWriteType = iota
+	AppendPath    InfoWriteType = iota
+	UpdateMeta    InfoWriteType = iota
+	UpdateColor   InfoWriteType = iota
+	UpdateAI      InfoWriteType = iota
+	Delete        InfoWriteType = iota
+	Index         InfoWriteType = iota
+	AddTag        InfoWriteType = iota
+	AddTagId      InfoWriteType = iota
+	AddTagIds     InfoWriteType = iota
+	RemoveTagIds  InfoWriteType = iota
+	InvertTagIds  InfoWriteType = iota
+	CompactTagIds InfoWriteType = iota
 )
 
 type InfoWrite struct {
@@ -97,6 +99,16 @@ type TagIdRange struct {
 	IdRange
 }
 
+type tagSet map[tag.Id]struct{}
+
+func (tags *tagSet) Add(id tag.Id) {
+	(*tags)[id] = struct{}{}
+}
+
+func (tags *tagSet) Len() int {
+	return len(*tags)
+}
+
 func (info *InfoExistence) NeedsMeta() bool {
 	return info.SizeNull || info.OrientationNull || info.DateTimeNull
 }
@@ -118,7 +130,7 @@ func NewDatabase(path string, migrations embed.FS) *Database {
 		panic(err)
 	}
 
-	source.pending = make(chan *InfoWrite, 100)
+	source.pending = make(chan *InfoWrite, 10000)
 	go source.writePendingInfosSqlite()
 
 	return &source
@@ -284,6 +296,8 @@ func (source *Database) writePendingInfosSqlite() {
 	lastCommit := time.Now()
 	lastOptimize := time.Time{}
 	inTransaction := false
+
+	pendingCompactionTags := tagSet{}
 
 	defer func() {
 		err := sqlitex.Execute(conn, "COMMIT;", nil)
@@ -463,18 +477,66 @@ func (source *Database) writePendingInfosSqlite() {
 			}
 			close(imageInfo.Done)
 
-		case AddTagIds, RemoveTagIds, InvertTagIds:
-			diffIds := imageInfo.Ids
+		case AddTagId:
+			tagName := imageInfo.Path
+			upsertTag.BindText(1, tagName)
+			_, err := upsertTag.Step()
+			if err != nil {
+				log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
+				continue
+			}
+			err = upsertTag.Reset()
+			if err != nil {
+				panic(err)
+			}
+
+			// Get tag id
+			getTagId.BindText(1, tagName)
+			ok, err := getTagId.Step()
+			if err != nil {
+				log.Printf("Unable to get tag id for %s: %s\n", tagName, err.Error())
+				continue
+			}
+			if !ok {
+				log.Printf("Unable to get tag id for %s, returned false\n", tagName)
+				continue
+			}
+			tagId := tag.Id(getTagId.ColumnInt64(0))
+			err = getTagId.Reset()
+			if err != nil {
+				panic(err)
+			}
+
+			// Add tag range
+			min := imageInfo.Id
+			len := 0
+			insertTagRange.BindInt64(1, int64(tagId))
+			insertTagRange.BindInt64(2, int64(min))
+			insertTagRange.BindInt64(3, int64(len))
+			_, err = insertTagRange.Step()
+			if err != nil {
+				log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
+				continue
+			}
+			err = insertTagRange.Reset()
+			if err != nil {
+				panic(err)
+			}
+			pendingCompactionTags.Add(tagId)
+
+		case AddTagIds, RemoveTagIds, InvertTagIds, CompactTagIds:
 			tagId := tag.Id(imageInfo.Id)
 
 			ids := source.GetTagImageIds(tagId)
 			switch imageInfo.Type {
 			case AddTagIds:
-				ids.AddTree(diffIds)
+				ids.AddTree(imageInfo.Ids)
 			case RemoveTagIds:
-				ids.SubtractTree(diffIds)
+				ids.SubtractTree(imageInfo.Ids)
 			case InvertTagIds:
-				ids.InvertTree(diffIds)
+				ids.InvertTree(imageInfo.Ids)
+			case CompactTagIds:
+				// Do nothing
 			default:
 				panic("Unknown tag id diff type")
 			}
@@ -511,12 +573,12 @@ func (source *Database) writePendingInfosSqlite() {
 
 			// Increment tag revision
 			incrementTagRevision.BindInt64(1, int64(tagId))
-			ret, err := incrementTagRevision.Step()
+			ok, err := incrementTagRevision.Step()
 			if err != nil {
 				log.Printf("Unable to increment tag revision %d: %s\n", tagId, err.Error())
 				continue
 			}
-			if !ret {
+			if !ok {
 				panic("Unable to increment tag revision, returned false")
 			}
 			rev := incrementTagRevision.ColumnInt(0)
@@ -531,6 +593,14 @@ func (source *Database) writePendingInfosSqlite() {
 
 		sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
 		if inTransaction && (sinceLastCommitSeconds >= 10 || len(source.pending) == 0) {
+			if pendingCompactionTags.Len() > 0 {
+				for id := range pendingCompactionTags {
+					source.CompactTag(id)
+				}
+				pendingCompactionTags = tagSet{}
+				continue
+			}
+
 			err := sqlitex.Execute(conn, "COMMIT;", nil)
 			lastCommit = time.Now()
 			if err != nil {
@@ -742,6 +812,32 @@ func (source *Database) Write(path string, info Info, writeType InfoWriteType) e
 		Path: path,
 		Info: info,
 		Type: writeType,
+	}
+	return nil
+}
+
+func (source *Database) CompactTag(id tag.Id) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		d := make(chan any)
+		source.pending <- &InfoWrite{
+			Id:   int64(id),
+			Type: CompactTagIds,
+			Done: d,
+		}
+		<-d
+		close(done)
+	}()
+	return done
+}
+
+func (source *Database) WriteTags(id ImageId, tags []tag.Tag) error {
+	for _, t := range tags {
+		source.pending <- &InfoWrite{
+			Id:   int64(id),
+			Type: AddTagId,
+			Path: t.Name,
+		}
 	}
 	return nil
 }
@@ -1032,7 +1128,8 @@ func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 
 		sql += defaultTagConditions
 
-		sql += `;`
+		sql += `
+		ORDER BY length(name) ASC, name ASC;`
 
 		stmt := conn.Prep(sql)
 		defer stmt.Reset()

@@ -11,12 +11,13 @@ func (source *Source) indexMetadata(in <-chan interface{}) {
 		path := m.Path
 
 		var info Info
-		err := source.decoder.DecodeInfo(path, &info)
+		tags, err := source.decoder.DecodeInfo(path, &info)
 		if err != nil {
 			fmt.Println("Unable to load image info meta", err, path)
 			continue
 		}
 		source.database.Write(path, info, UpdateMeta)
+		source.database.WriteTags(id, tags)
 		source.imageInfoCache.Delete(id)
 	}
 }
