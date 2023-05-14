@@ -411,6 +411,10 @@ func (source *Source) GetImagePath(id ImageId) (string, error) {
 	return path, nil
 }
 
+func (source *Source) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
+	return source.database.GetImageEmbedding(id)
+}
+
 func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 	dir = filepath.FromSlash(dir)
 	indexed := make(map[string]struct{})

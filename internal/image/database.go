@@ -1215,6 +1215,36 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 	return out
 }
 
+func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+		SELECT inv_norm, embedding
+		FROM clip_emb
+		WHERE file_id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	if exists, err := stmt.Step(); err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, nil
+	}
+
+	invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(0))
+
+	size := stmt.ColumnLen(1)
+	bytes := make([]byte, size)
+	read := stmt.ColumnBytes(1, bytes)
+	if read != size {
+		return nil, fmt.Errorf("error reading embedding: buffer underrun, expected %d actual %d bytes", size, read)
+	}
+
+	return clip.FromRaw(bytes, invnorm), nil
+}
+
 func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-chan EmbeddingsResult {
 	out := make(chan EmbeddingsResult, 100)
 	go func() {

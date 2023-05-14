@@ -39,6 +39,9 @@
         <ui-item @click="copyImageLink()">
           Copy Image Link
         </ui-item>
+        <ui-item @click="findSimilar()">
+          Find Similar Images
+        </ui-item>
       </ui-nav>
       <div v-if="expanded" class="thumbnails">
         <a
@@ -71,7 +74,7 @@ import { useViewport } from '../use';
 
 export default {
   props: ["region", "scene", "flipX", "flipY", "tileSize"],
-  emits: ["close"],
+  emits: ["close", "search"],
   components: { TileViewer, ExpandButton },
   data() {
     return {
@@ -120,6 +123,12 @@ export default {
     },
     async copyImageLink() {
       await navigator.clipboard.writeText(this.fileUrl);
+      this.$emit("close");
+    },
+    findSimilar() {
+      const id = this.region?.data?.id;
+      if (!id) return;
+      this.$emit("search", `img:${id}`);
       this.$emit("close");
     },
   }

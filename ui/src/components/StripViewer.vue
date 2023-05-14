@@ -65,6 +65,7 @@
         :flipY="contextFlip.y"
         :tileSize="512"
         @close="closeContextMenu()"
+        @search="onSearch($event)"
       ></RegionMenu>
     </ContextMenu>
   </div>
@@ -100,6 +101,7 @@ const emit = defineEmits({
   scene: null,
   reindex: null,
   region: null,
+  search: null,
 })
 
 const {
@@ -146,6 +148,11 @@ const { region, navigate, exit, mutate: updateRegion } = useSeekableRegion({
   collectionId,
   regionId,
 });
+
+const onSearch = async (term) => {
+  await exit();
+  emit("search", term);
+}
 
 const fileId = computed(() => region.value?.data?.id);
 

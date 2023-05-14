@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/EdlinOrg/prominentcolor v1.0.0
+	github.com/alecthomas/participle/v2 v2.0.0
 	github.com/deepmap/oapi-codegen v1.8.2
 	github.com/dgraph-io/ristretto v0.0.2
 	github.com/docker/go-units v0.4.0
