@@ -11,6 +11,8 @@
     Experimental <em>fast</em> photo viewer.
     <br />
     <br />
+    <a href="https://demo.photofield.dev">Demo</a>
+    ·
     <a href="https://github.com/SmilyOrg/photofield/issues">Report Bug</a>
     ·
     <a href="https://github.com/SmilyOrg/photofield/issues">Request Feature</a>
