@@ -15,6 +15,7 @@ import (
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
+	"photofield/search"
 )
 
 type SceneSource struct {
@@ -82,12 +83,26 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 
 		if scene.Search != "" {
 			searchDone := metrics.Elapsed("search embed")
-			embedding, err := imageSource.Clip.EmbedText(scene.Search)
-			if err != nil {
-				log.Println("search embed failed")
-				scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+			q, err := search.Parse(scene.Search)
+			if err == nil {
+				similar, err := q.QualifierInt("img")
+				if err == nil {
+					embedding, err := imageSource.GetImageEmbedding(image.ImageId(similar))
+					if err != nil {
+						log.Println("search get similar failed")
+						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+					}
+					scene.SearchEmbedding = embedding
+				}
 			}
-			scene.SearchEmbedding = embedding
+			if scene.SearchEmbedding == nil && scene.Error == "" {
+				embedding, err := imageSource.Clip.EmbedText(scene.Search)
+				if err != nil {
+					log.Println("search embed failed")
+					scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+				}
+				scene.SearchEmbedding = embedding
+			}
 			searchDone()
 		}
 

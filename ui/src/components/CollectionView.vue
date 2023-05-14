@@ -16,6 +16,7 @@
       @selectTagId="onSelectTagId"
       @region="onScrollRegion"
       @scene="scrollScene = $event"
+      @search="onSearch"
     >
     </scroll-viewer>
 
@@ -33,6 +34,7 @@
       :fullpage="true"
       @region="onStripRegion"
       @scene="stripScene = $event"
+      @search="onSearch"
     >
     </strip-viewer>
 
@@ -136,6 +138,15 @@ const imageHeight = computed(() => {
 const search = computed(() => {
   return route.query.search;
 })
+
+const onSearch = (search) => {
+  router.push({
+    query: {
+      ...route.query,
+      search,
+    }
+  });
+}
 
 const debug = computed(() => {
   const v = {};

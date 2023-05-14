@@ -59,6 +59,7 @@
         :flipY="contextFlip.y"
         :tileSize="512"
         @close="closeContextMenu()"
+        @search="emit('search', $event)"
       ></RegionMenu>
     </ContextMenu>
   </div>
@@ -97,6 +98,7 @@ const emit = defineEmits({
   reindex: null,
   region: null,
   selectTagId: null,
+  search: null,
 })
 
 const {

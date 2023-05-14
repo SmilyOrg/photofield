@@ -240,9 +240,9 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
     id: index,
   });
   
-  const exit = () => {
+  const exit = async () => {
     applyTask.cancelAll();
-    router.push({
+    await router.push({
       name: "collection",
       params: {
         collectionId: collectionId.value,
