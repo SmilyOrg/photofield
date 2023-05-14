@@ -147,6 +147,9 @@ type SceneParams struct {
 // Search defines model for Search.
 type Search string
 
+// SearchQuery defines model for SearchQuery.
+type SearchQuery map[string]interface{}
+
 // Sort defines model for Sort.
 type Sort string
 
@@ -341,6 +344,9 @@ type ServerInterface interface {
 
 	// (GET /scenes/{scene_id}/tiles)
 	GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdTilesParams)
+
+	// (GET /search-queries/{query})
+	GetSearchQueriesQuery(w http.ResponseWriter, r *http.Request, query Search)
 
 	// (GET /tags)
 	GetTags(w http.ResponseWriter, r *http.Request, params GetTagsParams)
@@ -982,6 +988,32 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	handler(w, r.WithContext(ctx))
 }
 
+// GetSearchQueriesQuery operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchQueriesQuery(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "query" -------------
+	var query Search
+
+	err = runtime.BindStyledParameter("simple", false, "query", chi.URLParam(r, "query"), &query)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter query: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchQueriesQuery(w, r, query)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
 // GetTags operation middleware
 func (siw *ServerInterfaceWrapper) GetTags(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1186,6 +1218,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/tiles", wrapper.GetScenesSceneIdTiles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/search-queries/{query}", wrapper.GetSearchQueriesQuery)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tags", wrapper.GetTags)

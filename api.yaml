@@ -353,6 +353,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /search-queries/{query}:
+    get:
+      description: Get details for the provided `query` string
+      tags: ["Search"]
+      parameters:
+        - name: query
+          in: path
+          required: true
+          description: Search query
+          schema:
+            $ref: "#/components/schemas/Search"
+      responses:
+        "200":
+          description: OK
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/SearchQuery"
+
   /files/{id}:
     get:
       description: Get a file (referenced by region data)
@@ -839,6 +858,10 @@ components:
     
     Search:
       type: string
+
+    SearchQuery:
+      type: object
+      
 
     Sort:
       type: string

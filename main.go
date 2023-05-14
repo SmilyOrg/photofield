@@ -60,6 +60,7 @@ import (
 	"photofield/internal/render"
 	"photofield/internal/scene"
 	pfio "photofield/io"
+	"photofield/search"
 	"photofield/tag"
 )
 
@@ -929,6 +930,17 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 	}
 
 	respond(w, r, http.StatusOK, t)
+}
+
+func (*Api) GetSearchQueriesQuery(w http.ResponseWriter, r *http.Request, query openapi.Search) {
+
+	q, err := search.Parse(string(query))
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respond(w, r, http.StatusOK, q)
 }
 
 func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {

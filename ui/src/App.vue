@@ -61,6 +61,13 @@
           @update:modelValue="setQuery({ search: $event })"
         ></search-input>
 
+        <search-help
+          class="search-help"
+          v-if="capabilities?.search.supported && collection"
+          :loading="query.search && scrollScene?.loading"
+          :modelValue="query.search"
+        ></search-help>
+
         <div class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
           <span class="empty" v-if="!tasks?.length">
             No background tasks running.
@@ -120,6 +127,7 @@ import { computed, toRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ExpandButton from './components/ExpandButton.vue'
 import SearchInput from './components/SearchInput.vue'
+import SearchHelp from './components/SearchHelp.vue'
 import DisplaySettings from './components/DisplaySettings.vue'
 import TaskList from './components/TaskList.vue';
 import CollectionPanel from './components/CollectionPanel.vue';
@@ -130,10 +138,11 @@ export default {
   components: {
     ExpandButton,
     SearchInput,
+    SearchHelp,
     DisplaySettings,
     TaskList,
     CollectionPanel,
-},
+  },
   
   props: [
     "collectionId",
@@ -489,6 +498,14 @@ button {
 
 .viewer {
   height: calc(100vh - 64px);
+}
+
+.search-help {
+  position: absolute;
+  top: 64px;
+  left: 44px;
+  width: calc(100% - 40px);
+  max-width: 400px;
 }
 
 </style>

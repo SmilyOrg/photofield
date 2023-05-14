@@ -48,12 +48,12 @@ export default {
     const modelValue = toRef(props, "modelValue");
 
     const input = ref(null);
-    const active = ref(false);
+    const active = ref(true);
     const inputValue = ref("");
     
     const onBlur = () => {
       if (inputValue.value == "") {
-        active.value = false;
+        // active.value = false;
       }
     }
 
