@@ -13,6 +13,7 @@ import (
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
+	"photofield/search"
 	"photofield/tag"
 
 	"zombiezen.com/go/sqlite"
@@ -36,6 +37,7 @@ const (
 type ListOptions struct {
 	OrderBy ListOrder
 	Limit   int
+	Tags    search.Where
 }
 
 type Database struct {
@@ -293,7 +295,6 @@ func (source *Database) writePendingInfosSqlite() {
 		RETURNING revision;`)
 	defer incrementTagRevision.Finalize()
 
-	lastCommit := time.Now()
 	lastOptimize := time.Time{}
 	inTransaction := false
 
@@ -307,302 +308,28 @@ func (source *Database) writePendingInfosSqlite() {
 		}
 	}()
 
-	for imageInfo := range source.pending {
-		if !inTransaction {
-			source.transactionMutex.Lock()
-			err := sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
-			if err != nil {
-				panic(err)
-			}
-			inTransaction = true
-		}
+	commitTicker := &time.Ticker{}
+	commitInterval := 100 * time.Millisecond
 
-		switch imageInfo.Type {
-		case AppendPath:
-			dir, file := filepath.Split(imageInfo.Path)
-
-			upsertPrefix.BindText(1, dir)
-			_, err := upsertPrefix.Step()
-			if err != nil {
-				log.Printf("Unable to insert path prefix %s: %s\n", dir, err.Error())
+	for {
+		select {
+		case <-commitTicker.C:
+			if !inTransaction {
+				commitTicker.Stop()
 				continue
 			}
-			err = upsertPrefix.Reset()
-			if err != nil {
-				panic(err)
-			}
 
-			appendPath.BindText(1, file)
-			appendPath.BindText(2, dir)
-			_, err = appendPath.Step()
-			if err != nil {
-				log.Printf("Unable to insert path filename %s: %s\n", file, err.Error())
-				continue
-			}
-			err = appendPath.Reset()
-			if err != nil {
-				panic(err)
-			}
-		case UpdateMeta:
-			dir, file := filepath.Split(imageInfo.Path)
-			_, timezoneOffsetSeconds := imageInfo.DateTime.Zone()
-
-			updateMeta.BindText(1, file)
-			updateMeta.BindInt64(2, (int64)(imageInfo.Width))
-			updateMeta.BindInt64(3, (int64)(imageInfo.Height))
-			updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
-			updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
-			updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
-			updateMeta.BindText(7, dir)
-
-			_, err := updateMeta.Step()
-			if err != nil {
-				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = updateMeta.Reset()
-			if err != nil {
-				panic(err)
-			}
-		case UpdateColor:
-			dir, file := filepath.Split(imageInfo.Path)
-
-			updateColor.BindText(1, file)
-			updateColor.BindInt64(2, (int64)(imageInfo.Color))
-			updateColor.BindText(3, dir)
-
-			_, err := updateColor.Step()
-			if err != nil {
-				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = updateColor.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		case UpdateAI:
-			updateAI.BindInt64(1, int64(imageInfo.Id))
-			updateAI.BindInt64(2, int64(imageInfo.Embedding.InvNormUint16())-clip.InvNormMean)
-			updateAI.BindBytes(3, imageInfo.Embedding.Byte())
-
-			_, err := updateAI.Step()
-			if err != nil {
-				log.Printf("Unable to insert image info ai for %d: %s\n", imageInfo.Id, err.Error())
-				continue
-			}
-			err = updateAI.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		case Delete:
-			id := ImageId(imageInfo.Id)
-
-			// Delete image tags
-			for r := range source.ListImageTagRanges(id) {
-				ids := NewIds()
-				ids.Add(r.IdRange)
-				ids.SubtractInt(int(id))
-
-				min := r.Low
-				len := r.High - r.Low
-				deleteTagRange.BindInt64(1, int64(r.Id))
-				deleteTagRange.BindInt64(2, int64(min))
-				deleteTagRange.BindInt64(3, int64(len))
-				_, err := deleteTagRange.Step()
-				if err != nil {
-					log.Printf("Unable to delete tag range %d: %s\n", r.Id, err.Error())
-					continue
-				}
-				err = deleteTagRange.Reset()
-				if err != nil {
-					panic(err)
-				}
-
-				for nr := range ids.RangeChan() {
-					min := nr.Low
-					len := nr.High - nr.Low
-					insertTagRange.BindInt64(1, int64(r.Id))
-					insertTagRange.BindInt64(2, int64(min))
-					insertTagRange.BindInt64(3, int64(len))
-					_, err := insertTagRange.Step()
-					if err != nil {
-						log.Printf("Unable to insert tag range %d: %s\n", r.Id, err.Error())
-						continue
-					}
-					err = insertTagRange.Reset()
-					if err != nil {
-						panic(err)
-					}
-				}
-			}
-
-			// Delete image info
-			delete.BindInt64(1, int64(id))
-			_, err := delete.Step()
-			if err != nil {
-				log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = delete.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		case Index:
-			upsertIndex.BindText(1, imageInfo.Path)
-			upsertIndex.BindText(2, imageInfo.DateTime.Format(dateFormat))
-			_, err := upsertIndex.Step()
-			if err != nil {
-				log.Printf("Unable to set dir to indexed %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = upsertIndex.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		case AddTag:
-			tagName := imageInfo.Path
-			upsertTag.BindText(1, tagName)
-			_, err := upsertTag.Step()
-			if err != nil {
-				log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
-				continue
-			}
-			err = upsertTag.Reset()
-			if err != nil {
-				panic(err)
-			}
-			close(imageInfo.Done)
-
-		case AddTagId:
-			tagName := imageInfo.Path
-			upsertTag.BindText(1, tagName)
-			_, err := upsertTag.Step()
-			if err != nil {
-				log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
-				continue
-			}
-			err = upsertTag.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-			// Get tag id
-			getTagId.BindText(1, tagName)
-			ok, err := getTagId.Step()
-			if err != nil {
-				log.Printf("Unable to get tag id for %s: %s\n", tagName, err.Error())
-				continue
-			}
-			if !ok {
-				log.Printf("Unable to get tag id for %s, returned false\n", tagName)
-				continue
-			}
-			tagId := tag.Id(getTagId.ColumnInt64(0))
-			err = getTagId.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-			// Add tag range
-			min := imageInfo.Id
-			len := 0
-			insertTagRange.BindInt64(1, int64(tagId))
-			insertTagRange.BindInt64(2, int64(min))
-			insertTagRange.BindInt64(3, int64(len))
-			_, err = insertTagRange.Step()
-			if err != nil {
-				log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
-				continue
-			}
-			err = insertTagRange.Reset()
-			if err != nil {
-				panic(err)
-			}
-			pendingCompactionTags.Add(tagId)
-
-		case AddTagIds, RemoveTagIds, InvertTagIds, CompactTagIds:
-			tagId := tag.Id(imageInfo.Id)
-
-			ids := source.GetTagImageIds(tagId)
-			switch imageInfo.Type {
-			case AddTagIds:
-				ids.AddTree(imageInfo.Ids)
-			case RemoveTagIds:
-				ids.SubtractTree(imageInfo.Ids)
-			case InvertTagIds:
-				ids.InvertTree(imageInfo.Ids)
-			case CompactTagIds:
-				// Do nothing
-			default:
-				panic("Unknown tag id diff type")
-			}
-
-			// Delete all tag ranges
-			deleteTagRanges.BindInt64(1, int64(tagId))
-			_, err := deleteTagRanges.Step()
-			if err != nil {
-				log.Printf("Unable to delete tag ranges %d: %s\n", tagId, err.Error())
-				continue
-			}
-			err = deleteTagRanges.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-			// Insert new tag ranges
-			for r := range ids.RangeChan() {
-				min := r.Low
-				len := r.High - r.Low
-				insertTagRange.BindInt64(1, int64(tagId))
-				insertTagRange.BindInt64(2, int64(min))
-				insertTagRange.BindInt64(3, int64(len))
-				_, err := insertTagRange.Step()
-				if err != nil {
-					log.Printf("Unable to insert tag range %d: %s\n", tagId, err.Error())
-					continue
-				}
-				err = insertTagRange.Reset()
-				if err != nil {
-					panic(err)
-				}
-			}
-
-			// Increment tag revision
-			incrementTagRevision.BindInt64(1, int64(tagId))
-			ok, err := incrementTagRevision.Step()
-			if err != nil {
-				log.Printf("Unable to increment tag revision %d: %s\n", tagId, err.Error())
-				continue
-			}
-			if !ok {
-				panic("Unable to increment tag revision, returned false")
-			}
-			rev := incrementTagRevision.ColumnInt(0)
-			err = incrementTagRevision.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-			imageInfo.Done <- rev
-			close(imageInfo.Done)
-		}
-
-		sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
-		if inTransaction && (sinceLastCommitSeconds >= 10 || len(source.pending) == 0) {
 			if pendingCompactionTags.Len() > 0 {
+				compactions := make([]<-chan struct{}, 0, pendingCompactionTags.Len())
 				for id := range pendingCompactionTags {
-					source.CompactTag(id)
+					c := source.CompactTag(id)
+					compactions = append(compactions, c)
 				}
 				pendingCompactionTags = tagSet{}
 				continue
 			}
 
 			err := sqlitex.Execute(conn, "COMMIT;", nil)
-			lastCommit = time.Now()
 			if err != nil {
 				panic(err)
 			}
@@ -620,7 +347,294 @@ func (source *Database) writePendingInfosSqlite() {
 
 			source.transactionMutex.Unlock()
 			inTransaction = false
+
+		case imageInfo := <-source.pending:
+
+			if !inTransaction {
+				source.transactionMutex.Lock()
+				err := sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
+				if err != nil {
+					panic(err)
+				}
+				inTransaction = true
+				commitTicker = time.NewTicker(commitInterval)
+			}
+
+			switch imageInfo.Type {
+			case AppendPath:
+				dir, file := filepath.Split(imageInfo.Path)
+
+				upsertPrefix.BindText(1, dir)
+				_, err := upsertPrefix.Step()
+				if err != nil {
+					log.Printf("Unable to insert path prefix %s: %s\n", dir, err.Error())
+					continue
+				}
+				err = upsertPrefix.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				appendPath.BindText(1, file)
+				appendPath.BindText(2, dir)
+				_, err = appendPath.Step()
+				if err != nil {
+					log.Printf("Unable to insert path filename %s: %s\n", file, err.Error())
+					continue
+				}
+				err = appendPath.Reset()
+				if err != nil {
+					panic(err)
+				}
+			case UpdateMeta:
+				dir, file := filepath.Split(imageInfo.Path)
+				_, timezoneOffsetSeconds := imageInfo.DateTime.Zone()
+
+				updateMeta.BindText(1, file)
+				updateMeta.BindInt64(2, (int64)(imageInfo.Width))
+				updateMeta.BindInt64(3, (int64)(imageInfo.Height))
+				updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
+				updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
+				updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
+				updateMeta.BindText(7, dir)
+
+				_, err := updateMeta.Step()
+				if err != nil {
+					log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = updateMeta.Reset()
+				if err != nil {
+					panic(err)
+				}
+			case UpdateColor:
+				dir, file := filepath.Split(imageInfo.Path)
+
+				updateColor.BindText(1, file)
+				updateColor.BindInt64(2, (int64)(imageInfo.Color))
+				updateColor.BindText(3, dir)
+
+				_, err := updateColor.Step()
+				if err != nil {
+					log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = updateColor.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case UpdateAI:
+				updateAI.BindInt64(1, int64(imageInfo.Id))
+				updateAI.BindInt64(2, int64(imageInfo.Embedding.InvNormUint16())-clip.InvNormMean)
+				updateAI.BindBytes(3, imageInfo.Embedding.Byte())
+
+				_, err := updateAI.Step()
+				if err != nil {
+					log.Printf("Unable to insert image info ai for %d: %s\n", imageInfo.Id, err.Error())
+					continue
+				}
+				err = updateAI.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case Delete:
+				id := ImageId(imageInfo.Id)
+
+				// Delete image tags
+				for r := range source.ListImageTagRanges(id) {
+					ids := NewIds()
+					ids.Add(r.IdRange)
+					ids.SubtractInt(int(id))
+
+					min := r.Low
+					len := r.High - r.Low
+					deleteTagRange.BindInt64(1, int64(r.Id))
+					deleteTagRange.BindInt64(2, int64(min))
+					deleteTagRange.BindInt64(3, int64(len))
+					_, err := deleteTagRange.Step()
+					if err != nil {
+						log.Printf("Unable to delete tag range %d: %s\n", r.Id, err.Error())
+						continue
+					}
+					err = deleteTagRange.Reset()
+					if err != nil {
+						panic(err)
+					}
+
+					for nr := range ids.RangeChan() {
+						min := nr.Low
+						len := nr.High - nr.Low
+						insertTagRange.BindInt64(1, int64(r.Id))
+						insertTagRange.BindInt64(2, int64(min))
+						insertTagRange.BindInt64(3, int64(len))
+						_, err := insertTagRange.Step()
+						if err != nil {
+							log.Printf("Unable to insert tag range %d: %s\n", r.Id, err.Error())
+							continue
+						}
+						err = insertTagRange.Reset()
+						if err != nil {
+							panic(err)
+						}
+					}
+				}
+
+				// Delete image info
+				delete.BindInt64(1, int64(id))
+				_, err := delete.Step()
+				if err != nil {
+					log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = delete.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case Index:
+				upsertIndex.BindText(1, imageInfo.Path)
+				upsertIndex.BindText(2, imageInfo.DateTime.Format(dateFormat))
+				_, err := upsertIndex.Step()
+				if err != nil {
+					log.Printf("Unable to set dir to indexed %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = upsertIndex.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case AddTag:
+				tagName := imageInfo.Path
+				upsertTag.BindText(1, tagName)
+				_, err := upsertTag.Step()
+				if err != nil {
+					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
+					continue
+				}
+				err = upsertTag.Reset()
+				if err != nil {
+					panic(err)
+				}
+				close(imageInfo.Done)
+
+			case AddTagId:
+				tagName := imageInfo.Path
+				upsertTag.BindText(1, tagName)
+				_, err := upsertTag.Step()
+				if err != nil {
+					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
+					continue
+				}
+				err = upsertTag.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Get tag id
+				getTagId.BindText(1, tagName)
+				ok, err := getTagId.Step()
+				if err != nil {
+					log.Printf("Unable to get tag id for %s: %s\n", tagName, err.Error())
+					continue
+				}
+				if !ok {
+					log.Printf("Unable to get tag id for %s, returned false\n", tagName)
+					continue
+				}
+				tagId := tag.Id(getTagId.ColumnInt64(0))
+				err = getTagId.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Add tag range
+				min := imageInfo.Id
+				len := 0
+				insertTagRange.BindInt64(1, int64(tagId))
+				insertTagRange.BindInt64(2, int64(min))
+				insertTagRange.BindInt64(3, int64(len))
+				_, err = insertTagRange.Step()
+				if err != nil {
+					log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
+					continue
+				}
+				err = insertTagRange.Reset()
+				if err != nil {
+					panic(err)
+				}
+				pendingCompactionTags.Add(tagId)
+
+			case AddTagIds, RemoveTagIds, InvertTagIds, CompactTagIds:
+				tagId := tag.Id(imageInfo.Id)
+
+				ids := source.getTagImageIdsWithConn(conn, tagId)
+				switch imageInfo.Type {
+				case AddTagIds:
+					ids.AddTree(imageInfo.Ids)
+				case RemoveTagIds:
+					ids.SubtractTree(imageInfo.Ids)
+				case InvertTagIds:
+					ids.InvertTree(imageInfo.Ids)
+				case CompactTagIds:
+					// Tags being compacted do not change
+				default:
+					panic("Unknown tag id diff type")
+				}
+
+				// Delete all tag ranges
+				deleteTagRanges.BindInt64(1, int64(tagId))
+				_, err := deleteTagRanges.Step()
+				if err != nil {
+					log.Printf("Unable to delete tag ranges %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = deleteTagRanges.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Insert new tag ranges
+				for r := range ids.RangeChan() {
+					min := r.Low
+					len := r.High - r.Low
+					insertTagRange.BindInt64(1, int64(tagId))
+					insertTagRange.BindInt64(2, int64(min))
+					insertTagRange.BindInt64(3, int64(len))
+					_, err := insertTagRange.Step()
+					if err != nil {
+						log.Printf("Unable to insert tag range %d: %s\n", tagId, err.Error())
+						continue
+					}
+					err = insertTagRange.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				// Increment tag revision
+				incrementTagRevision.BindInt64(1, int64(tagId))
+				ok, err := incrementTagRevision.Step()
+				if err != nil {
+					log.Printf("Unable to increment tag revision %d: %s\n", tagId, err.Error())
+					continue
+				}
+				if !ok {
+					panic("Unable to increment tag revision, returned false")
+				}
+				rev := incrementTagRevision.ColumnInt(0)
+				err = incrementTagRevision.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				imageInfo.Done <- rev
+				close(imageInfo.Done)
+			}
 		}
+
 	}
 }
 
@@ -938,7 +952,10 @@ func (source *Database) InvertTagIds(id tag.Id, ids Ids) (int, error) {
 func (source *Database) GetTagImageIds(id tag.Id) Ids {
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
+	return source.getTagImageIdsWithConn(conn, id)
+}
 
+func (source *Database) getTagImageIdsWithConn(conn *sqlite.Conn, id tag.Id) Ids {
 	stmt := conn.Prep(`
 	SELECT infos_tag.file_id, infos_tag.len
 	FROM infos_tag
@@ -993,11 +1010,14 @@ func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
 }
 
 func (source *Database) ListImageTagRanges(id ImageId) <-chan TagIdRange {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+	return source.listImageTagRangesWithConn(conn, id)
+}
+
+func (source *Database) listImageTagRangesWithConn(conn *sqlite.Conn, id ImageId) <-chan TagIdRange {
 	out := make(chan TagIdRange, 100)
 	go func() {
-		conn := source.pool.Get(nil)
-		defer source.pool.Put(conn)
-
 		stmt := conn.Prep(`
 		SELECT tag_id, file_id, len
 		FROM infos_tag
