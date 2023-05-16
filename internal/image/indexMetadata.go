@@ -17,7 +17,9 @@ func (source *Source) indexMetadata(in <-chan interface{}) {
 			continue
 		}
 		source.database.Write(path, info, UpdateMeta)
-		source.database.WriteTags(id, tags)
+		if source.Config.TagConfig.Exif.Enable {
+			source.database.WriteTags(id, tags)
+		}
 		source.imageInfoCache.Delete(id)
 	}
 }

@@ -107,8 +107,9 @@ type Caches struct {
 }
 
 type Config struct {
-	DataDir string
-	AI      clip.AI
+	DataDir   string
+	AI        clip.AI
+	TagConfig tag.Config `json:"-"`
 
 	ExifToolCount        int  `json:"exif_tool_count"`
 	SkipLoadInfo         bool `json:"skip_load_info"`
