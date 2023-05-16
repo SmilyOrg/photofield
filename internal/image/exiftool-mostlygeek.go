@@ -3,6 +3,7 @@ package image
 import (
 	"bufio"
 	"errors"
+	"photofield/tag"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ var previewValueMatcher = regexp.MustCompile(`Binary data (\d+) bytes`)
 
 type ExifToolMostlyGeekLoader struct {
 	exifTool *exiftool.Pool
+	flags    []string
 }
 
 func NewExifToolMostlyGeekLoader(exifToolCount int) (*ExifToolMostlyGeekLoader, error) {
@@ -25,40 +27,45 @@ func NewExifToolMostlyGeekLoader(exifToolCount int) (*ExifToolMostlyGeekLoader, 
 	decoder := &ExifToolMostlyGeekLoader{}
 	decoder.exifTool, err = exiftool.NewPool(
 		"exiftool", exifToolCount,
-		"-n", // Machine-readable values
 		"-S", // Short tag names with no padding
+	)
+
+	decoder.flags = append(decoder.flags,
+		"-Orientation#",
+		"-Rotation#",
+		"-ImageWidth#",
+		"-ImageHeight#",
+	)
+	decoder.flags = append(decoder.flags, tag.ExifFlags...)
+	decoder.flags = append(decoder.flags,
+		// First available will be used
+		"-SubSecDateTimeOriginal#",
+		"-DateTimeOriginal#",
+		"-EXIF:DateTimeOriginal#",
+		"-CreateDate#",
+		"-XMP:CreateDate#",
+		"-EXIF:CreateDate#",
+		"-XMP:DateTimeOriginal#",
+		"-GPSDateTime#",
+		"-TimeStamp#",
+		"-FileModifyDate#",
+		"-FileCreateDate#",
 	)
 	return decoder, err
 }
 
-func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) error {
+func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]tag.Tag, error) {
 
 	if decoder == nil {
-		return errors.New("unable to decode, exiftool missing")
+		return nil, errors.New("unable to decode, exiftool missing")
 	}
 
-	bytes, err := decoder.exifTool.ExtractFlags(path,
-		"-Orientation",
-		"-Rotation",
-		"-ImageWidth",
-		"-ImageHeight",
-		// First available will be used
-		"-SubSecDateTimeOriginal",
-		"-DateTimeOriginal",
-		"-EXIF:DateTimeOriginal",
-		"-CreateDate",
-		"-XMP:CreateDate",
-		"-EXIF:CreateDate",
-		"-XMP:DateTimeOriginal",
-		"-GPSDateTime",
-		"-TimeStamp",
-		"-FileModifyDate",
-		"-FileCreateDate",
-	)
+	bytes, err := decoder.exifTool.ExtractFlags(path, decoder.flags...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	tags := make([]tag.Tag, 0)
 	orientation := ""
 	rotation := ""
 	imageWidth := ""
@@ -86,9 +93,10 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 			imageWidth = value
 		case "ImageHeight":
 			imageHeight = value
-		// case "GPSDateTime":
-		// 	gpsTime, _ = parseDateTime(value)
 		default:
+			if name, ok := tag.ExifTagToName[name]; ok {
+				tags = append(tags, tag.NewExif(name, value))
+			}
 			if strings.Contains(name, "Date") || strings.Contains(name, "Time") {
 				if info.DateTime.IsZero() {
 					info.DateTime, _, _, _ = parseDateTime(value)
@@ -108,7 +116,7 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return err
+		return tags, err
 	}
 
 	if imageWidth != "" {
@@ -137,7 +145,7 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) err
 
 	// println(path, info.Width, info.Height, info.DateTime.String())
 
-	return nil
+	return tags, nil
 }
 
 func (decoder *ExifToolMostlyGeekLoader) DecodeBytes(path string, tagName string) ([]byte, error) {

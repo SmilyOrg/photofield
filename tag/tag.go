@@ -28,18 +28,6 @@ func randomId() (string, error) {
 	return gonanoid.Generate("6789BCDFGHJKLMNPQRTWbcdfghjkmnpqrtwz", 10)
 }
 
-func NewSelection(collectionId string) (Tag, error) {
-	var t Tag
-
-	rand, err := randomId()
-	if err != nil {
-		return t, err
-	}
-
-	t.Name = fmt.Sprintf("sys:select:col:%s:%s", collectionId, rand)
-	return t, nil
-}
-
 func (t Tag) MarshalJSON() ([]byte, error) {
 	return json.Marshal(ExternalTag{
 		Id:       t.NameRev(),

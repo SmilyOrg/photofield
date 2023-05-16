@@ -1062,6 +1062,7 @@ func loadConfiguration(path string) AppConfig {
 	}
 
 	appConfig.Media.AI = appConfig.AI
+	appConfig.Tags.Enable = appConfig.Tags.Enable || appConfig.Tags.Enabled
 
 	return appConfig
 }
@@ -1186,8 +1187,7 @@ func main() {
 
 	appConfig := loadConfiguration(configurationPath)
 	appConfig.Media.DataDir = dataDir
-
-	tagsEnabled = appConfig.Tags.Enabled
+	tagsEnabled = appConfig.Tags.Enable
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]
