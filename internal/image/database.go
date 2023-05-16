@@ -13,7 +13,6 @@ import (
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
-	"photofield/search"
 	"photofield/tag"
 
 	"zombiezen.com/go/sqlite"
@@ -37,7 +36,6 @@ const (
 type ListOptions struct {
 	OrderBy ListOrder
 	Limit   int
-	Tags    search.Where
 }
 
 type Database struct {
