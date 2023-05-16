@@ -307,7 +307,7 @@ func (source *Database) writePendingInfosSqlite() {
 	}()
 
 	commitTicker := &time.Ticker{}
-	commitInterval := 100 * time.Millisecond
+	commitInterval := 200 * time.Millisecond
 
 	for {
 		select {
@@ -318,10 +318,8 @@ func (source *Database) writePendingInfosSqlite() {
 			}
 
 			if pendingCompactionTags.Len() > 0 {
-				compactions := make([]<-chan struct{}, 0, pendingCompactionTags.Len())
 				for id := range pendingCompactionTags {
-					c := source.CompactTag(id)
-					compactions = append(compactions, c)
+					source.CompactTag(id)
 				}
 				pendingCompactionTags = tagSet{}
 				continue
