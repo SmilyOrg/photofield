@@ -31,7 +31,7 @@ var par *participle.Parser[Query]
 func init() {
 	lex = lexer.MustSimple([]lexer.SimpleRule{
 		{Name: "Whitespace", Pattern: `[ \t]+`},
-		{Name: "Word", Pattern: `\w+`},
+		{Name: "Word", Pattern: `[^\s:]+`},
 		{Name: "String", Pattern: `"(\\"|[^"])*"`},
 		{Name: "Colon", Pattern: `:`},
 	})

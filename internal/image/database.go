@@ -13,6 +13,7 @@ import (
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
+	"photofield/search"
 	"photofield/tag"
 
 	"zombiezen.com/go/sqlite"
@@ -36,6 +37,7 @@ const (
 type ListOptions struct {
 	OrderBy ListOrder
 	Limit   int
+	Tags    search.Where
 }
 
 type Database struct {
@@ -1245,13 +1247,22 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		defer source.pool.Put(conn)
 
 		sql := `
-			SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset
 			FROM infos
+		`
+
+		if !options.Tags.IsEmpty() {
+			sql += `
+				JOIN infos_tag
+				JOIN tag ON infos_tag.tag_id = tag.id
+			`
+		}
+
+		sql += `
 			WHERE path_prefix_id IN (
 				SELECT id
 				FROM prefix
-				WHERE
-		`
+				WHERE `
 
 		for i := range dirs {
 			sql += `str LIKE ? `
@@ -1264,18 +1275,35 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			)
 		`
 
+		if !options.Tags.IsEmpty() {
+			sql += `
+				AND tag.id IN (
+					SELECT id
+					FROM tag
+					WHERE ` + options.Tags.SQL + `
+				)
+				AND infos.id >= file_id AND infos.id <= file_id + len
+			`
+		}
+
 		switch options.OrderBy {
 		case None:
 		case DateAsc:
-			sql += `ORDER BY created_at_unix ASC `
+			sql += `
+			ORDER BY created_at_unix ASC
+			`
 		case DateDesc:
-			sql += `ORDER BY created_at_unix DESC `
+			sql += `
+			ORDER BY created_at_unix DESC
+			`
 		default:
 			panic("Unsupported listing order")
 		}
 
 		if options.Limit > 0 {
-			sql += `LIMIT ? `
+			sql += `
+				LIMIT ?
+			`
 		}
 
 		sql += ";"
@@ -1288,6 +1316,13 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
 			bindIndex++
+		}
+
+		if !options.Tags.IsEmpty() {
+			for _, tag := range options.Tags.Texts {
+				stmt.BindText(bindIndex, tag)
+				bindIndex++
+			}
 		}
 
 		if options.Limit > 0 {
