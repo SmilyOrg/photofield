@@ -102,8 +102,10 @@ layouts.
   * [x] **Custom tags**. You canadd your own tags to photos, e.g. `#family` or
     `#vacation`. Batch tagging not supported yet, but should be relatively easy
     to add considering the selections (above) are already tags.
-  * [ ] **EXIF tags**. Tags could be automatically added from the EXIF data, e.g.
-    `exif:make:sony` or `exif:model:sm-g950f`.
+  * [x] **EXIF tags**. Tags are automatically added from the EXIF data, e.g.
+    `exif:make:sony` or `exif:model:sm-g950f`. You need to enable this in the
+    `exif` section of the [configuration]. Only `make` and `model` are currently
+    supported (hardcoded).
   * [ ] **Location tags**. Photos could be automatically tagged with the
     location, e.g. `city:berlin` or `country:germany`. See #59.
   * [ ] **Filter by tags**. You could filter by a tag, e.g. `#beach` to only
