@@ -31,7 +31,7 @@ var par *participle.Parser[Query]
 func init() {
 	lex = lexer.MustSimple([]lexer.SimpleRule{
 		{Name: "Whitespace", Pattern: `[ \t]+`},
-		{Name: "Word", Pattern: `\w+`},
+		{Name: "Word", Pattern: `[^\s:]+`},
 		{Name: "String", Pattern: `"(\\"|[^"])*"`},
 		{Name: "Colon", Pattern: `:`},
 	})
@@ -69,4 +69,17 @@ func (q *Query) QualifierInt(key string) (int, error) {
 	}
 
 	return strconv.Atoi(q.Terms[0].Qualifier.Value)
+}
+
+func (q *Query) QualifierValues(key string) []string {
+	if q == nil {
+		return nil
+	}
+	var values []string
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			values = append(values, term.Qualifier.Value)
+		}
+	}
+	return values
 }

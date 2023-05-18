@@ -7,12 +7,14 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
+	"photofield/search"
 	"photofield/tag"
 
 	"zombiezen.com/go/sqlite"
@@ -36,6 +38,7 @@ const (
 type ListOptions struct {
 	OrderBy ListOrder
 	Limit   int
+	Query   *search.Query
 }
 
 type Database struct {
@@ -1244,14 +1247,49 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
 
-		sql := `
-			SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset
+		sql := ""
+
+		tags := options.Query.QualifierValues("tag")
+		if len(tags) > 0 {
+			sql += `
+			WITH
+			`
+			for i := range tags {
+				if i > 0 {
+					sql += ","
+				}
+				sql += `
+				tag` + strconv.Itoa(i) + ` AS (
+					SELECT file_id, len
+					FROM infos_tag
+					WHERE tag_id IN (
+						SELECT id
+						FROM tag
+						WHERE name = ?
+					)
+				)
+				`
+			}
+		}
+
+		sql += `
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset
 			FROM infos
+		`
+
+		if len(tags) > 0 {
+			for i := range tags {
+				sql += fmt.Sprintf(`
+					JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
+				`, i)
+			}
+		}
+
+		sql += `
 			WHERE path_prefix_id IN (
 				SELECT id
 				FROM prefix
-				WHERE
-		`
+				WHERE `
 
 		for i := range dirs {
 			sql += `str LIKE ? `
@@ -1267,15 +1305,21 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		switch options.OrderBy {
 		case None:
 		case DateAsc:
-			sql += `ORDER BY created_at_unix ASC `
+			sql += `
+			ORDER BY created_at_unix ASC
+			`
 		case DateDesc:
-			sql += `ORDER BY created_at_unix DESC `
+			sql += `
+			ORDER BY created_at_unix DESC
+			`
 		default:
 			panic("Unsupported listing order")
 		}
 
 		if options.Limit > 0 {
-			sql += `LIMIT ? `
+			sql += `
+				LIMIT ?
+			`
 		}
 
 		sql += ";"
@@ -1284,6 +1328,11 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		defer stmt.Reset()
 
 		bindIndex := 1
+
+		for _, tag := range tags {
+			stmt.BindText(bindIndex, tag)
+			bindIndex++
+		}
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")

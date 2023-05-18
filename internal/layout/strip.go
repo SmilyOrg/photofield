@@ -4,7 +4,6 @@ import (
 	// . "photofield/internal"
 
 	"log"
-	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
@@ -12,24 +11,7 @@ import (
 	"time"
 )
 
-func LayoutStrip(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
-
-	limit := collection.Limit
-
-	var infos <-chan image.SourcedInfo
-
-	if scene.Search != "" {
-		infos = image.SimilarityInfosToSourcedInfos(
-			collection.GetSimilar(source, scene.SearchEmbedding, image.ListOptions{
-				Limit: limit,
-			}),
-		)
-	} else {
-		infos = collection.GetInfos(source, image.ListOptions{
-			OrderBy: image.ListOrder(layout.Order),
-			Limit:   limit,
-		})
-	}
+func LayoutStrip(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
 	layout.ImageSpacing = 0.02 * layout.ViewportWidth
 
@@ -56,10 +38,6 @@ func LayoutStrip(layout Layout, collection collection.Collection, scene *render.
 	scene.Photos = scene.Photos[:0]
 	index := 0
 	for info := range infos {
-		if limit > 0 && index >= limit {
-			break
-		}
-
 		imageRect := render.Rect{
 			X: 0,
 			Y: 0,

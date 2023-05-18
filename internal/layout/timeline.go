@@ -7,7 +7,6 @@ import (
 	"github.com/hako/durafmt"
 	"github.com/tdewolff/canvas"
 
-	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
@@ -67,14 +66,7 @@ func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, 
 	return rect
 }
 
-func LayoutTimeline(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
-
-	limit := collection.Limit
-
-	infos := collection.GetInfos(source, image.ListOptions{
-		OrderBy: image.ListOrder(layout.Order),
-		Limit:   limit,
-	})
+func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
 	layout.ImageSpacing = 0.02 * layout.ImageHeight
 	layout.LineSpacing = 0.02 * layout.ImageHeight
@@ -105,10 +97,6 @@ func LayoutTimeline(layout Layout, collection collection.Collection, scene *rend
 
 	index := 0
 	for info := range infos {
-		if limit > 0 && index >= limit {
-			break
-		}
-
 		photoTime := info.DateTime
 		elapsed := lastPhotoTime.Sub(photoTime)
 		if elapsed > 30*time.Minute {

@@ -3,7 +3,6 @@ package layout
 import (
 	"log"
 	"math"
-	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
@@ -11,13 +10,7 @@ import (
 	"time"
 )
 
-func LayoutSearch(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
-
-	limit := collection.Limit
-
-	infos := collection.GetSimilar(source, scene.SearchEmbedding, image.ListOptions{
-		Limit: limit,
-	})
+func LayoutSearch(infos <-chan image.SimilarityInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
 	layout.ImageSpacing = 0.02 * layout.ImageHeight
 	layout.LineSpacing = 0.02 * layout.ImageHeight
@@ -52,10 +45,6 @@ func LayoutSearch(layout Layout, collection collection.Collection, scene *render
 
 	row := make([]SectionPhoto, 0)
 	for info := range infos {
-		if limit > 0 && index >= limit {
-			break
-		}
-
 		photo := SectionPhoto{
 			Photo: render.Photo{
 				Id:     info.Id,

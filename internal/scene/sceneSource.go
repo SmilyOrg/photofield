@@ -81,21 +81,26 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	go func() {
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
+		var query *search.Query
+
 		if scene.Search != "" {
 			searchDone := metrics.Elapsed("search embed")
 			q, err := search.Parse(scene.Search)
 			if err == nil {
-				similar, err := q.QualifierInt("img")
-				if err == nil {
+				if similar, err := q.QualifierInt("img"); err == nil {
 					embedding, err := imageSource.GetImageEmbedding(image.ImageId(similar))
 					if err != nil {
 						log.Println("search get similar failed")
 						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
 					}
 					scene.SearchEmbedding = embedding
+				} else if len(q.QualifierValues("tag")) > 0 {
+					query = q
 				}
 			}
-			if scene.SearchEmbedding == nil && scene.Error == "" {
+
+			// Fallback
+			if scene.SearchEmbedding == nil && scene.Error == "" && query == nil {
 				embedding, err := imageSource.Clip.EmbedText(scene.Search)
 				if err != nil {
 					log.Println("search embed failed")
@@ -106,28 +111,42 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone()
 		}
 
-		switch config.Layout.Type {
-		case layout.Timeline:
-			layout.LayoutTimeline(config.Layout, config.Collection, &scene, imageSource)
+		if scene.SearchEmbedding != nil {
+			// Similarity order
+			infos := config.Collection.GetSimilar(imageSource, scene.SearchEmbedding, image.ListOptions{
+				Limit: config.Collection.Limit,
+			})
 
-		case layout.Album:
-			layout.LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
-
-		case layout.Square:
-			layout.LayoutSquare(&scene, imageSource)
-
-		case layout.Wall:
-			layout.LayoutWall(config.Layout, config.Collection, &scene, imageSource)
-
-		case layout.Strip:
-			layout.LayoutStrip(config.Layout, config.Collection, &scene, imageSource)
-
-		case layout.Search:
-			layout.LayoutSearch(config.Layout, config.Collection, &scene, imageSource)
-
-		default:
-			layout.LayoutAlbum(config.Layout, config.Collection, &scene, imageSource)
+			switch config.Layout.Type {
+			case layout.Strip:
+				sinfos := image.SimilarityInfosToSourcedInfos(infos)
+				layout.LayoutStrip(sinfos, config.Layout, &scene, imageSource)
+			default:
+				layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
+			}
+		} else {
+			// Normal order
+			infos := config.Collection.GetInfos(imageSource, image.ListOptions{
+				OrderBy: image.ListOrder(config.Layout.Order),
+				Limit:   config.Collection.Limit,
+				Query:   query,
+			})
+			switch config.Layout.Type {
+			case layout.Timeline:
+				layout.LayoutTimeline(infos, config.Layout, &scene, imageSource)
+			case layout.Album:
+				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
+			case layout.Square:
+				layout.LayoutSquare(&scene, imageSource)
+			case layout.Wall:
+				layout.LayoutWall(infos, config.Layout, &scene, imageSource)
+			case layout.Strip:
+				layout.LayoutStrip(infos, config.Layout, &scene, imageSource)
+			default:
+				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
+			}
 		}
+
 		if scene.RegionSource == nil {
 			scene.RegionSource = &layout.PhotoRegionSource{
 				Source: imageSource,
