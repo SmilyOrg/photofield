@@ -70,3 +70,16 @@ func (q *Query) QualifierInt(key string) (int, error) {
 
 	return strconv.Atoi(q.Terms[0].Qualifier.Value)
 }
+
+func (q *Query) QualifierValues(key string) []string {
+	if q == nil {
+		return nil
+	}
+	var values []string
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			values = append(values, term.Qualifier.Value)
+		}
+	}
+	return values
+}

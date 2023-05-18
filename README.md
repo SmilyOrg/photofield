@@ -106,11 +106,13 @@ layouts.
     `exif:make:sony` or `exif:model:sm-g950f`. You need to enable this in the
     `exif` section of the [configuration]. Only `make` and `model` are currently
     supported (hardcoded).
+  * [x] **Filter by tags**. You can filter by a tag by searching for `tag:TAG`.
+    For example, you can search for `tag:fav` to only show favorited photos, or
+    `tag:fav tag:exif:make:panasonic` to only show photos tagged with `#family`.
+    This is an early version of filtering and should be more user-friendly in
+    the future.
   * [ ] **Location tags**. Photos could be automatically tagged with the
     location, e.g. `city:berlin` or `country:germany`. See #59.
-  * [ ] **Filter by tags**. You could filter by a tag, e.g. `#beach` to only
-    show photos with that tag. Even cooler would be to be able to search with
-    arbitrary boolean expressions like `#beach AND #sunset` or `#beach OR #palm`.
   * [ ] **Face recognition**. Photos could be automatically tagged with the
     person's name. This would be a great way to search for photos of a specific
     person.

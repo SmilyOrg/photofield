@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +38,7 @@ const (
 type ListOptions struct {
 	OrderBy ListOrder
 	Limit   int
-	Tags    search.Where
+	Query   *search.Query
 }
 
 type Database struct {
@@ -1246,16 +1247,42 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
 
-		sql := `
+		sql := ""
+
+		tags := options.Query.QualifierValues("tag")
+		if len(tags) > 0 {
+			sql += `
+			WITH
+			`
+			for i := range tags {
+				if i > 0 {
+					sql += ","
+				}
+				sql += `
+				tag` + strconv.Itoa(i) + ` AS (
+					SELECT file_id, len
+					FROM infos_tag
+					WHERE tag_id IN (
+						SELECT id
+						FROM tag
+						WHERE name = ?
+					)
+				)
+				`
+			}
+		}
+
+		sql += `
 			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset
 			FROM infos
 		`
 
-		if !options.Tags.IsEmpty() {
-			sql += `
-				JOIN infos_tag
-				JOIN tag ON infos_tag.tag_id = tag.id
-			`
+		if len(tags) > 0 {
+			for i := range tags {
+				sql += fmt.Sprintf(`
+					JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
+				`, i)
+			}
 		}
 
 		sql += `
@@ -1274,17 +1301,6 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		sql += `
 			)
 		`
-
-		if !options.Tags.IsEmpty() {
-			sql += `
-				AND tag.id IN (
-					SELECT id
-					FROM tag
-					WHERE ` + options.Tags.SQL + `
-				)
-				AND infos.id >= file_id AND infos.id <= file_id + len
-			`
-		}
 
 		switch options.OrderBy {
 		case None:
@@ -1313,16 +1329,14 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		bindIndex := 1
 
-		for _, dir := range dirs {
-			stmt.BindText(bindIndex, dir+"%")
+		for _, tag := range tags {
+			stmt.BindText(bindIndex, tag)
 			bindIndex++
 		}
 
-		if !options.Tags.IsEmpty() {
-			for _, tag := range options.Tags.Texts {
-				stmt.BindText(bindIndex, tag)
-				bindIndex++
-			}
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
 		}
 
 		if options.Limit > 0 {

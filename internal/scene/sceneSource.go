@@ -81,7 +81,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	go func() {
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
-		var tags search.Where
+		var query *search.Query
 
 		if scene.Search != "" {
 			searchDone := metrics.Elapsed("search embed")
@@ -94,12 +94,13 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
 					}
 					scene.SearchEmbedding = embedding
+				} else if len(q.QualifierValues("tag")) > 0 {
+					query = q
 				}
-				tags = q.Where("tag", "name")
 			}
 
 			// Fallback
-			if scene.SearchEmbedding == nil && scene.Error == "" && tags.IsEmpty() {
+			if scene.SearchEmbedding == nil && scene.Error == "" && query == nil {
 				embedding, err := imageSource.Clip.EmbedText(scene.Search)
 				if err != nil {
 					log.Println("search embed failed")
@@ -128,7 +129,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			infos := config.Collection.GetInfos(imageSource, image.ListOptions{
 				OrderBy: image.ListOrder(config.Layout.Order),
 				Limit:   config.Collection.Limit,
-				Tags:    tags,
+				Query:   query,
 			})
 			switch config.Layout.Type {
 			case layout.Timeline:

@@ -92,3 +92,15 @@ func TestWhereExifTag(t *testing.T) {
 	}
 	assert.Equal(t, expected, actual)
 }
+
+func TestQualifierValues(t *testing.T) {
+	query, err := Parse("tag:hello word tag:world hi:there")
+	if err != nil {
+		t.Error(err)
+	}
+	assert.Equal(
+		t,
+		[]string{"hello", "world"},
+		query.QualifierValues("tag"),
+	)
+}
