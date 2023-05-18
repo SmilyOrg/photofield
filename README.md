@@ -108,9 +108,9 @@ layouts.
     supported (hardcoded).
   * [x] **Filter by tags**. You can filter by a tag by searching for `tag:TAG`.
     For example, you can search for `tag:fav` to only show favorited photos, or
-    `tag:fav tag:exif:make:panasonic` to only show photos tagged with `#family`.
-    This is an early version of filtering and should be more user-friendly in
-    the future.
+    `tag:hello tag:world` to only show photos with both `hello` and `world`
+    tags. This is an early version of filtering and should be more user-friendly
+    in the future.
   * [ ] **Location tags**. Photos could be automatically tagged with the
     location, e.g. `city:berlin` or `country:germany`. See #59.
   * [ ] **Face recognition**. Photos could be automatically tagged with the
