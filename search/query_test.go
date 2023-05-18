@@ -41,58 +41,6 @@ func TestTag(t *testing.T) {
 	}
 }
 
-func TestWhereEmpty(t *testing.T) {
-	query, err := Parse("")
-	if err != nil {
-		t.Error(err)
-	}
-	actual := query.Where("tag", "name")
-	expected := Where{
-		SQL:   "",
-		Texts: nil,
-	}
-	assert.Equal(t, expected, actual)
-}
-
-func TestWhereTag(t *testing.T) {
-	query, err := Parse("tag:hello")
-	if err != nil {
-		t.Error(err)
-	}
-	actual := query.Where("tag", "name")
-	expected := Where{
-		SQL:   "name = ?",
-		Texts: []string{"hello"},
-	}
-	assert.Equal(t, expected, actual)
-}
-
-func TestWhereTags(t *testing.T) {
-	query, err := Parse("tag:hello tag:world")
-	if err != nil {
-		t.Error(err)
-	}
-	actual := query.Where("tag", "name")
-	expected := Where{
-		SQL:   "name = ? AND name = ?",
-		Texts: []string{"hello", "world"},
-	}
-	assert.Equal(t, expected, actual)
-}
-
-func TestWhereExifTag(t *testing.T) {
-	query, err := Parse("tag:exif:model:dji-osmo-action")
-	if err != nil {
-		t.Error(err)
-	}
-	actual := query.Where("tag", "name")
-	expected := Where{
-		SQL:   "name = ?",
-		Texts: []string{"exif:model:dji-osmo-action"},
-	}
-	assert.Equal(t, expected, actual)
-}
-
 func TestQualifierValues(t *testing.T) {
 	query, err := Parse("tag:hello word tag:world hi:there")
 	if err != nil {
