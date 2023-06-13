@@ -16,7 +16,7 @@ import (
 	"photofield/internal/queue"
 	"photofield/io"
 	"photofield/io/ffmpeg"
-	ioristretto "photofield/io/ristretto"
+	"photofield/io/imagemagick"
 	"photofield/io/sqlite"
 	"photofield/tag"
 
@@ -189,11 +189,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	)
 
 	env := SourceEnvironment{
-		SourceTypes: config.SourceTypes,
-		FFmpegPath:  ffmpeg.FindPath(),
-		Migrations:  migrationsThumbs,
-		ImageCache:  ioristretto.New(),
-		DataDir:     config.DataDir,
+		ImageMagickPath: imagemagick.FindPath(),
 	}
 
 	// Sources used for rendering

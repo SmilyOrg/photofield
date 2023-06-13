@@ -80,8 +80,8 @@ media:
     
   # File extensions to index on the file system
   extensions: [
-    ".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng",
-    ".mp4",
+    ".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng", ".heic", ".gif"
+    ".mp4",  ".mov",
   ]
 
   # Used to extract dates from file names as a heuristic in case of missing or
@@ -91,10 +91,10 @@ media:
   images:
     # Extensions to use to understand a file to be an image
     # extensions: [".jpg", ".jpeg", ".png", ".gif"]
-    extensions: [".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng"]
+    extensions: [".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng", ".heic", ".gif"]
 
   videos:
-    extensions: [".mp4"]
+    extensions: [".mp4", ".mov"]
 
   # 
   # Media source configuration
@@ -165,6 +165,11 @@ media:
   #   fit: The aspect ratio fit to use while resizing
   #   path: Path to the FFmpeg binary, uses the one in PATH if not set
   #
+  # IMAGEMAGICK - transcoded images via ImageMagick
+  #   width, height: Dimensions to which the source media should be resized
+  #   fit: The aspect ratio fit to use while resizing
+  #   path: Path to the ImageMagick binary, uses the one in PATH if not set
+  #
   source_types:
     sqlite:
       path: photofield.thumbs.db
@@ -192,7 +197,10 @@ media:
     ffmpeg:
       fit: "INSIDE"
       cost:
-        time_per_original_megapixel: 220ms
+    imagemagick:
+      fit: "INSIDE"
+      cost:
+        time_per_original_megapixel: 300ms
       
 
   sources:
@@ -285,7 +293,23 @@ media:
       width: 4096
       height: 4096
       fit: INSIDE
+    #
+    # ImageMagick on-the-fly decoding
+    #
+    # - type: imagemagick
+    #   width: 256
+    #   height: 256
+    #   fit: INSIDE
 
+    # - type: imagemagick
+    #   width: 1280
+    #   height: 1280
+    #   fit: INSIDE
+
+    # - type: imagemagick
+    #   width: 4096
+    #   height: 4096
+    #   fit: INSIDE
 
   # These sources are used for handling small thumbnails specifically for
   # specific purposes.
@@ -329,6 +353,12 @@ media:
       
       # FFmpeg decoding
       - type: ffmpeg
+        width: 256
+        height: 256
+        fit: INSIDE
+
+      # ImageMagick decoding
+      - type: imagemagick
         width: 256
         height: 256
         fit: INSIDE

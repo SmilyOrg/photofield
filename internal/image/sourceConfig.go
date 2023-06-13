@@ -11,6 +11,7 @@ import (
 	"photofield/io/filtered"
 	"photofield/io/goexif"
 	"photofield/io/goimage"
+	"photofield/io/imagemagick"
 	"photofield/io/ristretto"
 	"photofield/io/sqlite"
 	"photofield/io/thumb"
@@ -21,12 +22,13 @@ import (
 )
 
 const (
-	SourceTypeNone   = ""
-	SourceTypeSqlite = "SQLITE"
-	SourceTypeGoexif = "GOEXIF"
-	SourceTypeThumb  = "THUMB"
-	SourceTypeImage  = "IMAGE"
-	SourceTypeFFmpeg = "FFMPEG"
+	SourceTypeNone        = ""
+	SourceTypeSqlite      = "SQLITE"
+	SourceTypeGoexif      = "GOEXIF"
+	SourceTypeThumb       = "THUMB"
+	SourceTypeImage       = "IMAGE"
+	SourceTypeFFmpeg      = "FFMPEG"
+	SourceTypeImageMagick = "IMAGEMAGICK"
 )
 
 // SourceType is the type of a source (e.g. SQLITE, THUMB, IMAGE, FFMPEG)
@@ -76,12 +78,13 @@ type ThumbnailConfig struct {
 
 // SourceEnvironment is the environment for creating sources
 type SourceEnvironment struct {
-	SourceTypes SourceTypeMap
-	DataDir     string
-	FFmpegPath  string
-	Migrations  embed.FS
-	ImageCache  *ristretto.Ristretto
-	Databases   map[string]*sqlite.Source
+	SourceTypes     SourceTypeMap
+	DataDir         string
+	FFmpegPath      string
+	ImageMagickPath string
+	Migrations      embed.FS
+	ImageCache      *ristretto.Ristretto
+	Databases       map[string]*sqlite.Source
 }
 
 func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
@@ -140,6 +143,14 @@ func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
 	case SourceTypeFFmpeg:
 		s = ffmpeg.FFmpeg{
 			Path:   env.FFmpegPath,
+			Width:  c.Width,
+			Height: c.Height,
+			Fit:    c.Fit,
+		}
+
+	case SourceTypeImageMagick:
+		s = imagemagick.ImageMagick{
+			Path:   env.ImageMagickPath,
 			Width:  c.Width,
 			Height: c.Height,
 			Fit:    c.Fit,
