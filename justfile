@@ -22,6 +22,9 @@ run-static *args:
   go build -tags embedstatic
   ./photofield {{args}}
 
+bench collection: build
+  ./photofield -bench -bench.collection {{collection}} -test.benchtime 1s -test.count 6
+
 ui:
   cd ui && npm run dev
 

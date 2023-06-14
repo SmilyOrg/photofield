@@ -217,7 +217,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 9
       },
@@ -242,14 +242,14 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(pf_source_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
+          "expr": "histogram_quantile($percentile/100, sum(rate(pf_source_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
           "interval": "",
           "legendFormat": "{{source}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Image Load Latency (p90)",
+      "title": "Load Latency (p$percentile)",
       "type": "timeseries"
     },
     {
@@ -314,8 +314,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 6,
         "y": 9
       },
       "id": 230,
@@ -339,14 +339,112 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
+          "expr": "histogram_quantile($percentile/100, sum(rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
           "interval": "",
           "legendFormat": "{{source}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Image Load Latency per Original Megapixel (p90)",
+      "title": "Load Latency / Original Megapixel (p$percentile)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisGridShow": false,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "log": 10,
+              "type": "log"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 9
+      },
+      "id": 231,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "histogram_quantile($percentile/100, sum(rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Load Latency / Resized Megapixel (p$percentile)",
       "type": "timeseries"
     },
     {
@@ -411,11 +509,11 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 18,
         "y": 9
       },
-      "id": 231,
+      "id": 284,
       "options": {
         "legend": {
           "calcs": [],
@@ -436,14 +534,14 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.90, sum(rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[1m])) by (le, source))",
+          "expr": "histogram_quantile($percentile/100, sum(rate(pf_source_latency_abs_diff_bucket{source=~\"$source\"}[1m])) by (le, source))",
           "interval": "",
           "legendFormat": "{{source}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Image Load Latency per Resized Megapixel (p90)",
+      "title": "Load Latency Diff vs. Predicted (p$percentile)",
       "type": "timeseries"
     },
     {
@@ -461,7 +559,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text"
+                "color": "text",
+                "value": null
               }
             ]
           },
@@ -471,7 +570,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 17
       },
@@ -499,7 +598,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sort(histogram_quantile(0.90, sum(rate(pf_source_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
+          "expr": "sort(histogram_quantile($percentile/100, sum(rate(pf_source_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -508,7 +607,7 @@
           "refId": "A"
         }
       ],
-      "title": "Image Load Latency (p90)",
+      "title": "Load Latency (p$percentile)",
       "transformations": [],
       "type": "bargauge"
     },
@@ -538,8 +637,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 6,
         "y": 17
       },
       "id": 250,
@@ -566,7 +665,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sort(histogram_quantile(0.90, sum(rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
+          "expr": "sort(histogram_quantile($percentile/100, sum(rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -575,7 +674,7 @@
           "refId": "A"
         }
       ],
-      "title": "Image Load Latency per Original Megapixel (p90)",
+      "title": "Load Latency / Original Megapixel (p$percentile)",
       "transformations": [],
       "type": "bargauge"
     },
@@ -605,8 +704,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 6,
+        "x": 12,
         "y": 17
       },
       "id": 251,
@@ -633,7 +732,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sort(histogram_quantile(0.90, sum(rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
+          "expr": "sort(histogram_quantile($percentile/100, sum(rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -642,9 +741,475 @@
           "refId": "A"
         }
       ],
-      "title": "Image Load Latency per Resized Megapixel (p90)",
+      "title": "Load Latency / Resized Megapixel (p$percentile)",
       "transformations": [],
       "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "RmeUbDMnz"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "µs"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 17
+      },
+      "id": 268,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false
+      },
+      "pluginVersion": "9.4.7",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sort(histogram_quantile($percentile/100, sum(rate(pf_source_latency_abs_diff_bucket{source=~\"$source\"}[$__range])) by (le, source)))",
+          "format": "time_series",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "{{source}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Load Latency Diff vs. Predicted (p$percentile)",
+      "transformations": [],
+      "type": "bargauge"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 305,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "gridPos": {
+            "h": 2,
+            "w": 4.8,
+            "x": 0,
+            "y": 26
+          },
+          "id": 411,
+          "maxPerRow": 12,
+          "options": {
+            "code": {
+              "language": "plaintext",
+              "showLineNumbers": false,
+              "showMiniMap": false
+            },
+            "content": "# ${source}",
+            "mode": "markdown"
+          },
+          "pluginVersion": "9.4.7",
+          "repeat": "source",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "sum by(le) (rate(pf_source_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "transparent": true,
+          "type": "text"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 4.8,
+            "x": 0,
+            "y": 28
+          },
+          "id": 349,
+          "maxPerRow": 12,
+          "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "color": {
+              "exponent": 0.5,
+              "fill": "dark-orange",
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Oranges",
+              "steps": 64
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": false
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "reverse": false,
+              "unit": "µs"
+            }
+          },
+          "pluginVersion": "9.4.7",
+          "repeat": "source",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
+              "editorMode": "code",
+              "exemplar": false,
+              "expr": "sum by(le) (rate(pf_source_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "$source - Latency",
+          "type": "heatmap"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 4.8,
+            "x": 0,
+            "y": 35
+          },
+          "id": 377,
+          "maxPerRow": 12,
+          "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "color": {
+              "exponent": 0.5,
+              "fill": "dark-orange",
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Oranges",
+              "steps": 64
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": false
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "reverse": false,
+              "unit": "µs"
+            }
+          },
+          "pluginVersion": "9.4.7",
+          "repeat": "source",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
+              "editorMode": "builder",
+              "exemplar": false,
+              "expr": "sum by(le) (rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "$source - Latency / Original MP",
+          "type": "heatmap"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 4.8,
+            "x": 0,
+            "y": 42
+          },
+          "id": 378,
+          "maxPerRow": 12,
+          "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "color": {
+              "exponent": 0.5,
+              "fill": "dark-orange",
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Oranges",
+              "steps": 64
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": false
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "reverse": false,
+              "unit": "µs"
+            }
+          },
+          "pluginVersion": "9.4.7",
+          "repeat": "source",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
+              "editorMode": "builder",
+              "exemplar": false,
+              "expr": "sum by(le) (rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "$source - Latency / Resized MP",
+          "type": "heatmap"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "RmeUbDMnz"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 4.8,
+            "x": 0,
+            "y": 49
+          },
+          "id": 379,
+          "maxPerRow": 12,
+          "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "color": {
+              "exponent": 0.5,
+              "fill": "dark-orange",
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Oranges",
+              "steps": 64
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": false
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "reverse": false,
+              "unit": "µs"
+            }
+          },
+          "pluginVersion": "9.4.7",
+          "repeat": "source",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "RmeUbDMnz"
+              },
+              "editorMode": "builder",
+              "exemplar": false,
+              "expr": "sum by(le) (rate(pf_source_latency_abs_diff_bucket{source=~\"$source\"}[$__rate_interval]))",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "$source - Latency Diff vs. Predicted",
+          "type": "heatmap"
+        }
+      ],
+      "title": "Source Details",
+      "type": "row"
     },
     {
       "datasource": {
@@ -655,7 +1220,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 26
       },
       "id": 143,
       "targets": [
@@ -702,7 +1267,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 27
       },
       "id": 93,
       "options": {
@@ -768,7 +1333,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 26
+        "y": 27
       },
       "id": 109,
       "options": {
@@ -833,7 +1398,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 26
+        "y": 27
       },
       "id": 126,
       "options": {
@@ -879,7 +1444,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 32
       },
       "id": 56,
       "targets": [
@@ -909,8 +1474,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -926,7 +1490,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 32
+        "y": 33
       },
       "id": 38,
       "options": {
@@ -976,8 +1540,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "#EAB839",
@@ -993,7 +1556,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 32
+        "y": 33
       },
       "id": 25,
       "options": {
@@ -1043,8 +1606,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1056,7 +1618,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 33
       },
       "id": 33,
       "options": {
@@ -1120,8 +1682,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "#EAB839",
@@ -1136,7 +1697,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 37
+        "y": 38
       },
       "id": 37,
       "options": {
@@ -1198,8 +1759,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "#EAB839",
@@ -1215,7 +1775,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 37
+        "y": 38
       },
       "id": 35,
       "options": {
@@ -1269,8 +1829,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
-                "value": null
+                "color": "text"
               },
               {
                 "color": "green",
@@ -1286,7 +1845,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 42
+        "y": 43
       },
       "id": 75,
       "options": {
@@ -1354,8 +1913,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1367,7 +1925,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 42
+        "y": 43
       },
       "id": 92,
       "options": {
@@ -1415,7 +1973,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 49
       },
       "id": 12,
       "panels": [
@@ -1496,7 +2054,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 55
           },
           "id": 13,
           "options": {
@@ -1600,7 +2158,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 47
+            "y": 55
           },
           "id": 17,
           "options": {
@@ -1724,7 +2282,7 @@
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 53
+            "y": 61
           },
           "id": 14,
           "options": {
@@ -1862,7 +2420,7 @@
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 53
+            "y": 61
           },
           "id": 15,
           "options": {
@@ -1922,7 +2480,7 @@
       "type": "row"
     }
   ],
-  "refresh": "2s",
+  "refresh": "",
   "revision": 1,
   "schemaVersion": 38,
   "style": "dark",
@@ -1977,7 +2535,7 @@
       },
       {
         "current": {
-          "selected": true,
+          "selected": false,
           "text": [
             "All"
           ],
@@ -2070,11 +2628,31 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "50",
+          "value": "50"
+        },
+        "hide": 0,
+        "label": "Latency p",
+        "name": "percentile",
+        "options": [
+          {
+            "selected": true,
+            "text": "50",
+            "value": "50"
+          }
+        ],
+        "query": "50",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-2d",
     "to": "now"
   },
   "timepicker": {
@@ -2096,6 +2674,6 @@
   "timezone": "",
   "title": "Photofield",
   "uid": "9sQ5hGGnk",
-  "version": 13,
+  "version": 24,
   "weekStart": ""
 }
