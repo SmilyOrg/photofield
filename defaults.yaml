@@ -197,11 +197,11 @@ media:
 
   sources:
     
-    # # Internal thumbnail database
+    # Internal thumbnail database
     - type: sqlite
 
     
-    # # # Embedded JPEG thumbnails
+    # Embedded JPEG thumbnails
     - type: goexif
     
     # Native image decoding
