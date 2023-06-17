@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "photofield"
+version = "0.1.0"
+description = ""
+authors = ["Miha Lunar <mlunar@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+mkdocs = "^1.4.3"
+mkdocs-material = "^9.1.16"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
