@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"math"
 	"photofield/internal/image"
 	"photofield/io"
 	"time"
@@ -77,6 +78,9 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 	sources := srcs.EstimateCost(io.Size(size), io.Size(rsize))
 	sources.Sort()
+
+	var errs []error
+
 	for i, s := range sources {
 		if drawn {
 			break
@@ -87,13 +91,21 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 
 		img, err := r.Image, r.Error
 		if img == nil || err != nil {
+			if err != nil {
+				errs = append(errs, err)
+			}
 			continue
 		}
 
-		name := s.Name()
-		source.SourceLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed.Microseconds()))
-		source.SourcePerOriginalMegapixelLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed) * 1e6 / (float64(size.X) * float64(size.Y)))
-		source.SourcePerResizedMegapixelLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed) * 1e6 / float64(s.EstimatedArea))
+		if !r.FromCache {
+			name := s.Name()
+			elapsedus := float64(elapsed.Microseconds())
+			elapsedabsdiff := math.Abs(float64(s.EstimatedDuration.Microseconds()) - elapsedus)
+			source.SourceLatencyHistogram.WithLabelValues(name).Observe(elapsedus)
+			source.SourceLatencyAbsDiffHistogram.WithLabelValues(name).Observe(elapsedabsdiff)
+			source.SourcePerOriginalMegapixelLatencyHistogram.WithLabelValues(name).Observe(elapsedus * 1e6 / (float64(size.X) * float64(size.Y)))
+			source.SourcePerResizedMegapixelLatencyHistogram.WithLabelValues(name).Observe(elapsedus * 1e6 / float64(s.EstimatedArea))
+		}
 
 		if r.Orientation == io.SourceInfoOrientation {
 			r.Orientation = io.Orientation(info.Orientation)
@@ -138,6 +150,10 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	if !drawn {
+		if len(errs) > 0 {
+			log.Printf("Unable to draw photo %v: %v", photo.Id, errs)
+		}
+
 		style := c.Style
 		style.FillColor = canvas.Red
 		photo.Sprite.DrawWithStyle(c, style)

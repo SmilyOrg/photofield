@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"mime"
 	"path"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"io"
@@ -60,6 +62,7 @@ import (
 	"photofield/internal/render"
 	"photofield/internal/scene"
 	pfio "photofield/io"
+	"photofield/io/bench"
 	"photofield/tag"
 )
 
@@ -1126,15 +1129,59 @@ func IndexHTML() func(next http.Handler) http.Handler {
 	}
 }
 
+// benchmarkSources runs a benchmark on image sources
+//
+// It's not very usable right now as it doesn't use a representative sample of images,
+// but it's a start.
+func benchmarkSources(collection *collection.Collection, seed int64, sampleSize int, count int) {
+	ids := make([]image.ImageId, 0)
+	for id := range collection.GetIds(imageSource) {
+		ids = append(ids, id)
+	}
+	randGen := rand.New(rand.NewSource(seed))
+	randGen.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
+	if len(ids) > sampleSize {
+		ids = ids[:sampleSize]
+	}
+	samples := make([]bench.Sample, 0)
+	for _, id := range ids {
+		path, err := imageSource.GetImagePath(id)
+		if err != nil {
+			panic(err)
+		}
+		info := imageSource.GetInfo(id)
+		samples = append(samples, bench.Sample{
+			Id:   pfio.ImageId(id),
+			Path: path,
+			Size: pfio.Size{
+				X: info.Width,
+				Y: info.Height,
+			},
+		})
+	}
+	sources := imageSource.Sources
+	bench.BenchmarkSources(seed, sources, samples, count)
+}
+
 func main() {
 	startupTime = time.Now()
 
-	versionPtr := flag.Bool("version", false, "print version and exit")
-	vacuumPtr := flag.Bool("vacuum", false, "clean database for smaller size and better performance, and exit")
+	testing.Init()
+	versionFlag := flag.Bool("version", false, "print version and exit")
+	vacuumFlag := flag.Bool("vacuum", false, "clean database for smaller size and better performance, and exit")
+	benchFlag := flag.Bool("bench", false, "benchmark sources and exit")
+	benchCollectionId := flag.String("bench.collection", "vacation-photos", "id of the collection to benchmark")
+	benchSeed := flag.Int64("bench.seed", 123, "seed for random number generator")
+	benchSample := flag.Int("bench.sample", 10000, "number of images from the collection to use as a sample")
+	flag.Parse()
 
 	flag.Parse()
 
-	if *versionPtr {
+	if *benchFlag {
+		log.SetOutput(os.Stderr)
+	}
+
+	if *versionFlag {
 		fmt.Printf("photofield %s, commit %s, built on %s by %s\n", version, commit, date, builtBy)
 		return
 	}
@@ -1200,7 +1247,7 @@ func main() {
 	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs)
 	defer imageSource.Close()
 
-	if *vacuumPtr {
+	if *vacuumFlag {
 		err := imageSource.Vacuum()
 		if err != nil {
 			panic(err)
@@ -1237,6 +1284,19 @@ func main() {
 			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
 		}
 		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+	}
+
+	if *benchFlag {
+		log.Printf("benchmark sources")
+
+		count := flag.Lookup("test.count").Value.(flag.Getter).Get().(uint)
+
+		c := getCollectionById(*benchCollectionId)
+		if c == nil {
+			panic(fmt.Errorf("collection %v not found", *benchCollectionId))
+		}
+		benchmarkSources(c, *benchSeed, *benchSample, int(count))
+		return
 	}
 
 	metadataTask := Task{

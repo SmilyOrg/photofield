@@ -95,6 +95,7 @@ func (s Size) Fit(original Size, fit AspectRatioFit) Size {
 type Result struct {
 	Image       image.Image
 	Orientation Orientation
+	FromCache   bool
 	Error       error
 }
 
@@ -128,34 +129,49 @@ type ReadDecoder interface {
 
 type Sources []Source
 
-func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
+// Original
+// var UnderdrawPenaltyMultiplier = 15.
+// var SizeCostMultiplier = 0.00001
+// var DurationCostMultiplier = 0.003
+
+// Optimized for 0.9 max width ratio + square duration
+var UnderdrawPenaltyMultiplier = 59.851585
+var SizeCostMultiplier = 0.000281
+var DurationCostMultiplier = 0.011857
+
+func SizeCost(source Size, original Size, target Size) (cost float64, area int64) {
+	if source.X == 0 && source.Y == 0 {
+		source = target
+	}
+	area = source.Area()
 	targetArea := target.Area()
+	diff := float64(targetArea) - float64(area)
+	if targetArea > area {
+		diff *= UnderdrawPenaltyMultiplier
+	}
+	cost = diff * diff * SizeCostMultiplier
+	return
+}
+
+func DurationCost(dur time.Duration) float64 {
+	us := float64(dur.Microseconds())
+	return us * us * DurationCostMultiplier
+}
+
+func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
 	costs := make([]SourceCost, len(sources))
 	for i := range sources {
 		s := sources[i]
-		ssize := s.Size(original)
-		if ssize.X == 0 && ssize.Y == 0 {
-			ssize = target
-		}
-		sarea := ssize.Area()
-		sizecost := math.Abs(float64(targetArea)-float64(sarea)) * 0.001
-		if targetArea > sarea {
-			// areacost = math.Sqrt(float64(targetArea)-float64(sarea)) * 3
-			// areacost = math.Sqrt(float64(targetArea)-float64(sarea)) * 3
-			sizecost *= 15
-		}
-		// dx := float64(target.X - ssize.X)
-		// dy := float64(target.Y - ssize.Y)
-		// sizecost := math.Sqrt(dx*dx + dy*dy)
+		sizecost, sarea := SizeCost(s.Size(original), original, target)
 		dur := s.GetDurationEstimate(original)
-		durcost := math.Pow(float64(dur.Microseconds()), 1) * 0.003
-		// durcost := float64(dur.Microseconds()) * 0.001
+		durcost := DurationCost(dur)
 		cost := sizecost + durcost
-		// fmt.Printf("%4d %30s %12s %12s %12s %12d %12f %10s %12f %12f\n", i, s.Name(), original, target, ssize, sarea, sizecost, dur, durcost, cost)
 		costs[i] = SourceCost{
 			Source:            s,
 			EstimatedArea:     sarea,
 			EstimatedDuration: dur,
+			SizeCost:          sizecost,
+			DurationCost:      durcost,
 			Cost:              cost,
 		}
 	}
@@ -166,6 +182,8 @@ type SourceCost struct {
 	Source
 	EstimatedArea     int64
 	EstimatedDuration time.Duration
+	SizeCost          float64
+	DurationCost      float64
 	Cost              float64
 }
 
@@ -176,5 +194,13 @@ func (costs SourceCosts) Sort() {
 		a := costs[i]
 		b := costs[j]
 		return a.Cost < b.Cost
+	})
+}
+
+func (costs SourceCosts) SortSize() {
+	sort.Slice(costs, func(i, j int) bool {
+		a := costs[i]
+		b := costs[j]
+		return a.SizeCost < b.SizeCost
 	})
 }

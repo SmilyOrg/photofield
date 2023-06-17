@@ -16,7 +16,7 @@ import (
 	"photofield/internal/queue"
 	"photofield/io"
 	"photofield/io/ffmpeg"
-	ioristretto "photofield/io/ristretto"
+	"photofield/io/ristretto"
 	"photofield/io/sqlite"
 	"photofield/tag"
 
@@ -137,6 +137,7 @@ type Source struct {
 
 	Sources                                    io.Sources
 	SourceLatencyHistogram                     *prometheus.HistogramVec
+	SourceLatencyAbsDiffHistogram              *prometheus.HistogramVec
 	SourcePerOriginalMegapixelLatencyHistogram *prometheus.HistogramVec
 	SourcePerResizedMegapixelLatencyHistogram  *prometheus.HistogramVec
 
@@ -167,7 +168,15 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.SourceLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Name:      "source_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+	},
+		[]string{"source"},
+	)
+
+	source.SourceLatencyAbsDiffHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: metrics.Namespace,
+		Name:      "source_latency_abs_diff",
+		Buckets:   []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 200000, 500000, 1000000},
 	},
 		[]string{"source"},
 	)
@@ -175,7 +184,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.SourcePerOriginalMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Name:      "source_per_original_megapixel_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
 	},
 		[]string{"source"},
 	)
@@ -183,7 +192,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.SourcePerResizedMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Name:      "source_per_resized_megapixel_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
 	},
 		[]string{"source"},
 	)
@@ -192,7 +201,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 		SourceTypes: config.SourceTypes,
 		FFmpegPath:  ffmpeg.FindPath(),
 		Migrations:  migrationsThumbs,
-		ImageCache:  ioristretto.New(),
+		ImageCache:  ristretto.New(),
 		DataDir:     config.DataDir,
 	}
 
