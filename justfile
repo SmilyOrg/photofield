@@ -10,10 +10,10 @@ build-ui:
   cd ui && npm run build
 
 build-local:
-  goreleaser build --snapshot --single-target --rm-dist
+  goreleaser build --snapshot --single-target --clean
 
 release-local:
-  goreleaser release --snapshot --skip-publish --rm-dist
+  goreleaser release --snapshot --clean
 
 run *args: build
   ./photofield {{args}}

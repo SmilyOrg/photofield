@@ -2,9 +2,10 @@ name: goreleaser
 
 on:
   push:
-    # run only against tags
     tags:
       - '*'
+  pull_request:
+    types: [opened, synchronize]
 
 permissions:
   contents: write
@@ -37,11 +38,22 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run GoReleaser
+      - name: Run GoReleaser (Push)
+        if: github.event_name == 'push'
         uses: goreleaser/goreleaser-action@v4
         with:
           distribution: goreleaser
           version: latest
-          args: release --rm-dist
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser (PR)
+        if: github.event_name == 'pull_request'
+        uses: goreleaser/goreleaser-action@v4
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --snapshot --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
