@@ -94,6 +94,13 @@ func (q *Queue) Length() int {
 	return q.queue.Length()
 }
 
+func (q *Queue) AppendItem(item interface{}) {
+	if q.queue == nil {
+		return
+	}
+	q.queue.Append(item)
+}
+
 func (q *Queue) AppendItems(items <-chan interface{}) {
 	if q.queue == nil {
 		return

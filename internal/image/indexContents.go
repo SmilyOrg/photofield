@@ -57,10 +57,14 @@ func (source *Source) indexContentsReader(ctx context.Context, m MissingInfo, sr
 	var err error
 	if m.Color {
 		// Decode image if needed
-		if img == nil && rs != nil {
-			img, err = source.indexContentsDecode(ctx, src, rs)
-			if err != nil {
-				log.Println("Unable to decode image thumbnail", err)
+		if img == nil {
+			if rs != nil {
+				img, err = source.indexContentsDecode(ctx, src, rs)
+				if err != nil {
+					log.Println("Unable to decode image thumbnail", err)
+				}
+			} else {
+				log.Println("Unable to decode image thumbnail, missing reader", m.Path)
 			}
 		}
 
@@ -79,14 +83,20 @@ func (source *Source) indexContentsReader(ctx context.Context, m MissingInfo, sr
 	}
 
 	// Extract AI embedding
-	if m.Embedding && rs != nil {
-		embedding, err := source.Clip.EmbedImageReader(rs)
-		if err != clip.ErrNotAvailable {
-			if err != nil {
-				fmt.Println("Unable to get image embedding", err, m.Path)
+	if m.Embedding {
+		if rs != nil {
+			embedding, err := source.Clip.EmbedImageReader(rs)
+			if err != clip.ErrNotAvailable {
+				if err != nil {
+					fmt.Println("Unable to get image embedding", err, m.Path)
+				} else {
+					source.database.WriteAI(m.Id, embedding)
+				}
 			} else {
-				source.database.WriteAI(m.Id, embedding)
+				log.Println("Unable to get image embedding, not available", m.Path)
 			}
+		} else {
+			log.Println("Unable to get image embedding, missing reader", m.Path)
 		}
 	}
 }

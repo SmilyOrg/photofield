@@ -51,24 +51,30 @@ type Database struct {
 type InfoWriteType int32
 
 const (
-	AppendPath    InfoWriteType = iota
-	UpdateMeta    InfoWriteType = iota
-	UpdateColor   InfoWriteType = iota
-	UpdateAI      InfoWriteType = iota
-	Delete        InfoWriteType = iota
-	Index         InfoWriteType = iota
-	AddTag        InfoWriteType = iota
-	AddTagId      InfoWriteType = iota
-	AddTagIds     InfoWriteType = iota
-	RemoveTagIds  InfoWriteType = iota
-	InvertTagIds  InfoWriteType = iota
-	CompactTagIds InfoWriteType = iota
+	AppendPath       InfoWriteType = iota
+	RemovePathPrefix InfoWriteType = iota
+	UpdatePath       InfoWriteType = iota
+	RenamePath       InfoWriteType = iota
+	UpdateMeta       InfoWriteType = iota
+	UpdateColor      InfoWriteType = iota
+	UpdateAI         InfoWriteType = iota
+	Delete           InfoWriteType = iota
+	Index            InfoWriteType = iota
+	AddTag           InfoWriteType = iota
+	AddTagId         InfoWriteType = iota
+	AddTagIds        InfoWriteType = iota
+	RemoveTagIds     InfoWriteType = iota
+	InvertTagIds     InfoWriteType = iota
+	CompactTagIds    InfoWriteType = iota
+	UpsertHash       InfoWriteType = iota
 )
 
 type InfoWrite struct {
 	Path      string
+	OldPath   string
 	Id        int64
 	Embedding clip.Embedding
+	Hash      uint64
 	Type      InfoWriteType
 	Ids       Ids
 	Done      chan any
@@ -249,8 +255,94 @@ func (source *Database) writePendingInfosSqlite() {
 			id as path_prefix_id,
 			? as filename
 		FROM prefix
-		WHERE str == ?`)
+		WHERE str == ?;`)
 	defer appendPath.Finalize()
+
+	getIdFromPath := conn.Prep(`
+		SELECT id FROM infos
+		WHERE filename == ? AND path_prefix_id == (
+			SELECT id
+			FROM prefix
+			WHERE str == ?
+		);`)
+	defer getIdFromPath.Finalize()
+
+	// updatePath := conn.Prep(`
+	// 	UPDATE infos
+	// 	SET path_prefix_id = (
+	// 		SELECT id
+	// 		FROM prefix
+	// 		WHERE str == ?
+	// 	)
+	// 	WHERE path_prefix_id IS NULL AND filename == ?
+	// 	RETURNING id;`)
+	// defer updatePath.Finalize()
+
+	// updatePath := conn.Prep(`
+	// 	UPDATE infos
+	// 	SET path_prefix_id = (
+	// 		SELECT id
+	// 		FROM prefix
+	// 		WHERE str == :prefix
+	// 	)
+	// 	WHERE id = (
+	// 		SELECT id
+	// 		FROM infos
+	// 		LEFT JOIN fingerprint ON fingerprint.file_id = infos.id
+	// 		WHERE path_prefix_id IS NULL AND (
+	// 			filename == :filename OR
+	// 			hash_xxh64 == :hash
+	// 		)
+	// 		ORDER BY (filename == :filename) + (hash_xxh64 == :hash) DESC
+	// 		LIMIT 1
+	// 	)
+	// 	RETURNING id;`)
+	// defer updatePath.Finalize()
+
+	updatePath := conn.Prep(`
+		UPDATE infos
+		SET path_prefix_id = (
+			SELECT id
+			FROM prefix
+			WHERE str == :prefix
+		),
+		filename = :filename
+		WHERE id = (
+			SELECT id
+			FROM infos
+			LEFT JOIN fingerprint ON fingerprint.file_id = infos.id
+			WHERE path_prefix_id IS NULL AND hash_xxh64 == :hash
+			ORDER BY (filename == :filename) + (hash_xxh64 == :hash) DESC
+			LIMIT 1
+		)
+		RETURNING id;`)
+	defer updatePath.Finalize()
+
+	updateFilename := conn.Prep(`
+		UPDATE infos
+		SET filename = ?
+		WHERE path_prefix_id = (
+			SELECT id
+			FROM prefix
+			WHERE str == ?
+		) AND filename == ?;`)
+	defer updateFilename.Finalize()
+
+	updatePrefix := conn.Prep(`
+		UPDATE prefix
+		SET str = ?
+		WHERE str == ?;`)
+	defer updatePrefix.Finalize()
+
+	removePathPrefix := conn.Prep(`
+		UPDATE infos
+		SET path_prefix_id = NULL
+		WHERE filename == ? AND path_prefix_id == (
+			SELECT id
+			FROM prefix
+			WHERE str == ?
+		);`)
+	defer removePathPrefix.Finalize()
 
 	delete := conn.Prep(`
 		DELETE
@@ -295,6 +387,11 @@ func (source *Database) writePendingInfosSqlite() {
 		WHERE id == ?
 		RETURNING revision;`)
 	defer incrementTagRevision.Finalize()
+
+	upsertHash := conn.Prep(`
+		INSERT OR REPLACE INTO fingerprint(file_id, hash_xxh64)
+		VALUES (?, ?);`)
+	defer upsertHash.Finalize()
 
 	lastOptimize := time.Time{}
 	inTransaction := false
@@ -382,6 +479,127 @@ func (source *Database) writePendingInfosSqlite() {
 					continue
 				}
 				err = appendPath.Reset()
+				if err != nil {
+					panic(err)
+				}
+			case UpdatePath:
+				dir, file := filepath.Split(imageInfo.Path)
+				hash := imageInfo.Hash
+
+				upsertPrefix.BindText(1, dir)
+				_, err := upsertPrefix.Step()
+				if err != nil {
+					log.Printf("Unable to insert path prefix %s: %s\n", dir, err.Error())
+					continue
+				}
+				err = upsertPrefix.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				updatePath.BindText(1, dir)
+				updatePath.BindText(2, file)
+				updatePath.BindInt64(3, int64(hash))
+				updated, err := updatePath.Step()
+				if err != nil {
+					log.Printf("Unable to update path %s: %s\n", file, err.Error())
+					continue
+				}
+				var id ImageId
+				if updated {
+					println("update", dir, file, int64(hash))
+					id = ImageId(updatePath.ColumnInt(0))
+				} else {
+					println("append", dir, file, int64(hash))
+					appendPath.BindText(1, file)
+					appendPath.BindText(2, dir)
+					_, err = appendPath.Step()
+					if err != nil {
+						log.Printf("Unable to append path %s: %s\n", file, err.Error())
+						continue
+					}
+					err = appendPath.Reset()
+					if err != nil {
+						panic(err)
+					}
+
+					getIdFromPath.BindText(1, file)
+					getIdFromPath.BindText(2, dir)
+					_, err = getIdFromPath.Step()
+					if err != nil {
+						log.Printf("Unable to get path id %s: %s\n", file, err.Error())
+						continue
+					}
+					id = ImageId(getIdFromPath.ColumnInt64(0))
+					err = getIdFromPath.Reset()
+					if err != nil {
+						panic(err)
+					}
+
+					upsertHash.BindInt64(1, int64(id))
+					upsertHash.BindInt64(2, int64(hash))
+					_, err = upsertHash.Step()
+					if err != nil {
+						log.Printf("Unable to insert hash %d: %s\n", hash, err.Error())
+						continue
+					}
+					err = upsertHash.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+				err = updatePath.Reset()
+				if err != nil {
+					panic(err)
+				}
+				imageInfo.Done <- id
+
+			case RenamePath:
+				dir, file := filepath.Split(imageInfo.OldPath)
+				newdir, newfile := filepath.Split(imageInfo.Path)
+
+				if dir != newdir {
+					if file != "" && newfile != "" {
+						log.Printf("Unable to rename dir %s to %s: filename not empty\n", imageInfo.OldPath, imageInfo.Path)
+						continue
+					}
+
+					updatePrefix.BindText(1, newdir)
+					updatePrefix.BindText(2, dir)
+					_, err := updatePrefix.Step()
+					if err != nil {
+						log.Printf("Unable to rename path prefix %s to %s: %s\n", dir, newdir, err.Error())
+						continue
+					}
+					err = updatePrefix.Reset()
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					updateFilename.BindText(1, newfile)
+					updateFilename.BindText(2, dir)
+					updateFilename.BindText(3, file)
+					_, err := updateFilename.Step()
+					if err != nil {
+						log.Printf("Unable to rename path %s to %s: %s\n", imageInfo.OldPath, imageInfo.Path, err.Error())
+						continue
+					}
+					err = updateFilename.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+
+			case RemovePathPrefix:
+				dir, file := filepath.Split(imageInfo.Path)
+				removePathPrefix.BindText(1, file)
+				removePathPrefix.BindText(2, dir)
+				_, err := removePathPrefix.Step()
+				if err != nil {
+					log.Printf("Unable to remove path filename %s: %s\n", file, err.Error())
+					continue
+				}
+				err = removePathPrefix.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -631,6 +849,21 @@ func (source *Database) writePendingInfosSqlite() {
 
 				imageInfo.Done <- rev
 				close(imageInfo.Done)
+
+			case UpsertHash:
+				id := imageInfo.Id
+				hash := imageInfo.Hash
+				upsertHash.BindInt64(1, int64(id))
+				upsertHash.BindInt64(2, int64(hash))
+				_, err := upsertHash.Step()
+				if err != nil {
+					log.Printf("Unable upsert hash %d: %s\n", hash, err.Error())
+					continue
+				}
+				err = upsertHash.Reset()
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 
@@ -827,6 +1060,39 @@ func (source *Database) Write(path string, info Info, writeType InfoWriteType) e
 		Type: writeType,
 	}
 	return nil
+}
+
+func (source *Database) WriteHash(id ImageId, hash uint64) {
+	source.pending <- &InfoWrite{
+		Id:   int64(id),
+		Type: UpsertHash,
+		Hash: hash,
+	}
+}
+
+func (source *Database) WriteUpdate(path string, hash uint64) (ImageId, error) {
+	d := make(chan any)
+	source.pending <- &InfoWrite{
+		Path: path,
+		Hash: hash,
+		Info: Info{},
+		Type: UpdatePath,
+		Done: d,
+	}
+	id, ok := (<-d).(ImageId)
+	if !ok {
+		return 0, errors.New("unable to get id")
+	}
+	return id, nil
+}
+
+func (source *Database) WriteRename(path string, oldPath string) {
+	source.pending <- &InfoWrite{
+		Path:    path,
+		OldPath: oldPath,
+		Info:    Info{},
+		Type:    RenamePath,
+	}
 }
 
 func (source *Database) CompactTag(id tag.Id) <-chan struct{} {
@@ -1688,6 +1954,143 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 	return out
 }
 
+type condition struct {
+	inputs []string
+	output string
+}
+
+type conditions []condition
+
+func (conds conditions) sqlSelect() string {
+	sql := ""
+	for _, c := range conds {
+		sql += `,
+		`
+		for i, input := range c.inputs {
+			sql += fmt.Sprintf("%s IS NULL ", input)
+			if i < len(c.inputs)-1 {
+				sql += "OR "
+			}
+		}
+		sql += fmt.Sprintf("AS %s", c.output)
+	}
+	return sql
+}
+
+func (conds conditions) sqlWhere() string {
+	sql := ""
+	if len(conds) > 0 {
+		sql += `
+			AND (
+		`
+
+		for i, c := range conds {
+			sql += fmt.Sprintf("%s ", c.output)
+			if i < len(conds)-1 {
+				sql += `OR 
+				`
+			}
+		}
+		sql += `
+			)
+		`
+	}
+	return sql
+}
+
+func getMissingConditions(opts Missing) conditions {
+	conds := make([]condition, 0)
+	if opts.Metadata {
+		conds = append(conds, condition{
+			inputs: []string{
+				"width",
+				"height",
+				"orientation",
+				"created_at_unix",
+			},
+			output: "missing_metadata",
+		})
+	}
+	if opts.Color {
+		conds = append(conds, condition{
+			inputs: []string{"color"},
+			output: "missing_color",
+		})
+	}
+	if opts.Embedding {
+		conds = append(conds, condition{
+			inputs: []string{"embedding"},
+			output: "missing_embedding",
+		})
+	}
+	if opts.Hash {
+		conds = append(conds, condition{
+			inputs: []string{"hash_xxh64"},
+			output: "missing_hash",
+		})
+	}
+	return conds
+}
+
+func readMissingConditions(stmt *sqlite.Stmt, opts Missing, bindIndex int) (out Missing, bindIndexOut int) {
+	if opts.Metadata {
+		out.Metadata = stmt.ColumnBool(bindIndex)
+		bindIndex++
+	}
+	if opts.Color {
+		out.Color = stmt.ColumnBool(bindIndex)
+		bindIndex++
+	}
+	if opts.Embedding {
+		out.Embedding = stmt.ColumnBool(bindIndex)
+		bindIndex++
+	}
+	if opts.Hash {
+		out.Hash = stmt.ColumnBool(bindIndex)
+		bindIndex++
+	}
+	return out, bindIndex
+}
+
+func (source *Database) GetMissing(id ImageId, opts Missing) (MissingInfo, error) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	sql := `
+		SELECT str || filename as path`
+
+	conds := getMissingConditions(opts)
+	sql += conds.sqlSelect()
+
+	sql += `
+		FROM infos
+		INNER JOIN prefix ON prefix.id = path_prefix_id
+		LEFT JOIN clip_emb ON clip_emb.file_id = infos.id
+		LEFT JOIN fingerprint ON fingerprint.file_id = infos.id
+		WHERE infos.id = ?;`
+
+	stmt := conn.Prep(sql)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, (int64)(id))
+
+	exists, err := stmt.Step()
+	if err != nil {
+		return MissingInfo{}, err
+	}
+	if !exists {
+		return MissingInfo{}, ErrNotFound
+	}
+
+	r := MissingInfo{
+		Id:   id,
+		Path: stmt.ColumnText(0),
+	}
+	m, _ := readMissingConditions(stmt, opts, 1)
+	r.Missing = m
+	return r, nil
+}
+
 func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-chan MissingInfo {
 	out := make(chan MissingInfo, 1000)
 	go func() {
@@ -1699,47 +2102,20 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 		sql := `
 			SELECT infos.id, str || filename as path`
 
-		type condition struct {
-			inputs []string
-			output string
-		}
+		conds := getMissingConditions(opts)
+		sql += conds.sqlSelect()
 
-		conds := make([]condition, 0)
-		if opts.Metadata {
-			conds = append(conds, condition{
-				inputs: []string{
-					"width",
-					"height",
-					"orientation",
-					"created_at_unix",
-				},
-				output: "missing_metadata",
-			})
-		}
-		if opts.Color {
-			conds = append(conds, condition{
-				inputs: []string{"color"},
-				output: "missing_color",
-			})
-		}
-		if opts.Embedding {
-			conds = append(conds, condition{
-				inputs: []string{"file_id"},
-				output: "missing_embedding",
-			})
-		}
-
-		for _, c := range conds {
-			sql += `,
-			`
-			for i, input := range c.inputs {
-				sql += fmt.Sprintf("%s IS NULL ", input)
-				if i < len(c.inputs)-1 {
-					sql += "OR "
-				}
-			}
-			sql += fmt.Sprintf("AS %s", c.output)
-		}
+		// for _, c := range conds {
+		// 	sql += `,
+		// 	`
+		// 	for i, input := range c.inputs {
+		// 		sql += fmt.Sprintf("%s IS NULL ", input)
+		// 		if i < len(c.inputs)-1 {
+		// 			sql += "OR "
+		// 		}
+		// 	}
+		// 	sql += fmt.Sprintf("AS %s", c.output)
+		// }
 
 		sql += `
 			FROM infos
@@ -1771,35 +2147,37 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 			)
 		`
 
-		if len(conds) > 0 {
-			sql += `
-				AND (
-			`
+		sql += conds.sqlWhere()
 
-			for i, c := range conds {
-				sql += fmt.Sprintf("%s ", c.output)
-				if i < len(conds)-1 {
-					sql += `OR 
-					`
-				}
-			}
-			// for i, c := range conds {
-			// 	for j, input := range c.inputs {
-			// 		sql += fmt.Sprintf("%s IS NULL ", input)
-			// 		if j < len(c.inputs)-1 {
-			// 			sql += "OR "
-			// 		}
-			// 	}
-			// 	if i < len(conds)-1 {
-			// 		sql += "OR "
-			// 	}
-			// 	sql += `
-			// 	`
-			// }
-			sql += `
-				)
-			`
-		}
+		// if len(conds) > 0 {
+		// 	sql += `
+		// 		AND (
+		// 	`
+
+		// 	for i, c := range conds {
+		// 		sql += fmt.Sprintf("%s ", c.output)
+		// 		if i < len(conds)-1 {
+		// 			sql += `OR
+		// 			`
+		// 		}
+		// 	}
+		// 	// for i, c := range conds {
+		// 	// 	for j, input := range c.inputs {
+		// 	// 		sql += fmt.Sprintf("%s IS NULL ", input)
+		// 	// 		if j < len(c.inputs)-1 {
+		// 	// 			sql += "OR "
+		// 	// 		}
+		// 	// 	}
+		// 	// 	if i < len(conds)-1 {
+		// 	// 		sql += "OR "
+		// 	// 	}
+		// 	// 	sql += `
+		// 	// 	`
+		// 	// }
+		// 	sql += `
+		// 		)
+		// 	`
+		// }
 
 		if limit > 0 {
 			sql += `LIMIT ? `
@@ -1830,15 +2208,8 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 				Id:   (ImageId)(stmt.ColumnInt64(0)),
 				Path: stmt.ColumnText(1),
 			}
-			i := 2
-			if opts.Color {
-				r.Color = stmt.ColumnBool(i)
-				i++
-			}
-			if opts.Embedding {
-				r.Embedding = stmt.ColumnBool(i)
-				i++
-			}
+			m, _ := readMissingConditions(stmt, opts, 2)
+			r.Missing = m
 			out <- r
 		}
 

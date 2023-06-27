@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
 	goio "io"
 
+	"photofield/fs"
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
 	"photofield/internal/queue"
@@ -61,6 +63,7 @@ type Missing struct {
 	Metadata  bool
 	Color     bool
 	Embedding bool
+	Hash      bool
 }
 
 type IdPath struct {
@@ -441,6 +444,87 @@ func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 	}
 	source.database.SetIndexed(dir)
 	source.database.WaitForCommit()
+}
+
+func (source *Source) WatchFiles(dirs []string) {
+	normalized := make([]string, len(dirs))
+	for i := range dirs {
+		normalized[i] = filepath.FromSlash(dirs[i])
+	}
+
+	w, err := fs.NewWatcher(normalized)
+	if err != nil {
+		panic(err)
+	}
+
+	idsToIndex := make(chan ImageId)
+	go func() {
+		for e := range w.Events {
+			log.Printf("watch event %v %v", e.Op, e.Path)
+			switch e.Op {
+			case fs.Update:
+				go func(path string) {
+					f, err := os.Open(path)
+					if err != nil {
+						log.Printf("Error opening %v: %v", path, err)
+						return
+					}
+					defer f.Close()
+
+					i, err := f.Stat()
+					if err != nil {
+						log.Printf("Error statting %v: %v", path, err)
+						return
+					}
+
+					if i.IsDir() {
+						log.Printf("Skipping directory %v (TODO)", path)
+						return
+					}
+
+					hash, err := fs.HashReader(f)
+					if err != nil {
+						log.Printf("Error hashing %v: %v", path, err)
+						return
+					}
+
+					id, err := source.database.WriteUpdate(path, hash)
+					if err != nil {
+						log.Printf("Error updating %v: %v", path, err)
+						return
+					}
+					source.database.WaitForCommit()
+					idsToIndex <- id
+				}(e.Path)
+			case fs.Rename:
+				source.database.WriteRename(e.Path, e.OldPath)
+			case fs.Remove:
+				source.database.Write(e.Path, Info{}, RemovePathPrefix)
+			}
+		}
+	}()
+
+	go func() {
+		for id := range idsToIndex {
+			m, err := source.database.GetMissing(id, Missing{
+				Metadata:  true,
+				Color:     true,
+				Embedding: true,
+				Hash:      true,
+			})
+			if err != nil {
+				log.Printf("Error getting missing data status %v: %v", id, err)
+				continue
+			}
+			println("missing", m.Id, m.Path, m.Metadata, m.Color, m.Embedding)
+			if m.Metadata || m.Hash {
+				source.metadataQueue.AppendItem(m)
+			}
+			if m.Color || m.Embedding {
+				source.contentsQueue.AppendItem(m)
+			}
+		}
+	}()
 }
 
 func (source *Source) IndexMetadata(dirs []string, maxPhotos int, force Missing) {

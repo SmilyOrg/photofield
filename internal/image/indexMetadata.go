@@ -2,6 +2,7 @@ package image
 
 import (
 	"fmt"
+	"photofield/fs"
 )
 
 func (source *Source) indexMetadata(in <-chan interface{}) {
@@ -10,16 +11,27 @@ func (source *Source) indexMetadata(in <-chan interface{}) {
 		id := m.Id
 		path := m.Path
 
-		var info Info
-		tags, err := source.decoder.DecodeInfo(path, &info)
-		if err != nil {
-			fmt.Println("Unable to load image info meta", err, path)
-			continue
+		if m.Hash {
+			hash, err := fs.HashFile(path)
+			if err != nil {
+				fmt.Println("Unable to hash file", err, path)
+				continue
+			}
+			source.database.WriteHash(id, hash)
 		}
-		source.database.Write(path, info, UpdateMeta)
-		if source.Config.TagConfig.Exif.Enable {
-			source.database.WriteTags(id, tags)
+
+		if m.Metadata {
+			var info Info
+			tags, err := source.decoder.DecodeInfo(path, &info)
+			if err != nil {
+				fmt.Println("Unable to load image info meta", err, path)
+				continue
+			}
+			source.database.Write(path, info, UpdateMeta)
+			if source.Config.TagConfig.Exif.Enable {
+				source.database.WriteTags(id, tags)
+			}
+			source.imageInfoCache.Delete(id)
 		}
-		source.imageInfoCache.Delete(id)
 	}
 }

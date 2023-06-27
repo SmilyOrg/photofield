@@ -1038,6 +1038,14 @@ func indexCollection(collection *collection.Collection) (task Task, existing boo
 	return
 }
 
+func watchCollection(collection *collection.Collection) {
+	go func() {
+		log.Printf("watching files %s\n", collection.Id)
+		imageSource.WatchFiles(collection.Dirs)
+	}()
+	return
+}
+
 func loadConfiguration(path string) AppConfig {
 
 	var appConfig AppConfig
@@ -1396,6 +1404,8 @@ func main() {
 	}
 
 	// addExampleScene()
+
+	watchCollection(getCollectionById("watch"))
 
 	log.Println(msg)
 	log.Fatal(http.ListenAndServe(addr, r))
