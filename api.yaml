@@ -203,6 +203,12 @@ paths:
               type: string
           style: form
           explode: false
+
+        - name: select_tag
+          description: Show images with this tag as selected.
+          in: query
+          schema:
+            type: string
             
         - name: debug_overdraw
           in: query
@@ -387,6 +393,54 @@ paths:
         "404":
           $ref: "#/components/responses/FileNotFound"
 
+  /tags:
+    get:
+      description: Retrieve a list of tags
+      tags: ["Tags"]
+      parameters:
+        - $ref: "#/components/parameters/SearchParam"
+      responses:
+        "200":
+          description: List of tags retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+    post:
+      description: Add tag
+      tags: ["Tags"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagsPost"
+      responses:
+        "201":
+          description: Tag created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+
+  /tags/{id}/files:
+    post:
+      description: Perform an operation on the files for this specific tag.
+      tags: ["Tags"]
+      parameters:
+        - $ref: "#/components/parameters/TagIdPathParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagFilesPost"
+      responses:
+        "200":
+          description: Tag operation successfully completed on the files.
+
   /tasks:
     post:
       description: Create a new task e.g. scan the file system for files
@@ -478,6 +532,21 @@ components:
             $ref: "#/components/schemas/File"
 
   parameters:
+    SearchParam:
+      name: q
+      in: query
+      description: Search custom text query
+      schema:
+        $ref: "#/components/schemas/Search"
+
+    TagIdPathParam:
+      name: id
+      in: path
+      required: true
+      description: Tag ID
+      schema:
+        $ref: "#/components/schemas/TagId"
+
     FileIdPathParam:
       name: id
       in: path
@@ -582,8 +651,11 @@ components:
       type: object
       required:
         - search
+        - tags
       properties:
         search:
+          $ref: "#/components/schemas/Capability"
+        tags:
           $ref: "#/components/schemas/Capability"
           
     Capability:
@@ -637,6 +709,44 @@ components:
         sort:
           $ref: "#/components/schemas/Sort"
           
+    TagsPost:
+      type: object
+      description: Create a new tag based on the provided parameters.
+      properties:
+        selection:
+          type: boolean
+        collection_id:
+          $ref: "#/components/schemas/CollectionId"
+  
+    TagFilesPost:
+      type: object
+      description: |
+        Perform the specified tag operation for the specified files.
+        You need to provide either a `scene_id` & `bounds` or `file_id`.
+      required:
+        - op
+      properties:
+        op:
+          $ref: "#/components/schemas/Operation"
+        scene_id:
+          $ref: "#/components/schemas/SceneId"
+        bounds:
+          $ref: "#/components/schemas/Bounds"
+        file_id:
+          $ref: "#/components/schemas/FileId"
+
+    Tags:
+      type: array
+      items:
+        $ref: "#/components/schemas/Tag"
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+
+          
     TaskType:
       type: string
       enum:
@@ -654,6 +764,13 @@ components:
       type: string
       example: index-vacation-photos
     
+    Operation:
+      type: string
+      enum:
+        - ADD
+        - SUBTRACT
+        - INVERT
+
     SceneId:
       type: string
       example: Tqcqtc6h69
@@ -686,6 +803,10 @@ components:
       type: integer
       example: 0
 
+    TagId:
+      type: string
+      example: 0
+
     TileCoord:
       type: integer
       minimum: 0
@@ -697,16 +818,21 @@ components:
 
     Bounds:
       type: object
+      required:
+        - "x"
+        - "y"
+        - "w"
+        - "h"
       properties:
-        x:
+        "x":
           type: number
-        y:
+        "y":
           type: number
-        w:
+        "w":
           type: number
           minimum: 0
           example: 1200
-        h:
+        "h":
           type: number
           minimum: 0
           example: 90000

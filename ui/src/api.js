@@ -266,3 +266,10 @@ export async function createScene(params) {
   return await post(`/scenes`, params);
 }
 
+export async function addTag(body) {
+  return await post(`/tags`, body);
+}
+
+export async function postTagFiles(id, body) {
+  return await post(`/tags/${id}/files`, body);
+}

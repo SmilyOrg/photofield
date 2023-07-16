@@ -4,6 +4,7 @@ import (
 	"image"
 	"io"
 	"os"
+	"photofield/tag"
 
 	"github.com/rwcarlsen/goexif/exif"
 )
@@ -28,13 +29,13 @@ func getOrientationFromExif(x *exif.Exif) string {
 	return "1"
 }
 
-func (decoder *GoExifRwcarlsenLoader) DecodeInfo(path string, info *Info) error {
+func (decoder *GoExifRwcarlsenLoader) DecodeInfo(path string, info *Info) ([]tag.Tag, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer file.Close()
-	return decoder.DecodeInfoReader(file, info)
+	return nil, decoder.DecodeInfoReader(file, info)
 }
 
 func (decoder *GoExifRwcarlsenLoader) DecodeInfoReader(r io.ReadSeeker, info *Info) error {

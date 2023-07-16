@@ -52,6 +52,7 @@ func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result 
 	if r.Image != nil || r.Error != nil {
 		// fmt.Printf("%v cache found\n", id)
 		// println("found in cache")
+		r.FromCache = true
 		return r
 	}
 	// r = c.Source.Get(ctx, id, path)

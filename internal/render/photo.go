@@ -3,7 +3,9 @@ package render
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"log"
+	"math"
 	"photofield/internal/image"
 	"photofield/io"
 	"time"
@@ -41,18 +43,25 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
-func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source) {
-
+func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool) {
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
 	if pixelArea < config.MaxSolidPixelArea {
 		style := c.Style
+
+		scale := 1.
+		if selected {
+			style := c.Style
+			style.FillColor = color.RGBA{0xe4, 0xf2, 0xff, 0xff}
+			photo.Sprite.DrawWithStyle(c, style)
+			scale = 0.8
+		}
 
 		// TODO: this can be a bottleneck for lots of images
 		// if it ends up hitting the database for each individual image
 		info := source.GetInfo(photo.Id)
 		style.FillColor = info.GetColor()
 
-		photo.Sprite.DrawWithStyle(c, style)
+		photo.Sprite.DrawInsetWithStyle(c, style, (1-scale)*photo.Sprite.Rect.W)
 		return
 	}
 
@@ -69,6 +78,9 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 	sources := srcs.EstimateCost(io.Size(size), io.Size(rsize))
 	sources.Sort()
+
+	var errs []error
+
 	for i, s := range sources {
 		if drawn {
 			break
@@ -79,13 +91,21 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 
 		img, err := r.Image, r.Error
 		if img == nil || err != nil {
+			if err != nil {
+				errs = append(errs, err)
+			}
 			continue
 		}
 
-		name := s.Name()
-		source.SourceLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed.Microseconds()))
-		source.SourcePerOriginalMegapixelLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed) * 1e6 / (float64(size.X) * float64(size.Y)))
-		source.SourcePerResizedMegapixelLatencyHistogram.WithLabelValues(name).Observe(float64(elapsed) * 1e6 / float64(s.EstimatedArea))
+		if !r.FromCache {
+			name := s.Name()
+			elapsedus := float64(elapsed.Microseconds())
+			elapsedabsdiff := math.Abs(float64(s.EstimatedDuration.Microseconds()) - elapsedus)
+			source.SourceLatencyHistogram.WithLabelValues(name).Observe(elapsedus)
+			source.SourceLatencyAbsDiffHistogram.WithLabelValues(name).Observe(elapsedabsdiff)
+			source.SourcePerOriginalMegapixelLatencyHistogram.WithLabelValues(name).Observe(elapsedus * 1e6 / (float64(size.X) * float64(size.Y)))
+			source.SourcePerResizedMegapixelLatencyHistogram.WithLabelValues(name).Observe(elapsedus * 1e6 / float64(s.EstimatedArea))
+		}
 
 		if r.Orientation == io.SourceInfoOrientation {
 			r.Orientation = io.Orientation(info.Orientation)
@@ -96,7 +116,15 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			Orientation: image.Orientation(r.Orientation),
 		}
 
-		bitmap.DrawImage(config.CanvasImage, img, c)
+		scale := 1.
+		if selected {
+			style := c.Style
+			style.FillColor = color.RGBA{0xe4, 0xf2, 0xff, 0xff}
+			bitmap.Sprite.DrawWithStyle(c, style)
+			scale = 0.8
+		}
+
+		bitmap.DrawImage(config.CanvasImage, img, c, scale)
 		drawn = true
 
 		if source.IsSupportedVideo(path) {
@@ -122,6 +150,10 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	if !drawn {
+		if len(errs) > 0 {
+			log.Printf("Unable to draw photo %v: %v", photo.Id, errs)
+		}
+
 		style := c.Style
 		style.FillColor = canvas.Red
 		photo.Sprite.DrawWithStyle(c, style)

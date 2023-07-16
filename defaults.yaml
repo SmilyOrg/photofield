@@ -45,6 +45,16 @@ ai:
   # textual:
     # host: http://localhost:8081
 
+tags:
+  # Enable tagging support in the UI.
+  # Tags are currently only stored in the (cache) database, so they will
+  # be lost if it's deleted. Consider this alpha-level functionality.
+  #
+  # enable: true
+
+  # exif:
+  #   enable: true
+
 media:
   # Extract metadata from this many files concurrently
   concurrent_meta_loads: 8
@@ -159,7 +169,7 @@ media:
     sqlite:
       path: photofield.thumbs.db
       cost:
-        time: 5ms
+        time: 6ms
 
     goexif:
       extensions: [".jpg", ".jpeg"]
@@ -167,17 +177,17 @@ media:
       height: 256
       fit: "INSIDE"
       cost:
-        time: 30ms # 15ms + extra cost
+        time_per_original_megapixel: 670us
 
     image:
       extensions: [".jpg", ".jpeg", ".png"]
       cost:
-        time_per_original_megapixel: 90ms
+        time_per_original_megapixel: 71ms
 
     thumb:
       fit: "INSIDE"
       cost:
-        time_per_resized_megapixel: 140ms
+        time_per_resized_megapixel: 70ms
 
     ffmpeg:
       fit: "INSIDE"
@@ -197,7 +207,6 @@ media:
     # Native image decoding
     - type: image
 
-
     # 
     # Synology Moments / Photo Station thumbnails
     # 
@@ -208,6 +217,8 @@ media:
       fit: "INSIDE"
       width: 120
       height: 120
+      cost:
+        time_per_resized_megapixel: 89ms
       
     - name: SM
       type: thumb
@@ -216,6 +227,8 @@ media:
       fit: OUTSIDE
       width: 240
       height: 240
+      cost:
+        time_per_resized_megapixel: 70ms
       
     - name: M
       type: thumb
@@ -224,6 +237,8 @@ media:
       fit: OUTSIDE
       width: 320
       height: 320
+      cost:
+        time_per_resized_megapixel: 66ms
       
     - name: B
       type: thumb
@@ -232,6 +247,8 @@ media:
       fit: INSIDE
       width: 640
       height: 640
+      cost:
+        time_per_resized_megapixel: 42ms
       
     - name: XL
       type: thumb
@@ -240,6 +257,8 @@ media:
       fit: OUTSIDE
       width: 1280
       height: 1280
+      cost:
+        time_per_resized_megapixel: 35ms
       
     #
     # Synology Moments / Photo Station video variants
@@ -265,16 +284,22 @@ media:
       width: 256
       height: 256
       fit: INSIDE
+      cost:
+        time_per_original_megapixel: 120ms
 
     - type: ffmpeg
       width: 1280
       height: 1280
       fit: INSIDE
+      cost:
+        time_per_original_megapixel: 160ms
 
     - type: ffmpeg
       width: 4096
       height: 4096
       fit: INSIDE
+      cost:
+        time_per_original_megapixel: 180ms
 
 
   # These sources are used for handling small thumbnails specifically for

@@ -45,42 +45,11 @@ func fitInside(cw float64, ch float64, w float64, h float64) (float64, float64) 
 // 	return r
 // }
 
-func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Context) {
+func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64) {
 	bounds := img.Bounds()
 
 	model := bitmap.Sprite.Rect.GetMatrixFitBoundsRotate(bounds, bitmap.Orientation)
-	m := c.View().Mul(model)
-
-	// bar := bitmap.Sprite.Rect.W / bitmap.Sprite.Rect.H
-	// iar := float64(bounds.Dx()) / float64(bounds.Dy())
-	// if math.Abs(bar-iar) > 1e-3 {
-	// 	// println(bitmap.Sprite.Rect.String(), bounds.Dx(), bounds.Dy())
-	// 	// modelTopLeft := model.Dot(canvas.Point{X: 0, Y: 0})
-	// 	// modelBottomRight := model.Dot(canvas.Point{X: float64(bounds.Max.X), Y: float64(bounds.Max.Y)})
-	// 	// renderImageFastCropped(rimg, img, m, bitmap.Sprite.Rect, modelTopLeft, modelBottomRight)
-	// 	// w, h := fitInside(
-	// 	// 	bitmap.Sprite.Rect.W,
-	// 	// 	bitmap.Sprite.Rect.H,
-	// 	// 	float64(bounds.Dx()),
-	// 	// 	float64(bounds.Dy()),
-	// 	// )
-	// 	// b := bounds
-	// 	// b.Min.X =
-
-	// 	img := Rect{
-	// 		X: float64(bounds.Min.X),
-	// 		Y: float64(bounds.Min.Y),
-	// 		W: float64(bounds.Dx()),
-	// 		H: float64(bounds.Dy()),
-	// 	}
-
-	// 	model := bitmap.Sprite.Rect.GetMatrixFitBoundsRotate(b, bitmap.Orientation)
-	// 	m := c.View().Mul(model)
-
-	// 	renderImageFastBounds(rimg, img, m, b)
-	// 	return
-	// }
-
+	m := c.View().Mul(model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5))
 	renderImageFast(rimg, img, m)
 }
 

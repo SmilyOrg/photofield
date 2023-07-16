@@ -12,8 +12,11 @@
       :debug="debug"
       :fullpage="true"
       :scrollbar="scrollbar"
+      :selectTagId="selectTagId"
+      @selectTagId="onSelectTagId"
       @region="onScrollRegion"
       @scene="scrollScene = $event"
+      @search="onSearch"
     >
     </scroll-viewer>
 
@@ -31,6 +34,7 @@
       :fullpage="true"
       @region="onStripRegion"
       @scene="stripScene = $event"
+      @search="onSearch"
     >
     </strip-viewer>
 
@@ -105,6 +109,19 @@ const layout = computed(() => {
   return route.query.layout || collection.value?.layout || undefined;
 })
 
+const selectTagId = computed(() => {
+  return route.query.select_tag || undefined;
+})
+
+const onSelectTagId = (id) => {
+  router.replace({
+    query: {
+      ...route.query,
+      select_tag: id,
+    }
+  });
+}
+
 const sort = computed(() => {
   switch (layout.value) {
     case "TIMELINE":
@@ -121,6 +138,15 @@ const imageHeight = computed(() => {
 const search = computed(() => {
   return route.query.search;
 })
+
+const onSearch = (search) => {
+  router.push({
+    query: {
+      ...route.query,
+      search,
+    }
+  });
+}
 
 const debug = computed(() => {
   const v = {};

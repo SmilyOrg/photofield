@@ -16,8 +16,9 @@ import (
 	"photofield/internal/queue"
 	"photofield/io"
 	"photofield/io/ffmpeg"
-	ioristretto "photofield/io/ristretto"
+	"photofield/io/ristretto"
 	"photofield/io/sqlite"
+	"photofield/tag"
 
 	"github.com/docker/go-units"
 	"github.com/prometheus/client_golang/prometheus"
@@ -108,8 +109,9 @@ type Caches struct {
 }
 
 type Config struct {
-	DataDir string
-	AI      clip.AI
+	DataDir   string
+	AI        clip.AI
+	TagConfig tag.Config `json:"-"`
 
 	ExifToolCount        int  `json:"exif_tool_count"`
 	SkipLoadInfo         bool `json:"skip_load_info"`
@@ -137,6 +139,7 @@ type Source struct {
 
 	Sources                                    io.Sources
 	SourceLatencyHistogram                     *prometheus.HistogramVec
+	SourceLatencyAbsDiffHistogram              *prometheus.HistogramVec
 	SourcePerOriginalMegapixelLatencyHistogram *prometheus.HistogramVec
 	SourcePerResizedMegapixelLatencyHistogram  *prometheus.HistogramVec
 
@@ -177,7 +180,15 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.SourceLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Name:      "source_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+	},
+		[]string{"source"},
+	)
+
+	source.SourceLatencyAbsDiffHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: metrics.Namespace,
+		Name:      "source_latency_abs_diff",
+		Buckets:   []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 200000, 500000, 1000000},
 	},
 		[]string{"source"},
 	)
@@ -185,7 +196,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.SourcePerOriginalMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Name:      "source_per_original_megapixel_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
 	},
 		[]string{"source"},
 	)
@@ -193,7 +204,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.SourcePerResizedMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
 		Name:      "source_per_resized_megapixel_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
+		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
 	},
 		[]string{"source"},
 	)
@@ -202,7 +213,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 		SourceTypes: config.SourceTypes,
 		FFmpegPath:  ffmpeg.FindPath(),
 		Migrations:  migrationsThumbs,
-		ImageCache:  ioristretto.New(),
+		ImageCache:  ristretto.New(),
 		DataDir:     config.DataDir,
 	}
 
@@ -422,6 +433,10 @@ func (source *Source) GetImagePath(id ImageId) (string, error) {
 	return path, nil
 }
 
+func (source *Source) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
+	return source.database.GetImageEmbedding(id)
+}
+
 func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 	dir = filepath.FromSlash(dir)
 	indexed := make(map[string]struct{})
@@ -433,7 +448,7 @@ func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 		counter <- 1
 	}
 	for ip := range source.database.ListNonexistent(dir, indexed) {
-		source.database.Write(ip.Path, Info{}, Delete)
+		source.database.Delete(ip.Id)
 		source.thumbnailSink.Delete(uint32(ip.Id))
 	}
 	source.database.SetIndexed(dir)
@@ -493,4 +508,82 @@ func (source *Source) GetImageReader(id ImageId, sourceName string, fn func(r go
 	if !found {
 		fn(nil, fmt.Errorf("unable to find image %d using %s", id, sourceName))
 	}
+}
+
+func (source *Source) AddTag(name string) {
+	done, _ := source.database.AddTag(name)
+	<-done
+}
+
+func (source *Source) GetTag(name string) (tag.Tag, bool) {
+	return source.database.GetTagByName(name)
+}
+
+func (source *Source) ListImageTags(id ImageId) <-chan tag.Tag {
+	out := make(chan tag.Tag, 100)
+	go func() {
+		defer close(out)
+		for tag := range source.database.ListImageTags(id) {
+			out <- tag
+		}
+	}()
+	return out
+}
+
+func (source *Source) ListTags(q string, limit int) <-chan tag.Tag {
+	return source.database.ListTags(q, limit)
+}
+
+func (source *Source) AddTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
+	ids := NewIds()
+	for id := range ch {
+		ids.AddInt(int(id))
+	}
+	rev, err = source.database.AddTagIds(id, ids)
+	return
+}
+
+func (source *Source) RemoveTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
+	ids := NewIds()
+	for id := range ch {
+		ids.AddInt(int(id))
+	}
+	rev, err = source.database.RemoveTagIds(id, ids)
+	return
+}
+
+func (source *Source) InvertTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
+	ids := NewIds()
+	for id := range ch {
+		ids.AddInt(int(id))
+	}
+	rev, err = source.database.InvertTagIds(id, ids)
+	return
+}
+
+func (source *Source) GetTagId(name string) (tag.Id, bool) {
+	return source.database.GetTagId(name)
+}
+
+func (source *Source) GetOrCreateTagFromNameRev(nameRev string) (tag.Tag, error) {
+	t, err := tag.FromNameRev(nameRev)
+	if err != nil {
+		return tag.Tag{}, err
+	}
+	id, ok := source.GetTagId(t.Name)
+	if ok {
+		t.Id = id
+	} else {
+		source.AddTag(t.Name)
+		id, ok := source.GetTagId(t.Name)
+		if !ok {
+			return tag.Tag{}, ErrNotFound
+		}
+		t.Id = id
+	}
+	return t, nil
+}
+
+func (source *Source) GetTagImageIds(id tag.Id) Ids {
+	return source.database.GetTagImageIds(id)
 }

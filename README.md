@@ -11,6 +11,8 @@
     Experimental <em>fast</em> photo viewer.
     <br />
     <br />
+    <a href="https://demo.photofield.dev">Demo</a>
+    ·
     <a href="https://github.com/SmilyOrg/photofield/issues">Report Bug</a>
     ·
     <a href="https://github.com/SmilyOrg/photofield/issues">Request Feature</a>
@@ -65,14 +67,14 @@ photo gallery software.
 levels of detail seamlessly without loading a special detailed or
 fullscreen view.
 
-![Seamless zoom to giraffe face](docs/assets/seamless-zoom.gif)
+  ![Seamless zoom to giraffe face](docs/assets/seamless-zoom.gif)
 
 * **Progressive multi-resolution loading**. Not only are thumbnails used to show
 a single photo quicker, the whole layout is progressively loaded, so even if you
 move through photos quickly or zoom around, you will almost always have some
 form of feedback to not lose track.
 
-![Progressive load of a deer](docs/assets/progressive-load.gif)
+  ![Progressive load of a deer](docs/assets/progressive-load.gif)
 
 * **Different layouts**. Collections of photos can be displayed with different
 layouts.
@@ -86,6 +88,39 @@ layouts.
   able to search for photo contents using words like "beach sunset", "a couple
   kissing", or "cat eyes".
   ![semantic search for "cat eyes"](docs/assets/semantic-search.jpg)
+* **Tagging (alpha)**. You can tag photos with arbitrary tags. Currently tags
+  are only stored in the database and not in the photos themselves. You need to
+  enable them in the `tags` section of the [configuration] and restart the
+  server. This forms a foundation for many other features, see below (checked -
+  implemented).
+  * [x] **Persistent photo selection**. You can Ctrl+Click or Ctrl+Drag to
+    select photos. This creates a new randomly generated "selection" tag that is
+    persistent and shareable. It also means you can select tens of thousands of
+    photos without losing your progress. These tags are currently never cleaned
+    up and you can't do anything with it yet, so it's not useful yet, but it's
+    a start.
+  * [x] **Custom tags**. You canadd your own tags to photos, e.g. `#family` or
+    `#vacation`. Batch tagging not supported yet, but should be relatively easy
+    to add considering the selections (above) are already tags.
+  * [x] **EXIF tags**. Tags are automatically added from the EXIF data, e.g.
+    `exif:make:sony` or `exif:model:sm-g950f`. You need to enable this in the
+    `exif` section of the [configuration]. Only `make` and `model` are currently
+    supported (hardcoded).
+  * [x] **Filter by tags**. You can filter by a tag by searching for `tag:TAG`.
+    For example, you can search for `tag:fav` to only show favorited photos, or
+    `tag:hello tag:world` to only show photos with both `hello` and `world`
+    tags. This is an early version of filtering and should be more user-friendly
+    in the future.
+  * [ ] **Location tags**. Photos could be automatically tagged with the
+    location, e.g. `city:berlin` or `country:germany`. See #59.
+  * [ ] **Face recognition**. Photos could be automatically tagged with the
+    person's name. This would be a great way to search for photos of a specific
+    person.
+
+
+
+ Persistent photo
+  selection is also implemented using tags. Tags are 
 * **Flexible media/thumbnail system**. Do you have hundreds of gigabytes of existing
   thumbnails from an existing system? Me too! Let's reuse those. Don't have any?
   No worries, they will be generated automatically to speed up display. Here are

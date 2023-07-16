@@ -1,9 +1,11 @@
 module photofield
 
-go 1.19
+go 1.20
 
 require (
 	github.com/EdlinOrg/prominentcolor v1.0.0
+	github.com/alecthomas/assert/v2 v2.2.2
+	github.com/alecthomas/participle/v2 v2.0.0
 	github.com/deepmap/oapi-codegen v1.8.2
 	github.com/dgraph-io/ristretto v0.0.2
 	github.com/docker/go-units v0.4.0
@@ -22,6 +24,7 @@ require (
 	github.com/lpar/gzipped v1.1.0
 	github.com/matoous/go-nanoid/v2 v2.0.0
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
+	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
@@ -39,6 +42,7 @@ require (
 require (
 	github.com/ByteArena/poly2tri-go v0.0.0-20170716161910-d102ad91854f // indirect
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
+	github.com/alecthomas/repr v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.0.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
@@ -56,6 +60,7 @@ require (
 	github.com/gosimple/unidecode v1.0.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
+	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect

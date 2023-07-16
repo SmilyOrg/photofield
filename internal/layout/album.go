@@ -4,7 +4,6 @@ import (
 	// . "photofield/internal"
 
 	"log"
-	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
@@ -73,14 +72,7 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 	return rect
 }
 
-func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
-
-	limit := collection.Limit
-
-	infos := collection.GetInfos(source, image.ListOptions{
-		OrderBy: image.ListOrder(layout.Order),
-		Limit:   limit,
-	})
+func LayoutAlbum(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
 	layout.ImageSpacing = 0.02 * layout.ImageHeight
 	layout.LineSpacing = 0.02 * layout.ImageHeight
@@ -114,13 +106,6 @@ func LayoutAlbum(layout Layout, collection collection.Collection, scene *render.
 	scene.Photos = scene.Photos[:0]
 	index := 0
 	for info := range infos {
-		if limit > 0 && index >= limit {
-			break
-		}
-
-		// path, _ := source.GetImagePath(info.Id)
-		// println(path, info.Width, info.Height)
-
 		photoTime := info.DateTime
 		elapsed := photoTime.Sub(lastPhotoTime)
 		if elapsed > 1*time.Hour {

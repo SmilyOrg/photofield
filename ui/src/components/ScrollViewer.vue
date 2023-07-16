@@ -7,6 +7,7 @@
       :style="{ transform: `translate(0, ${scrollY}px)` }"
       :scene="scene"
       :view="view"
+      :selectTagId="selectTagId"
       :debug="debug"
       :tileSize="512"
       :interactive="interactive"
@@ -19,7 +20,8 @@
       @wheel="onWheel"
       @load-end="onLoadEnd"
       @contextmenu.prevent="onContextMenu"
-      @keydown.esc="zoomOut"
+      @keydown.esc="onEscape"
+      @box-select="onBoxSelect"
     ></tile-viewer>
 
     <Spinner
@@ -57,6 +59,7 @@
         :flipY="contextFlip.y"
         :tileSize="512"
         @close="closeContextMenu()"
+        @search="emit('search', $event)"
       ></RegionMenu>
     </ContextMenu>
   </div>
@@ -66,7 +69,7 @@
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus } from '@vueuse/core';
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { getRegion, getRegions, useScene } from '../api';
+import { getRegion, getRegions, useScene, addTag, postTagFiles, useApi } from '../api';
 import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
@@ -81,6 +84,7 @@ const props = defineProps({
   sort: String,
   imageHeight: Number,
   search: String,
+  selectTagId: String,
   debug: Object,
   fullpage: Boolean,
   scrollbar: Object,
@@ -93,6 +97,8 @@ const emit = defineEmits({
   scene: null,
   reindex: null,
   region: null,
+  selectTagId: null,
+  search: null,
 })
 
 const {
@@ -104,6 +110,7 @@ const {
   sort,
   imageHeight,
   search,
+  selectTagId,
   debug,
 } = toRefs(props);
 
@@ -138,6 +145,9 @@ const { region } = useSeekableRegion({
   regionId,
 })
 
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
+
 const contextMenu = ref(null);
 const {
   onContextMenu,
@@ -169,7 +179,21 @@ const centerToBounds = async (bounds) => {
   await nextTick();
 }
 
-const zoomOut = async () => {
+const onEscape = async () => {
+  zoomOut();
+  if (lastView.value) {
+    const lastZoom = scene.value.bounds.w / lastView.value.w;
+    if (lastZoom > 1.1) {
+      return;
+    }
+  }
+  if (selectTagId.value) {
+    emit("selectTagId", null);
+    return;
+  }
+}
+
+const zoomOut = () => {
   viewer.value?.setView(view.value);
 }
 
@@ -199,9 +223,37 @@ const view = computed(() => {
     h: viewport.height.value,
   }
 });
-  
+
+const selectBounds = async (op, bounds) => {
+  if (!tagsSupported.value) return;
+  let id = selectTagId.value;
+  if (!id) {
+    const tag = await addTag({
+      selection: true,
+      collection_id: collectionId.value,
+    });
+    id = tag.id;
+  }
+  const tag = await postTagFiles(id, {
+    op,
+    scene_id: scene.value.id,
+    bounds
+  })
+  id = tag.id;
+  emit("selectTagId", id);
+}
+
 const onClick = async (event) => {
   if (!event) return false;
+  if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
+    await selectBounds("INVERT", {
+      x: event.x,
+      y: event.y,
+      w: 0,
+      h: 0,
+    });
+    return false;
+  }
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
   if (regions && regions.length > 0) {
     const region = regions[0];
@@ -247,6 +299,11 @@ const onView = (view) => {
     }
   }
   lastView.value = view;
+}
+
+const onBoxSelect = async (bounds, shift) => {
+  const op = shift ? "SUBTRACT" : "ADD";
+  selectBounds(op, bounds);
 }
 
 const onLoadEnd = (event) => {

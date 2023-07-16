@@ -46,8 +46,12 @@
       v-if="region"
       :region="region"
       :scene="scene"
+      :tags-enabled="tagsSupported"
       @navigate="navigate($event)"
+      @favorite="favorite($event)"
       @exit="resetZoomOrExit()"
+      @add-tag="addTag($event)"
+      @remove-tag="removeTag($event)"
     ></controls>
 
     <ContextMenu
@@ -61,6 +65,7 @@
         :flipY="contextFlip.y"
         :tileSize="512"
         @close="closeContextMenu()"
+        @search="onSearch($event)"
       ></RegionMenu>
     </ContextMenu>
   </div>
@@ -69,8 +74,8 @@
 <script setup>
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus, useMousePressed, useNow, useRefHistory } from '@vueuse/core';
-import { computed, nextTick, ref, toRef, toRefs, watch, watchEffect } from 'vue';
-import { useApi, useScene, getCenterRegion } from '../api';
+import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { useApi, useScene, getCenterRegion, postTagFiles } from '../api';
 import { useSeekableRegion, useViewport, useViewDelta, useContextMenu } from '../use.js';
 import { viewCenterSquared } from '../utils.js';
 import Controls from './Controls.vue';
@@ -96,6 +101,7 @@ const emit = defineEmits({
   scene: null,
   reindex: null,
   region: null,
+  search: null,
 })
 
 const {
@@ -118,6 +124,9 @@ const {
   data: collection,
 } = useApi(() => collectionId && `/collections/${collectionId.value}`);
 
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
+
 const viewport = useViewport(container);
 
 const { scene, recreate: recreateScene } = useScene({
@@ -134,12 +143,52 @@ useEventBus("recreate-scene").on(scene => {
   recreateScene();
 });
 
-
-const { region, navigate, exit } = useSeekableRegion({
+const { region, navigate, exit, mutate: updateRegion } = useSeekableRegion({
   scene,
   collectionId,
   regionId,
 });
+
+const onSearch = async (term) => {
+  await exit();
+  emit("search", term);
+}
+
+const fileId = computed(() => region.value?.data?.id);
+
+const favorite = async (tag) => {
+  const tagId = tag?.id || "fav:r0";
+  if (!fileId.value) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "INVERT",
+    file_id: fileId.value,
+  });
+  await updateRegion();
+}
+
+const addTag = async (tagId) => {
+  if (!fileId.value || !tagId) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "ADD",
+    file_id: fileId.value,
+  });
+  await updateRegion();
+}
+
+const removeTag = async (tagId) => {
+  if (!fileId.value || !tagId) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "SUBTRACT",
+    file_id: fileId.value,
+  });
+  await updateRegion();
+}
 
 watch(region, r => emit("region", r), { immediate: true });
 

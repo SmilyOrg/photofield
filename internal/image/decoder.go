@@ -6,6 +6,7 @@ import (
 	"image/jpeg"
 	"io"
 	"log"
+	"photofield/tag"
 	"strconv"
 	"time"
 )
@@ -16,7 +17,7 @@ type Decoder struct {
 }
 
 type metadataLoader interface {
-	DecodeInfo(path string, info *Info) error
+	DecodeInfo(path string, info *Info) ([]tag.Tag, error)
 	DecodeBytes(path string, tagName string) ([]byte, error)
 	Close()
 }
@@ -69,13 +70,8 @@ func parseDateTime(value string) (t time.Time, hasTimezone bool, hasSubsec bool,
 	return
 }
 
-func (decoder *Decoder) DecodeInfo(path string, info *Info) error {
-	err := decoder.loader.DecodeInfo(path, info)
-	// println(path, info.Width, info.Height, info.DateTime.String())
-	// if info.Width != 0 {
-	// 	println(path, info.String())
-	// }
-	return err
+func (decoder *Decoder) DecodeInfo(path string, info *Info) ([]tag.Tag, error) {
+	return decoder.loader.DecodeInfo(path, info)
 }
 
 func (decoder *Decoder) DecodeImage(path string, tagName string) (goimage.Image, Info, error) {

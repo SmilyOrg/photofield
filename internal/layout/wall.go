@@ -3,19 +3,13 @@ package layout
 import (
 	"log"
 	"math"
-	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
 	"time"
 )
 
-func LayoutWall(layout Layout, collection collection.Collection, scene *render.Scene, source *image.Source) {
-
-	infos := collection.GetInfos(source, image.ListOptions{
-		OrderBy: image.ListOrder(layout.Order),
-		Limit:   collection.Limit,
-	})
+func LayoutWall(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
 	section := Section{}
 

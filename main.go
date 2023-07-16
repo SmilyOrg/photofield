@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"mime"
 	"path"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"io"
@@ -60,11 +62,15 @@ import (
 	"photofield/internal/render"
 	"photofield/internal/scene"
 	pfio "photofield/io"
+	"photofield/io/bench"
+	"photofield/tag"
 )
 
 //go:embed defaults.yaml
 var defaultsYaml []byte
 var defaults AppConfig
+
+var tagsEnabled bool
 
 //go:embed db/migrations
 var migrations embed.FS
@@ -617,6 +623,9 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 		Search: openapi.Capability{
 			Supported: imageSource.AI.Available(),
 		},
+		Tags: openapi.Capability{
+			Supported: tagsEnabled,
+		},
 	})
 }
 
@@ -661,46 +670,61 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		return
 	}
 
-	render := defaultSceneConfig.Render
-	render.TileSize = params.TileSize
+	rn := defaultSceneConfig.Render
+	rn.TileSize = params.TileSize
 	if params.Sources != nil {
-		render.Sources = make(pfio.Sources, len(*params.Sources))
+		rn.Sources = make(pfio.Sources, len(*params.Sources))
 		for _, src := range imageSource.Sources {
 			for i, name := range *params.Sources {
 				if src.Name() == name {
-					if render.Sources[i] != nil {
+					if rn.Sources[i] != nil {
 						problem(w, r, http.StatusBadRequest, "Duplicate source")
 						return
 					}
-					render.Sources[i] = src
+					rn.Sources[i] = src
 				}
 			}
 		}
-		for _, src := range render.Sources {
+		for _, src := range rn.Sources {
 			if src == nil {
 				problem(w, r, http.StatusBadRequest, "Unknown source")
 				return
 			}
 		}
 	}
+
+	if params.SelectTag != nil {
+		t, err := tag.FromNameRev(string(*params.SelectTag))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, "Invalid tag id")
+			return
+		}
+		id, ok := imageSource.GetTagId(t.Name)
+		if !ok {
+			problem(w, r, http.StatusBadRequest, "Unknown tag")
+			return
+		}
+		rn.Selected = imageSource.GetTagImageIds(id)
+	}
+
 	if params.DebugOverdraw != nil {
-		render.DebugOverdraw = *params.DebugOverdraw
+		rn.DebugOverdraw = *params.DebugOverdraw
 	}
 	if params.DebugThumbnails != nil {
-		render.DebugThumbnails = *params.DebugThumbnails
+		rn.DebugThumbnails = *params.DebugThumbnails
 	}
 
 	zoom := params.Zoom
 	x := int(params.X)
 	y := int(params.Y)
-	render.BackgroundColor = color.White
+	rn.BackgroundColor = color.White
 	if params.BackgroundColor != nil {
 		c, err := hex.DecodeString(strings.TrimPrefix(*params.BackgroundColor, "#"))
 		if err != nil {
 			problem(w, r, http.StatusBadRequest, "Invalid background color")
 			return
 		}
-		render.BackgroundColor = color.RGBA{
+		rn.BackgroundColor = color.RGBA{
 			A: 0xFF,
 			R: c[0],
 			G: c[1],
@@ -708,11 +732,11 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		}
 	}
 
-	img, context := getTileImage(&render)
-	defer putTileImage(&render, img)
-	render.CanvasImage = img
-	render.Zoom = zoom
-	drawTile(context, &render, scene, zoom, x, y)
+	img, context := getTileImage(&rn)
+	defer putTileImage(&rn, img)
+	rn.CanvasImage = img
+	rn.Zoom = zoom
+	drawTile(context, &rn, scene, zoom, x, y)
 
 	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	codec.EncodeJpeg(w, img)
@@ -785,6 +809,131 @@ func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sc
 	respond(w, r, http.StatusOK, region)
 }
 
+func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTagsParams) {
+
+	q := ""
+	if params.Q != nil {
+		q = string(*params.Q)
+	}
+
+	tags := make([]tag.Tag, 0)
+	for t := range imageSource.ListTags(q, 10) {
+		tags = append(tags, t)
+	}
+
+	respond(w, r, http.StatusOK, struct {
+		Items []tag.Tag `json:"items"`
+	}{
+		Items: tags,
+	})
+}
+
+func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
+
+	data := &openapi.TagsPost{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if data.Selection == nil {
+		problem(w, r, http.StatusBadRequest, "Only selection supported")
+		return
+	}
+
+	if data.CollectionId == nil {
+		problem(w, r, http.StatusBadRequest, "collection_id required")
+		return
+	}
+
+	t, err := tag.NewSelection(string(*data.CollectionId))
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	imageSource.AddTag(t.Name)
+
+	tag, exists := imageSource.GetTag(t.Name)
+	if !exists {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respond(w, r, http.StatusCreated, struct {
+		Id openapi.TagId `json:"id"`
+	}{
+		Id: openapi.TagId(tag.NameRev()),
+	})
+}
+
+func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
+
+	data := &openapi.TagFilesPost{}
+	if err := chirender.Decode(r, data); err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	t, err := imageSource.GetOrCreateTagFromNameRev(string(id))
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ids := make(chan image.ImageId, 100)
+	if data.SceneId != nil && data.Bounds != nil {
+		scene := sceneSource.GetSceneById(string(*data.SceneId), imageSource)
+		if scene == nil {
+			problem(w, r, http.StatusBadRequest, "Scene not found")
+			return
+		}
+
+		bounds := render.Rect{
+			X: float64(data.Bounds.X),
+			Y: float64(data.Bounds.Y),
+			W: float64(data.Bounds.W),
+			H: float64(data.Bounds.H),
+		}
+
+		go func() {
+			defer close(ids)
+			photos := scene.GetVisiblePhotos(bounds)
+			for p := range photos {
+				ids <- image.ImageId(p.Id)
+			}
+		}()
+	} else if data.FileId != nil {
+		go func() {
+			defer close(ids)
+			ids <- image.ImageId(*data.FileId)
+		}()
+	} else {
+		problem(w, r, http.StatusBadRequest, "Either scene_id+bounds or file_id required")
+		return
+	}
+
+	var rev int
+	switch data.Op {
+	case "ADD":
+		rev, err = imageSource.AddTagIds(t.Id, ids)
+	case "SUBTRACT":
+		rev, err = imageSource.RemoveTagIds(t.Id, ids)
+	case "INVERT":
+		rev, err = imageSource.InvertTagIds(t.Id, ids)
+	default:
+		problem(w, r, http.StatusBadRequest, "Invalid op")
+		return
+	}
+	t.Revision = rev
+
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respond(w, r, http.StatusOK, t)
+}
+
 func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {
 
 	path, err := imageSource.GetImagePath(image.ImageId(id))
@@ -848,6 +997,7 @@ type AppConfig struct {
 	Render       render.Render           `json:"render"`
 	Media        image.Config            `json:"media"`
 	AI           clip.AI                 `json:"ai"`
+	Tags         tag.Config              `json:"tags"`
 	TileRequests TileRequestConfig       `json:"tile_requests"`
 }
 
@@ -915,6 +1065,7 @@ func loadConfiguration(path string) AppConfig {
 	}
 
 	appConfig.Media.AI = appConfig.AI
+	appConfig.Tags.Enable = appConfig.Tags.Enable || appConfig.Tags.Enabled
 
 	return appConfig
 }
@@ -978,15 +1129,59 @@ func IndexHTML() func(next http.Handler) http.Handler {
 	}
 }
 
+// benchmarkSources runs a benchmark on image sources
+//
+// It's not very usable right now as it doesn't use a representative sample of images,
+// but it's a start.
+func benchmarkSources(collection *collection.Collection, seed int64, sampleSize int, count int) {
+	ids := make([]image.ImageId, 0)
+	for id := range collection.GetIds(imageSource) {
+		ids = append(ids, id)
+	}
+	randGen := rand.New(rand.NewSource(seed))
+	randGen.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
+	if len(ids) > sampleSize {
+		ids = ids[:sampleSize]
+	}
+	samples := make([]bench.Sample, 0)
+	for _, id := range ids {
+		path, err := imageSource.GetImagePath(id)
+		if err != nil {
+			panic(err)
+		}
+		info := imageSource.GetInfo(id)
+		samples = append(samples, bench.Sample{
+			Id:   pfio.ImageId(id),
+			Path: path,
+			Size: pfio.Size{
+				X: info.Width,
+				Y: info.Height,
+			},
+		})
+	}
+	sources := imageSource.Sources
+	bench.BenchmarkSources(seed, sources, samples, count)
+}
+
 func main() {
 	startupTime = time.Now()
 
-	versionPtr := flag.Bool("version", false, "print version and exit")
-	vacuumPtr := flag.Bool("vacuum", false, "clean database for smaller size and better performance, and exit")
+	testing.Init()
+	versionFlag := flag.Bool("version", false, "print version and exit")
+	vacuumFlag := flag.Bool("vacuum", false, "clean database for smaller size and better performance, and exit")
+	benchFlag := flag.Bool("bench", false, "benchmark sources and exit")
+	benchCollectionId := flag.String("bench.collection", "vacation-photos", "id of the collection to benchmark")
+	benchSeed := flag.Int64("bench.seed", 123, "seed for random number generator")
+	benchSample := flag.Int("bench.sample", 10000, "number of images from the collection to use as a sample")
+	flag.Parse()
 
 	flag.Parse()
 
-	if *versionPtr {
+	if *benchFlag {
+		log.SetOutput(os.Stderr)
+	}
+
+	if *versionFlag {
 		fmt.Printf("photofield %s, commit %s, built on %s by %s\n", version, commit, date, builtBy)
 		return
 	}
@@ -1039,6 +1234,7 @@ func main() {
 
 	appConfig := loadConfiguration(configurationPath)
 	appConfig.Media.DataDir = dataDir
+	tagsEnabled = appConfig.Tags.Enable
 
 	if len(appConfig.Collections) > 0 {
 		defaultSceneConfig.Collection = appConfig.Collections[0]
@@ -1051,7 +1247,7 @@ func main() {
 	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs)
 	defer imageSource.Close()
 
-	if *vacuumPtr {
+	if *vacuumFlag {
 		err := imageSource.Vacuum()
 		if err != nil {
 			panic(err)
@@ -1088,6 +1284,19 @@ func main() {
 			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
 		}
 		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+	}
+
+	if *benchFlag {
+		log.Printf("benchmark sources")
+
+		count := flag.Lookup("test.count").Value.(flag.Getter).Get().(uint)
+
+		c := getCollectionById(*benchCollectionId)
+		if c == nil {
+			panic(fmt.Errorf("collection %v not found", *benchCollectionId))
+		}
+		benchmarkSources(c, *benchSeed, *benchSample, int(count))
+		return
 	}
 
 	metadataTask := Task{

@@ -2,17 +2,21 @@ package image
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"math"
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
+	"photofield/search"
+	"photofield/tag"
 
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
@@ -35,6 +39,7 @@ const (
 type ListOptions struct {
 	OrderBy ListOrder
 	Limit   int
+	Query   *search.Query
 }
 
 type Database struct {
@@ -47,19 +52,27 @@ type Database struct {
 type InfoWriteType int32
 
 const (
-	AppendPath  InfoWriteType = iota
-	UpdateMeta  InfoWriteType = iota
-	UpdateColor InfoWriteType = iota
-	UpdateAI    InfoWriteType = iota
-	Delete      InfoWriteType = iota
-	Index       InfoWriteType = iota
+	AppendPath    InfoWriteType = iota
+	UpdateMeta    InfoWriteType = iota
+	UpdateColor   InfoWriteType = iota
+	UpdateAI      InfoWriteType = iota
+	Delete        InfoWriteType = iota
+	Index         InfoWriteType = iota
+	AddTag        InfoWriteType = iota
+	AddTagId      InfoWriteType = iota
+	AddTagIds     InfoWriteType = iota
+	RemoveTagIds  InfoWriteType = iota
+	InvertTagIds  InfoWriteType = iota
+	CompactTagIds InfoWriteType = iota
 )
 
 type InfoWrite struct {
 	Path      string
-	Id        ImageId
+	Id        int64
 	Embedding clip.Embedding
 	Type      InfoWriteType
+	Ids       Ids
+	Done      chan any
 	Info
 }
 
@@ -85,6 +98,21 @@ type EmbeddingsResult struct {
 	clip.Embedding
 }
 
+type TagIdRange struct {
+	Id tag.Id
+	IdRange
+}
+
+type tagSet map[tag.Id]struct{}
+
+func (tags *tagSet) Add(id tag.Id) {
+	(*tags)[id] = struct{}{}
+}
+
+func (tags *tagSet) Len() int {
+	return len(*tags)
+}
+
 func (info *InfoExistence) NeedsMeta() bool {
 	return info.SizeNull || info.OrientationNull || info.DateTimeNull
 }
@@ -106,7 +134,7 @@ func NewDatabase(path string, migrations embed.FS) *Database {
 		panic(err)
 	}
 
-	source.pending = make(chan *InfoWrite, 100)
+	source.pending = make(chan *InfoWrite, 10000)
 	go source.writePendingInfosSqlite()
 
 	return &source
@@ -234,11 +262,7 @@ func (source *Database) writePendingInfosSqlite() {
 	delete := conn.Prep(`
 		DELETE
 		FROM infos
-		WHERE path_prefix_id == (
-			SELECT id
-			FROM prefix
-			WHERE str == ?
-		) AND filename == ?;`)
+		WHERE id == ?;`)
 	defer delete.Finalize()
 
 	upsertIndex := conn.Prep(`
@@ -246,9 +270,43 @@ func (source *Database) writePendingInfosSqlite() {
 		VALUES (?, ?);`)
 	defer upsertIndex.Finalize()
 
-	lastCommit := time.Now()
+	upsertTag := conn.Prep(`
+		INSERT OR IGNORE INTO tag(name, revision)
+		VALUES (?, 1);`)
+	defer upsertTag.Finalize()
+
+	getTagId := conn.Prep(`	
+		SELECT id
+		FROM tag
+		WHERE name = ?;`)
+	defer getTagId.Finalize()
+
+	deleteTagRange := conn.Prep(`
+		DELETE FROM infos_tag
+		WHERE tag_id == ? AND file_id == ? AND len == ?;`)
+	defer deleteTagRange.Finalize()
+
+	deleteTagRanges := conn.Prep(`
+		DELETE FROM infos_tag
+		WHERE tag_id == ?;`)
+	defer deleteTagRanges.Finalize()
+
+	insertTagRange := conn.Prep(`
+		INSERT OR IGNORE INTO infos_tag (tag_id, file_id, len)
+		VALUES (?, ?, ?);`)
+	defer insertTagRange.Finalize()
+
+	incrementTagRevision := conn.Prep(`
+		UPDATE tag
+		SET revision = revision + 1
+		WHERE id == ?
+		RETURNING revision;`)
+	defer incrementTagRevision.Finalize()
+
 	lastOptimize := time.Time{}
 	inTransaction := false
+
+	pendingCompactionTags := tagSet{}
 
 	defer func() {
 		err := sqlitex.Execute(conn, "COMMIT;", nil)
@@ -258,138 +316,26 @@ func (source *Database) writePendingInfosSqlite() {
 		}
 	}()
 
-	for imageInfo := range source.pending {
-		if !inTransaction {
-			source.transactionMutex.Lock()
-			err := sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
-			if err != nil {
-				panic(err)
-			}
-			inTransaction = true
-		}
+	commitTicker := &time.Ticker{}
+	commitInterval := 200 * time.Millisecond
 
-		switch imageInfo.Type {
-		case AppendPath:
-			dir, file := filepath.Split(imageInfo.Path)
-
-			upsertPrefix.BindText(1, dir)
-			_, err := upsertPrefix.Step()
-			if err != nil {
-				log.Printf("Unable to insert path prefix %s: %s\n", dir, err.Error())
+	for {
+		select {
+		case <-commitTicker.C:
+			if !inTransaction {
+				commitTicker.Stop()
 				continue
 			}
-			err = upsertPrefix.Reset()
-			if err != nil {
-				panic(err)
-			}
 
-			appendPath.BindText(1, file)
-			appendPath.BindText(2, dir)
-			_, err = appendPath.Step()
-			if err != nil {
-				log.Printf("Unable to insert path filename %s: %s\n", file, err.Error())
+			if pendingCompactionTags.Len() > 0 {
+				for id := range pendingCompactionTags {
+					source.CompactTag(id)
+				}
+				pendingCompactionTags = tagSet{}
 				continue
 			}
-			err = appendPath.Reset()
-			if err != nil {
-				panic(err)
-			}
-		case UpdateMeta:
-			dir, file := filepath.Split(imageInfo.Path)
-			_, timezoneOffsetSeconds := imageInfo.DateTime.Zone()
 
-			updateMeta.BindText(1, file)
-			updateMeta.BindInt64(2, (int64)(imageInfo.Width))
-			updateMeta.BindInt64(3, (int64)(imageInfo.Height))
-			updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
-			updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
-			updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
-			if math.IsNaN(imageInfo.Latitude) {
-				updateMeta.BindNull(7)
-				updateMeta.BindNull(8)
-			} else {
-				updateMeta.BindFloat(7, imageInfo.Latitude)
-				updateMeta.BindFloat(8, imageInfo.Longitude)
-			}
-			updateMeta.BindText(9, imageInfo.Location)
-			updateMeta.BindText(10, dir)
-
-			_, err := updateMeta.Step()
-			if err != nil {
-				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = updateMeta.Reset()
-			if err != nil {
-				panic(err)
-			}
-		case UpdateColor:
-			dir, file := filepath.Split(imageInfo.Path)
-
-			updateColor.BindText(1, file)
-			updateColor.BindInt64(2, (int64)(imageInfo.Color))
-			updateColor.BindText(3, dir)
-
-			_, err := updateColor.Step()
-			if err != nil {
-				log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = updateColor.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		case UpdateAI:
-			updateAI.BindInt64(1, int64(imageInfo.Id))
-			updateAI.BindInt64(2, int64(imageInfo.Embedding.InvNormUint16())-clip.InvNormMean)
-			updateAI.BindBytes(3, imageInfo.Embedding.Byte())
-
-			_, err := updateAI.Step()
-			if err != nil {
-				log.Printf("Unable to insert image info ai for %d: %s\n", imageInfo.Id, err.Error())
-				continue
-			}
-			err = updateAI.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		case Delete:
-			dir, file := filepath.Split(imageInfo.Path)
-
-			delete.BindText(1, dir)
-			delete.BindText(2, file)
-
-			_, err := delete.Step()
-			if err != nil {
-				log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = delete.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		case Index:
-			upsertIndex.BindText(1, imageInfo.Path)
-			upsertIndex.BindText(2, imageInfo.DateTime.Format(dateFormat))
-			_, err := upsertIndex.Step()
-			if err != nil {
-				log.Printf("Unable to set dir to indexed %s: %s\n", imageInfo.Path, err.Error())
-				continue
-			}
-			err = upsertIndex.Reset()
-			if err != nil {
-				panic(err)
-			}
-
-		}
-
-		sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
-		if inTransaction && (sinceLastCommitSeconds >= 10 || len(source.pending) == 0) {
 			err := sqlitex.Execute(conn, "COMMIT;", nil)
-			lastCommit = time.Now()
 			if err != nil {
 				panic(err)
 			}
@@ -407,7 +353,302 @@ func (source *Database) writePendingInfosSqlite() {
 
 			source.transactionMutex.Unlock()
 			inTransaction = false
+
+		case imageInfo := <-source.pending:
+
+			if !inTransaction {
+				source.transactionMutex.Lock()
+				err := sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
+				if err != nil {
+					panic(err)
+				}
+				inTransaction = true
+				commitTicker = time.NewTicker(commitInterval)
+			}
+
+			switch imageInfo.Type {
+			case AppendPath:
+				dir, file := filepath.Split(imageInfo.Path)
+
+				upsertPrefix.BindText(1, dir)
+				_, err := upsertPrefix.Step()
+				if err != nil {
+					log.Printf("Unable to insert path prefix %s: %s\n", dir, err.Error())
+					continue
+				}
+				err = upsertPrefix.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				appendPath.BindText(1, file)
+				appendPath.BindText(2, dir)
+				_, err = appendPath.Step()
+				if err != nil {
+					log.Printf("Unable to insert path filename %s: %s\n", file, err.Error())
+					continue
+				}
+				err = appendPath.Reset()
+				if err != nil {
+					panic(err)
+				}
+			case UpdateMeta:
+				dir, file := filepath.Split(imageInfo.Path)
+				_, timezoneOffsetSeconds := imageInfo.DateTime.Zone()
+
+				updateMeta.BindText(1, file)
+				updateMeta.BindInt64(2, (int64)(imageInfo.Width))
+				updateMeta.BindInt64(3, (int64)(imageInfo.Height))
+				updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
+				updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
+				updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
+				if math.IsNaN(imageInfo.Latitude) {
+					updateMeta.BindNull(7)
+					updateMeta.BindNull(8)
+				} else {
+					updateMeta.BindFloat(7, imageInfo.Latitude)
+					updateMeta.BindFloat(8, imageInfo.Longitude)
+				}
+				updateMeta.BindText(9, imageInfo.Location)
+				updateMeta.BindText(10, dir)
+
+				_, err := updateMeta.Step()
+				if err != nil {
+					log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = updateMeta.Reset()
+				if err != nil {
+					panic(err)
+				}
+			case UpdateColor:
+				dir, file := filepath.Split(imageInfo.Path)
+
+				updateColor.BindText(1, file)
+				updateColor.BindInt64(2, (int64)(imageInfo.Color))
+				updateColor.BindText(3, dir)
+
+				_, err := updateColor.Step()
+				if err != nil {
+					log.Printf("Unable to insert image info meta for %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = updateColor.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case UpdateAI:
+				updateAI.BindInt64(1, int64(imageInfo.Id))
+				updateAI.BindInt64(2, int64(imageInfo.Embedding.InvNormUint16())-clip.InvNormMean)
+				updateAI.BindBytes(3, imageInfo.Embedding.Byte())
+
+				_, err := updateAI.Step()
+				if err != nil {
+					log.Printf("Unable to insert image info ai for %d: %s\n", imageInfo.Id, err.Error())
+					continue
+				}
+				err = updateAI.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case Delete:
+				id := ImageId(imageInfo.Id)
+
+				// Delete image tags
+				for r := range source.ListImageTagRanges(id) {
+					ids := NewIds()
+					ids.Add(r.IdRange)
+					ids.SubtractInt(int(id))
+
+					min := r.Low
+					len := r.High - r.Low
+					deleteTagRange.BindInt64(1, int64(r.Id))
+					deleteTagRange.BindInt64(2, int64(min))
+					deleteTagRange.BindInt64(3, int64(len))
+					_, err := deleteTagRange.Step()
+					if err != nil {
+						log.Printf("Unable to delete tag range %d: %s\n", r.Id, err.Error())
+						continue
+					}
+					err = deleteTagRange.Reset()
+					if err != nil {
+						panic(err)
+					}
+
+					for nr := range ids.RangeChan() {
+						min := nr.Low
+						len := nr.High - nr.Low
+						insertTagRange.BindInt64(1, int64(r.Id))
+						insertTagRange.BindInt64(2, int64(min))
+						insertTagRange.BindInt64(3, int64(len))
+						_, err := insertTagRange.Step()
+						if err != nil {
+							log.Printf("Unable to insert tag range %d: %s\n", r.Id, err.Error())
+							continue
+						}
+						err = insertTagRange.Reset()
+						if err != nil {
+							panic(err)
+						}
+					}
+				}
+
+				// Delete image info
+				delete.BindInt64(1, int64(id))
+				_, err := delete.Step()
+				if err != nil {
+					log.Printf("Unable to delete path %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = delete.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case Index:
+				upsertIndex.BindText(1, imageInfo.Path)
+				upsertIndex.BindText(2, imageInfo.DateTime.Format(dateFormat))
+				_, err := upsertIndex.Step()
+				if err != nil {
+					log.Printf("Unable to set dir to indexed %s: %s\n", imageInfo.Path, err.Error())
+					continue
+				}
+				err = upsertIndex.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case AddTag:
+				tagName := imageInfo.Path
+				upsertTag.BindText(1, tagName)
+				_, err := upsertTag.Step()
+				if err != nil {
+					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
+					continue
+				}
+				err = upsertTag.Reset()
+				if err != nil {
+					panic(err)
+				}
+				close(imageInfo.Done)
+
+			case AddTagId:
+				tagName := imageInfo.Path
+				upsertTag.BindText(1, tagName)
+				_, err := upsertTag.Step()
+				if err != nil {
+					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
+					continue
+				}
+				err = upsertTag.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Get tag id
+				getTagId.BindText(1, tagName)
+				ok, err := getTagId.Step()
+				if err != nil {
+					log.Printf("Unable to get tag id for %s: %s\n", tagName, err.Error())
+					continue
+				}
+				if !ok {
+					log.Printf("Unable to get tag id for %s, returned false\n", tagName)
+					continue
+				}
+				tagId := tag.Id(getTagId.ColumnInt64(0))
+				err = getTagId.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Add tag range
+				min := imageInfo.Id
+				len := 0
+				insertTagRange.BindInt64(1, int64(tagId))
+				insertTagRange.BindInt64(2, int64(min))
+				insertTagRange.BindInt64(3, int64(len))
+				_, err = insertTagRange.Step()
+				if err != nil {
+					log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
+					continue
+				}
+				err = insertTagRange.Reset()
+				if err != nil {
+					panic(err)
+				}
+				pendingCompactionTags.Add(tagId)
+
+			case AddTagIds, RemoveTagIds, InvertTagIds, CompactTagIds:
+				tagId := tag.Id(imageInfo.Id)
+
+				ids := source.getTagImageIdsWithConn(conn, tagId)
+				switch imageInfo.Type {
+				case AddTagIds:
+					ids.AddTree(imageInfo.Ids)
+				case RemoveTagIds:
+					ids.SubtractTree(imageInfo.Ids)
+				case InvertTagIds:
+					ids.InvertTree(imageInfo.Ids)
+				case CompactTagIds:
+					// Tags being compacted do not change
+				default:
+					panic("Unknown tag id diff type")
+				}
+
+				// Delete all tag ranges
+				deleteTagRanges.BindInt64(1, int64(tagId))
+				_, err := deleteTagRanges.Step()
+				if err != nil {
+					log.Printf("Unable to delete tag ranges %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = deleteTagRanges.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Insert new tag ranges
+				for r := range ids.RangeChan() {
+					min := r.Low
+					len := r.High - r.Low
+					insertTagRange.BindInt64(1, int64(tagId))
+					insertTagRange.BindInt64(2, int64(min))
+					insertTagRange.BindInt64(3, int64(len))
+					_, err := insertTagRange.Step()
+					if err != nil {
+						log.Printf("Unable to insert tag range %d: %s\n", tagId, err.Error())
+						continue
+					}
+					err = insertTagRange.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				// Increment tag revision
+				incrementTagRevision.BindInt64(1, int64(tagId))
+				ok, err := incrementTagRevision.Step()
+				if err != nil {
+					log.Printf("Unable to increment tag revision %d: %s\n", tagId, err.Error())
+					continue
+				}
+				if !ok {
+					panic("Unable to increment tag revision, returned false")
+				}
+				rev := incrementTagRevision.ColumnInt(0)
+				err = incrementTagRevision.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				imageInfo.Done <- rev
+				close(imageInfo.Done)
+			}
 		}
+
 	}
 }
 
@@ -607,13 +848,388 @@ func (source *Database) Write(path string, info Info, writeType InfoWriteType) e
 	return nil
 }
 
+func (source *Database) CompactTag(id tag.Id) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		d := make(chan any)
+		source.pending <- &InfoWrite{
+			Id:   int64(id),
+			Type: CompactTagIds,
+			Done: d,
+		}
+		<-d
+		close(done)
+	}()
+	return done
+}
+
+func (source *Database) WriteTags(id ImageId, tags []tag.Tag) error {
+	for _, t := range tags {
+		source.pending <- &InfoWrite{
+			Id:   int64(id),
+			Type: AddTagId,
+			Path: t.Name,
+		}
+	}
+	return nil
+}
+
+func (source *Database) Delete(id ImageId) error {
+	source.pending <- &InfoWrite{
+		Id:   int64(id),
+		Type: Delete,
+	}
+	return nil
+}
+
 func (source *Database) WriteAI(id ImageId, embedding clip.Embedding) error {
 	source.pending <- &InfoWrite{
-		Id:        id,
+		Id:        int64(id),
 		Type:      UpdateAI,
 		Embedding: embedding,
 	}
 	return nil
+}
+
+func (source *Database) AddTag(name string) (<-chan struct{}, error) {
+	d := make(chan any)
+	done := make(chan struct{})
+	source.pending <- &InfoWrite{
+		Path: name,
+		Type: AddTag,
+		Done: d,
+	}
+	go func() {
+		<-d
+		source.WaitForCommit()
+		close(done)
+	}()
+	return done, nil
+}
+
+func (source *Database) AddTagIds(id tag.Id, ids Ids) (int, error) {
+	if ids.Len() == 0 {
+		return source.GetTagRevision(id)
+	}
+	done := make(chan any)
+	source.pending <- &InfoWrite{
+		Id:   int64(id),
+		Ids:  ids,
+		Type: AddTagIds,
+		Done: done,
+	}
+	rev := (<-done).(int)
+	if rev == 0 {
+		return source.GetTagRevision(id)
+	} else {
+		source.WaitForCommit()
+		return rev, nil
+	}
+}
+
+func (source *Database) RemoveTagIds(id tag.Id, ids Ids) (int, error) {
+	if ids.Len() == 0 {
+		return source.GetTagRevision(id)
+	}
+	done := make(chan any)
+	source.pending <- &InfoWrite{
+		Id:   int64(id),
+		Ids:  ids,
+		Type: RemoveTagIds,
+		Done: done,
+	}
+	rev := (<-done).(int)
+	if rev == 0 {
+		return source.GetTagRevision(id)
+	} else {
+		source.WaitForCommit()
+		return rev, nil
+	}
+}
+
+func (source *Database) InvertTagIds(id tag.Id, ids Ids) (int, error) {
+	if ids.Len() == 0 {
+		return source.GetTagRevision(id)
+	}
+	done := make(chan any)
+	source.pending <- &InfoWrite{
+		Id:   int64(id),
+		Ids:  ids,
+		Type: InvertTagIds,
+		Done: done,
+	}
+	rev := (<-done).(int)
+	if rev == 0 {
+		return source.GetTagRevision(id)
+	} else {
+		source.WaitForCommit()
+		return rev, nil
+	}
+}
+
+func (source *Database) GetTagImageIds(id tag.Id) Ids {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+	return source.getTagImageIdsWithConn(conn, id)
+}
+
+func (source *Database) getTagImageIdsWithConn(conn *sqlite.Conn, id tag.Id) Ids {
+	stmt := conn.Prep(`
+	SELECT infos_tag.file_id, infos_tag.len
+	FROM infos_tag
+	JOIN tag ON infos_tag.tag_id = tag.id
+	WHERE tag.id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	ids := NewIds()
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error listing files: %s\n", err.Error())
+		} else if !exists {
+			break
+		}
+		min := stmt.ColumnInt(0)
+		len := stmt.ColumnInt(1)
+		ids.Add(IdFromTo(min, min+len))
+	}
+	return ids
+}
+
+func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
+	out := make(chan IdRange, 100)
+	go func() {
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		stmt := conn.Prep(`
+		SELECT infos_tag.file_id, infos_tag.len
+		FROM infos_tag
+		JOIN tag ON infos_tag.tag_id = tag.id
+		WHERE tag.id = ?;`)
+		defer stmt.Reset()
+
+		stmt.BindInt64(1, int64(id))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			min := stmt.ColumnInt(0)
+			len := stmt.ColumnInt(1)
+			out <- IdFromTo(min, min+len)
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListImageTagRanges(id ImageId) <-chan TagIdRange {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+	return source.listImageTagRangesWithConn(conn, id)
+}
+
+func (source *Database) listImageTagRangesWithConn(conn *sqlite.Conn, id ImageId) <-chan TagIdRange {
+	out := make(chan TagIdRange, 100)
+	go func() {
+		stmt := conn.Prep(`
+		SELECT tag_id, file_id, len
+		FROM infos_tag
+		WHERE :file_id >= file_id AND :file_id <= file_id + len;`)
+		defer stmt.Reset()
+
+		stmt.BindInt64(1, int64(id))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			tagId := tag.Id(stmt.ColumnInt(0))
+			min := stmt.ColumnInt(1)
+			len := stmt.ColumnInt(2)
+			out <- TagIdRange{
+				Id:      tagId,
+				IdRange: IdFromTo(min, min+len),
+			}
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT id, revision
+	FROM tag
+	WHERE name = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindText(1, name)
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return tag.Tag{}, false
+	}
+
+	return tag.Tag{
+		Id:       tag.Id(stmt.ColumnInt(0)),
+		Name:     name,
+		Revision: stmt.ColumnInt(1),
+	}, true
+}
+
+func (source *Database) GetTagId(name string) (tag.Id, bool) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT id
+	FROM tag
+	WHERE name = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindText(1, name)
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return 0, false
+	}
+
+	return tag.Id(stmt.ColumnInt(0)), true
+}
+
+func (source *Database) GetTagName(id tag.Id) (string, bool) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT name
+	FROM tag
+	WHERE id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return "", false
+	}
+
+	return stmt.ColumnText(0), true
+}
+
+func (source *Database) GetTagRevision(id tag.Id) (int, error) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT revision
+	FROM tag
+	WHERE id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return 0, errors.New("tag not found")
+	}
+
+	return stmt.ColumnInt(0), nil
+}
+
+const defaultTagConditions string = `
+	AND name NOT LIKE 'sys:%'
+`
+
+func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
+	out := make(chan tag.Tag, 100)
+	go func() {
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+		SELECT id, name, revision
+		FROM infos_tag
+		JOIN tag ON infos_tag.tag_id = tag.id
+		WHERE :file_id >= file_id AND :file_id <= file_id + len
+		`
+
+		sql += defaultTagConditions
+
+		sql += `
+		ORDER BY length(name) ASC, name ASC;`
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		stmt.BindInt64(1, int64(id))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing tags: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			out <- tag.Tag{
+				Id:       tag.Id(stmt.ColumnInt(0)),
+				Name:     stmt.ColumnText(1),
+				Revision: stmt.ColumnInt(2),
+			}
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
+	out := make(chan tag.Tag, 100)
+	go func() {
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+		SELECT id, name, revision
+		FROM tag
+		WHERE name LIKE ?
+		`
+
+		sql += defaultTagConditions
+
+		sql += `
+		ORDER BY name ASC
+		LIMIT ?;`
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		stmt.BindText(1, "%"+q+"%")
+		stmt.BindInt64(2, int64(limit))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing tags: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			out <- tag.Tag{
+				Id:       tag.Id(stmt.ColumnInt(0)),
+				Name:     stmt.ColumnText(1),
+				Revision: stmt.ColumnInt(2),
+			}
+		}
+		close(out)
+	}()
+	return out
 }
 
 func (source *Database) WaitForCommit() {
@@ -636,12 +1252,6 @@ func (source *Database) ListNonexistent(dir string, paths map[string]struct{}) <
 	return out
 }
 
-func (source *Database) DeleteNonexistent(dir string, paths map[string]struct{}) {
-	for ip := range source.ListNonexistent(dir, paths) {
-		source.Write(ip.Path, Info{}, Delete)
-	}
-}
-
 func (source *Database) SetIndexed(dir string) {
 	source.Write(dir, Info{
 		DateTime: time.Now(),
@@ -656,14 +1266,49 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		conn := source.pool.Get(nil)
 		defer source.pool.Put(conn)
 
-		sql := `
-			SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset, location
+		sql := ""
+
+		tags := options.Query.QualifierValues("tag")
+		if len(tags) > 0 {
+			sql += `
+			WITH
+			`
+			for i := range tags {
+				if i > 0 {
+					sql += ","
+				}
+				sql += `
+				tag` + strconv.Itoa(i) + ` AS (
+					SELECT file_id, len
+					FROM infos_tag
+					WHERE tag_id IN (
+						SELECT id
+						FROM tag
+						WHERE name = ?
+					)
+				)
+				`
+			}
+		}
+
+		sql += `
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, location
 			FROM infos
+		`
+
+		if len(tags) > 0 {
+			for i := range tags {
+				sql += fmt.Sprintf(`
+					JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
+				`, i)
+			}
+		}
+
+		sql += `
 			WHERE path_prefix_id IN (
 				SELECT id
 				FROM prefix
-				WHERE
-		`
+				WHERE `
 
 		for i := range dirs {
 			sql += `str LIKE ? `
@@ -679,15 +1324,21 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		switch options.OrderBy {
 		case None:
 		case DateAsc:
-			sql += `ORDER BY created_at_unix ASC `
+			sql += `
+			ORDER BY created_at_unix ASC
+			`
 		case DateDesc:
-			sql += `ORDER BY created_at_unix DESC `
+			sql += `
+			ORDER BY created_at_unix DESC
+			`
 		default:
 			panic("Unsupported listing order")
 		}
 
 		if options.Limit > 0 {
-			sql += `LIMIT ? `
+			sql += `
+				LIMIT ?
+			`
 		}
 
 		sql += ";"
@@ -696,6 +1347,11 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		defer stmt.Reset()
 
 		bindIndex := 1
+
+		for _, tag := range tags {
+			stmt.BindText(bindIndex, tag)
+			bindIndex++
+		}
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
@@ -740,6 +1396,36 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		close(out)
 	}()
 	return out
+}
+
+func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+		SELECT inv_norm, embedding
+		FROM clip_emb
+		WHERE file_id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	if exists, err := stmt.Step(); err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, nil
+	}
+
+	invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(0))
+
+	size := stmt.ColumnLen(1)
+	bytes := make([]byte, size)
+	read := stmt.ColumnBytes(1, bytes)
+	if read != size {
+		return nil, fmt.Errorf("error reading embedding: buffer underrun, expected %d actual %d bytes", size, read)
+	}
+
+	return clip.FromRaw(bytes, invnorm), nil
 }
 
 func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-chan EmbeddingsResult {
