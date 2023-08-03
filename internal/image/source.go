@@ -30,6 +30,7 @@ import (
 
 var ErrNotFound = errors.New("not found")
 var ErrNotAnImage = errors.New("not a supported image extension, might be video")
+var ErrUnavailable = errors.New("unavailable")
 
 type ImageId uint32
 
@@ -109,9 +110,14 @@ type Caches struct {
 	Image CacheConfig
 }
 
+type Geo struct {
+	ReverseGeocode bool `json:"reverse_geocode"`
+}
+
 type Config struct {
 	DataDir   string
 	AI        clip.AI
+	Geo       Geo
 	TagConfig tag.Config `json:"-"`
 
 	ExifToolCount        int  `json:"exif_tool_count"`
@@ -169,12 +175,12 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.imageInfoCache = newInfoCache()
 	source.pathCache = newPathCache()
 
-	r, err := rgeo.New(rgeo.Provinces10, rgeo.Cities10)
-
-	if err != nil {
-		// Handle error
-		fmt.Println("RGEO ERR", err)
-	} else {
+	if config.Geo.ReverseGeocode {
+		log.Println("rgeo loading")
+		r, err := rgeo.New(rgeo.Provinces10, rgeo.Cities10)
+		if err != nil {
+			log.Fatalf("failed to initialize rgeo: %s", err)
+		}
 		source.rg = r
 	}
 
@@ -285,6 +291,9 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 }
 
 func (source *Source) ReverseGeocode(l s2.LatLng) (string, error) {
+	if source.rg == nil {
+		return "", ErrUnavailable
+	}
 	location, err := source.rg.ReverseGeocode([]float64{l.Lng.Degrees(), l.Lat.Degrees()})
 	if err != nil {
 		return "", err

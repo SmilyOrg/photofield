@@ -55,6 +55,16 @@ tags:
   # exif:
   #   enable: true
 
+geo:
+  # Reverse geocode coordinates to location names. Runs fully locally
+  # via the "rgeo" Golang library. Currently only supported in the
+  # timeline layout.
+  # 
+  # Can delay startup by up to a minute as the local geolocation
+  # database is loaded.
+  # 
+  # reverse_geocode: true
+
 media:
   # Extract metadata from this many files concurrently
   concurrent_meta_loads: 8
