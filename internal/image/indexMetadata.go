@@ -2,9 +2,6 @@ package image
 
 import (
 	"fmt"
-	"math"
-
-	
 )
 
 func (source *Source) indexMetadata(in <-chan interface{}) {
@@ -19,20 +16,6 @@ func (source *Source) indexMetadata(in <-chan interface{}) {
 			fmt.Println("Unable to load image info meta", err, path)
 			continue
 		}
-
-		if !math.IsNaN(info.Latitude) {
-			loc, err := source.rg.ReverseGeocode([]float64{info.Longitude, info.Latitude})
-			if err != nil {
-				info.Location = ""
-			} else if loc.City == "" && loc.Country == "" {
-				info.Location = ""
-			} else if loc.City != "" {
-				info.Location = fmt.Sprintf("%s, %s, %s", loc.City, loc.Province, loc.Country)
-			} else {
-				info.Location = fmt.Sprintf("%s, %s", loc.Province, loc.Country)
-			}
-		}
-		
 		source.database.Write(path, info, UpdateMeta)
 		if source.Config.TagConfig.Exif.Enable {
 			source.database.WriteTags(id, tags)

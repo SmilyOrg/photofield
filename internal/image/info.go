@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"math"
 	"time"
+
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
 )
 
 type Size = image.Point
@@ -14,9 +18,21 @@ type Info struct {
 	DateTime      time.Time
 	Color         uint32
 	Orientation   Orientation
-	Latitude	  float64
-	Longitude     float64
-	Location	  string
+	LatLng        s2.LatLng
+}
+
+const earthRadiusKm = 6371.01
+
+func NaNLatLng() s2.LatLng {
+	return s2.LatLng{Lat: s1.Angle(math.NaN()), Lng: s1.Angle(math.NaN())}
+}
+
+func IsNaNLatLng(latlng s2.LatLng) bool {
+	return math.IsNaN(float64(latlng.Lat)) || math.IsNaN(float64(latlng.Lng))
+}
+
+func AngleToKm(a s1.Angle) float64 {
+	return a.Radians() * earthRadiusKm
 }
 
 func (info *Info) Size() Size {
@@ -24,13 +40,13 @@ func (info *Info) Size() Size {
 }
 
 func (info *Info) String() string {
-	return fmt.Sprintf("width: %v, height: %v, date: %v, color: %08x, orientation: %s, location: %s",
+	return fmt.Sprintf("width: %v, height: %v, date: %v, color: %08x, orientation: %s, latlng: %s",
 		info.Width,
 		info.Height,
 		info.DateTime.String(),
 		info.Color,
 		info.Orientation,
-		info.Location,
+		info.LatLng.String(),
 	)
 }
 

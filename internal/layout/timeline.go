@@ -20,7 +20,6 @@ type TimelineEvent struct {
 	LastOnDay  bool
 	Section    Section
 	Location   string
-
 }
 
 func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, scene *render.Scene, source *image.Source) render.Rect {
@@ -97,7 +96,7 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 		Interval: 1 * time.Second,
 	}
 
-	locations := make(map[string]bool)
+	locations := make(map[string]struct{})
 
 	index := 0
 	for info := range infos {
@@ -112,8 +111,8 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 					event.Location = location
 				}
 			}
-			
-			locations = make(map[string]bool)
+
+			locations = make(map[string]struct{})
 
 			rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
 			eventCount++
@@ -124,8 +123,12 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 		lastPhotoTime = photoTime
 
 		event.Section.infos = append(event.Section.infos, info)
-		if info.Location != "" {
-			locations[info.Location] = true
+
+		if !image.IsNaNLatLng(info.LatLng) {
+			location, err := source.ReverseGeocode(info.LatLng)
+			if err == nil {
+				locations[location] = struct{}{}
+			}
 		}
 
 		layoutCounter.Set(index)
@@ -136,20 +139,10 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 
 	if len(event.Section.infos) > 0 {
 		event.StartTime = lastPhotoTime
-		for location := range locations {
-			if event.Location != "" {
-				event.Location = event.Location + ", " + location
-			} else {
-				event.Location = location
-			}
-		}
-		
-		locations = make(map[string]bool)
 		rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
 		event.Location = ""
 		eventCount++
 	}
-
 
 	log.Printf("layout events %d\n", eventCount)
 

@@ -21,6 +21,7 @@ import (
 	"photofield/tag"
 
 	"github.com/docker/go-units"
+	"github.com/golang/geo/s2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -167,7 +168,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	source.database = NewDatabase(filepath.Join(config.DataDir, "photofield.cache.db"), migrations)
 	source.imageInfoCache = newInfoCache()
 	source.pathCache = newPathCache()
-	
+
 	r, err := rgeo.New(rgeo.Provinces10, rgeo.Cities10)
 
 	if err != nil {
@@ -281,6 +282,26 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	}
 
 	return &source
+}
+
+func (source *Source) ReverseGeocode(l s2.LatLng) (string, error) {
+	location, err := source.rg.ReverseGeocode([]float64{l.Lng.Degrees(), l.Lat.Degrees()})
+	if err != nil {
+		return "", err
+	}
+	loc := ""
+	if err == nil {
+		loc = location.City
+		if loc == "" {
+			loc = location.Province
+		}
+		if loc == "" {
+			loc = location.Country
+		} else if location.Country != "" {
+			loc = fmt.Sprintf("%s (%s)", loc, location.Country)
+		}
+	}
+	return loc, nil
 }
 
 func (source *Source) Vacuum() error {

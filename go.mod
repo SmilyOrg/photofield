@@ -15,6 +15,7 @@ require (
 	github.com/go-chi/render v1.0.1
 	github.com/goccy/go-yaml v1.7.17
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.1
+	github.com/golang/geo v0.0.0-20200730024412-e86565bf3f35
 	github.com/gosimple/slug v1.10.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/imdario/mergo v0.3.13
@@ -52,7 +53,6 @@ require (
 	github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f // indirect
-	github.com/golang/geo v0.0.0-20200730024412-e86565bf3f35 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/pprof v0.0.0-20210226084205-cbba55b83ad5 // indirect

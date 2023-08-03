@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/geo/s2"
 	"github.com/mostlygeek/go-exiftool"
 )
 
@@ -152,18 +153,24 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 		info.Orientation = getOrientationFromRotation(rotation)
 	}
 
-	if latitude != "" {
-		info.Latitude, err = strconv.ParseFloat(latitude, 64)
+	lat := math.NaN()
+	lng := math.NaN()
+	if latitude != "" && longitude != "" {
+		lat, err = strconv.ParseFloat(latitude, 64)
 		if err != nil {
-			info.Latitude = math.NaN()
+			lat = math.NaN()
+		}
+
+		lng, err = strconv.ParseFloat(longitude, 64)
+		if err != nil {
+			lng = math.NaN()
 		}
 	}
 
-	if longitude != "" {
-		info.Longitude, err = strconv.ParseFloat(longitude, 64)
-		if err != nil {
-			info.Longitude = math.NaN()
-		}
+	if !math.IsNaN(lat) && !math.IsNaN(lng) {
+		info.LatLng = s2.LatLngFromDegrees(lat, lng)
+	} else {
+		info.LatLng = NaNLatLng()
 	}
 
 	if info.Orientation.SwapsDimensions() {
