@@ -997,6 +997,7 @@ type AppConfig struct {
 	Render       render.Render           `json:"render"`
 	Media        image.Config            `json:"media"`
 	AI           clip.AI                 `json:"ai"`
+	Geo          image.Geo               `json:"geo"`
 	Tags         tag.Config              `json:"tags"`
 	TileRequests TileRequestConfig       `json:"tile_requests"`
 }
@@ -1065,6 +1066,7 @@ func loadConfiguration(path string) AppConfig {
 	}
 
 	appConfig.Media.AI = appConfig.AI
+	appConfig.Media.Geo = appConfig.Geo
 	appConfig.Tags.Enable = appConfig.Tags.Enable || appConfig.Tags.Enabled
 
 	return appConfig

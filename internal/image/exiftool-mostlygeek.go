@@ -3,12 +3,14 @@ package image
 import (
 	"bufio"
 	"errors"
+	"math"
 	"photofield/tag"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/golang/geo/s2"
 	"github.com/mostlygeek/go-exiftool"
 )
 
@@ -50,6 +52,9 @@ func NewExifToolMostlyGeekLoader(exifToolCount int) (*ExifToolMostlyGeekLoader, 
 		"-TimeStamp#",
 		"-FileModifyDate#",
 		"-FileCreateDate#",
+		// Location Info
+		"-GPSLatitude#",
+		"-GPSLongitude#",
 	)
 	return decoder, err
 }
@@ -70,6 +75,8 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 	rotation := ""
 	imageWidth := ""
 	imageHeight := ""
+	latitude := ""
+	longitude := ""
 
 	// var gpsTime time.Time
 
@@ -93,6 +100,13 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 			imageWidth = value
 		case "ImageHeight":
 			imageHeight = value
+		case "GPSLatitude":
+			latitude = value
+		case "GPSLongitude":
+			longitude = value
+
+		// case "GPSDateTime":
+		// 	gpsTime, _ = parseDateTime(value)
 		default:
 			if name, ok := tag.ExifTagToName[name]; ok {
 				tags = append(tags, tag.NewExif(name, value))
@@ -137,6 +151,26 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 		info.Orientation = parseOrientation(orientation)
 	} else if rotation != "" {
 		info.Orientation = getOrientationFromRotation(rotation)
+	}
+
+	lat := math.NaN()
+	lng := math.NaN()
+	if latitude != "" && longitude != "" {
+		lat, err = strconv.ParseFloat(latitude, 64)
+		if err != nil {
+			lat = math.NaN()
+		}
+
+		lng, err = strconv.ParseFloat(longitude, 64)
+		if err != nil {
+			lng = math.NaN()
+		}
+	}
+
+	if !math.IsNaN(lat) && !math.IsNaN(lng) {
+		info.LatLng = s2.LatLngFromDegrees(lat, lng)
+	} else {
+		info.LatLng = NaNLatLng()
 	}
 
 	if info.Orientation.SwapsDimensions() {

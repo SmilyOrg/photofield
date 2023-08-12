@@ -19,6 +19,7 @@ type TimelineEvent struct {
 	FirstOnDay bool
 	LastOnDay  bool
 	Section    Section
+	Location   string
 }
 
 func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, scene *render.Scene, source *image.Source) render.Rect {
@@ -40,7 +41,7 @@ func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, 
 
 	startTimeFormat += "   15:04"
 
-	headerText := event.StartTime.Format(startTimeFormat)
+	headerText := event.StartTime.Format(startTimeFormat) + " " + event.Location
 
 	duration := event.EndTime.Sub(event.StartTime)
 	if duration >= 1*time.Minute {
@@ -95,12 +96,24 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 		Interval: 1 * time.Second,
 	}
 
+	locations := make(map[string]struct{})
+
 	index := 0
 	for info := range infos {
 		photoTime := info.DateTime
 		elapsed := lastPhotoTime.Sub(photoTime)
 		if elapsed > 30*time.Minute {
 			event.StartTime = lastPhotoTime
+			for location := range locations {
+				if event.Location != "" {
+					event.Location = event.Location + ", " + location
+				} else {
+					event.Location = location
+				}
+			}
+
+			locations = make(map[string]struct{})
+
 			rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
 			eventCount++
 			event = TimelineEvent{
@@ -111,6 +124,13 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 
 		event.Section.infos = append(event.Section.infos, info)
 
+		if !image.IsNaNLatLng(info.LatLng) {
+			location, err := source.ReverseGeocode(info.LatLng)
+			if err == nil {
+				locations[location] = struct{}{}
+			}
+		}
+
 		layoutCounter.Set(index)
 		index++
 		scene.FileCount = index
@@ -120,6 +140,7 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 	if len(event.Section.infos) > 0 {
 		event.StartTime = lastPhotoTime
 		rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
+		event.Location = ""
 		eventCount++
 	}
 

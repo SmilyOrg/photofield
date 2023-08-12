@@ -15,9 +15,10 @@ require (
 	github.com/go-chi/render v1.0.1
 	github.com/goccy/go-yaml v1.7.17
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.1
+	github.com/golang/geo v0.0.0-20200730024412-e86565bf3f35
 	github.com/gosimple/slug v1.10.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
-	github.com/imdario/mergo v0.3.12
+	github.com/imdario/mergo v0.3.13
 	github.com/joho/godotenv v1.3.0
 	github.com/karrick/godirwalk v1.15.6
 	github.com/kelindar/intmap v1.1.0
@@ -30,6 +31,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/pyroscope-io/client v0.7.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
+	github.com/sams96/rgeo v1.2.0
 	github.com/sheerun/queue v1.0.1
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	github.com/x448/float16 v0.8.4
@@ -74,6 +76,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/tdewolff/minify/v2 v2.7.1-0.20200112204046-70870d25a935 // indirect
 	github.com/tdewolff/parse/v2 v2.4.2 // indirect
+	github.com/twpayne/go-geom v1.4.4 // indirect
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/mod v0.4.2 // indirect

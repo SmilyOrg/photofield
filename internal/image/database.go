@@ -23,6 +23,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
 	"github.com/golang-migrate/migrate/v4/source/httpfs"
+	"github.com/golang/geo/s2"
 )
 
 var dateFormat = "2006-01-02 15:04:05.999999 -07:00"
@@ -79,6 +80,7 @@ type InfoExistence struct {
 	SizeNull        bool
 	OrientationNull bool
 	DateTimeNull    bool
+	LatLngNull      bool
 	ColorNull       bool
 }
 
@@ -207,7 +209,7 @@ func (source *Database) writePendingInfosSqlite() {
 	defer upsertPrefix.Finalize()
 
 	updateMeta := conn.Prep(`
-		INSERT INTO infos(path_prefix_id, filename, width, height, orientation, created_at_unix, created_at_tz_offset)
+		INSERT INTO infos(path_prefix_id, filename, width, height, orientation, created_at_unix, created_at_tz_offset, latitude, longitude)
 		SELECT
 			id as path_prefix_id,
 			? as filename,
@@ -215,13 +217,17 @@ func (source *Database) writePendingInfosSqlite() {
 			? as height,
 			? orientation,
 			? as created_at_unix,
-			? as created_at_tz_offset
+			? as created_at_tz_offset,
+			? as latitude,
+			? as longitude
 		FROM prefix
 		WHERE str == ?
 		ON CONFLICT(path_prefix_id, filename) DO UPDATE SET
 			width=excluded.width,
 			height=excluded.height,
 			orientation=excluded.orientation,
+			latitude=excluded.latitude,
+			longitude=excluded.longitude,
 			created_at_unix=excluded.created_at_unix,
 			created_at_tz_offset=excluded.created_at_tz_offset;`)
 	defer updateMeta.Finalize()
@@ -395,7 +401,14 @@ func (source *Database) writePendingInfosSqlite() {
 				updateMeta.BindInt64(4, (int64)(imageInfo.Orientation))
 				updateMeta.BindInt64(5, imageInfo.DateTime.Unix())
 				updateMeta.BindInt64(6, int64(timezoneOffsetSeconds/60))
-				updateMeta.BindText(7, dir)
+				if IsNaNLatLng(imageInfo.LatLng) {
+					updateMeta.BindNull(7)
+					updateMeta.BindNull(8)
+				} else {
+					updateMeta.BindFloat(7, imageInfo.LatLng.Lat.Degrees())
+					updateMeta.BindFloat(8, imageInfo.LatLng.Lng.Degrees())
+				}
+				updateMeta.BindText(9, dir)
 
 				_, err := updateMeta.Step()
 				if err != nil {
@@ -664,7 +677,7 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-		SELECT width, height, orientation, color, created_at
+		SELECT width, height, orientation, color, created_at, latitude, longitude
 		FROM infos
 		WHERE id == ?;`)
 	defer stmt.Reset()
@@ -691,6 +704,13 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 	info.DateTime, _ = time.Parse(dateFormat, stmt.ColumnText(4))
 	info.DateTimeNull = stmt.ColumnType(4) == sqlite.TypeNull
 
+	info.LatLngNull = stmt.ColumnType(5) == sqlite.TypeNull || stmt.ColumnType(6) == sqlite.TypeNull
+	if info.LatLngNull {
+		info.LatLng = NaNLatLng()
+	} else {
+		info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(5), stmt.ColumnFloat(6))
+	}
+
 	return info, true
 }
 
@@ -702,7 +722,7 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 		defer source.pool.Put(conn)
 
 		sql := `
-		SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset
+		SELECT id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude
 		FROM infos
 		WHERE id IN (`
 
@@ -744,6 +764,13 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
+
+			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
+			if info.LatLngNull {
+				info.LatLng = NaNLatLng()
+			} else {
+				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
+			}
 
 			out <- info
 		}
@@ -1273,7 +1300,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		}
 
 		sql += `
-			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude
 			FROM infos
 		`
 
@@ -1368,6 +1395,13 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
+
+			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
+			if info.LatLngNull {
+				info.LatLng = NaNLatLng()
+			} else {
+				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
+			}
 
 			out <- info
 		}
