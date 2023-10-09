@@ -17,8 +17,10 @@ assets:
   mkdir -p data/geo
   gpkg_file="$(grep -e '//go:embed data/geo/' embed-geo.go | cut -d / -f 5)" && \
     gpkg_ver="$(grep -e '// tinygpkg-data release:' embed-geo.go | cut -d ' ' -f 4)" && \
+    gpkg_dst="data/geo/$gpkg_file" && \
     echo "Downloading $gpkg_ver/$gpkg_file" && \
-    wget -O data/geo/$gpkg_file https://github.com/SmilyOrg/tinygpkg-data/releases/download/$gpkg_ver/$gpkg_file
+    wget -q -O "$gpkg_dst" https://github.com/SmilyOrg/tinygpkg-data/releases/download/$gpkg_ver/$gpkg_file && \
+    echo "Downloaded to $gpkg_dst"
 
 release-local:
   goreleaser release --snapshot --clean
