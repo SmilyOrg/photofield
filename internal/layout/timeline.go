@@ -1,9 +1,11 @@
 package layout
 
 import (
+	"context"
 	"log"
 	"time"
 
+	"github.com/golang/geo/s2"
 	"github.com/hako/durafmt"
 	"github.com/tdewolff/canvas"
 
@@ -79,6 +81,8 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 	event := TimelineEvent{}
 	eventCount := 0
 	var lastPhotoTime time.Time
+	var lastLocationTime time.Time
+	var lastLatLng s2.LatLng
 
 	rect := render.Rect{
 		X: sceneMargin,
@@ -124,10 +128,22 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 
 		event.Section.infos = append(event.Section.infos, info)
 
-		if !image.IsNaNLatLng(info.LatLng) {
-			location, err := source.ReverseGeocode(info.LatLng)
-			if err == nil {
-				locations[location] = struct{}{}
+		if source.Geo.Available() {
+			lastLocationTimeElapsed := lastLocationTime.Sub(photoTime)
+			if lastLocationTimeElapsed < 0 {
+				lastLocationTimeElapsed = -lastLocationTimeElapsed
+			}
+			queryLocation := lastLocationTime.IsZero() || lastLocationTimeElapsed > 15*time.Minute
+			if queryLocation && image.IsValidLatLng(info.LatLng) {
+				lastLocationTime = photoTime
+				dist := image.AngleToKm(lastLatLng.Distance(info.LatLng))
+				if dist > 1 {
+					location, err := source.Geo.ReverseGeocode(context.TODO(), info.LatLng)
+					if err == nil {
+						locations[location] = struct{}{}
+					}
+					lastLatLng = info.LatLng
+				}
 			}
 		}
 

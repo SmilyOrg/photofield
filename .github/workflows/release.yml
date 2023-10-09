@@ -31,6 +31,12 @@ jobs:
         with:
           node-version: '16'
 
+      - name: Install just
+        uses: extractions/setup-just@v1
+
+      - name: Download assets
+        run: just assets
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:

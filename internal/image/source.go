@@ -12,6 +12,7 @@ import (
 	goio "io"
 
 	"photofield/internal/clip"
+	"photofield/internal/geo"
 	"photofield/internal/metrics"
 	"photofield/internal/queue"
 	"photofield/io"
@@ -21,11 +22,8 @@ import (
 	"photofield/tag"
 
 	"github.com/docker/go-units"
-	"github.com/golang/geo/s2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"github.com/sams96/rgeo"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -110,14 +108,9 @@ type Caches struct {
 	Image CacheConfig
 }
 
-type Geo struct {
-	ReverseGeocode bool `json:"reverse_geocode"`
-}
-
 type Config struct {
 	DataDir   string
 	AI        clip.AI
-	Geo       Geo
 	TagConfig tag.Config `json:"-"`
 
 	ExifToolCount        int  `json:"exif_tool_count"`
@@ -152,7 +145,6 @@ type Source struct {
 
 	decoder  *Decoder
 	database *Database
-	rg       *rgeo.Rgeo
 
 	imageInfoCache InfoCache
 	pathCache      PathCache
@@ -165,24 +157,17 @@ type Source struct {
 	thumbnailSink       *sqlite.Source
 
 	Clip clip.Clip
+	Geo  *geo.Geo
 }
 
-func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *Source {
+func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, geo *geo.Geo) *Source {
 	source := Source{}
 	source.Config = config
 	source.decoder = NewDecoder(config.ExifToolCount)
 	source.database = NewDatabase(filepath.Join(config.DataDir, "photofield.cache.db"), migrations)
 	source.imageInfoCache = newInfoCache()
 	source.pathCache = newPathCache()
-
-	if config.Geo.ReverseGeocode {
-		log.Println("rgeo loading")
-		r, err := rgeo.New(rgeo.Provinces10, rgeo.Cities10)
-		if err != nil {
-			log.Fatalf("failed to initialize rgeo: %s", err)
-		}
-		source.rg = r
-	}
+	source.Geo = geo
 
 	source.SourceLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: metrics.Namespace,
@@ -288,29 +273,6 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS) *S
 	}
 
 	return &source
-}
-
-func (source *Source) ReverseGeocode(l s2.LatLng) (string, error) {
-	if source.rg == nil {
-		return "", ErrUnavailable
-	}
-	location, err := source.rg.ReverseGeocode([]float64{l.Lng.Degrees(), l.Lat.Degrees()})
-	if err != nil {
-		return "", err
-	}
-	loc := ""
-	if err == nil {
-		loc = location.City
-		if loc == "" {
-			loc = location.Province
-		}
-		if loc == "" {
-			loc = location.Country
-		} else if location.Country != "" {
-			loc = fmt.Sprintf("%s (%s)", loc, location.Country)
-		}
-	}
-	return loc, nil
 }
 
 func (source *Source) Vacuum() error {

@@ -12,6 +12,14 @@ build-ui:
 build-local:
   goreleaser build --snapshot --single-target --clean
 
+# Download geopackage to be embedded via -tags embedgeo
+assets:
+  mkdir -p data/geo
+  gpkg_file="$(grep -e '//go:embed data/geo/' embed-geo.go | cut -d / -f 5)" && \
+    gpkg_ver="$(grep -e '// tinygpkg-data release:' embed-geo.go | cut -d ' ' -f 4)" && \
+    echo "Downloading $gpkg_ver/$gpkg_file" && \
+    wget -O data/geo/$gpkg_file https://github.com/SmilyOrg/tinygpkg-data/releases/download/$gpkg_ver/$gpkg_file
+
 release-local:
   goreleaser release --snapshot --clean
 
@@ -20,6 +28,10 @@ run *args: build
 
 run-static *args:
   go build -tags embedstatic
+  ./photofield {{args}}
+
+run-geo *args:
+  go build -tags embedgeo
   ./photofield {{args}}
 
 bench collection: build

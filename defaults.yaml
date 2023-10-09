@@ -63,7 +63,29 @@ geo:
   # Can delay startup by up to a minute as the local geolocation
   # database is loaded.
   # 
-  # reverse_geocode: true
+  reverse_geocode: true
+  geopackage:
+    # Path to the GeoPackage file containing features
+    # WKB and TWKB (via tinygpkg) are supported.
+    # 
+    # See https://github.com/SmilyOrg/tinygpkg-data
+    # 
+    # If empty, the database embedded into the executable
+    # via embed-geo.go is used.
+    # 
+    # path: data/geo/geoBoundariesCGAZ_ADM2_s5_twkb_p3.gpkg
+
+    # Table in the GeoPackage file to be used in case there is
+    # more than one
+    #
+    # If empty, the first table is used.
+    # 
+    # table: globalADM2
+
+    # The column to use for reverse geocoding the location name
+    name_col: shapeName # geoBoundaries CGAZ
+    # name_col: name_conve # Natural Earth urban areas
+    # name_col: NAME_LONG # Natural Earth countries 
 
 media:
   # Extract metadata from this many files concurrently

@@ -19,6 +19,7 @@ builds:
         goarch: "386"
     tags:
       - embedstatic
+      - embedgeo
 dockers:
   - dockerfile: Dockerfile-goreleaser
     image_templates:
