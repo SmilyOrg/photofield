@@ -762,7 +762,7 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 			unix := stmt.ColumnInt64(5)
 			timezoneOffset := stmt.ColumnInt(6)
 
-			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
+			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
 			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
@@ -1393,7 +1393,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			unix := stmt.ColumnInt64(5)
 			timezoneOffset := stmt.ColumnInt(6)
 
-			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("tz_offset", timezoneOffset*60))
+			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
 			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
 			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
