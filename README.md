@@ -116,11 +116,11 @@ layouts.
   * [ ] **Face recognition**. Photos could be automatically tagged with the
     person's name. This would be a great way to search for photos of a specific
     person.
+ * **Reverse geolocation**. Local, embedded reverse geolocation via [tinygpkg].
+   Does not need any API calls, has negligible performance impact, and supports
+   ~50 thousand places. Currently only supported for photos with GPS coordinates
+   in the EXIF data and the Timeline view.
 
-
-
- Persistent photo
-  selection is also implemented using tags. Tags are 
 * **Flexible media/thumbnail system**. Do you have hundreds of gigabytes of existing
   thumbnails from an existing system? Me too! Let's reuse those. Don't have any?
   No worries, they will be generated automatically to speed up display. Here are
@@ -383,6 +383,8 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Acknowledgements
 * [Open Images Dataset][open-images-dataset]
+* [geoBoundaries](https://www.geoboundaries.org/) for geographic boundary data used for reverse geolocation
+* [sams96/rgeo](https://github.com/sams96/rgeo) for previous reverse geolocation implementation and inspiration
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
 * [readme.so](https://readme.so/)
 
@@ -409,3 +411,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [Vue 3]: https://v3.vuejs.org/
 [BalmUI]: https://next-material.balmjs.com/
 [photofield-ai]: https://github.com/smilyorg/photofield-ai
+[tinygpkg]: https://github.com/smilyorg/tinygpkg

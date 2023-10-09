@@ -33,9 +33,10 @@ COPY internal ./internal
 COPY io ./io
 COPY db ./db
 COPY fonts ./fonts
+COPY data/geo ./data/geo
 # RUN go install -tags libjpeg .
 COPY --from=node-builder /ui/dist/ ./ui/dist
-RUN go install -tags embedstatic .
+RUN go install -tags embedstatic,embedgeo .
 
 
 

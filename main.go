@@ -37,11 +37,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	chirender "github.com/go-chi/render"
+	"github.com/grafana/pyroscope-go"
 	"github.com/hako/durafmt"
 	"github.com/imdario/mergo"
 	"github.com/joho/godotenv"
 	"github.com/lpar/gzipped"
-	"github.com/pyroscope-io/client/pyroscope"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
@@ -55,6 +55,7 @@ import (
 	"photofield/internal/clip"
 	"photofield/internal/codec"
 	"photofield/internal/collection"
+	"photofield/internal/geo"
 	"photofield/internal/image"
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
@@ -997,7 +998,7 @@ type AppConfig struct {
 	Render       render.Render           `json:"render"`
 	Media        image.Config            `json:"media"`
 	AI           clip.AI                 `json:"ai"`
-	Geo          image.Geo               `json:"geo"`
+	Geo          geo.Config              `json:"geo"`
 	Tags         tag.Config              `json:"tags"`
 	TileRequests TileRequestConfig       `json:"tile_requests"`
 }
@@ -1066,7 +1067,6 @@ func loadConfiguration(path string) AppConfig {
 	}
 
 	appConfig.Media.AI = appConfig.AI
-	appConfig.Media.Geo = appConfig.Geo
 	appConfig.Tags.Enable = appConfig.Tags.Enable || appConfig.Tags.Enabled
 
 	return appConfig
@@ -1166,6 +1166,8 @@ func benchmarkSources(collection *collection.Collection, seed int64, sampleSize 
 }
 
 func main() {
+	var err error
+
 	startupTime = time.Now()
 
 	testing.Init()
@@ -1246,7 +1248,16 @@ func main() {
 	defaultSceneConfig.Render = appConfig.Render
 	tileRequestConfig = appConfig.TileRequests
 
-	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs)
+	geo, err := geo.New(
+		appConfig.Geo,
+		GeoFs,
+	)
+	if err != nil {
+		log.Printf("geo disabled: %v", err)
+	} else {
+		log.Printf("%v", geo.String())
+	}
+	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, geo)
 	defer imageSource.Close()
 
 	if *vacuumFlag {
@@ -1261,7 +1272,7 @@ func main() {
 
 	fontFamily := canvas.NewFontFamily("Main")
 	// fontFamily.Use(canvas.CommonLigatures)
-	err := fontFamily.LoadFont(robotoRegular, canvas.FontRegular)
+	err = fontFamily.LoadFont(robotoRegular, canvas.FontRegular)
 	if err != nil {
 		panic(err)
 	}

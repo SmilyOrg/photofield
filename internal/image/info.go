@@ -31,6 +31,10 @@ func IsNaNLatLng(latlng s2.LatLng) bool {
 	return math.IsNaN(float64(latlng.Lat)) || math.IsNaN(float64(latlng.Lng))
 }
 
+func IsValidLatLng(latlng s2.LatLng) bool {
+	return !IsNaNLatLng(latlng) && latlng.Lat.Radians() != 0 && latlng.Lng.Radians() != 0
+}
+
 func AngleToKm(a s1.Angle) float64 {
 	return a.Radians() * earthRadiusKm
 }
