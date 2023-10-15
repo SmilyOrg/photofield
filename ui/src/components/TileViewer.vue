@@ -18,6 +18,7 @@
 <script>
 import Map from 'ol/Map';
 import XYZ from 'ol/source/XYZ';
+import OSM from 'ol/source/OSM';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
@@ -208,14 +209,14 @@ export default {
       return new XYZ({
         tileUrlFunction: this.tileUrlFunction,
         crossOrigin: "Anonymous",
-        projection: this.projection,
+        // projection: this.projection,
         tileSize: [this.tileSize, this.tileSize],
-        wrapX: false,
+        // wrapX: false,
         // zDirection: -1,
         // zDi
         // imageSmoothing: false,
         // interpolate: false,
-        opaque: true,
+        opaque: false,
         transition: 100,
         // transition: 0,
       });
@@ -225,6 +226,7 @@ export default {
       return new TileLayer({
         preload: Infinity,
         source,
+        // opacity: 0.9,
       });
     },
 
@@ -285,17 +287,33 @@ export default {
       this.map = new Map({
         target: element,
         // pixelRatio: 1,
-        layers: [layer],
+        layers: [
+          new TileLayer({
+            source: new OSM(),
+          }),
+          layer,
+        ],
+        // layers: [
+        //   new TileLayer({
+        //     source: new OSM(),
+        //   }),
+        // ],
+        // view: new View({
+        //   center: [0, 0],
+        //   zoom: 2,
+        // }),
         view: new View({
-          center: [extent[2]/2, extent[3]],
-          projection,
-          zoom: 0,
-          minZoom: 0,
-          maxZoom: this.maxZoom,
+          center: [0, 0],
+          zoom: 2,
+          // center: [extent[2]/2, extent[3]],
+          // projection,
+          // zoom: 0,
+          // minZoom: 0,
+          // maxZoom: this.maxZoom,
           enableRotation: false,
-          extent,
-          smoothExtentConstraint: false,
-          showFullExtent: true,
+          // extent,
+          // smoothExtentConstraint: false,
+          // showFullExtent: true,
         }),
         controls: [],
         interactions,
@@ -432,6 +450,7 @@ export default {
       if (this.selectTagId) {
         extra.select_tag = this.selectTagId;
       }
+      // console.log("tileUrlFunction", z, x, y, extra, pixelRatio, proj)
       return getTileUrl(
         this.scene.id,
         z, x, y,

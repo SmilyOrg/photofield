@@ -17,10 +17,11 @@
       @region="onScrollRegion"
       @scene="scrollScene = $event"
       @search="onSearch"
+      @load-end="onLoadEnd"
     >
     </scroll-viewer>
 
-    <strip-viewer
+    <!-- <strip-viewer
       ref="stripViewer"
       class="strip"
       :class="{ visible: stripVisible }"
@@ -36,13 +37,13 @@
       @scene="stripScene = $event"
       @search="onSearch"
     >
-    </strip-viewer>
+    </strip-viewer> -->
 
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, ref, toRefs, watch, watchEffect } from 'vue';
+import { computed, nextTick, onMounted, ref, toRefs, watch, watchEffect } from 'vue';
 import { timeout, useTask } from 'vue-concurrency';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -70,6 +71,25 @@ const {
   collectionId,
   regionId,
 } = toRefs(props);
+
+const debug = ref({});
+// onMounted(() => {
+//   // setInterval(() => {
+//   //   debug.value = {
+//   //     refresh: Date.now(),
+//   //   };
+//   // }, 300);
+// });
+
+const onLoadEnd = () => {
+  // if (scrollScene.loading) {
+  // setTimeout(() => {
+  //   debug.value = {
+  //     refresh: Date.now(),
+  //   }
+  // }, 100);
+  // }
+}
 
 const scrollViewer = ref(null);
 const stripViewer = ref(null);
@@ -148,15 +168,15 @@ const onSearch = (search) => {
   });
 }
 
-const debug = computed(() => {
-  const v = {};
-  for (const key in route.query) {
-    if (key.startsWith("debug_")) {
-      v[key] = route.query[key];
-    }
-  }
-  return v;
-});
+// const debug = computed(() => {
+//   const v = {};
+//   for (const key in route.query) {
+//     if (key.startsWith("debug_")) {
+//       v[key] = route.query[key];
+//     }
+//   }
+//   return v;
+// });
 
 const showRegion = useTask(function*(_, regionId) {
   if (regionId) {

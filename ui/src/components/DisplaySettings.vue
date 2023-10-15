@@ -65,6 +65,7 @@ const layoutOptions = ref([
     { label: "Album", value: "ALBUM" },
     { label: "Timeline", value: "TIMELINE" },
     { label: "Wall", value: "WALL" },
+    { label: "Map", value: "MAP" },
 ]);
 
 const extra = ref(false);

@@ -1,6 +1,6 @@
 module photofield
 
-go 1.20
+go 1.21
 
 require (
 	github.com/EdlinOrg/prominentcolor v1.0.0

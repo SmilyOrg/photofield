@@ -21,6 +21,7 @@ const (
 	Timeline Type = "TIMELINE"
 	Square   Type = "SQUARE"
 	Wall     Type = "WALL"
+	Map      Type = "MAP"
 	Search   Type = "SEARCH"
 	Strip    Type = "STRIP"
 )
@@ -176,7 +177,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 
 func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, scene *render.Scene, regionConfig render.RegionConfig) []render.Region {
 	regions := make([]render.Region, 0)
-	photos := scene.GetVisiblePhotoRefs(rect, regionConfig.Limit)
+	photos := scene.GetVisiblePhotoRefs(rect, render.Scales{}, regionConfig.Limit)
 	for photo := range photos {
 		regions = append(regions, regionSource.getRegionFromPhoto(
 			1+photo.Index,
@@ -190,7 +191,7 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, sce
 func (regionSource PhotoRegionSource) GetRegionChanFromBounds(rect render.Rect, scene *render.Scene, regionConfig render.RegionConfig) <-chan render.Region {
 	out := make(chan render.Region)
 	go func() {
-		photos := scene.GetVisiblePhotoRefs(rect, regionConfig.Limit)
+		photos := scene.GetVisiblePhotoRefs(rect, render.Scales{}, regionConfig.Limit)
 		for photo := range photos {
 			out <- regionSource.getRegionFromPhoto(
 				1+photo.Index,

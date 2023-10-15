@@ -36,6 +36,12 @@ type Point struct {
 	Y float64 `json:"y"`
 }
 
+func (p Point) Distance(other Point) float64 {
+	dx := p.X - other.X
+	dy := p.Y - other.Y
+	return math.Sqrt(dx*dx + dy*dy)
+}
+
 type Region struct {
 	Id     int         `json:"id"`
 	Bounds Rect        `json:"bounds"`
@@ -80,6 +86,7 @@ type Scene struct {
 type Scales struct {
 	Pixel float64
 	Tile  float64
+	Photo float64
 }
 
 type PhotoRef struct {
@@ -99,6 +106,9 @@ func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *R
 }
 
 func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, source *image.Source) {
+	// scales.Photo = 1 / scales.Pixel
+	scales.Photo = 1
+
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
 		solid.Draw(c, scales)
@@ -122,7 +132,7 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	tileCanvasRect := tileRect.Transform(tileToCanvas)
 	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
 
-	visiblePhotos := scene.GetVisiblePhotoRefs(tileCanvasRect, 0)
+	visiblePhotos := scene.GetVisiblePhotoRefs(tileCanvasRect, scales, 0)
 	visiblePhotoCount := 0
 
 	wg := &sync.WaitGroup{}
@@ -187,7 +197,7 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []image.ImageId) {
 	scene.FileCount = len(scene.Photos)
 }
 
-func (scene *Scene) GetVisiblePhotoRefs(view Rect, maxCount int) <-chan PhotoRef {
+func (scene *Scene) GetVisiblePhotoRefs(view Rect, scales Scales, maxCount int) <-chan PhotoRef {
 	out := make(chan PhotoRef)
 	go func() {
 		count := 0

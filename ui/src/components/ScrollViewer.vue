@@ -9,7 +9,7 @@
       :view="view"
       :selectTagId="selectTagId"
       :debug="debug"
-      :tileSize="512"
+      :tileSize="1024"
       :interactive="interactive"
       :pan="!nativeScroll"
       :zoom="!nativeScroll"
@@ -24,13 +24,13 @@
       @box-select="onBoxSelect"
     ></tile-viewer>
 
-    <Spinner
+    <!-- <Spinner
       class="spinner"
       :total="scene?.file_count"
       :speed="filesPerSecond"
       :divider="10000"
       :loading="scene?.loading"
-    ></Spinner>
+    ></Spinner> -->
 
     <DateStrip
       class="date-strip"
@@ -119,14 +119,19 @@ const viewport = useViewport(viewer);
 const nativeScroll = ref(true);
 const lastView = ref(null);
 
-const { scene, recreate: recreateScene, filesPerSecond } = useScene({
-  layout,
-  sort,
-  collectionId,
-  imageHeight,
-  viewport,
-  search,
-});
+// const { scene, recreate: recreateScene, filesPerSecond } = useScene({
+//   layout,
+//   sort,
+//   collectionId,
+//   imageHeight,
+//   viewport,
+//   search,
+// });
+
+const {
+  data: scene,
+} = useApi(`/scenes/Tqcqtc6h69`);
+
 watch(scene, async (newScene, oldScene) => {
   if (newScene?.search != oldScene?.search) {
     scrollToPixels(0);

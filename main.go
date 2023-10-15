@@ -53,7 +53,6 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 
 	"photofield/internal/clip"
-	"photofield/internal/codec"
 	"photofield/internal/collection"
 	"photofield/internal/geo"
 	"photofield/internal/image"
@@ -718,7 +717,8 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	zoom := params.Zoom
 	x := int(params.X)
 	y := int(params.Y)
-	rn.BackgroundColor = color.White
+	// rn.BackgroundColor = color.White
+	rn.BackgroundColor = color.Transparent
 	if params.BackgroundColor != nil {
 		c, err := hex.DecodeString(strings.TrimPrefix(*params.BackgroundColor, "#"))
 		if err != nil {
@@ -740,7 +740,8 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	drawTile(context, &rn, scene, zoom, x, y)
 
 	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
-	codec.EncodeJpeg(w, img)
+	// codec.EncodeJpeg(w, img)
+	png.Encode(w, img)
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
@@ -1078,7 +1079,9 @@ func addExampleScene() {
 	sceneConfig.Layout.ViewportWidth = 1920
 	sceneConfig.Layout.ViewportHeight = 1080
 	sceneConfig.Layout.ImageHeight = 300
-	sceneConfig.Collection = *getCollectionById("vacation-photos")
+	sceneConfig.Layout.Type = layout.Map
+	sceneConfig.Layout.Order = layout.DateAsc
+	sceneConfig.Collection = *getCollectionById("geo")
 	sceneSource.Add(sceneConfig, imageSource)
 }
 
@@ -1408,7 +1411,7 @@ func main() {
 		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
 	}
 
-	// addExampleScene()
+	addExampleScene()
 
 	log.Println(msg)
 	log.Fatal(http.ListenAndServe(addr, r))
