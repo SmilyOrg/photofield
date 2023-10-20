@@ -16,7 +16,6 @@
       @region="onScrollRegion"
       @scene="scrollScene = $event"
       @search="onSearch"
-      @load-end="onLoadEnd"
     >
     </map-viewer>
 
@@ -37,7 +36,6 @@
       @region="onScrollRegion"
       @scene="scrollScene = $event"
       @search="onSearch"
-      @load-end="onLoadEnd"
     >
     </scroll-viewer>
 
@@ -170,15 +168,15 @@ const onSearch = (search) => {
   });
 }
 
-// const debug = computed(() => {
-//   const v = {};
-//   for (const key in route.query) {
-//     if (key.startsWith("debug_")) {
-//       v[key] = route.query[key];
-//     }
-//   }
-//   return v;
-// });
+const debug = computed(() => {
+  const v = {};
+  for (const key in route.query) {
+    if (key.startsWith("debug_")) {
+      v[key] = route.query[key];
+    }
+  }
+  return v;
+});
 
 const showRegion = useTask(function*(_, regionId) {
   if (regionId) {

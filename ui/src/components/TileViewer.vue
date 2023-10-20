@@ -217,31 +217,84 @@ export default {
       return zoom;
     },
 
-    createSource() {
-      return new XYZ({
-        tileUrlFunction: this.tileUrlFunction,
-        crossOrigin: "Anonymous",
-        projection: this.projection,
-        tileSize: [this.tileSize, this.tileSize],
-        // wrapX: false,
-        // zDirection: -1,
-        // zDi
-        // imageSmoothing: false,
-        // interpolate: false,
-        opaque: false,
-        // opaque: true,
-
-        transition: 100,
-        // transition: 0,
+    createMainLayer() {
+      const main = new TileLayer({
+        properties: {
+          main: true,
+        },
+        preload: Infinity,
+        source: new XYZ({
+          tileUrlFunction: this.tileUrlFunction,
+          crossOrigin: "Anonymous",
+          projection: this.projection,
+          tileSize: [this.tileSize, this.tileSize],
+          opaque: false,
+          transition: 100,
+        }),
       });
+      
+      if (this.geo) {
+        main.on("prerender", event => {
+          const ctx = event.context;
+          // Fill in the transparent holes with the photos
+          ctx.globalCompositeOperation = "destination-over";
+        });
+        
+        main.on("postrender", event => {
+          const ctx = event.context;
+          // Restore the default
+          ctx.globalCompositeOperation = "source-over";
+        });
+      }
+      
+      return main;
     },
 
-    createLayer(source) {
-      return new TileLayer({
-        preload: Infinity,
-        source,
-        // opacity: 0.9,
-      });
+    createLayers() {
+
+      const main = this.createMainLayer();
+
+      if (this.geo) {
+
+        const mask = new TileLayer({
+          preload: Infinity,
+          source: new XYZ({
+            tileUrlFunction: this.maskUrlFunction,
+            crossOrigin: "Anonymous",
+            projection: this.projection,
+            tileSize: [this.tileSize, this.tileSize],
+            opaque: false,
+            transition: 0,
+          }),
+        });
+
+        const osmLayer = new TileLayer({
+          source: new OSM(),
+        });
+
+        mask.on("prerender", event => {
+          const ctx = event.context;
+          // Cut out transparent holes out of the rendered map
+          // using the mask
+          ctx.globalCompositeOperation = "destination-out";
+        });
+
+        mask.on("postrender", event => {
+          const ctx = event.context;
+          // Restore the default
+          ctx.globalCompositeOperation = "source-over";
+        });
+
+        return [
+          osmLayer,
+          mask,
+          main,
+        ]
+      } else {
+        return [
+          main,
+        ];
+      }
     },
 
     initOpenLayers(element) {
@@ -255,12 +308,6 @@ export default {
           extent: this.projectionExtent,
         });
       }
-
-      const source = this.createSource();
-      this.source = source;
-
-      const layer = this.createLayer(source);
-      this.layer = layer;
 
       // Limit minimum size loaded to avoid
       // loading tiled images with very little content
@@ -300,142 +347,46 @@ export default {
       this.mouseWheelZoom.setActive(this.zoomable);
 
       if (this.geo) {
-        
-        const center = this.pendingLocation ?
-          fromLonLat(this.pendingLocation.coords) :
-          [0, 0];
-        
-        const zoom = this.pendingLocation ?
-          this.pendingLocation.zoom :
-          2;
-
-        const mask = new TileLayer({
-          // preload: Infinity,
-          source: new XYZ({
-            tileUrlFunction: ([z, x, y], pixelRatio, proj) => {
-              if (!this.scene) return;
-              const extra = {
-                ...this.debug,
-                transparency_mask: true,
-              }
-              if (this.selectTagId) {
-                extra.select_tag = this.selectTagId;
-              }
-              // console.log("tileUrlFunction", z, x, y, extra, pixelRatio, proj)
-              return getTileUrl(
-                this.scene.id,
-                z, x, y,
-                this.tileSize,
-                this.backgroundColor,
-                extra,
-              );
-            },
-            crossOrigin: "Anonymous",
-            projection: this.projection,
-            tileSize: [this.tileSize, this.tileSize],
-            // wrapX: false,
-            // zDirection: -1,
-            // zDi
-            // imageSmoothing: false,
-            // interpolate: false,
-            opaque: false,
-            // opaque: true,
-            transition: 100,
-            // transition: 0,
-          }),
-          // opacity: 0.9,
-        });
-
-        const osmLayer = new TileLayer({
-          source: new OSM(),
-        });
-
-        mask.on("prerender", event => {
-          const ctx = event.context;
-          ctx.save();
-          // Mask the image using the mask layer
-          // ctx.globalCompositeOperation = "destination-out";
-          ctx.globalCompositeOperation = "destination-out";
-        });
-
-        mask.on("postrender", event => {
-          const ctx = event.context;
-          ctx.restore();
-        });
-
-        layer.on("prerender", event => {
-          const ctx = event.context;
-          ctx.save();
-          // Mask the image using the mask layer
-          ctx.globalCompositeOperation = "destination-over";
-        });
-
-        layer.on("postrender", event => {
-          const ctx = event.context;
-          ctx.restore();
-        });
-
-        osmLayer.on("prerender", event => {
-          const ctx = event.context;
-          // ctx.save();
-          // Mask the image using the mask layer
-          // ctx.globalCompositeOperation = "destination-out";
-          // ctx.globalCompositeOperation = "source-out";
-        });
-
-        osmLayer.on("postrender", event => {
-          const ctx = event.context;
-          // ctx.restore();
-        });
-
-        this.map = new Map({
-          target: element,
-          layers: [
-            osmLayer,
-            mask,
-            layer,
-          ],
-          view: new View({
-            projection: this.projection,
-            center,
-            zoom,
-            // minZoom: 0,
-            // maxZoom: this.maxZoom,
-            enableRotation: false,
-          }),
-          controls: [],
-          interactions,
-          moveTolerance: 4,
+        this.v = new View({
+          projection: this.projection,
+          center: this.pendingLocation ?
+            fromLonLat(this.pendingLocation.coords) :
+            [0, 0],
+          zoom: this.pendingLocation ?
+            this.pendingLocation.zoom :
+            2,
+          enableRotation: false,
         });
       } else {
         const extent = this.projectionExtent;
-        this.map = new Map({
-          target: element,
-          // pixelRatio: 1,
-          layers: [layer],
-          view: new View({
-            center: [extent[2]/2, extent[3]],
-            projection: this.projection,
-            zoom: 0,
-            minZoom: 0,
-            maxZoom: this.maxZoom,
-            enableRotation: false,
-            extent,
-            smoothExtentConstraint: false,
-            showFullExtent: true,
-          }),
-          controls: [],
-          interactions,
-          moveTolerance: 4,
+        this.v = new View({
+          center: [extent[2]/2, extent[3]],
+          projection: this.projection,
+          zoom: 0,
+          minZoom: 0,
+          maxZoom: this.maxZoom,
+          enableRotation: false,
+          extent,
+          smoothExtentConstraint: false,
+          showFullExtent: true,
         });
       }
+
+      this.map = new Map({
+        target: element,
+        // pixelRatio: 1,
+        layers: this.createLayers(),
+        view: this.v,
+        controls: [],
+        interactions,
+        moveTolerance: 4,
+      });
 
       this.map.on("click", event => this.onClick(event));
       this.map.on("movestart", event => this.onMoveStart(event));
       this.map.on("moveend", event => this.onMoveEnd(event));
       this.map.on("loadend", event => this.onLoadEnd(event));
 
-      this.v = this.map.getView();
       this.v.setMinZoom(this.minViewportZoom);
       this.v.on('change:center', this.onCenterChange);
       this.v.on('change:resolution', this.onResolutionChange);
@@ -489,7 +440,7 @@ export default {
       this.moveStartEvent = event;
     },
 
-    onMoveEnd(event) {
+    onMoveEnd() {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
@@ -500,7 +451,7 @@ export default {
       this.$emit("load-end");
     },
 
-    onCenterChange(event) {
+    onCenterChange() {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
@@ -513,7 +464,7 @@ export default {
       }
     },
 
-    onResolutionChange(event) {
+    onResolutionChange() {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
@@ -546,23 +497,22 @@ export default {
     },
 
     reload() {
-      const oldLayer = this.layer;
-      const oldSource = this.source;
-      const newSource = this.createSource();
-      this.source = newSource;
-      const newLayer = this.createLayer(newSource);
-      this.layer = newLayer;
+      const oldLayers = this.map.getLayers();
+      const oldMain = oldLayers.getArray().find(l => l.get("main"));
+      const newMain = this.createMainLayer();
       const cleanup = () => {
-        this.map.removeLayer(oldLayer);
-        oldSource.dispose();
-        oldLayer.dispose();
+        if (oldMain) {
+          this.map.removeLayer(oldMain);
+          oldMain?.getSource()?.dispose();
+          oldMain?.dispose();
+        }
         this.map.un("loadend", cleanup);
       };
       this.map.on("loadend", cleanup);
-      this.map.addLayer(newLayer);
+      this.map.addLayer(newMain);
     },
 
-    tileUrlFunction([z, x, y], pixelRatio, proj) {
+    tileUrlFunction([z, x, y]) {
       if (!this.scene) return;
       const extra = {
         ...this.debug,
@@ -570,13 +520,25 @@ export default {
       if (this.selectTagId) {
         extra.select_tag = this.selectTagId;
       }
-      // console.log("tileUrlFunction", z, x, y, extra, pixelRatio, proj)
       return getTileUrl(
         this.scene.id,
         z, x, y,
         this.tileSize,
         this.backgroundColor,
         extra,
+      );
+    },
+
+    maskUrlFunction([z, x, y]) {
+      if (!this.scene) return;
+      return getTileUrl(
+        this.scene.id,
+        z, x, y,
+        this.tileSize,
+        null,
+        {
+          transparency_mask: true,
+        },
       );
     },
 

@@ -93,9 +93,6 @@ const {
 const viewer = ref(null);
 const viewport = useViewport(viewer);
 
-const lastCoords = ref([0, 0]);
-const lastZoom = ref(0);
-
 // Maps are always a square,
 // so the layout is viewport-independent
 const staticViewport = {
@@ -125,6 +122,10 @@ const route = useRoute();
 
 const lastAppliedTime = ref(0);
 const location = computed(() => {
+  if (Date.now() - lastAppliedTime.value < 100) {
+    return;
+  }
+
   const p = route.query.p;
   if (!p) return;
   let [latstr, lonstr, zstr] = p.split(",", 3);
@@ -138,28 +139,6 @@ const location = computed(() => {
   const z = parseFloat(zstr);
   if (isNaN(lat) || isNaN(lon) || isNaN(z)) return;
   return [[lon, lat], z];
-});
-
-watchEffect(() => {
-  if (Date.now() - lastAppliedTime.value < 100) {
-    return;
-  }
-  
-  const p = route.query.p;
-  if (!p) return;
-  let [latstr, lonstr, zstr] = p.split(",", 3);
-  if (!latstr || !lonstr || !zstr) return;
-  if (zstr.endsWith("z")) {
-    zstr = zstr.slice(0, -1);
-  }
-
-  const lat = parseFloat(latstr);
-  const lon = parseFloat(lonstr);
-  const z = parseFloat(zstr);
-  if (isNaN(lat) || isNaN(lon) || isNaN(z)) return;
-
-  lastCoords.value = [lon, lat];
-  lastZoom.value = z;
 });
 
 const applyLocationTask = useTask(function*(_, coords, zoom) {

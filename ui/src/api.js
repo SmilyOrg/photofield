@@ -95,11 +95,13 @@ export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extr
   const params = {
     tile_size: tileSize,
     zoom: level,
-    background_color: backgroundColor,
     x,
     y,
     ...extraParams,
   };
+  if (backgroundColor) {
+    params.background_color = backgroundColor;
+  }
   let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
   return url;
 }
