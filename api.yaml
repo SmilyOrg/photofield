@@ -175,6 +175,11 @@ paths:
             type: string
             example: "#000000"
             
+        - name: transparency_mask
+          in: query
+          schema:
+            type: boolean
+            
         - name: zoom
           in: query
           required: true

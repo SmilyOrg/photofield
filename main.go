@@ -53,6 +53,7 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 
 	"photofield/internal/clip"
+	"photofield/internal/codec"
 	"photofield/internal/collection"
 	"photofield/internal/geo"
 	"photofield/internal/image"
@@ -97,6 +98,12 @@ var defaultSceneConfig scene.SceneConfig
 var tileRequestConfig TileRequestConfig
 
 var tilePools sync.Map
+
+type TilePool struct {
+	TileSize int
+	Mask     bool
+}
+
 var imageSource *image.Source
 var sceneSource *scene.SceneSource
 var collections []collection.Collection
@@ -223,27 +230,44 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 }
 
 func getTilePool(config *render.Render) *sync.Pool {
-	stored, ok := tilePools.Load(config.TileSize)
+	p := TilePool{
+		TileSize: config.TileSize,
+		Mask:     config.TransparencyMask,
+	}
+	stored, ok := tilePools.Load(p)
 	if ok {
 		return stored.(*sync.Pool)
 	}
-	pool := sync.Pool{
-		New: func() interface{} {
-			return goimage.NewRGBA(goimage.Rect(0, 0, config.TileSize, config.TileSize))
-		},
+	pool := sync.Pool{}
+	if p.Mask {
+		pool.New = func() interface{} {
+			return goimage.NewPaletted(
+				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+				color.Palette{
+					color.RGBA{0x00, 0x00, 0x00, 0x00},
+					color.RGBA{0xFF, 0xFF, 0xFF, 0xFF},
+				},
+			)
+		}
+	} else {
+		pool.New = func() interface{} {
+			return goimage.NewRGBA(
+				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+			)
+		}
 	}
-	stored, _ = tilePools.LoadOrStore(config.TileSize, &pool)
+	stored, _ = tilePools.LoadOrStore(p, &pool)
 	return stored.(*sync.Pool)
 }
 
-func getTileImage(config *render.Render) (*goimage.RGBA, *canvas.Context) {
+func getTileImage(config *render.Render) (draw.Image, *canvas.Context) {
 	pool := getTilePool(config)
-	img := pool.Get().(*goimage.RGBA)
+	img := pool.Get().(draw.Image)
 	renderer := rasterizer.New(img, 1.0)
 	return img, canvas.NewContext(renderer)
 }
 
-func putTileImage(config *render.Render, img *goimage.RGBA) {
+func putTileImage(config *render.Render, img draw.Image) {
 	pool := getTilePool(config)
 	pool.Put(img)
 }
@@ -717,8 +741,7 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	zoom := params.Zoom
 	x := int(params.X)
 	y := int(params.Y)
-	// rn.BackgroundColor = color.White
-	rn.BackgroundColor = color.Transparent
+	rn.BackgroundColor = color.White
 	if params.BackgroundColor != nil {
 		c, err := hex.DecodeString(strings.TrimPrefix(*params.BackgroundColor, "#"))
 		if err != nil {
@@ -732,16 +755,29 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 			B: c[2],
 		}
 	}
+	if params.TransparencyMask != nil {
+		rn.TransparencyMask = *params.TransparencyMask
+	}
+	if rn.TransparencyMask {
+		rn.BackgroundColor = color.Transparent
+	}
 
 	img, context := getTileImage(&rn)
 	defer putTileImage(&rn, img)
+
 	rn.CanvasImage = img
 	rn.Zoom = zoom
 	drawTile(context, &rn, scene, zoom, x, y)
 
 	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
-	// codec.EncodeJpeg(w, img)
-	png.Encode(w, img)
+
+	if params.TransparencyMask != nil {
+		w.Header().Add("Content-Type", "image/png")
+		png.Encode(w, img)
+		return
+	}
+	w.Header().Add("Content-Type", "image/jpeg")
+	codec.EncodeJpeg(w, img)
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
@@ -1411,7 +1447,7 @@ func main() {
 		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
 	}
 
-	addExampleScene()
+	// addExampleScene()
 
 	log.Println(msg)
 	log.Fatal(http.ListenAndServe(addr, r))

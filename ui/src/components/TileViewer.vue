@@ -31,6 +31,7 @@ import PhotoSkeleton from './PhotoSkeleton.vue';
 import "ol/ol.css";
 import { getTileUrl } from '../api';
 import Kinetic from 'ol/Kinetic';
+import { toLonLat, get as getProjection, fromLonLat } from 'ol/proj';
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
   const originalEvent = /** @type {KeyboardEvent|MouseEvent|TouchEvent} */ (
@@ -53,8 +54,8 @@ export default {
     api: String,
     scene: Object,
     interactive: Boolean,
-    pan: Boolean,
-    zoom: Boolean,
+    pannable: Boolean,
+    zoomable: Boolean,
     zoomTransition: Boolean,
     kinetic: Boolean,
     tileSize: Number,
@@ -63,6 +64,8 @@ export default {
     selectTagId: String,
     debug: Object,
     loading: Boolean,
+    geo: Boolean,
+    loc: Array,
     viewport: Object,
   },
 
@@ -71,6 +74,7 @@ export default {
     "click",
     "pointer-down",
     "view",
+    "location",
     "move-end",
     "reset",
     "load-end",
@@ -120,17 +124,25 @@ export default {
       this.setInteractive(interactive);
     },
 
-    pan: {
+    pannable: {
       immediate: true,
       handler(newValue) {
         this.dragPan?.setActive(newValue);
       }
     },
 
-    zoom: {
+    zoomable: {
       immediate: true,
       handler(newValue) {
         this.mouseWheelZoom?.setActive(newValue);
+      }
+    },
+
+    loc: {
+      immediate: true,
+      handler(loc) {
+        if (!loc) return;
+        this.setLocation(loc[0], loc[1]);
       }
     },
 
@@ -209,7 +221,7 @@ export default {
       return new XYZ({
         tileUrlFunction: this.tileUrlFunction,
         crossOrigin: "Anonymous",
-        // projection: this.projection,
+        projection: this.projection,
         tileSize: [this.tileSize, this.tileSize],
         // wrapX: false,
         // zDirection: -1,
@@ -217,6 +229,8 @@ export default {
         // imageSmoothing: false,
         // interpolate: false,
         opaque: false,
+        // opaque: true,
+
         transition: 100,
         // transition: 0,
       });
@@ -232,14 +246,15 @@ export default {
 
     initOpenLayers(element) {
 
-      const extent = this.projectionExtent;
-
-      const projection = new Projection({
-        code: "tiles",
-        units: "pixels",
-        extent,
-      });
-      this.projection = projection;
+      if (this.geo) {
+        this.projection = getProjection("EPSG:3857");
+      } else {
+        this.projection = new Projection({
+          code: "tiles",
+          units: "pixels",
+          extent: this.projectionExtent,
+        });
+      }
 
       const source = this.createSource();
       this.source = source;
@@ -279,55 +294,149 @@ export default {
       ]);
       this.interactions = interactions;
       this.dragPan = dragPan;
-      this.dragPan.setActive(this.pan);
+      this.dragPan.setActive(this.pannable);
 
       this.mouseWheelZoom = mouseWheelZoom;
-      this.mouseWheelZoom.setActive(this.zoom);
+      this.mouseWheelZoom.setActive(this.zoomable);
 
-      this.map = new Map({
-        target: element,
-        // pixelRatio: 1,
-        layers: [
-          new TileLayer({
-            source: new OSM(),
+      if (this.geo) {
+        
+        const center = this.pendingLocation ?
+          fromLonLat(this.pendingLocation.coords) :
+          [0, 0];
+        
+        const zoom = this.pendingLocation ?
+          this.pendingLocation.zoom :
+          2;
+
+        const mask = new TileLayer({
+          // preload: Infinity,
+          source: new XYZ({
+            tileUrlFunction: ([z, x, y], pixelRatio, proj) => {
+              if (!this.scene) return;
+              const extra = {
+                ...this.debug,
+                transparency_mask: true,
+              }
+              if (this.selectTagId) {
+                extra.select_tag = this.selectTagId;
+              }
+              // console.log("tileUrlFunction", z, x, y, extra, pixelRatio, proj)
+              return getTileUrl(
+                this.scene.id,
+                z, x, y,
+                this.tileSize,
+                this.backgroundColor,
+                extra,
+              );
+            },
+            crossOrigin: "Anonymous",
+            projection: this.projection,
+            tileSize: [this.tileSize, this.tileSize],
+            // wrapX: false,
+            // zDirection: -1,
+            // zDi
+            // imageSmoothing: false,
+            // interpolate: false,
+            opaque: false,
+            // opaque: true,
+            transition: 100,
+            // transition: 0,
           }),
-          layer,
-        ],
-        // layers: [
-        //   new TileLayer({
-        //     source: new OSM(),
-        //   }),
-        // ],
-        // view: new View({
-        //   center: [0, 0],
-        //   zoom: 2,
-        // }),
-        view: new View({
-          center: [0, 0],
-          zoom: 2,
-          // center: [extent[2]/2, extent[3]],
-          // projection,
-          // zoom: 0,
-          // minZoom: 0,
-          // maxZoom: this.maxZoom,
-          enableRotation: false,
-          // extent,
-          // smoothExtentConstraint: false,
-          // showFullExtent: true,
-        }),
-        controls: [],
-        interactions,
-        moveTolerance: 4,
-      });
+          // opacity: 0.9,
+        });
+
+        const osmLayer = new TileLayer({
+          source: new OSM(),
+        });
+
+        mask.on("prerender", event => {
+          const ctx = event.context;
+          ctx.save();
+          // Mask the image using the mask layer
+          // ctx.globalCompositeOperation = "destination-out";
+          ctx.globalCompositeOperation = "destination-out";
+        });
+
+        mask.on("postrender", event => {
+          const ctx = event.context;
+          ctx.restore();
+        });
+
+        layer.on("prerender", event => {
+          const ctx = event.context;
+          ctx.save();
+          // Mask the image using the mask layer
+          ctx.globalCompositeOperation = "destination-over";
+        });
+
+        layer.on("postrender", event => {
+          const ctx = event.context;
+          ctx.restore();
+        });
+
+        osmLayer.on("prerender", event => {
+          const ctx = event.context;
+          // ctx.save();
+          // Mask the image using the mask layer
+          // ctx.globalCompositeOperation = "destination-out";
+          // ctx.globalCompositeOperation = "source-out";
+        });
+
+        osmLayer.on("postrender", event => {
+          const ctx = event.context;
+          // ctx.restore();
+        });
+
+        this.map = new Map({
+          target: element,
+          layers: [
+            osmLayer,
+            mask,
+            layer,
+          ],
+          view: new View({
+            projection: this.projection,
+            center,
+            zoom,
+            // minZoom: 0,
+            // maxZoom: this.maxZoom,
+            enableRotation: false,
+          }),
+          controls: [],
+          interactions,
+          moveTolerance: 4,
+        });
+      } else {
+        const extent = this.projectionExtent;
+        this.map = new Map({
+          target: element,
+          // pixelRatio: 1,
+          layers: [layer],
+          view: new View({
+            center: [extent[2]/2, extent[3]],
+            projection: this.projection,
+            zoom: 0,
+            minZoom: 0,
+            maxZoom: this.maxZoom,
+            enableRotation: false,
+            extent,
+            smoothExtentConstraint: false,
+            showFullExtent: true,
+          }),
+          controls: [],
+          interactions,
+          moveTolerance: 4,
+        });
+      }
+
       this.map.on("click", event => this.onClick(event));
       this.map.on("movestart", event => this.onMoveStart(event));
       this.map.on("moveend", event => this.onMoveEnd(event));
       this.map.on("loadend", event => this.onLoadEnd(event));
-      
+
       this.v = this.map.getView();
-
       this.v.setMinZoom(this.minViewportZoom);
-
       this.v.on('change:center', this.onCenterChange);
       this.v.on('change:resolution', this.onResolutionChange);
 
@@ -342,7 +451,6 @@ export default {
 
       this.setKinetic(this.kinetic);
       this.$emit("viewer", this.map);
-
     },
 
     setInteractive(interactive) {
@@ -364,7 +472,7 @@ export default {
         kinetic: this.dragPanKinetic,
       });
       this.interactions.push(this.dragPan);
-      this.dragPan.setActive(this.pan);
+      this.dragPan.setActive(this.pannable);
     },
 
     onClick(event) {
@@ -398,6 +506,11 @@ export default {
       if (!view) return;
       this.latestView = view;
       this.$emit("view", view);
+      if (this.geo) {
+        const coords = toLonLat(this.v.getCenter());
+        const zoom = this.v.getZoom();
+        this.$emit("location", coords, zoom);
+      }
     },
 
     onResolutionChange(event) {
@@ -406,6 +519,13 @@ export default {
       if (!view) return;
       this.latestView = view;
       this.$emit("view", view);
+      if (this.geo) {
+        const coords = toLonLat(this.v.getCenter());
+        const zoom = this.v.getZoom();
+        this.latestZoom = zoom;
+        this.$emit("zoom", zoom);
+        this.$emit("location", coords, zoom);
+      }
     },
 
     onBoxSelect(event, extent) {
@@ -536,6 +656,16 @@ export default {
 
     setPendingAnimationTime(t) {
       this.pendingAnimationTime = t;
+    },
+
+    setLocation(coords, zoom) {
+      if (!this.map) {
+        console.warn("Map not initialized yet, setting pending location", coords, zoom);
+        this.pendingLocation = { coords, zoom };
+        return;
+      }
+      this.v.setCenter(fromLonLat(coords));
+      this.v.setZoom(zoom);
     },
 
     setView(view, options) {

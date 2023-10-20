@@ -1,7 +1,10 @@
 package layout
 
 import (
+	"cmp"
+	"context"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"photofield/internal/image"
@@ -11,17 +14,8 @@ import (
 
 	"github.com/golang/geo/r2"
 	"github.com/golang/geo/s2"
+	"golang.org/x/exp/slices"
 )
-
-// func toScene(pos []r2.Point, s []float64, photoHeight float64, scene *render.Scene) {
-// 	for i, p := range pos {
-// 		pi := &scene.Photos[i]
-// 		pi.Sprite.Rect.W *= s[i] / photoHeight
-// 		pi.Sprite.Rect.H *= s[i] / photoHeight
-// 		pi.Sprite.Rect.X = p.X - 0.5*pi.Sprite.Rect.W
-// 		pi.Sprite.Rect.Y = p.Y - 0.5*pi.Sprite.Rect.H
-// 	}
-// }
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
@@ -35,276 +29,212 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		W: layout.ViewportWidth,
 		H: layout.ViewportHeight,
 	}
-	scene.Loading = true
-
-	scale := 0.001
 
 	layoutFinished := metrics.Elapsed("layout")
 
-	// h := layout.ViewportHeight
+	earthEquatorMeters := 40075017.
 
 	maxlng := 0.
+
+	maxlng = earthEquatorMeters * 0.5
+
+	scale := 0.
 	if layout.ViewportWidth > layout.ViewportHeight {
-		maxlng = layout.ViewportWidth * 0.5
+		scale = layout.ViewportWidth / (maxlng * 2)
 	} else {
-		maxlng = layout.ViewportHeight * 0.5
+		scale = layout.ViewportHeight / (maxlng * 2)
 	}
 
 	proj := s2.NewMercatorProjection(maxlng)
 
-	// minll := s2.LatLngFromDegrees(49.26495060791964, 3.0542203644634105)
-	// maxll := s2.LatLngFromDegrees(53.12427201241878, 10.52021851439191)
-	// min := proj.FromLatLng(minll)
-	// max := proj.FromLatLng(maxll)
-	// bounds := render.Rect{
-	// 	X: min.X,
-	// 	Y: min.Y,
-	// 	W: max.X - min.X,
-	// 	H: max.Y - min.Y,
-	// }
+	maxSize := 2000.
+	maxDist := 1500.
+	maxExtent := maxDist + maxSize*0.5*1.0001
+	minSize := 1.
+	startSize := 1.
 
-	photoHeight := layout.ImageHeight * scale
+	fmt.Printf("%f\n", earthEquatorMeters/(maxExtent*2))
 
 	index := 0
+	pp := make([]r2.Point, 0)
+	pi := make([]int, 0)
+	placeRects := make(map[string]s2.Rect)
 	for info := range infos {
 		if !image.IsValidLatLng(info.LatLng) {
 			continue
 		}
-		p := proj.FromLatLng(info.LatLng)
-		// p.X -= bounds.X
-		// p.Y -= bounds.Y
-		// p.X *= layout.ViewportWidth / bounds.W
-		// p.Y *= layout.ViewportHeight / bounds.H
-		photo := render.Photo{
-			Id:     info.Id,
-			Sprite: render.Sprite{},
+		if !image.IsNaNLatLng(info.LatLng) {
+			l, err := source.Geo.ReverseGeocode(context.TODO(), info.LatLng)
+			if err != nil {
+				l = ""
+			}
+			if l != "" {
+				placeRect, ok := placeRects[l]
+				if !ok {
+					placeRect = s2.RectFromLatLng(info.LatLng)
+					placeRects[l] = placeRect
+				} else {
+					placeRects[l] = placeRect.AddPoint(info.LatLng)
+				}
+			}
 		}
-		photo.Sprite.PlaceFitHeight(
-			maxlng+p.X,
-			maxlng-p.Y,
-			photoHeight,
-			float64(info.Width),
-			float64(info.Height),
-		)
-		// photo.Sprite.Rect = photo.Sprite.Rect.Move(
-		// 	render.Point{
-		// 		X: -0.5 * photo.Sprite.Rect.W,
-		// 		Y: -0.5 * photo.Sprite.Rect.H,
-		// 	},
-		// )
+		p := proj.FromLatLng(info.LatLng)
+		photo := render.Photo{
+			Id: info.Id,
+			Sprite: render.Sprite{
+				Rect: render.Rect{
+					W: float64(info.Width),
+					H: float64(info.Height),
+				},
+			},
+		}
+		pp = append(pp, p)
+		pi = append(pi, index)
+
 		scene.Photos = append(scene.Photos, photo)
 		loadCounter.Set(index)
 		index++
 	}
 
-	po := make([]r2.Point, len(scene.Photos))
-	pa := make([]r2.Point, len(scene.Photos))
-	s := make([]float64, len(scene.Photos))
-	sv := make([]float64, len(scene.Photos))
-	// pb := make([]r2.Point, len(scene.Photos))
-	v := make([]r2.Point, len(scene.Photos))
-	// a := make([]r2.Point, len(scene.Photos))
+	n := len(pp)
+	po := make([]r2.Point, n)
+	v := make([]r2.Point, n)
+	s := make([]float64, n)
+	sv := make([]float64, n)
 
 	rsrc := rand.NewSource(123)
 	rnd := rand.New(rsrc)
 
-	startSize := photoHeight * 0.0001
+	slices.SortFunc(pi, func(i, j int) int {
+		return cmp.Compare(pp[i].X, pp[j].X)
+	})
+
 	jitter := startSize * 0.1
-	for i, p := range scene.Photos {
-		pa[i] = r2.Point{
-			X: p.Sprite.Rect.X + jitter*(rnd.Float64()-0.5),
-			Y: p.Sprite.Rect.Y + jitter*(rnd.Float64()-0.5),
-		}
-		po[i] = pa[i]
+	for i := range pi {
+		j := pi[i]
+		p := pp[j]
+		po[i] = p
 		v[i] = r2.Point{X: 0, Y: 0}
 		s[i] = startSize
-		sv[i] = 0.0002
-		// a[i] = r2.Point{X: 0, Y: 0}
+		sv[i] = 16
+	}
+
+	for i := range pi {
+		pp[i] = po[i].Add(r2.Point{
+			X: jitter * (rnd.Float64() - 0.5),
+			Y: jitter * (rnd.Float64() - 0.5),
+		})
 	}
 
 	dt := 0.1
-	// slowdown := 1000
-	// slowdown := 1
 
-	// minDist := layout.ImageHeight * scale * 1.6
+	vSumLast := 0.
+	for n := 0; n < 1000; n++ {
+		intersections := 0
+		start := time.Now()
+		// Collision detection incl. sweep and prune skips
+		for i, p := range pp {
+			hs := s[i] * 0.5
+			for j := i + 1; j < len(pp); j++ {
+				q := pp[j]
+				d := q.Sub(p)
 
-	go func() {
-		lasttotalv := 0.
-		for n := 0; n < 1000; n++ {
-			totald := 0.
-			// clear(a)
-			for i, p := range pa {
-				// pi := &scene.Photos[i]
-				for j := i + 1; j < len(pa); j++ {
-					q := pa[j]
-					// pj := &scene.Photos[j]
-					// if pi.Sprite.Rect.Intersects(pj.Sprite.Rect) {
-					d := q.Sub(p)
-					// np := p.Add(v[i].Mul(dt)) + a*(dt*dt*0.5)
-					// na := d.Mul(0.3)
-					// nv := v[i].Add(a.Add(na).Mul(0.5 * dt))
-					// p[i] = np
-					// v[i] = nv
-
-					// x(t+dt) = x(t) + v(t) * dt + 0.5 *dt*dt * a(t)
-					// v(t+dt) = v(t) + 0.5 * dt * (a(t) + a(t+dt))
-
-					minDist := (s[i]*0.5 + s[j]*0.5) * 1.3
-
-					if math.Abs(d.X) > minDist || math.Abs(d.Y) > minDist {
-						continue
-					}
-
-					dist := d.Norm()
-					totald += dist
-
-					if dist > minDist {
-						continue
-					}
-
-					// am := math.Max(minDist-dist, 0)
-					// fmt.Printf("dn: %f am: %f\n", dn, am)
-
-					ddist := (minDist - dist) / minDist
-					// a := d.Mul(ddist * 10 * dt)
-					a := d.Mul(ddist * 60 * dt)
-					// a := d.Mul(0 * dt)
-					// ddist := (minDist - dist) / minDist
-					// a := d.Normalize().Mul(0.001 / (0.01 + dist*dist) * dt)
-
-					// pb[i] = p.Add(v[i].Mul(dt)).Add(a.Mul(0.5 * dt * dt))
-
-					v[i] = v[i].Sub(a)
-					v[j] = v[j].Add(a)
-					sv[i] *= 0.3
-					sv[j] *= 0.3
-
-					// pb[i] = p.Add(v[i].Mul(dt)).Add(a.Mul(0.5 * dt * dt))
-
-					// dn := d.Normalize()
-					// a := dn.Mul(0.1 * dt * dt)
-					// v[i] = v[i].Add(a.Mul(dt))
-					// x_1 = x_0 + v_0 * dt + 0.5 * a * dt*dt
-					// x_n1 = 2 * x_n - x_n-1 + a * dt*dt
-					// x(t+dt) = x(t) + v(t) * dt + 0.5 * a(t) * dt*dt
-					// a(t+dt) = ...
-					// v(t+dt) = v(t) + 0.5 * (a(t) + a(t+dt)) * dt
-				}
-				// }
-			}
-			totaldorig := 0.
-			totalds := 0.
-			totalv := 0.
-			for i := range pa {
-				// pi := &scene.Photos[i]
-				// pp := r2.Point{X: pi.Sprite.Rect.X, Y: pi.Sprite.Rect.Y}
-				// dorig := pp.Sub(pa[i])
-				dorig := po[i].Sub(pa[i])
-				totaldorig += dorig.Norm()
-				v[i] = v[i].Add(dorig.Mul(0.2 * dt))
-				v[i] = v[i].Mul(0.98)
-				// s[i] *= 1 / (1 + 0.2*dorig.Norm()) * dt
-				// s[i] += (photoHeight - s[i]) * 0.1 * dt
-				totalds += photoHeight - s[i]
-				// s[i] -= v[i].Norm() * 0.5 * dt
-				pa[i] = pa[i].Add(v[i].Mul(dt))
-
-				// maxgrow := 0.005
-				// maxdist := 0.01
-				// sv[i] = maxgrow * 1 / (1 + sv[i]) * (1 - math.Min(1, dorig.Norm()/maxdist)) * dt
-				// sv[i] *= 0.9
-				s[i] += sv[i] * dt
-
-				totalv += v[i].Norm() + sv[i]
-
-				sv[i] += 0.001
-				sv[i] *= 1.1
-				if s[i] < photoHeight*0.0001 {
-					s[i] = photoHeight * 0.0001
+				// Early-out due to presorted points
+				if d.X > maxExtent {
+					break
 				}
 
-				// pa[i] = pa[i].Add(v[i])
-				// v[i] = v[i].Mul(0.99 * dt)
-			}
-			energy := math.Abs(totalv - lasttotalv)
-			lasttotalv = totalv
-			// energy := (totald + totaldorig + totalds) - total
-			// total = totald + totaldorig + totalds
-			fmt.Printf("n: %4d totald: %f totaldorig: %f totalds: %f energy: %f\n", n, totald, totaldorig, totalds, energy)
+				if math.Abs(d.Y) > maxExtent {
+					continue
+				}
 
-			for i, p := range pa {
-				pi := &scene.Photos[i]
-				pi.Sprite.Rect.W = s[i]
-				pi.Sprite.Rect.H = s[i]
-				pi.Sprite.Rect.X = p.X - 0.5*pi.Sprite.Rect.W
-				pi.Sprite.Rect.Y = p.Y - 0.5*pi.Sprite.Rect.H
-			}
+				minDist := (hs + s[j]*0.5) * 1.3
+				if d.X > minDist || math.Abs(d.Y) > minDist {
+					continue
+				}
 
-			if energy < 0.001 {
-				break
-			}
+				distsq := d.X*d.X + d.Y*d.Y
+				minDistSq := minDist * minDist
+				if distsq > minDistSq {
+					continue
+				}
 
-			// toScene(pa, s, photoHeight, scene)
-			// time.Sleep(time.Duration(dt*float64(slowdown)*1_000_000) * time.Nanosecond)
-			// pa, pb = pb, pa
-			// copy(pb, pa)
+				intersections++
+
+				ddist := (minDistSq - distsq) / minDistSq
+				a := d.Mul(ddist * 40 * dt)
+
+				v[i] = v[i].Sub(a)
+				v[j] = v[j].Add(a)
+				sv[i] *= 0.3
+				sv[j] *= 0.3
+			}
 		}
-		scene.Loading = false
-	}()
+		elapsed := int(time.Since(start).Microseconds())
 
-	// for i, p := range pa {
-	// 	pi := &scene.Photos[i]
-	// 	// pi.Sprite.PlaceFitHeight(
-	// 	// 	p.X,
-	// 	// 	p.Y,
-	// 	// 	s[i],
-	// 	// 	float64(pi.Sprite.Rect.W),
-	// 	// 	float64(pi.Sprite.Rect.H),
-	// 	// )
-	// 	// pi.Sprite.Rect.W *= s[i] / photoHeight
-	// 	// pi.Sprite.Rect.H *= s[i] / photoHeight
-	// 	pi.Sprite.Rect.X = p.X - 0.5*pi.Sprite.Rect.W
-	// 	pi.Sprite.Rect.Y = p.Y - 0.5*pi.Sprite.Rect.H
-	// }
+		dispSum := 0.
+		dispMax := 0.
+		vSum := 0.
+		for i := range pp {
 
-	// a := scene.Photos
-	// b := make([]render.Photo, len(a))
-	// copy(b, a)
+			dorig := po[i].Sub(pp[i])
+			dist := dorig.Norm()
+			dispSum += dist
+			if dist > dispMax {
+				dispMax = dist
+			}
+			v[i] = v[i].Add(dorig.Mul(0.1 * dt))
+			v[i] = v[i].Mul(0.98)
 
-	// for n := 0; n < 100; n++ {
-	// 	totald := 0.
-	// 	for i, p := range a {
-	// 		pp := render.Point{
-	// 			X: p.Sprite.Rect.X,
-	// 			Y: p.Sprite.Rect.Y,
-	// 		}
-	// 		for j := i + 1; j < len(a); j++ {
-	// 			q := a[j]
-	// 			if p.Sprite.Rect.Intersects(q.Sprite.Rect) {
-	// 				qq := render.Point{
-	// 					X: q.Sprite.Rect.X,
-	// 					Y: q.Sprite.Rect.Y,
-	// 				}
-	// 				// dist := pp.Distance(qq)
-	// 				dx := qq.X - pp.X
-	// 				dy := qq.Y - pp.Y
-	// 				totald += dx*dx + dy*dy
-	// 				d := 0.5 * 0.6
-	// 				p.Sprite.Rect.X = pp.X - dx*d
-	// 				p.Sprite.Rect.Y = pp.Y - dy*d
-	// 				q.Sprite.Rect.X = qq.X + dx*d
-	// 				q.Sprite.Rect.Y = qq.Y + dy*d
-	// 				b[i] = p
-	// 				b[j] = q
-	// 			}
-	// 		}
-	// 	}
-	// 	fmt.Printf("n: %4d totald: %f\n", n, totald)
-	// 	a, b = b, a
-	// 	copy(b, a)
-	// }
-	// scene.Photos = a
+			np := pp[i].Add(v[i].Mul(dt))
+			npd := np.Sub(po[i])
+			ndist := npd.Norm()
+			if ndist > maxDist {
+				np = po[i].Add(npd.Mul(maxDist / ndist))
+				v[i] = r2.Point{}
+				sv[i] = 0
+			}
+			pp[i] = np
 
+			s[i] += sv[i] * dt
+
+			vSum += v[i].Norm() + sv[i]
+
+			sv[i] += 100 * dt
+			sv[i] *= 1.01
+
+			if s[i] > maxSize {
+				s[i] = maxSize
+				sv[i] = 0
+			}
+			if s[i] < minSize {
+				s[i] = minSize
+				sv[i] = 0
+			}
+
+		}
+		energy := math.Abs(vSum - vSumLast)
+		vSumLast = vSum
+		log.Printf(
+			"layout map %4d with %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.1f energy %8d us\n",
+			n, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
+		)
+
+		if energy < 1 {
+			break
+		}
+	}
+
+	for i, p := range pp {
+		photo := &scene.Photos[pi[i]]
+		targetSquare := render.Rect{}
+		targetSquare.W = s[i] * scale
+		targetSquare.H = s[i] * scale
+		targetSquare.X = (maxlng+p.X)*scale - 0.5*targetSquare.W
+		targetSquare.Y = (maxlng-p.Y)*scale - 0.5*targetSquare.H
+		photo.Sprite.Rect = photo.Sprite.Rect.FitInside(targetSquare)
+	}
+
+	scene.Loading = false
 	layoutFinished()
-
 }

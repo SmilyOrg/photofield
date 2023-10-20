@@ -11,8 +11,8 @@
       :debug="debug"
       :tileSize="1024"
       :interactive="interactive"
-      :pan="!nativeScroll"
-      :zoom="!nativeScroll"
+      :pannable="!nativeScroll"
+      :zoomable="!nativeScroll"
       :zoom-transition="true"
       :viewport="viewport"
       @click="onClick"
@@ -119,18 +119,15 @@ const viewport = useViewport(viewer);
 const nativeScroll = ref(true);
 const lastView = ref(null);
 
-// const { scene, recreate: recreateScene, filesPerSecond } = useScene({
-//   layout,
-//   sort,
-//   collectionId,
-//   imageHeight,
-//   viewport,
-//   search,
-// });
+const { scene, recreate: recreateScene, filesPerSecond } = useScene({
+  layout,
+  sort,
+  collectionId,
+  imageHeight,
+  viewport,
+  search,
+});
 
-const {
-  data: scene,
-} = useApi(`/scenes/Tqcqtc6h69`);
 
 watch(scene, async (newScene, oldScene) => {
   if (newScene?.search != oldScene?.search) {

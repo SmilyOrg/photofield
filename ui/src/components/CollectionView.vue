@@ -1,7 +1,27 @@
 <template>
   <div class="collection">
 
+    <map-viewer
+      v-if="layout == 'MAP'"
+      ref="mapViewer"
+      :interactive="true"
+      :collectionId="collectionId"
+      :layout="layout"
+      :sort="sort"
+      :imageHeight="imageHeight"
+      :search="search"
+      :debug="debug"
+      :selectTagId="selectTagId"
+      @selectTagId="onSelectTagId"
+      @region="onScrollRegion"
+      @scene="scrollScene = $event"
+      @search="onSearch"
+      @load-end="onLoadEnd"
+    >
+    </map-viewer>
+
     <scroll-viewer
+      v-else
       ref="scrollViewer"
       :interactive="!stripVisible"
       :collectionId="collectionId"
@@ -21,7 +41,7 @@
     >
     </scroll-viewer>
 
-    <!-- <strip-viewer
+    <strip-viewer
       ref="stripViewer"
       class="strip"
       :class="{ visible: stripVisible }"
@@ -37,7 +57,7 @@
       @scene="stripScene = $event"
       @search="onSearch"
     >
-    </strip-viewer> -->
+    </strip-viewer>
 
   </div>
 </template>
@@ -49,6 +69,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import StripViewer from './StripViewer.vue';
 import ScrollViewer from './ScrollViewer.vue';
+import MapViewer from './MapViewer.vue';
 import { useApi } from '../api';
 
 const props = defineProps([
@@ -71,25 +92,6 @@ const {
   collectionId,
   regionId,
 } = toRefs(props);
-
-const debug = ref({});
-// onMounted(() => {
-//   // setInterval(() => {
-//   //   debug.value = {
-//   //     refresh: Date.now(),
-//   //   };
-//   // }, 300);
-// });
-
-const onLoadEnd = () => {
-  // if (scrollScene.loading) {
-  // setTimeout(() => {
-  //   debug.value = {
-  //     refresh: Date.now(),
-  //   }
-  // }, 100);
-  // }
-}
 
 const scrollViewer = ref(null);
 const stripViewer = ref(null);

@@ -248,12 +248,13 @@ type GetScenesSceneIdRegionsParams struct {
 
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
 type GetScenesSceneIdTilesParams struct {
-	TileSize        int       `json:"tile_size"`
-	BackgroundColor *string   `json:"background_color,omitempty"`
-	Zoom            int       `json:"zoom"`
-	X               TileCoord `json:"x"`
-	Y               TileCoord `json:"y"`
-	Sources         *[]string `json:"sources,omitempty"`
+	TileSize         int       `json:"tile_size"`
+	BackgroundColor  *string   `json:"background_color,omitempty"`
+	TransparencyMask *bool     `json:"transparency_mask,omitempty"`
+	Zoom             int       `json:"zoom"`
+	X                TileCoord `json:"x"`
+	Y                TileCoord `json:"y"`
+	Sources          *[]string `json:"sources,omitempty"`
 
 	// Show images with this tag as selected.
 	SelectTag       *string `json:"select_tag,omitempty"`
@@ -882,6 +883,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, false, "background_color", r.URL.Query(), &params.BackgroundColor)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter background_color: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "transparency_mask" -------------
+	if paramValue := r.URL.Query().Get("transparency_mask"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "transparency_mask", r.URL.Query(), &params.TransparencyMask)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter transparency_mask: %s", err), http.StatusBadRequest)
 		return
 	}
 
