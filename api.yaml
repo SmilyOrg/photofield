@@ -279,30 +279,36 @@ paths:
           schema:
             $ref: "#/components/schemas/SceneId"
 
+        - name: file_id
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/FileId"
+
         - name: "x"
           in: query
-          required: true
+          required: false
           schema:
             type: number
             example: 10
     
         - name: "y"
           in: query
-          required: true
+          required: false
           schema:
             type: number
             example: 200
     
         - name: w
           in: query
-          required: true
+          required: false
           schema:
             type: number
             example: 300
     
         - name: h
           in: query
-          required: true
+          required: false
           schema:
             type: number
             example: 200
@@ -593,6 +599,14 @@ components:
           type: integer
           minimum: 0
           example: 506
+        load_count:
+          type: integer
+          minimum: 0
+          example: 123
+        load_unit:
+          type: string
+          example: files
+          default: files
         loading:
           type: boolean
           description: True while the scene is loading and the dimensions are not yet known.

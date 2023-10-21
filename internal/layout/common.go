@@ -177,7 +177,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 
 func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, scene *render.Scene, regionConfig render.RegionConfig) []render.Region {
 	regions := make([]render.Region, 0)
-	photos := scene.GetVisiblePhotoRefs(rect, render.Scales{}, regionConfig.Limit)
+	photos := scene.GetVisiblePhotoRefs(rect, regionConfig.Limit)
 	for photo := range photos {
 		regions = append(regions, regionSource.getRegionFromPhoto(
 			1+photo.Index,
@@ -188,10 +188,33 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, sce
 	return regions
 }
 
+func (regionSource PhotoRegionSource) GetRegionsFromImageId(id image.ImageId, scene *render.Scene, regionConfig render.RegionConfig) []render.Region {
+	regions := make([]render.Region, 0)
+	max := regionConfig.Limit
+	if max == 0 {
+		max = len(scene.Photos)
+	}
+	for i := range scene.Photos {
+		photo := &scene.Photos[i]
+		if photo.Id != id {
+			continue
+		}
+		regions = append(regions, regionSource.getRegionFromPhoto(
+			1+i,
+			photo,
+			scene, regionConfig,
+		))
+		if len(regions) >= max {
+			break
+		}
+	}
+	return regions
+}
+
 func (regionSource PhotoRegionSource) GetRegionChanFromBounds(rect render.Rect, scene *render.Scene, regionConfig render.RegionConfig) <-chan render.Region {
 	out := make(chan render.Region)
 	go func() {
-		photos := scene.GetVisiblePhotoRefs(rect, render.Scales{}, regionConfig.Limit)
+		photos := scene.GetVisiblePhotoRefs(rect, regionConfig.Limit)
 		for photo := range photos {
 			out <- regionSource.getRegionFromPhoto(
 				1+photo.Index,

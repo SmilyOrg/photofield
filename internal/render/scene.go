@@ -62,6 +62,7 @@ type Fonts struct {
 
 type RegionSource interface {
 	GetRegionsFromBounds(Rect, *Scene, RegionConfig) []Region
+	GetRegionsFromImageId(image.ImageId, *Scene, RegionConfig) []Region
 	GetRegionChanFromBounds(Rect, *Scene, RegionConfig) <-chan Region
 	GetRegionById(int, *Scene, RegionConfig) Region
 }
@@ -74,6 +75,8 @@ type Scene struct {
 	Search          string         `json:"search,omitempty"`
 	SearchEmbedding clip.Embedding `json:"-"`
 	Loading         bool           `json:"loading"`
+	LoadCount       int            `json:"load_count,omitempty"`
+	LoadUnit        string         `json:"load_unit,omitempty"`
 	Error           string         `json:"error,omitempty"`
 	Fonts           Fonts          `json:"-"`
 	Bounds          Rect           `json:"bounds"`
@@ -133,7 +136,7 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	tileCanvasRect := tileRect.Transform(tileToCanvas)
 	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
 
-	visiblePhotos := scene.GetVisiblePhotoRefs(tileCanvasRect, scales, 0)
+	visiblePhotos := scene.GetVisiblePhotoRefs(tileCanvasRect, 0)
 	visiblePhotoCount := 0
 
 	wg := &sync.WaitGroup{}
@@ -198,7 +201,7 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []image.ImageId) {
 	scene.FileCount = len(scene.Photos)
 }
 
-func (scene *Scene) GetVisiblePhotoRefs(view Rect, scales Scales, maxCount int) <-chan PhotoRef {
+func (scene *Scene) GetVisiblePhotoRefs(view Rect, maxCount int) <-chan PhotoRef {
 	out := make(chan PhotoRef)
 	go func() {
 		count := 0
@@ -242,7 +245,7 @@ type BitmapAtZoom struct {
 	ZoomDist float64
 }
 
-func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region {
+func (scene *Scene) GetRegions(bounds Rect, limit *int) []Region {
 	query := RegionConfig{
 		Limit: 100,
 	}
@@ -257,6 +260,19 @@ func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region
 		scene,
 		query,
 	)
+}
+
+func (scene *Scene) GetRegionsByImageId(id image.ImageId, limit *int) []Region {
+	query := RegionConfig{
+		Limit: 100,
+	}
+	if limit != nil {
+		query.Limit = *limit
+	}
+	if scene.RegionSource == nil {
+		return []Region{}
+	}
+	return scene.RegionSource.GetRegionsFromImageId(id, scene, query)
 }
 
 func (scene *Scene) GetRegionChan(bounds Rect) <-chan Region {

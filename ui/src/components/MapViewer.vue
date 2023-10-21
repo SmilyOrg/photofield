@@ -16,11 +16,13 @@
       :geoview="geoview"
       @geoview="onGeoview"
       @contextmenu.prevent="onContextMenu"
+      @click="onClick"
     ></tile-viewer>
 
     <Spinner
       class="spinner"
-      :total="scene?.file_count"
+      :total="scene?.load_count || scene?.file_count"
+      :unit="scene?.load_unit || 'files'"
       :speed="filesPerSecond"
       :divider="10000"
       :loading="scene?.loading"
@@ -46,13 +48,14 @@
 <script setup>
 import { debounce } from 'throttle-debounce';
 import ContextMenu from '@overcoder/vue-context-menu';
-import { computed, ref, toRefs } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useScene } from '../api';
+import { getRegions, useScene } from '../api';
 import { useContextMenu, useViewport } from '../use.js';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
+import { useEventBus } from '@vueuse/core';
 
 const props = defineProps({
   interactive: Boolean,
@@ -109,6 +112,18 @@ const { scene, recreate: recreateScene, filesPerSecond } = useScene({
   search,
 });
 
+useEventBus("recreate-scene").on(scene => {
+  if (scene?.name && scene?.name != "Map") return;
+  recreateScene();
+});
+
+watch(scene, async (newScene, oldScene) => {
+  if (newScene?.search != oldScene?.search) {
+    scrollToPixels(0);
+  }
+  emit("scene", newScene);
+});
+
 const contextMenu = ref(null);
 const {
   onContextMenu,
@@ -156,6 +171,17 @@ const debouncedApplyGeoview = debounce(1000, applyGeoview);
 
 const onGeoview = (geoview) => {
   debouncedApplyGeoview(geoview);
+}
+
+const onClick = async (event) => {
+  if (!event) return false;
+  const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
+  if (regions && regions.length > 0) {
+    const region = regions[0];
+    emit("region", region);
+    return true;
+  }
+  return false;
 }
 
 </script>

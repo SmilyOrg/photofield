@@ -599,15 +599,10 @@ export default {
     viewFromCoordinate(coord) {
       if (!this.scene) return null;
       const fullExtent = this.projection.getExtent();
-      const fw = fullExtent[2] - fullExtent[0];
-      const fh = fullExtent[3] - fullExtent[1];
-      const sx = this.scene.bounds.w / fw;
-      const sy = this.scene.bounds.h / fh;
-      const tx = coord[0];
-      const ty = coord[1];
+      const [xa, ya, xb, yb] = fullExtent;
       return {
-        x: tx * sx,
-        y: (fh-ty)*sy,
+        x: (coord[0] - xa) / (xb - xa) * this.scene.bounds.w,
+        y: (yb - coord[1]) / (yb - ya) * this.scene.bounds.h,
       }
     },
 

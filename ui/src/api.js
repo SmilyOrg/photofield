@@ -50,6 +50,12 @@ export async function getRegions(sceneId, x, y, w, h) {
   return response.items;
 }
 
+export async function getRegionsWithFileId(sceneId, id) {
+  if (!sceneId) return null;
+  const response = await get(`/scenes/${sceneId}/regions?file_id=${id}`);
+  return response.items;
+}
+
 export async function getRegion(sceneId, id) {
   return get(`/scenes/${sceneId}/regions/${id}`);
 }
@@ -197,11 +203,17 @@ export function useScene({
   const filesPerSecond = ref(0);
   watch(scene, async (newValue, oldValue) => {
     if (newValue?.loading) {
-      let prev = oldValue?.file_count || 0;
-      if (prev > newValue.file_count) {
+      let prev =
+        oldValue?.load_count ||
+        oldValue?.file_count ||
+        0;
+      let next =
+        newValue.load_count ||
+        newValue.file_count;
+      if (prev > next) {
         prev = 0;
       }
-      filesPerSecond.value = newValue.file_count - prev;
+      filesPerSecond.value = next - prev;
       run();
     } else {
       reset();

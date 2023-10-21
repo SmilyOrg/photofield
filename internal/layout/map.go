@@ -2,10 +2,7 @@ package layout
 
 import (
 	"cmp"
-	"context"
-	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
@@ -19,10 +16,6 @@ import (
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
-	loadCounter := metrics.Counter{
-		Name:     "load infos",
-		Interval: 1 * time.Second,
-	}
 	scene.Bounds = render.Rect{
 		X: 0,
 		Y: 0,
@@ -53,30 +46,17 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	minSize := 1.
 	startSize := 1.
 
-	fmt.Printf("%f\n", earthEquatorMeters/(maxExtent*2))
-
 	index := 0
 	pp := make([]r2.Point, 0)
 	pi := make([]int, 0)
-	placeRects := make(map[string]s2.Rect)
+	photos := make([]render.Photo, 0)
+	loadCounter := metrics.Counter{
+		Name:     "load infos",
+		Interval: 1 * time.Second,
+	}
 	for info := range infos {
 		if !image.IsValidLatLng(info.LatLng) {
 			continue
-		}
-		if !image.IsNaNLatLng(info.LatLng) {
-			l, err := source.Geo.ReverseGeocode(context.TODO(), info.LatLng)
-			if err != nil {
-				l = ""
-			}
-			if l != "" {
-				placeRect, ok := placeRects[l]
-				if !ok {
-					placeRect = s2.RectFromLatLng(info.LatLng)
-					placeRects[l] = placeRect
-				} else {
-					placeRects[l] = placeRect.AddPoint(info.LatLng)
-				}
-			}
 		}
 		p := proj.FromLatLng(info.LatLng)
 		photo := render.Photo{
@@ -89,11 +69,13 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			},
 		}
 		pp = append(pp, p)
-		pi = append(pi, index)
-
-		scene.Photos = append(scene.Photos, photo)
+		pi = append(pi, len(pi))
+		photos = append(photos, photo)
 		loadCounter.Set(index)
 		index++
+		scene.FileCount = index
+		scene.LoadCount = index
+		scene.LoadUnit = "files"
 	}
 
 	n := len(pp)
@@ -132,44 +114,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	for n := 0; n < 1000; n++ {
 		intersections := 0
 		start := time.Now()
-		// Collision detection incl. sweep and prune skips
-		for i, p := range pp {
-			hs := s[i] * 0.5
-			for j := i + 1; j < len(pp); j++ {
-				q := pp[j]
-				d := q.Sub(p)
-
-				// Early-out due to presorted points
-				if d.X > maxExtent {
-					break
-				}
-
-				if math.Abs(d.Y) > maxExtent {
-					continue
-				}
-
-				minDist := (hs + s[j]*0.5) * 1.3
-				if d.X > minDist || math.Abs(d.Y) > minDist {
-					continue
-				}
-
-				distsq := d.X*d.X + d.Y*d.Y
-				minDistSq := minDist * minDist
-				if distsq > minDistSq {
-					continue
-				}
-
-				intersections++
-
-				ddist := (minDistSq - distsq) / minDistSq
-				a := d.Mul(ddist * 40 * dt)
-
-				v[i] = v[i].Sub(a)
-				v[j] = v[j].Add(a)
-				sv[i] *= 0.3
-				sv[j] *= 0.3
-			}
-		}
+		intersections += collide(pp, v, s, sv, maxExtent, dt)
 		elapsed := int(time.Since(start).Microseconds())
 
 		dispSum := 0.
@@ -213,12 +158,18 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			}
 
 		}
-		energy := math.Abs(vSum - vSumLast)
+		energy := vSum - vSumLast
+		if energy < 0 {
+			energy = -energy
+		}
 		vSumLast = vSum
 		log.Printf(
 			"layout map %4d with %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.1f energy %8d us\n",
 			n, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
 		)
+
+		scene.LoadCount = n
+		scene.LoadUnit = "iterations"
 
 		if energy < 1 {
 			break
@@ -226,15 +177,69 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	}
 
 	for i, p := range pp {
-		photo := &scene.Photos[pi[i]]
-		targetSquare := render.Rect{}
-		targetSquare.W = s[i] * scale
-		targetSquare.H = s[i] * scale
-		targetSquare.X = (maxlng+p.X)*scale - 0.5*targetSquare.W
-		targetSquare.Y = (maxlng-p.Y)*scale - 0.5*targetSquare.H
-		photo.Sprite.Rect = photo.Sprite.Rect.FitInside(targetSquare)
+		photo := &photos[pi[i]]
+		square := render.Rect{}
+		square.W = s[i] * scale
+		square.H = s[i] * scale
+		square.X = (maxlng+p.X)*scale - 0.5*square.W
+		square.Y = (maxlng-p.Y)*scale - 0.5*square.H
+		photo.Sprite.Rect = photo.Sprite.Rect.FitInside(square)
 	}
 
-	scene.Loading = false
+	scene.Photos = photos
+
+	scene.LoadCount = 0
+	scene.LoadUnit = ""
+	scene.RegionSource = PhotoRegionSource{
+		Source: source,
+	}
 	layoutFinished()
+}
+
+// Collision detection incl. sweep and prune skips
+func collide(pp []r2.Point, v []r2.Point, s []float64, sv []float64, maxExtent float64, dt float64) int {
+	inters := 0
+	for i, p := range pp {
+		hs := s[i] * 0.5
+		for j := i + 1; j < len(pp); j++ {
+			q := pp[j]
+			d := q.Sub(p)
+
+			// Early-out due to presorted points
+			if d.X > maxExtent {
+				break
+			}
+
+			dyabs := d.Y
+			if dyabs < 0 {
+				dyabs = -dyabs
+			}
+
+			if dyabs > maxExtent {
+				continue
+			}
+
+			minDist := (hs + s[j]*0.5) * 1.3
+			if d.X > minDist || dyabs > minDist {
+				continue
+			}
+
+			distsq := d.X*d.X + d.Y*d.Y
+			minDistSq := minDist * minDist
+			if distsq > minDistSq {
+				continue
+			}
+
+			inters++
+
+			ddist := (minDistSq - distsq) / minDistSq
+			a := d.Mul(ddist * 40 * dt)
+
+			v[i] = v[i].Sub(a)
+			v[j] = v[j].Add(a)
+			sv[i] *= 0.3
+			sv[j] *= 0.3
+		}
+	}
+	return inters
 }

@@ -814,14 +814,29 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 		return
 	}
 
-	bounds := render.Rect{
-		X: float64(params.X),
-		Y: float64(params.Y),
-		W: float64(params.W),
-		H: float64(params.H),
-	}
+	var regions []render.Region
 
-	regions := scene.GetRegions(&defaultSceneConfig.Render, bounds, params.Limit)
+	if params.FileId != nil {
+		if params.X != nil || params.Y != nil || params.W != nil || params.H != nil {
+			problem(w, r, http.StatusBadRequest, "file_id and bounds are mutually exclusive")
+			return
+		}
+		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), params.Limit)
+	} else {
+		if params.X == nil || params.Y == nil || params.W == nil || params.H == nil {
+			problem(w, r, http.StatusBadRequest, "bounds or file_id required")
+			return
+		}
+
+		bounds := render.Rect{
+			X: float64(*params.X),
+			Y: float64(*params.Y),
+			W: float64(*params.W),
+			H: float64(*params.H),
+		}
+
+		regions = scene.GetRegions(bounds, params.Limit)
+	}
 
 	respond(w, r, http.StatusOK, struct {
 		Items []render.Region `json:"items"`

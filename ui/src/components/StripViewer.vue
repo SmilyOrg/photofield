@@ -75,7 +75,7 @@
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus, useMousePressed, useNow, useRefHistory } from '@vueuse/core';
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { useApi, useScene, getCenterRegion, postTagFiles } from '../api';
+import { useApi, useScene, getCenterRegion, postTagFiles, getRegionsWithFileId } from '../api';
 import { useSeekableRegion, useViewport, useViewDelta, useContextMenu } from '../use.js';
 import { viewCenterSquared } from '../utils.js';
 import Controls from './Controls.vue';
@@ -388,6 +388,15 @@ const getCanvas = () => {
   return viewer.value?.$el?.querySelector("canvas");
 }
 
+const getRegionIdFromFileId = async id => {
+  if (!scene.value) return null;
+  const regions = await getRegionsWithFileId(scene.value.id, id);
+  if (regions.length > 0) {
+    return regions[0];
+  }
+  return null;
+}
+
 const focus = () => {
   viewer.value?.$el?.focus();
 }
@@ -397,6 +406,7 @@ defineExpose({
   zoomInFromView,
   zoomOutFromView,
   focus,
+  getRegionIdFromFileId,
 })
 
 </script>

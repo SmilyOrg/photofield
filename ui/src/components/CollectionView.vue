@@ -13,8 +13,8 @@
       :debug="debug"
       :selectTagId="selectTagId"
       @selectTagId="onSelectTagId"
-      @region="onScrollRegion"
-      @scene="scrollScene = $event"
+      @region="onMapRegion"
+      @scene="mapScene = $event"
       @search="onSearch"
     >
     </map-viewer>
@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, toRefs, watch, watchEffect } from 'vue';
+import { computed, nextTick, ref, toRefs, watch } from 'vue';
 import { timeout, useTask } from 'vue-concurrency';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -106,12 +106,17 @@ const lastRegionId = ref(null);
 const transitionRegionId = ref(null);
 
 const scrollScene = ref(null);
+const mapScene = ref(null);
 const stripScene = ref(null);
 const scenes = computed(() => {
   const scenes = [];
   if (scrollScene.value) scenes.push({
     name: "Scroll",
     ...scrollScene.value
+  });
+  if (mapScene.value) scenes.push({
+    name: "Map",
+    ...stripScene.value
   });
   if (stripScene.value) scenes.push({
     name: "Strip",
@@ -226,16 +231,26 @@ const showRegion = useTask(function*(_, regionId) {
   }
 }).restartable();
 
+function showRegionImmediate(regionId) {
+  if (regionId) {
+    stripVisible.value = true;
+  } else {
+    stripVisible.value = false;
+  }
+}
+
 watch(regionId, (newRegionId, oldRegionId) => {
   lastRegionId.value = oldRegionId;
   const showStrip = newRegionId !== undefined;
   emit("immersive", showStrip);
-  showRegion.perform(newRegionId);
+  showRegionImmediate(newRegionId);
+  // showRegion.perform(newRegionId);
 }, { immediate: true });
 
 const onStripRegion = async region => {
   if (!region) return;
-  showRegion.perform(region.id);
+  // showRegion.perform(region.id);
+  showRegionImmediate(region.id);
   lastStripRegion.value = region;
 }
 
@@ -246,6 +261,22 @@ const onScrollRegion = async (region) => {
     params: {
       collectionId: collectionId.value,
       regionId: region?.id,
+    },
+    query: route.query,
+  });
+}
+
+const onMapRegion = async (region) => {
+  const stripRegion = await stripViewer.value?.getRegionIdFromFileId(region?.data?.id);
+  if (!stripRegion) {
+    console.error("No strip region found for", region);
+    return;
+  }
+  router.push({
+    name: "region",
+    params: {
+      collectionId: collectionId.value,
+      regionId: stripRegion?.id,
     },
     query: route.query,
   });

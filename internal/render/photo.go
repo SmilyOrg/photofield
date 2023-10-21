@@ -44,6 +44,9 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 }
 
 func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool) {
+	rect := photo.Sprite.Rect.Scale(scales.Photo)
+	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
+
 	if config.TransparencyMask {
 		style := c.Style
 		style.FillColor = color.RGBA{0xFF, 0xFF, 0xFF, 0xFF}
@@ -51,8 +54,6 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 		return
 	}
 
-	rect := photo.Sprite.Rect.Scale(scales.Photo)
-	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
 	if pixelArea < config.MaxSolidPixelArea {
 		// if true {
 		style := c.Style
