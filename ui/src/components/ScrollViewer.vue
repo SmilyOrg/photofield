@@ -9,7 +9,7 @@
       :view="view"
       :selectTagId="selectTagId"
       :debug="debug"
-      :tileSize="1024"
+      :tileSize="512"
       :interactive="interactive"
       :pannable="!nativeScroll"
       :zoomable="!nativeScroll"
@@ -24,13 +24,13 @@
       @box-select="onBoxSelect"
     ></tile-viewer>
 
-    <!-- <Spinner
+    <Spinner
       class="spinner"
       :total="scene?.file_count"
-      :speed="filesPerSecond"
+      :speed="loadSpeed"
       :divider="10000"
       :loading="scene?.loading"
-    ></Spinner> -->
+    ></Spinner>
 
     <DateStrip
       class="date-strip"
@@ -119,7 +119,7 @@ const viewport = useViewport(viewer);
 const nativeScroll = ref(true);
 const lastView = ref(null);
 
-const { scene, recreate: recreateScene, filesPerSecond } = useScene({
+const { scene, recreate: recreateScene, loadSpeed } = useScene({
   layout,
   sort,
   collectionId,

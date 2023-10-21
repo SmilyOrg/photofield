@@ -47,6 +47,11 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	rect := photo.Sprite.Rect.Scale(scales.Photo)
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
 
+	// Avoid drawing almost-invisible photos or squares
+	if pixelArea < 0.1 {
+		return
+	}
+
 	if config.TransparencyMask {
 		style := c.Style
 		style.FillColor = color.RGBA{0xFF, 0xFF, 0xFF, 0xFF}

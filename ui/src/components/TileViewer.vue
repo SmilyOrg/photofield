@@ -99,13 +99,18 @@ export default {
 
     scene(newScene, oldScene) {
       if (
-        newScene?.id == oldScene?.id &&
-        newScene.bounds.w == oldScene.bounds.w &&
-        newScene.bounds.h == oldScene.bounds.h
+        newScene?.id != oldScene?.id ||
+        newScene.bounds.w != oldScene.bounds.w ||
+        newScene.bounds.h != oldScene.bounds.h
       ) {
+        if (newScene?.loading) return;
+        this.reset();
         return;
       }
-      this.reset();
+      if (oldScene?.loading && !newScene?.loading) {
+        this.reload();
+        return;
+      }
     },
 
     tileSize() {
@@ -116,7 +121,7 @@ export default {
       deep: true,
       handler(newValue, oldValue) {
         if (equal(newValue, oldValue)) return;
-        this.reload();
+        this.reloadMain();
       },
     },
 
@@ -142,6 +147,17 @@ export default {
       immediate: true,
       handler(geoview) {
         if (!geoview) return;
+        if (
+          this.lastGeoview &&
+          Math.abs(geoview[0] - this.lastGeoview[0]) < 1e-4 &&
+          Math.abs(geoview[1] - this.lastGeoview[1]) < 1e-4 &&
+          Math.abs(geoview[2] - this.lastGeoview[2]) < 1e-1
+        ) {
+          // Geoview is already close enough, nothing to do.
+          // This usually happens after the geoview is applied
+          // to the url and then the url is read back.
+          return;
+        }
         this.setGeoview(geoview);
       }
     },
@@ -222,7 +238,7 @@ export default {
         properties: {
           main: true,
         },
-        preload: Infinity,
+        preload: this.geo ? 2 : Infinity,
         source: new XYZ({
           tileUrlFunction: this.tileUrlFunction,
           crossOrigin: "Anonymous",
@@ -257,7 +273,8 @@ export default {
       if (this.geo) {
 
         const mask = new TileLayer({
-          preload: Infinity,
+          preload: 2,
+          // preload: 2,
           source: new XYZ({
             tileUrlFunction: this.maskUrlFunction,
             crossOrigin: "Anonymous",
@@ -269,7 +286,7 @@ export default {
         });
 
         const osmLayer = new TileLayer({
-          preload: Infinity,
+          preload: 2,
           source: new OSM(),
         });
 
@@ -459,7 +476,9 @@ export default {
       this.latestView = view;
       this.$emit("view", view);
       if (this.geo) {
-        this.$emit("geoview", this.getGeoview());
+        const geoview = this.getGeoview();
+        this.lastGeoview = geoview;
+        this.$emit("geoview", geoview);
       }
     },
 
@@ -470,7 +489,9 @@ export default {
       this.latestView = view;
       this.$emit("view", view);
       if (this.geo) {
-        this.$emit("geoview", this.getGeoview());
+        const geoview = this.getGeoview();
+        this.lastGeoview = geoview;
+        this.$emit("geoview", geoview);
       }
     },
 
@@ -492,6 +513,23 @@ export default {
     },
 
     reload() {
+      const oldLayers = this.map.getLayers().getArray().slice();
+      const newLayers = this.createLayers();
+      const cleanup = () => {
+        for (const old of oldLayers) {
+          this.map.removeLayer(old);
+          old?.getSource()?.dispose();
+          old?.dispose();
+        }
+        this.map.un("loadend", cleanup);
+      };
+      this.map.on("loadend", cleanup);
+      for (const newLayer of newLayers) {
+        this.map.addLayer(newLayer);
+      }
+    },
+
+    reloadMain() {
       const oldLayers = this.map.getLayers();
       const oldMain = oldLayers.getArray().find(l => l.get("main"));
       const newMain = this.createMainLayer();
@@ -617,6 +655,7 @@ export default {
     },
 
     setGeoview(geoview) {
+      this.lastGeoview = geoview;
       if (!this.map) {
         console.info("Map not initialized yet, setting pending geoview", geoview);
         this.pendingGeoview = geoview;

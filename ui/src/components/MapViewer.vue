@@ -6,7 +6,7 @@
       ref="viewer"
       :scene="scene"
       :debug="debug"
-      :tileSize="1024"
+      :tileSize="512"
       :interactive="interactive"
       :pannable="true"
       :zoomable="true"
@@ -21,9 +21,12 @@
 
     <Spinner
       class="spinner"
-      :total="scene?.load_count || scene?.file_count"
+      :total="
+        scene?.load_count !== undefined ?
+          scene?.load_count : scene?.file_count
+      "
       :unit="scene?.load_unit || 'files'"
-      :speed="filesPerSecond"
+      :speed="loadSpeed"
       :divider="10000"
       :loading="scene?.loading"
     ></Spinner>
@@ -99,11 +102,11 @@ const viewport = useViewport(viewer);
 // Maps are always a square,
 // so the layout is viewport-independent
 const staticViewport = {
-  width: ref(1024),
-  height: ref(1024),
+  width: ref(1000),
+  height: ref(1000),
 }
 
-const { scene, recreate: recreateScene, filesPerSecond } = useScene({
+const { scene, recreate: recreateScene, loadSpeed } = useScene({
   layout,
   sort,
   collectionId,
@@ -135,12 +138,7 @@ const {
 const router = useRouter();
 const route = useRoute();
 
-const lastAppliedTime = ref(0);
 const geoview = computed(() => {
-  if (Date.now() - lastAppliedTime.value < 100) {
-    return;
-  }
-
   const p = route.query.p;
   if (!p) return;
   let [latstr, lonstr, zstr] = p.split(",", 3);
@@ -153,12 +151,12 @@ const geoview = computed(() => {
   const lon = parseFloat(lonstr);
   const z = parseFloat(zstr);
   if (isNaN(lat) || isNaN(lon) || isNaN(z)) return;
-  return [lon, lat, z];
+  const geoview = [lon, lat, z];
+  return geoview;
 });
 
 const applyGeoview = (geoview) => {
   const [lon, lat, z] = geoview;
-  lastAppliedTime.value = Date.now();
   router.replace({
     query: {
       ...router.currentRoute.value.query,

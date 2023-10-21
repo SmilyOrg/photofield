@@ -694,6 +694,8 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		return
 	}
 
+	incomplete := scene.Loading
+
 	rn := defaultSceneConfig.Render
 	rn.TileSize = params.TileSize
 	if params.Sources != nil {
@@ -769,7 +771,11 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	rn.Zoom = zoom
 	drawTile(context, &rn, scene, zoom, x, y)
 
-	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+	if incomplete {
+		w.Header().Add("Cache-Control", "no-cache")
+	} else {
+		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+	}
 
 	if params.TransparencyMask != nil {
 		w.Header().Add("Content-Type", "image/png")

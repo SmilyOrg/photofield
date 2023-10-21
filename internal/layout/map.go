@@ -7,6 +7,8 @@ import (
 	"photofield/internal/image"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/golang/geo/r2"
@@ -110,11 +112,28 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	dt := 0.1
 
+	workerNum := runtime.NumCPU()
+	workerBatch := len(pp) / workerNum
+
 	vSumLast := 0.
 	for n := 0; n < 1000; n++ {
 		intersections := 0
 		start := time.Now()
-		intersections += collide(pp, v, s, sv, maxExtent, dt)
+		wg := &sync.WaitGroup{}
+		wg.Add(workerNum)
+		for w := 0; w < workerNum; w++ {
+			ia := w * workerBatch
+			ib := (w + 1) * workerBatch
+			if w == workerNum-1 {
+				ib = len(pp)
+			}
+			go func() {
+				intersections += collide(pp, v, s, sv, ia, ib, maxExtent, dt)
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+		// intersections += collide(pp, v, s, sv, maxExtent, dt)
 		elapsed := int(time.Since(start).Microseconds())
 
 		dispSum := 0.
@@ -171,7 +190,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		scene.LoadCount = n
 		scene.LoadUnit = "iterations"
 
-		if energy < 1 {
+		if energy < 10 {
 			break
 		}
 	}
@@ -197,9 +216,10 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 }
 
 // Collision detection incl. sweep and prune skips
-func collide(pp []r2.Point, v []r2.Point, s []float64, sv []float64, maxExtent float64, dt float64) int {
+func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float64) int {
 	inters := 0
-	for i, p := range pp {
+	for i := ia; i < ib; i++ {
+		p := pp[i]
 		hs := s[i] * 0.5
 		for j := i + 1; j < len(pp); j++ {
 			q := pp[j]

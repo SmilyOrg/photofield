@@ -200,24 +200,26 @@ export function useScene({
 
   const { run, reset } = useRetry(scenesMutate);
 
-  const filesPerSecond = ref(0);
+  const loadSpeed = ref(0);
+
   watch(scene, async (newValue, oldValue) => {
     if (newValue?.loading) {
       let prev =
-        oldValue?.load_count ||
-        oldValue?.file_count ||
-        0;
+        oldValue?.load_count !== undefined ?
+        oldValue?.load_count :
+        oldValue?.file_count || 0;
       let next =
-        newValue.load_count ||
-        newValue.file_count;
+        newValue.load_count !== undefined ?
+        newValue.load_count :
+        newValue.file_count
       if (prev > next) {
         prev = 0;
       }
-      filesPerSecond.value = next - prev;
+      loadSpeed.value = next - prev;
       run();
     } else {
       reset();
-      filesPerSecond.value = 0;
+      loadSpeed.value = 0;
     }
   })
 
@@ -225,7 +227,7 @@ export function useScene({
     scene,
     recreate: recreateScene,
     loading: scenesLoading,
-    filesPerSecond,
+    loadSpeed,
   }
 }
 
