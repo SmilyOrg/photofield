@@ -23,8 +23,9 @@
     "plyr": "^3.7.2",
     "qs": "^6.11.0",
     "swrv": "^1.0.0-beta.8",
+    "throttle-debounce": "^5.0.0",
     "vue": "3.2.37",
-    "vue-concurrency": "^2.3.0",
+    "vue-concurrency": "^4.0.1",
     "vue-multiselect": "^3.0.0-beta.1",
     "vue-router": "^4.1.5"
   },

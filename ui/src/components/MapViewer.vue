@@ -13,8 +13,8 @@
       :geo="true"
       :zoom-transition="true"
       :viewport="viewport"
-      :loc="location"
-      @location="onLocation"
+      :geoview="geoview"
+      @geoview="onGeoview"
       @contextmenu.prevent="onContextMenu"
     ></tile-viewer>
 
@@ -44,9 +44,9 @@
 </template>
 
 <script setup>
+import { debounce } from 'throttle-debounce';
 import ContextMenu from '@overcoder/vue-context-menu';
-import { computed, ref, toRefs, watchEffect } from 'vue';
-import { timeout, useTask } from 'vue-concurrency';
+import { computed, ref, toRefs } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useScene } from '../api';
 import { useContextMenu, useViewport } from '../use.js';
@@ -121,7 +121,7 @@ const router = useRouter();
 const route = useRoute();
 
 const lastAppliedTime = ref(0);
-const location = computed(() => {
+const geoview = computed(() => {
   if (Date.now() - lastAppliedTime.value < 100) {
     return;
   }
@@ -138,17 +138,11 @@ const location = computed(() => {
   const lon = parseFloat(lonstr);
   const z = parseFloat(zstr);
   if (isNaN(lat) || isNaN(lon) || isNaN(z)) return;
-  return [[lon, lat], z];
+  return [lon, lat, z];
 });
 
-const applyLocationTask = useTask(function*(_, coords, zoom) {
-  yield timeout(1000);
-  applyLocation(coords, zoom);
-}).restartable();
-
-const applyLocation = (coords, zoom) => {
-  const [lon, lat] = coords;
-  const z = zoom;
+const applyGeoview = (geoview) => {
+  const [lon, lat, z] = geoview;
   lastAppliedTime.value = Date.now();
   router.replace({
     query: {
@@ -158,8 +152,10 @@ const applyLocation = (coords, zoom) => {
   });
 }
 
-const onLocation = (coords, zoom) => {
-  applyLocationTask.perform(coords, zoom);
+const debouncedApplyGeoview = debounce(1000, applyGeoview);
+
+const onGeoview = (geoview) => {
+  debouncedApplyGeoview(geoview);
 }
 
 </script>

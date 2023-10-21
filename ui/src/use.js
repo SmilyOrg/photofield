@@ -4,6 +4,7 @@ import { useTask, timeout } from "vue-concurrency";
 import { useRoute, useRouter } from "vue-router";
 import { useApi, useBufferApi } from "./api";
 import qs from "qs";
+import { debounce } from "throttle-debounce";
 
 export function useScrollbar(scrollbar, sleep) {
 
@@ -25,10 +26,9 @@ export function useScrollbar(scrollbar, sleep) {
     onScroll();
   }
 
-  const speedReset = useTask(function*(_) {
-    yield timeout(1000);
+  const speedReset = debounce(1000, () => {
     yPerSec.value = 0;
-  }).restartable();
+  });
 
   const onScroll = () => {
     if (!scrollbar.value) return;
@@ -56,7 +56,7 @@ export function useScrollbar(scrollbar, sleep) {
 
     lastScrollTime.value = now;
 
-    speedReset.perform();
+    speedReset();
   }
 
   const onHostSizeChanged = () => {
@@ -192,18 +192,17 @@ export function useNavigation({ index, count, apply }) {
       return;
     }
     seekIndex.value = nextIndex;
-    seekApplyTask.perform(nextIndex);
+    debouncedSeek(nextIndex);
   }
 
-  const seekApplyTask = useTask(function*(_, index) {
-    yield timeout(1000);
+  const debouncedSeek = debounce(1000, index => {
+    if (seekIndex.value === null) return;
     apply(index);
-  }).restartable();
-  
+  });
+
   return {
     navigate,
     index: finalIndex,
-    applyTask: seekApplyTask,
   }
 }
 
@@ -219,7 +218,6 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
   const {
     navigate,
     index,
-    applyTask,
   } = useNavigation({
     index: regionId,
     count: fileCount,
@@ -241,7 +239,6 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
   });
   
   const exit = async () => {
-    applyTask.cancelAll();
     await router.push({
       name: "collection",
       params: {

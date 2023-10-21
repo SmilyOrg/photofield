@@ -65,7 +65,7 @@ export default {
     debug: Object,
     loading: Boolean,
     geo: Boolean,
-    loc: Array,
+    geoview: Array,
     viewport: Object,
   },
 
@@ -74,7 +74,7 @@ export default {
     "click",
     "pointer-down",
     "view",
-    "location",
+    "geoview",
     "move-end",
     "reset",
     "load-end",
@@ -138,11 +138,11 @@ export default {
       }
     },
 
-    loc: {
+    geoview: {
       immediate: true,
-      handler(loc) {
-        if (!loc) return;
-        this.setLocation(loc[0], loc[1]);
+      handler(geoview) {
+        if (!geoview) return;
+        this.setGeoview(geoview);
       }
     },
 
@@ -269,6 +269,7 @@ export default {
         });
 
         const osmLayer = new TileLayer({
+          preload: Infinity,
           source: new OSM(),
         });
 
@@ -349,11 +350,11 @@ export default {
       if (this.geo) {
         this.v = new View({
           projection: this.projection,
-          center: this.pendingLocation ?
-            fromLonLat(this.pendingLocation.coords) :
+          center: this.pendingGeoview ?
+            this.geoviewToCenter(this.pendingGeoview) :
             [0, 0],
-          zoom: this.pendingLocation ?
-            this.pendingLocation.zoom :
+          zoom: this.pendingGeoview ?
+            this.geoviewToZoom(this.pendingGeoview) :
             2,
           enableRotation: false,
         });
@@ -458,9 +459,7 @@ export default {
       this.latestView = view;
       this.$emit("view", view);
       if (this.geo) {
-        const coords = toLonLat(this.v.getCenter());
-        const zoom = this.v.getZoom();
-        this.$emit("location", coords, zoom);
+        this.$emit("geoview", this.getGeoview());
       }
     },
 
@@ -471,11 +470,7 @@ export default {
       this.latestView = view;
       this.$emit("view", view);
       if (this.geo) {
-        const coords = toLonLat(this.v.getCenter());
-        const zoom = this.v.getZoom();
-        this.latestZoom = zoom;
-        this.$emit("zoom", zoom);
-        this.$emit("location", coords, zoom);
+        this.$emit("geoview", this.getGeoview());
       }
     },
 
@@ -620,14 +615,28 @@ export default {
       this.pendingAnimationTime = t;
     },
 
-    setLocation(coords, zoom) {
+    getGeoview() {
+      const center = toLonLat(this.v.getCenter());
+      const zoom = this.v.getZoom();
+      return [center[0], center[1], zoom];
+    },
+
+    setGeoview(geoview) {
       if (!this.map) {
-        console.warn("Map not initialized yet, setting pending location", coords, zoom);
-        this.pendingLocation = { coords, zoom };
+        console.info("Map not initialized yet, setting pending geoview", geoview);
+        this.pendingGeoview = geoview;
         return;
       }
-      this.v.setCenter(fromLonLat(coords));
-      this.v.setZoom(zoom);
+      this.v.setCenter(this.geoviewToCenter(geoview));
+      this.v.setZoom(this.geoviewToZoom(geoview));
+    },
+
+    geoviewToCenter(geoview) {
+      return fromLonLat(geoview.slice(0, 2));
+    },
+
+    geoviewToZoom(geoview) {
+      return geoview[2];
     },
 
     setView(view, options) {
