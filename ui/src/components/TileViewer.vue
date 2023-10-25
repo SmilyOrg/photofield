@@ -23,6 +23,7 @@ import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
+import { defaults as defaultControls } from 'ol/control';
 import {MAC} from 'ol/src/has.js';
 import equal from 'fast-deep-equal';
 
@@ -287,7 +288,11 @@ export default {
 
         const osmLayer = new TileLayer({
           preload: 2,
-          source: new OSM(),
+          source: new OSM({
+            attributions: [
+              'Background from <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+            ],
+          }),
         });
 
         mask.on("prerender", event => {
@@ -395,7 +400,11 @@ export default {
         // pixelRatio: 1,
         layers: this.createLayers(),
         view: this.v,
-        controls: [],
+        controls: defaultControls({
+          attribution: true,
+          rotate: false,
+          zoom: false,
+        }),
         interactions,
         moveTolerance: 4,
       });
