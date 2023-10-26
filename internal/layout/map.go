@@ -133,7 +133,6 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			}()
 		}
 		wg.Wait()
-		// intersections += collide(pp, v, s, sv, maxExtent, dt)
 		elapsed := int(time.Since(start).Microseconds())
 
 		dispSum := 0.

@@ -232,6 +232,8 @@ const showRegion = useTask(function*(_, regionId) {
 }).restartable();
 
 function showRegionImmediate(regionId) {
+  transitionRegionId.value = null;
+  stripViewer.value?.resetZoom();
   if (regionId) {
     stripVisible.value = true;
   } else {
@@ -243,14 +245,20 @@ watch(regionId, (newRegionId, oldRegionId) => {
   lastRegionId.value = oldRegionId;
   const showStrip = newRegionId !== undefined;
   emit("immersive", showStrip);
-  showRegionImmediate(newRegionId);
-  // showRegion.perform(newRegionId);
+  if (layout.value === 'MAP') {
+    showRegionImmediate(newRegionId);
+  } else {
+    showRegion.perform(newRegionId);
+  }
 }, { immediate: true });
 
 const onStripRegion = async region => {
   if (!region) return;
-  // showRegion.perform(region.id);
-  showRegionImmediate(region.id);
+  if (layout.value === 'MAP') {
+    showRegionImmediate(region.id);
+  } else {
+    showRegion.perform(region.id);
+  }
   lastStripRegion.value = region;
 }
 

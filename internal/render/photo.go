@@ -44,7 +44,6 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 }
 
 func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool) {
-	rect := photo.Sprite.Rect.Scale(scales.Photo)
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
 
 	// Avoid drawing almost-invisible photos or squares
@@ -60,7 +59,6 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	if pixelArea < config.MaxSolidPixelArea {
-		// if true {
 		style := c.Style
 
 		scale := 1.
@@ -85,7 +83,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 
 	info := source.GetInfo(photo.Id)
 	size := info.Size()
-	rsize := rect.RenderedSize(c, size)
+	rsize := photo.Sprite.Rect.RenderedSize(c, size)
 
 	srcs := source.Sources
 	if config.Sources != nil {
@@ -127,9 +125,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 		}
 
 		bitmap := Bitmap{
-			Sprite: Sprite{
-				Rect: rect,
-			},
+			Sprite:      photo.Sprite,
 			Orientation: image.Orientation(r.Orientation),
 		}
 
@@ -140,8 +136,6 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			bitmap.Sprite.DrawWithStyle(c, style)
 			scale = 0.8
 		}
-
-		// fmt.Printf("tile %f pixel %f\n", scales.Tile, scales.Pixel)
 
 		bitmap.DrawImage(config.CanvasImage, img, c, scale)
 		drawn = true

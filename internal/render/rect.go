@@ -46,9 +46,7 @@ func (rect Rect) ScalePoint(scale Point) Rect {
 }
 
 func (rect Rect) Scale(scale float64) Rect {
-	// rect.X *= scale
 	rect.W *= scale
-	// rect.Y *= scale
 	rect.H *= scale
 	return rect
 }

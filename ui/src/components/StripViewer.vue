@@ -376,12 +376,16 @@ const zoomInFromView = async (view) => {
   zoomReset.value = true;
   screenView.value = view;
   await nextTick();
-  zoomReset.value = false;
-  screenView.value = null;
+  resetZoom();
 }
 
 const zoomOutFromView = async (view) => {
   screenView.value = view;
+}
+
+const resetZoom = () => {
+  zoomReset.value = false;
+  screenView.value = false;
 }
 
 const getCanvas = () => {
@@ -405,6 +409,7 @@ defineExpose({
   getCanvas,
   zoomInFromView,
   zoomOutFromView,
+  resetZoom,
   focus,
   getRegionIdFromFileId,
 })

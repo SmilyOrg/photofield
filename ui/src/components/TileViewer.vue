@@ -275,7 +275,6 @@ export default {
 
         const mask = new TileLayer({
           preload: 2,
-          // preload: 2,
           source: new XYZ({
             tileUrlFunction: this.maskUrlFunction,
             crossOrigin: "Anonymous",
@@ -397,7 +396,6 @@ export default {
 
       this.map = new Map({
         target: element,
-        // pixelRatio: 1,
         layers: this.createLayers(),
         view: this.v,
         controls: defaultControls({

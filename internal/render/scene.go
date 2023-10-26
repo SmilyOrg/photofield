@@ -90,7 +90,6 @@ type Scene struct {
 type Scales struct {
 	Pixel float64
 	Tile  float64
-	Photo float64
 }
 
 type PhotoRef struct {
@@ -110,9 +109,6 @@ func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *R
 }
 
 func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, source *image.Source) {
-	// scales.Photo = 1 / scales.Pixel
-	scales.Photo = 1
-
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
 		solid.Draw(c, scales)
