@@ -10,8 +10,9 @@
     </p>
     
     <h3>Display Layout</h3>
+    <ui-button @click="recreateEvent.emit()">Refresh all</ui-button>
     <table>
-      <tr class="rel" v-for="scene in scenes" :key="scene.id">
+      <tr class="rel" v-for="scene in scenes" :key="scene.id + ' ' + scene.name">
         <td>
           {{ scene.name }}
         </td>

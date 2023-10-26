@@ -18,6 +18,7 @@ type Render struct {
 	TileSize          int         `json:"tile_size"`
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
 	BackgroundColor   color.Color `json:"background_color"`
+	TransparencyMask  bool        `json:"transparency_mask"`
 	LogDraws          bool
 
 	Sources io.Sources
@@ -34,6 +35,12 @@ type Render struct {
 type Point struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
+}
+
+func (p Point) Distance(other Point) float64 {
+	dx := p.X - other.X
+	dy := p.Y - other.Y
+	return math.Sqrt(dx*dx + dy*dy)
 }
 
 type Region struct {
@@ -55,6 +62,7 @@ type Fonts struct {
 
 type RegionSource interface {
 	GetRegionsFromBounds(Rect, *Scene, RegionConfig) []Region
+	GetRegionsFromImageId(image.ImageId, *Scene, RegionConfig) []Region
 	GetRegionChanFromBounds(Rect, *Scene, RegionConfig) <-chan Region
 	GetRegionById(int, *Scene, RegionConfig) Region
 }
@@ -67,6 +75,8 @@ type Scene struct {
 	Search          string         `json:"search,omitempty"`
 	SearchEmbedding clip.Embedding `json:"-"`
 	Loading         bool           `json:"loading"`
+	LoadCount       int            `json:"load_count,omitempty"`
+	LoadUnit        string         `json:"load_unit,omitempty"`
 	Error           string         `json:"error,omitempty"`
 	Fonts           Fonts          `json:"-"`
 	Bounds          Rect           `json:"bounds"`
@@ -231,7 +241,7 @@ type BitmapAtZoom struct {
 	ZoomDist float64
 }
 
-func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region {
+func (scene *Scene) GetRegions(bounds Rect, limit *int) []Region {
 	query := RegionConfig{
 		Limit: 100,
 	}
@@ -246,6 +256,19 @@ func (scene *Scene) GetRegions(config *Render, bounds Rect, limit *int) []Region
 		scene,
 		query,
 	)
+}
+
+func (scene *Scene) GetRegionsByImageId(id image.ImageId, limit *int) []Region {
+	query := RegionConfig{
+		Limit: 100,
+	}
+	if limit != nil {
+		query.Limit = *limit
+	}
+	if scene.RegionSource == nil {
+		return []Region{}
+	}
+	return scene.RegionSource.GetRegionsFromImageId(id, scene, query)
 }
 
 func (scene *Scene) GetRegionChan(bounds Rect) <-chan Region {

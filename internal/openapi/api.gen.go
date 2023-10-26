@@ -125,6 +125,8 @@ type Scene struct {
 	Error     *string `json:"error,omitempty"`
 	FileCount *int    `json:"file_count,omitempty"`
 	Id        SceneId `json:"id"`
+	LoadCount *int    `json:"load_count,omitempty"`
+	LoadUnit  *string `json:"load_unit,omitempty"`
 
 	// True while the scene is loading and the dimensions are not yet known.
 	Loading *bool `json:"loading,omitempty"`
@@ -239,21 +241,23 @@ type GetScenesSceneIdDatesParams struct {
 
 // GetScenesSceneIdRegionsParams defines parameters for GetScenesSceneIdRegions.
 type GetScenesSceneIdRegionsParams struct {
-	X     float32 `json:"x"`
-	Y     float32 `json:"y"`
-	W     float32 `json:"w"`
-	H     float32 `json:"h"`
-	Limit *int    `json:"limit,omitempty"`
+	FileId *FileId  `json:"file_id,omitempty"`
+	X      *float32 `json:"x,omitempty"`
+	Y      *float32 `json:"y,omitempty"`
+	W      *float32 `json:"w,omitempty"`
+	H      *float32 `json:"h,omitempty"`
+	Limit  *int     `json:"limit,omitempty"`
 }
 
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
 type GetScenesSceneIdTilesParams struct {
-	TileSize        int       `json:"tile_size"`
-	BackgroundColor *string   `json:"background_color,omitempty"`
-	Zoom            int       `json:"zoom"`
-	X               TileCoord `json:"x"`
-	Y               TileCoord `json:"y"`
-	Sources         *[]string `json:"sources,omitempty"`
+	TileSize         int       `json:"tile_size"`
+	BackgroundColor  *string   `json:"background_color,omitempty"`
+	TransparencyMask *bool     `json:"transparency_mask,omitempty"`
+	Zoom             int       `json:"zoom"`
+	X                TileCoord `json:"x"`
+	Y                TileCoord `json:"y"`
+	Sources          *[]string `json:"sources,omitempty"`
 
 	// Show images with this tag as selected.
 	SelectTag       *string `json:"select_tag,omitempty"`
@@ -729,57 +733,56 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdRegions(w http.ResponseWriter
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetScenesSceneIdRegionsParams
 
-	// ------------- Required query parameter "x" -------------
-	if paramValue := r.URL.Query().Get("x"); paramValue != "" {
+	// ------------- Optional query parameter "file_id" -------------
+	if paramValue := r.URL.Query().Get("file_id"); paramValue != "" {
 
-	} else {
-		http.Error(w, "Query argument x is required, but not found", http.StatusBadRequest)
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "file_id", r.URL.Query(), &params.FileId)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter file_id: %s", err), http.StatusBadRequest)
 		return
 	}
 
-	err = runtime.BindQueryParameter("form", true, true, "x", r.URL.Query(), &params.X)
+	// ------------- Optional query parameter "x" -------------
+	if paramValue := r.URL.Query().Get("x"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "x", r.URL.Query(), &params.X)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter x: %s", err), http.StatusBadRequest)
 		return
 	}
 
-	// ------------- Required query parameter "y" -------------
+	// ------------- Optional query parameter "y" -------------
 	if paramValue := r.URL.Query().Get("y"); paramValue != "" {
 
-	} else {
-		http.Error(w, "Query argument y is required, but not found", http.StatusBadRequest)
-		return
 	}
 
-	err = runtime.BindQueryParameter("form", true, true, "y", r.URL.Query(), &params.Y)
+	err = runtime.BindQueryParameter("form", true, false, "y", r.URL.Query(), &params.Y)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter y: %s", err), http.StatusBadRequest)
 		return
 	}
 
-	// ------------- Required query parameter "w" -------------
+	// ------------- Optional query parameter "w" -------------
 	if paramValue := r.URL.Query().Get("w"); paramValue != "" {
 
-	} else {
-		http.Error(w, "Query argument w is required, but not found", http.StatusBadRequest)
-		return
 	}
 
-	err = runtime.BindQueryParameter("form", true, true, "w", r.URL.Query(), &params.W)
+	err = runtime.BindQueryParameter("form", true, false, "w", r.URL.Query(), &params.W)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter w: %s", err), http.StatusBadRequest)
 		return
 	}
 
-	// ------------- Required query parameter "h" -------------
+	// ------------- Optional query parameter "h" -------------
 	if paramValue := r.URL.Query().Get("h"); paramValue != "" {
 
-	} else {
-		http.Error(w, "Query argument h is required, but not found", http.StatusBadRequest)
-		return
 	}
 
-	err = runtime.BindQueryParameter("form", true, true, "h", r.URL.Query(), &params.H)
+	err = runtime.BindQueryParameter("form", true, false, "h", r.URL.Query(), &params.H)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter h: %s", err), http.StatusBadRequest)
 		return
@@ -882,6 +885,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, false, "background_color", r.URL.Query(), &params.BackgroundColor)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter background_color: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "transparency_mask" -------------
+	if paramValue := r.URL.Query().Get("transparency_mask"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "transparency_mask", r.URL.Query(), &params.TransparencyMask)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter transparency_mask: %s", err), http.StatusBadRequest)
 		return
 	}
 

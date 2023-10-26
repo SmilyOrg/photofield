@@ -1,6 +1,6 @@
 module photofield
 
-go 1.20
+go 1.21
 
 require (
 	github.com/EdlinOrg/prominentcolor v1.0.0
@@ -36,8 +36,9 @@ require (
 	github.com/smilyorg/tinygpkg v0.2.0
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	github.com/x448/float16 v0.8.4
+	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52
-	golang.org/x/sync v0.1.0
+	golang.org/x/sync v0.4.0
 	modernc.org/sqlite v1.21.1
 	zombiezen.com/go/sqlite v0.13.0
 )
@@ -81,10 +82,10 @@ require (
 	github.com/tdewolff/parse/v2 v2.4.2 // indirect
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/mod v0.4.2 // indirect
-	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/mod v0.13.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/tools v0.1.2 // indirect
+	golang.org/x/tools v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect

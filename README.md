@@ -82,6 +82,7 @@ layouts.
   * **Album:** chronological photos grouped by event
   * **Timeline:** reverse-chronological timeline similar to Google Photos
   * **Wall:** a square collage of all the photos, because zooming is fun!
+  * **Map:** all the photos on a map? Sure!
   * [More future ideas?](https://github.com/SmilyOrg/photofield/issues/1)
 * **Semantic search using [photofield-ai] (alpha)**. If you set up an AI server
   and configure it in the `ai` section of the [configuration], you should be

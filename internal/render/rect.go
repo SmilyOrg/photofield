@@ -30,6 +30,13 @@ func (rect Rect) Move(offset Point) Rect {
 	return rect
 }
 
+func (rect Rect) Intersects(other Rect) bool {
+	return rect.X <= other.X+other.W &&
+		rect.Y <= other.Y+other.H &&
+		rect.X+rect.W >= other.X &&
+		rect.Y+rect.H >= other.Y
+}
+
 func (rect Rect) ScalePoint(scale Point) Rect {
 	rect.X *= scale.X
 	rect.W *= scale.X
@@ -39,9 +46,7 @@ func (rect Rect) ScalePoint(scale Point) Rect {
 }
 
 func (rect Rect) Scale(scale float64) Rect {
-	rect.X *= scale
 	rect.W *= scale
-	rect.Y *= scale
 	rect.H *= scale
 	return rect
 }

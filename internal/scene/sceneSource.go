@@ -140,6 +140,8 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				layout.LayoutSquare(&scene, imageSource)
 			case layout.Wall:
 				layout.LayoutWall(infos, config.Layout, &scene, imageSource)
+			case layout.Map:
+				layout.LayoutMap(infos, config.Layout, &scene, imageSource)
 			case layout.Strip:
 				layout.LayoutStrip(infos, config.Layout, &scene, imageSource)
 			default:

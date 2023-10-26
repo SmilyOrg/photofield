@@ -1,7 +1,26 @@
 <template>
   <div class="collection">
 
+    <map-viewer
+      v-if="layout == 'MAP'"
+      ref="mapViewer"
+      :interactive="true"
+      :collectionId="collectionId"
+      :layout="layout"
+      :sort="sort"
+      :imageHeight="imageHeight"
+      :search="search"
+      :debug="debug"
+      :selectTagId="selectTagId"
+      @selectTagId="onSelectTagId"
+      @region="onMapRegion"
+      @scene="mapScene = $event"
+      @search="onSearch"
+    >
+    </map-viewer>
+
     <scroll-viewer
+      v-else
       ref="scrollViewer"
       :interactive="!stripVisible"
       :collectionId="collectionId"
@@ -42,12 +61,13 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, toRefs, watch, watchEffect } from 'vue';
+import { computed, nextTick, ref, toRefs, watch } from 'vue';
 import { timeout, useTask } from 'vue-concurrency';
 import { useRoute, useRouter } from 'vue-router';
 
 import StripViewer from './StripViewer.vue';
 import ScrollViewer from './ScrollViewer.vue';
+import MapViewer from './MapViewer.vue';
 import { useApi } from '../api';
 
 const props = defineProps([
@@ -86,12 +106,17 @@ const lastRegionId = ref(null);
 const transitionRegionId = ref(null);
 
 const scrollScene = ref(null);
+const mapScene = ref(null);
 const stripScene = ref(null);
 const scenes = computed(() => {
   const scenes = [];
   if (scrollScene.value) scenes.push({
     name: "Scroll",
     ...scrollScene.value
+  });
+  if (mapScene.value) scenes.push({
+    name: "Map",
+    ...stripScene.value
   });
   if (stripScene.value) scenes.push({
     name: "Strip",
@@ -206,16 +231,34 @@ const showRegion = useTask(function*(_, regionId) {
   }
 }).restartable();
 
+function showRegionImmediate(regionId) {
+  transitionRegionId.value = null;
+  stripViewer.value?.resetZoom();
+  if (regionId) {
+    stripVisible.value = true;
+  } else {
+    stripVisible.value = false;
+  }
+}
+
 watch(regionId, (newRegionId, oldRegionId) => {
   lastRegionId.value = oldRegionId;
   const showStrip = newRegionId !== undefined;
   emit("immersive", showStrip);
-  showRegion.perform(newRegionId);
+  if (layout.value === 'MAP') {
+    showRegionImmediate(newRegionId);
+  } else {
+    showRegion.perform(newRegionId);
+  }
 }, { immediate: true });
 
 const onStripRegion = async region => {
   if (!region) return;
-  showRegion.perform(region.id);
+  if (layout.value === 'MAP') {
+    showRegionImmediate(region.id);
+  } else {
+    showRegion.perform(region.id);
+  }
   lastStripRegion.value = region;
 }
 
@@ -226,6 +269,22 @@ const onScrollRegion = async (region) => {
     params: {
       collectionId: collectionId.value,
       regionId: region?.id,
+    },
+    query: route.query,
+  });
+}
+
+const onMapRegion = async (region) => {
+  const stripRegion = await stripViewer.value?.getRegionIdFromFileId(region?.data?.id);
+  if (!stripRegion) {
+    console.error("No strip region found for", region);
+    return;
+  }
+  router.push({
+    name: "region",
+    params: {
+      collectionId: collectionId.value,
+      regionId: stripRegion?.id,
     },
     query: route.query,
   });

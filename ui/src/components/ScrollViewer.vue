@@ -11,8 +11,8 @@
       :debug="debug"
       :tileSize="512"
       :interactive="interactive"
-      :pan="!nativeScroll"
-      :zoom="!nativeScroll"
+      :pannable="!nativeScroll"
+      :zoomable="!nativeScroll"
       :zoom-transition="true"
       :viewport="viewport"
       @click="onClick"
@@ -27,7 +27,7 @@
     <Spinner
       class="spinner"
       :total="scene?.file_count"
-      :speed="filesPerSecond"
+      :speed="loadSpeed"
       :divider="10000"
       :loading="scene?.loading"
     ></Spinner>
@@ -119,7 +119,7 @@ const viewport = useViewport(viewer);
 const nativeScroll = ref(true);
 const lastView = ref(null);
 
-const { scene, recreate: recreateScene, filesPerSecond } = useScene({
+const { scene, recreate: recreateScene, loadSpeed } = useScene({
   layout,
   sort,
   collectionId,
@@ -127,6 +127,8 @@ const { scene, recreate: recreateScene, filesPerSecond } = useScene({
   viewport,
   search,
 });
+
+
 watch(scene, async (newScene, oldScene) => {
   if (newScene?.search != oldScene?.search) {
     scrollToPixels(0);

@@ -21,6 +21,7 @@ const (
 	Timeline Type = "TIMELINE"
 	Square   Type = "SQUARE"
 	Wall     Type = "WALL"
+	Map      Type = "MAP"
 	Search   Type = "SEARCH"
 	Strip    Type = "STRIP"
 )
@@ -183,6 +184,29 @@ func (regionSource PhotoRegionSource) GetRegionsFromBounds(rect render.Rect, sce
 			photo.Photo,
 			scene, regionConfig,
 		))
+	}
+	return regions
+}
+
+func (regionSource PhotoRegionSource) GetRegionsFromImageId(id image.ImageId, scene *render.Scene, regionConfig render.RegionConfig) []render.Region {
+	regions := make([]render.Region, 0)
+	max := regionConfig.Limit
+	if max == 0 {
+		max = len(scene.Photos)
+	}
+	for i := range scene.Photos {
+		photo := &scene.Photos[i]
+		if photo.Id != id {
+			continue
+		}
+		regions = append(regions, regionSource.getRegionFromPhoto(
+			1+i,
+			photo,
+			scene, regionConfig,
+		))
+		if len(regions) >= max {
+			break
+		}
 	}
 	return regions
 }

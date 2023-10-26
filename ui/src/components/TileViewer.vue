@@ -18,10 +18,12 @@
 <script>
 import Map from 'ol/Map';
 import XYZ from 'ol/source/XYZ';
+import OSM from 'ol/source/OSM';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
+import { defaults as defaultControls } from 'ol/control';
 import {MAC} from 'ol/src/has.js';
 import equal from 'fast-deep-equal';
 
@@ -30,6 +32,7 @@ import PhotoSkeleton from './PhotoSkeleton.vue';
 import "ol/ol.css";
 import { getTileUrl } from '../api';
 import Kinetic from 'ol/Kinetic';
+import { toLonLat, get as getProjection, fromLonLat } from 'ol/proj';
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
   const originalEvent = /** @type {KeyboardEvent|MouseEvent|TouchEvent} */ (
@@ -52,8 +55,8 @@ export default {
     api: String,
     scene: Object,
     interactive: Boolean,
-    pan: Boolean,
-    zoom: Boolean,
+    pannable: Boolean,
+    zoomable: Boolean,
     zoomTransition: Boolean,
     kinetic: Boolean,
     tileSize: Number,
@@ -62,6 +65,8 @@ export default {
     selectTagId: String,
     debug: Object,
     loading: Boolean,
+    geo: Boolean,
+    geoview: Array,
     viewport: Object,
   },
 
@@ -70,6 +75,7 @@ export default {
     "click",
     "pointer-down",
     "view",
+    "geoview",
     "move-end",
     "reset",
     "load-end",
@@ -94,13 +100,18 @@ export default {
 
     scene(newScene, oldScene) {
       if (
-        newScene?.id == oldScene?.id &&
-        newScene.bounds.w == oldScene.bounds.w &&
-        newScene.bounds.h == oldScene.bounds.h
+        newScene?.id != oldScene?.id ||
+        newScene.bounds.w != oldScene.bounds.w ||
+        newScene.bounds.h != oldScene.bounds.h
       ) {
+        if (newScene?.loading) return;
+        this.reset();
         return;
       }
-      this.reset();
+      if (oldScene?.loading && !newScene?.loading) {
+        this.reload();
+        return;
+      }
     },
 
     tileSize() {
@@ -111,7 +122,7 @@ export default {
       deep: true,
       handler(newValue, oldValue) {
         if (equal(newValue, oldValue)) return;
-        this.reload();
+        this.reloadMain();
       },
     },
 
@@ -119,17 +130,36 @@ export default {
       this.setInteractive(interactive);
     },
 
-    pan: {
+    pannable: {
       immediate: true,
       handler(newValue) {
         this.dragPan?.setActive(newValue);
       }
     },
 
-    zoom: {
+    zoomable: {
       immediate: true,
       handler(newValue) {
         this.mouseWheelZoom?.setActive(newValue);
+      }
+    },
+
+    geoview: {
+      immediate: true,
+      handler(geoview) {
+        if (!geoview) return;
+        if (
+          this.lastGeoview &&
+          Math.abs(geoview[0] - this.lastGeoview[0]) < 1e-4 &&
+          Math.abs(geoview[1] - this.lastGeoview[1]) < 1e-4 &&
+          Math.abs(geoview[2] - this.lastGeoview[2]) < 1e-1
+        ) {
+          // Geoview is already close enough, nothing to do.
+          // This usually happens after the geoview is applied
+          // to the url and then the url is read back.
+          return;
+        }
+        this.setGeoview(geoview);
       }
     },
 
@@ -204,46 +234,102 @@ export default {
       return zoom;
     },
 
-    createSource() {
-      return new XYZ({
-        tileUrlFunction: this.tileUrlFunction,
-        crossOrigin: "Anonymous",
-        projection: this.projection,
-        tileSize: [this.tileSize, this.tileSize],
-        wrapX: false,
-        // zDirection: -1,
-        // zDi
-        // imageSmoothing: false,
-        // interpolate: false,
-        opaque: true,
-        transition: 100,
-        // transition: 0,
+    createMainLayer() {
+      const main = new TileLayer({
+        properties: {
+          main: true,
+        },
+        preload: this.geo ? 2 : Infinity,
+        source: new XYZ({
+          tileUrlFunction: this.tileUrlFunction,
+          crossOrigin: "Anonymous",
+          projection: this.projection,
+          tileSize: [this.tileSize, this.tileSize],
+          opaque: false,
+          transition: 100,
+        }),
       });
+      
+      if (this.geo) {
+        main.on("prerender", event => {
+          const ctx = event.context;
+          // Fill in the transparent holes with the photos
+          ctx.globalCompositeOperation = "destination-over";
+        });
+        
+        main.on("postrender", event => {
+          const ctx = event.context;
+          // Restore the default
+          ctx.globalCompositeOperation = "source-over";
+        });
+      }
+      
+      return main;
     },
 
-    createLayer(source) {
-      return new TileLayer({
-        preload: Infinity,
-        source,
-      });
+    createLayers() {
+
+      const main = this.createMainLayer();
+
+      if (this.geo) {
+
+        const mask = new TileLayer({
+          preload: 2,
+          source: new XYZ({
+            tileUrlFunction: this.maskUrlFunction,
+            crossOrigin: "Anonymous",
+            projection: this.projection,
+            tileSize: [this.tileSize, this.tileSize],
+            opaque: false,
+            transition: 0,
+          }),
+        });
+
+        const osmLayer = new TileLayer({
+          preload: 2,
+          source: new OSM({
+            attributions: [
+              'Background from <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+            ],
+          }),
+        });
+
+        mask.on("prerender", event => {
+          const ctx = event.context;
+          // Cut out transparent holes out of the rendered map
+          // using the mask
+          ctx.globalCompositeOperation = "destination-out";
+        });
+
+        mask.on("postrender", event => {
+          const ctx = event.context;
+          // Restore the default
+          ctx.globalCompositeOperation = "source-over";
+        });
+
+        return [
+          osmLayer,
+          mask,
+          main,
+        ]
+      } else {
+        return [
+          main,
+        ];
+      }
     },
 
     initOpenLayers(element) {
 
-      const extent = this.projectionExtent;
-
-      const projection = new Projection({
-        code: "tiles",
-        units: "pixels",
-        extent,
-      });
-      this.projection = projection;
-
-      const source = this.createSource();
-      this.source = source;
-
-      const layer = this.createLayer(source);
-      this.layer = layer;
+      if (this.geo) {
+        this.projection = getProjection("EPSG:3857");
+      } else {
+        this.projection = new Projection({
+          code: "tiles",
+          units: "pixels",
+          extent: this.projectionExtent,
+        });
+      }
 
       // Limit minimum size loaded to avoid
       // loading tiled images with very little content
@@ -277,18 +363,27 @@ export default {
       ]);
       this.interactions = interactions;
       this.dragPan = dragPan;
-      this.dragPan.setActive(this.pan);
+      this.dragPan.setActive(this.pannable);
 
       this.mouseWheelZoom = mouseWheelZoom;
-      this.mouseWheelZoom.setActive(this.zoom);
+      this.mouseWheelZoom.setActive(this.zoomable);
 
-      this.map = new Map({
-        target: element,
-        // pixelRatio: 1,
-        layers: [layer],
-        view: new View({
+      if (this.geo) {
+        this.v = new View({
+          projection: this.projection,
+          center: this.pendingGeoview ?
+            this.geoviewToCenter(this.pendingGeoview) :
+            [0, 0],
+          zoom: this.pendingGeoview ?
+            this.geoviewToZoom(this.pendingGeoview) :
+            2,
+          enableRotation: false,
+        });
+      } else {
+        const extent = this.projectionExtent;
+        this.v = new View({
           center: [extent[2]/2, extent[3]],
-          projection,
+          projection: this.projection,
           zoom: 0,
           minZoom: 0,
           maxZoom: this.maxZoom,
@@ -296,20 +391,28 @@ export default {
           extent,
           smoothExtentConstraint: false,
           showFullExtent: true,
+        });
+      }
+
+      this.map = new Map({
+        target: element,
+        layers: this.createLayers(),
+        view: this.v,
+        controls: defaultControls({
+          attribution: true,
+          rotate: false,
+          zoom: false,
         }),
-        controls: [],
         interactions,
         moveTolerance: 4,
       });
+
       this.map.on("click", event => this.onClick(event));
       this.map.on("movestart", event => this.onMoveStart(event));
       this.map.on("moveend", event => this.onMoveEnd(event));
       this.map.on("loadend", event => this.onLoadEnd(event));
-      
-      this.v = this.map.getView();
 
       this.v.setMinZoom(this.minViewportZoom);
-
       this.v.on('change:center', this.onCenterChange);
       this.v.on('change:resolution', this.onResolutionChange);
 
@@ -324,7 +427,6 @@ export default {
 
       this.setKinetic(this.kinetic);
       this.$emit("viewer", this.map);
-
     },
 
     setInteractive(interactive) {
@@ -346,7 +448,7 @@ export default {
         kinetic: this.dragPanKinetic,
       });
       this.interactions.push(this.dragPan);
-      this.dragPan.setActive(this.pan);
+      this.dragPan.setActive(this.pannable);
     },
 
     onClick(event) {
@@ -363,7 +465,7 @@ export default {
       this.moveStartEvent = event;
     },
 
-    onMoveEnd(event) {
+    onMoveEnd() {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
@@ -374,20 +476,30 @@ export default {
       this.$emit("load-end");
     },
 
-    onCenterChange(event) {
+    onCenterChange() {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
       this.latestView = view;
       this.$emit("view", view);
+      if (this.geo) {
+        const geoview = this.getGeoview();
+        this.lastGeoview = geoview;
+        this.$emit("geoview", geoview);
+      }
     },
 
-    onResolutionChange(event) {
+    onResolutionChange() {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
       this.latestView = view;
       this.$emit("view", view);
+      if (this.geo) {
+        const geoview = this.getGeoview();
+        this.lastGeoview = geoview;
+        this.$emit("geoview", geoview);
+      }
     },
 
     onBoxSelect(event, extent) {
@@ -408,23 +520,39 @@ export default {
     },
 
     reload() {
-      const oldLayer = this.layer;
-      const oldSource = this.source;
-      const newSource = this.createSource();
-      this.source = newSource;
-      const newLayer = this.createLayer(newSource);
-      this.layer = newLayer;
+      const oldLayers = this.map.getLayers().getArray().slice();
+      const newLayers = this.createLayers();
       const cleanup = () => {
-        this.map.removeLayer(oldLayer);
-        oldSource.dispose();
-        oldLayer.dispose();
+        for (const old of oldLayers) {
+          this.map.removeLayer(old);
+          old?.getSource()?.dispose();
+          old?.dispose();
+        }
         this.map.un("loadend", cleanup);
       };
       this.map.on("loadend", cleanup);
-      this.map.addLayer(newLayer);
+      for (const newLayer of newLayers) {
+        this.map.addLayer(newLayer);
+      }
     },
 
-    tileUrlFunction([z, x, y], pixelRatio, proj) {
+    reloadMain() {
+      const oldLayers = this.map.getLayers();
+      const oldMain = oldLayers.getArray().find(l => l.get("main"));
+      const newMain = this.createMainLayer();
+      const cleanup = () => {
+        if (oldMain) {
+          this.map.removeLayer(oldMain);
+          oldMain?.getSource()?.dispose();
+          oldMain?.dispose();
+        }
+        this.map.un("loadend", cleanup);
+      };
+      this.map.on("loadend", cleanup);
+      this.map.addLayer(newMain);
+    },
+
+    tileUrlFunction([z, x, y]) {
       if (!this.scene) return;
       const extra = {
         ...this.debug,
@@ -438,6 +566,19 @@ export default {
         this.tileSize,
         this.backgroundColor,
         extra,
+      );
+    },
+
+    maskUrlFunction([z, x, y]) {
+      if (!this.scene) return;
+      return getTileUrl(
+        this.scene.id,
+        z, x, y,
+        this.tileSize,
+        null,
+        {
+          transparency_mask: true,
+        },
       );
     },
 
@@ -503,20 +644,40 @@ export default {
     viewFromCoordinate(coord) {
       if (!this.scene) return null;
       const fullExtent = this.projection.getExtent();
-      const fw = fullExtent[2] - fullExtent[0];
-      const fh = fullExtent[3] - fullExtent[1];
-      const sx = this.scene.bounds.w / fw;
-      const sy = this.scene.bounds.h / fh;
-      const tx = coord[0];
-      const ty = coord[1];
+      const [xa, ya, xb, yb] = fullExtent;
       return {
-        x: tx * sx,
-        y: (fh-ty)*sy,
+        x: (coord[0] - xa) / (xb - xa) * this.scene.bounds.w,
+        y: (yb - coord[1]) / (yb - ya) * this.scene.bounds.h,
       }
     },
 
     setPendingAnimationTime(t) {
       this.pendingAnimationTime = t;
+    },
+
+    getGeoview() {
+      const center = toLonLat(this.v.getCenter());
+      const zoom = this.v.getZoom();
+      return [center[0], center[1], zoom];
+    },
+
+    setGeoview(geoview) {
+      this.lastGeoview = geoview;
+      if (!this.map) {
+        console.info("Map not initialized yet, setting pending geoview", geoview);
+        this.pendingGeoview = geoview;
+        return;
+      }
+      this.v.setCenter(this.geoviewToCenter(geoview));
+      this.v.setZoom(this.geoviewToZoom(geoview));
+    },
+
+    geoviewToCenter(geoview) {
+      return fromLonLat(geoview.slice(0, 2));
+    },
+
+    geoviewToZoom(geoview) {
+      return geoview[2];
     },
 
     setView(view, options) {

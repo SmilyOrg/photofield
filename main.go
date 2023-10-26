@@ -98,6 +98,12 @@ var defaultSceneConfig scene.SceneConfig
 var tileRequestConfig TileRequestConfig
 
 var tilePools sync.Map
+
+type TilePool struct {
+	TileSize int
+	Mask     bool
+}
+
 var imageSource *image.Source
 var sceneSource *scene.SceneSource
 var collections []collection.Collection
@@ -224,27 +230,44 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 }
 
 func getTilePool(config *render.Render) *sync.Pool {
-	stored, ok := tilePools.Load(config.TileSize)
+	p := TilePool{
+		TileSize: config.TileSize,
+		Mask:     config.TransparencyMask,
+	}
+	stored, ok := tilePools.Load(p)
 	if ok {
 		return stored.(*sync.Pool)
 	}
-	pool := sync.Pool{
-		New: func() interface{} {
-			return goimage.NewRGBA(goimage.Rect(0, 0, config.TileSize, config.TileSize))
-		},
+	pool := sync.Pool{}
+	if p.Mask {
+		pool.New = func() interface{} {
+			return goimage.NewPaletted(
+				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+				color.Palette{
+					color.RGBA{0x00, 0x00, 0x00, 0x00},
+					color.RGBA{0xFF, 0xFF, 0xFF, 0xFF},
+				},
+			)
+		}
+	} else {
+		pool.New = func() interface{} {
+			return goimage.NewRGBA(
+				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+			)
+		}
 	}
-	stored, _ = tilePools.LoadOrStore(config.TileSize, &pool)
+	stored, _ = tilePools.LoadOrStore(p, &pool)
 	return stored.(*sync.Pool)
 }
 
-func getTileImage(config *render.Render) (*goimage.RGBA, *canvas.Context) {
+func getTileImage(config *render.Render) (draw.Image, *canvas.Context) {
 	pool := getTilePool(config)
-	img := pool.Get().(*goimage.RGBA)
+	img := pool.Get().(draw.Image)
 	renderer := rasterizer.New(img, 1.0)
 	return img, canvas.NewContext(renderer)
 }
 
-func putTileImage(config *render.Render, img *goimage.RGBA) {
+func putTileImage(config *render.Render, img draw.Image) {
 	pool := getTilePool(config)
 	pool.Put(img)
 }
@@ -671,6 +694,8 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		return
 	}
 
+	incomplete := scene.Loading
+
 	rn := defaultSceneConfig.Render
 	rn.TileSize = params.TileSize
 	if params.Sources != nil {
@@ -732,14 +757,32 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 			B: c[2],
 		}
 	}
+	if params.TransparencyMask != nil {
+		rn.TransparencyMask = *params.TransparencyMask
+	}
+	if rn.TransparencyMask {
+		rn.BackgroundColor = color.Transparent
+	}
 
 	img, context := getTileImage(&rn)
 	defer putTileImage(&rn, img)
+
 	rn.CanvasImage = img
 	rn.Zoom = zoom
 	drawTile(context, &rn, scene, zoom, x, y)
 
-	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+	if incomplete {
+		w.Header().Add("Cache-Control", "no-cache")
+	} else {
+		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+	}
+
+	if params.TransparencyMask != nil {
+		w.Header().Add("Content-Type", "image/png")
+		png.Encode(w, img)
+		return
+	}
+	w.Header().Add("Content-Type", "image/jpeg")
 	codec.EncodeJpeg(w, img)
 }
 
@@ -777,14 +820,29 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 		return
 	}
 
-	bounds := render.Rect{
-		X: float64(params.X),
-		Y: float64(params.Y),
-		W: float64(params.W),
-		H: float64(params.H),
-	}
+	var regions []render.Region
 
-	regions := scene.GetRegions(&defaultSceneConfig.Render, bounds, params.Limit)
+	if params.FileId != nil {
+		if params.X != nil || params.Y != nil || params.W != nil || params.H != nil {
+			problem(w, r, http.StatusBadRequest, "file_id and bounds are mutually exclusive")
+			return
+		}
+		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), params.Limit)
+	} else {
+		if params.X == nil || params.Y == nil || params.W == nil || params.H == nil {
+			problem(w, r, http.StatusBadRequest, "bounds or file_id required")
+			return
+		}
+
+		bounds := render.Rect{
+			X: float64(*params.X),
+			Y: float64(*params.Y),
+			W: float64(*params.W),
+			H: float64(*params.H),
+		}
+
+		regions = scene.GetRegions(bounds, params.Limit)
+	}
 
 	respond(w, r, http.StatusOK, struct {
 		Items []render.Region `json:"items"`
@@ -1078,7 +1136,9 @@ func addExampleScene() {
 	sceneConfig.Layout.ViewportWidth = 1920
 	sceneConfig.Layout.ViewportHeight = 1080
 	sceneConfig.Layout.ImageHeight = 300
-	sceneConfig.Collection = *getCollectionById("vacation-photos")
+	sceneConfig.Layout.Type = layout.Map
+	sceneConfig.Layout.Order = layout.DateAsc
+	sceneConfig.Collection = *getCollectionById("geo")
 	sceneSource.Add(sceneConfig, imageSource)
 }
 

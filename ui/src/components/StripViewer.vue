@@ -19,8 +19,8 @@
       :scene="scene"
       :view="view"
       :viewport="viewport"
-      :pan="true"
-      :zoom="true"
+      :pannable="true"
+      :zoomable="true"
       :debug="debug"
       :kinetic="true"
       :tileSize="512"
@@ -75,7 +75,7 @@
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus, useMousePressed, useNow, useRefHistory } from '@vueuse/core';
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { useApi, useScene, getCenterRegion, postTagFiles } from '../api';
+import { useApi, useScene, getCenterRegion, postTagFiles, getRegionsWithFileId } from '../api';
 import { useSeekableRegion, useViewport, useViewDelta, useContextMenu } from '../use.js';
 import { viewCenterSquared } from '../utils.js';
 import Controls from './Controls.vue';
@@ -376,16 +376,29 @@ const zoomInFromView = async (view) => {
   zoomReset.value = true;
   screenView.value = view;
   await nextTick();
-  zoomReset.value = false;
-  screenView.value = null;
+  resetZoom();
 }
 
 const zoomOutFromView = async (view) => {
   screenView.value = view;
 }
 
+const resetZoom = () => {
+  zoomReset.value = false;
+  screenView.value = false;
+}
+
 const getCanvas = () => {
   return viewer.value?.$el?.querySelector("canvas");
+}
+
+const getRegionIdFromFileId = async id => {
+  if (!scene.value) return null;
+  const regions = await getRegionsWithFileId(scene.value.id, id);
+  if (regions.length > 0) {
+    return regions[0];
+  }
+  return null;
 }
 
 const focus = () => {
@@ -396,7 +409,9 @@ defineExpose({
   getCanvas,
   zoomInFromView,
   zoomOutFromView,
+  resetZoom,
   focus,
+  getRegionIdFromFileId,
 })
 
 </script>
