@@ -9,6 +9,9 @@ build *args:
 build-ui:
   cd ui && npm run build
 
+build-docs:
+  cd ui && npm run docs:build
+
 build-local:
   goreleaser build --snapshot --single-target --clean
 
@@ -28,9 +31,13 @@ release-local:
 run *args: build
   ./photofield {{args}}
 
-run-static *args:
-  go build -tags embedstatic
-  ./photofield {{args}}
+run-embed *args:
+  go build -tags embedui,embeddocs
+  PHOTOFIELD_API_PREFIX="/api" ./photofield {{args}}
+
+run-ui *args:
+  go build -tags embedui
+  PHOTOFIELD_API_PREFIX="/api" ./photofield {{args}}
 
 run-geo *args:
   go build -tags embedgeo

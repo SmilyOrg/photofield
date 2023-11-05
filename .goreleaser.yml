@@ -5,7 +5,7 @@ before:
   hooks:
     - go mod tidy
     - go generate -x
-    - sh -c "cd ui && npm install && npm run build"
+    - sh -c "cd ui && npm install && npm run build && npm run docs:build"
 builds:
   - env:
       - CGO_ENABLED=0
@@ -18,7 +18,8 @@ builds:
       - goos: windows
         goarch: "386"
     tags:
-      - embedstatic
+      - embedui
+      - embeddocs
       - embedgeo
 dockers:
   - dockerfile: Dockerfile-goreleaser

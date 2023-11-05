@@ -671,10 +671,13 @@ components:
       required:
         - search
         - tags
+        - docs
       properties:
         search:
           $ref: "#/components/schemas/Capability"
         tags:
+          $ref: "#/components/schemas/Capability"
+        docs:
           $ref: "#/components/schemas/Capability"
           
     Capability:

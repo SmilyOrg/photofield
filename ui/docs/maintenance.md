@@ -12,7 +12,7 @@ leftover data from database upgrades was cleaned up.
 
 ## How to Vacuum
 
-1. Shutdown the server
+1. Shut down the server
 2. Run the following command
     ::: code-group
     ```sh [CLI]

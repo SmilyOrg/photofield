@@ -4,17 +4,12 @@
   --vp-c-brand-3: #be6868;
 }
 
-.VPFeature .title img.bleed {
+.VPFeature article > img {
   margin-left: -24px;
   margin-top: -24px;
   margin-bottom: 24px;
+  width: calc(100% + 48px);
   max-width: calc(100% + 48px);
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
-}
-
-@media (max-width: 768px) {
-  .VPFeature .title img.bleed {
-    width: 100vw;
-  }
 }

@@ -13,7 +13,7 @@
 * Right-click or long-tap as usual to open a custom context menu allowing you to
   copy or download original photos or thumbnails.
   
-  ![context menu](assets/context-menu.png)
+  ![context menu](assets/context-menu.jpeg)
   
   _You can open/copy/copy link the original or access any existing thumbnails
   that already exist for it with the bottom list of thumbnails by pixel width._

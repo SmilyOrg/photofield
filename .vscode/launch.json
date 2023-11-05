@@ -17,7 +17,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "buildFlags": "-tags embedstatic"
+      "buildFlags": "-tags embedui"
     }
   ]
 }
