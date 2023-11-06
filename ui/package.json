@@ -4,7 +4,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@fontsource/roboto": "^4.5.7",
@@ -24,7 +27,7 @@
     "qs": "^6.11.0",
     "swrv": "^1.0.0-beta.8",
     "throttle-debounce": "^5.0.0",
-    "vue": "3.2.37",
+    "vue": "3.3.7",
     "vue-concurrency": "^4.0.1",
     "vue-multiselect": "^3.0.0-beta.1",
     "vue-router": "^4.1.5"
@@ -34,6 +37,7 @@
     "eslint-plugin-vue": "^9.2.0",
     "rollup-plugin-visualizer": "^5.6.0",
     "vite": "^2.9.14",
-    "vite-plugin-compression": "^0.5.1"
+    "vite-plugin-compression": "^0.5.1",
+    "vitepress": "^1.0.0-rc.24"
   }
 }

@@ -1,5 +1,5 @@
-//go:build !embedstatic
-// +build !embedstatic
+//go:build !embedui
+// +build !embedui
 
 package main
 

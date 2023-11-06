@@ -643,12 +643,22 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
+	docsUrl := os.Getenv("PHOTOFIELD_DOCS_URL")
+	if docsUrl == "" {
+		docsUrl = "/docs/usage"
+	}
 	respond(w, r, http.StatusOK, openapi.Capabilities{
 		Search: openapi.Capability{
 			Supported: imageSource.AI.Available(),
 		},
 		Tags: openapi.Capability{
 			Supported: tagsEnabled,
+		},
+		Docs: openapi.DocsCapability{
+			Capability: openapi.Capability{
+				Supported: docsUrl != "",
+			},
+			Url: docsUrl,
 		},
 	})
 }
@@ -1449,21 +1459,34 @@ func main() {
 		mime.AddExtensionType(".jpg", "image/jpg")
 		mime.AddExtensionType(".jpeg", "image/jpeg")
 		mime.AddExtensionType(".ico", "image/vnd.microsoft.icon")
-		subfs, err := fs.Sub(StaticFs, "ui/dist")
+
+		uifs, err := fs.Sub(StaticFs, "ui/dist")
 		if err != nil {
 			panic(err)
 		}
-
-		sfs := spaFs{
-			root: http.FS(subfs),
-		}
-
-		server := gzipped.FileServer(sfs)
+		uihandler := gzipped.FileServer(
+			spaFs{
+				root: http.FS(uifs),
+			},
+		)
 
 		r.Route("/", func(r chi.Router) {
 			r.Use(CacheControl())
 			r.Use(IndexHTML())
-			r.Handle("/*", server)
+			if StaticDocsPath != "" {
+				docfs, err := fs.Sub(StaticDocsFs, StaticDocsPath)
+				if err != nil {
+					panic(err)
+				}
+				dochandler := gzipped.FileServer(http.FS(docfs))
+				r.HandleFunc("/docs/*", func(w http.ResponseWriter, r *http.Request) {
+					if ext := path.Ext(r.URL.Path); ext == "" {
+						r.URL.Path += ".html"
+					}
+					http.StripPrefix("/docs", dochandler).ServeHTTP(w, r)
+				})
+			}
+			r.Handle("/*", uihandler)
 		})
 		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
 	}

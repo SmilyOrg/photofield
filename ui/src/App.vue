@@ -83,6 +83,17 @@
           @click="settingsExpanded = !settingsExpanded"
         >
         </ui-icon-button>
+        <a
+          v-if="!collection && capabilities?.docs?.supported"
+          :href="capabilities?.docs?.url"
+        >
+          <ui-icon-button
+            icon="help_outline"
+            class="help"
+            :class="{ toolbarItemClass }"
+          >
+          </ui-icon-button>
+        </a>
         <ui-icon-button
           @click="tasksExpanded = !tasksExpanded"
         >

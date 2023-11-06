@@ -57,8 +57,9 @@ type Bounds struct {
 
 // Capabilities defines model for Capabilities.
 type Capabilities struct {
-	Search Capability `json:"search"`
-	Tags   Capability `json:"tags"`
+	Docs   DocsCapability `json:"docs"`
+	Search Capability     `json:"search"`
+	Tags   Capability     `json:"tags"`
 }
 
 // Capability defines model for Capability.
@@ -79,6 +80,15 @@ type Collection struct {
 
 // CollectionId defines model for CollectionId.
 type CollectionId string
+
+// DocsCapability defines model for DocsCapability.
+type DocsCapability struct {
+	// Embedded struct due to allOf(#/components/schemas/Capability)
+	Capability `yaml:",inline"`
+	// Embedded fields due to inline allOf schema
+	// URL to the documentation to link to from the UI.
+	Url string `json:"url"`
+}
 
 // File defines model for File.
 type File string
