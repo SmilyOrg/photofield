@@ -12,6 +12,8 @@ export default defineConfig({
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
 
+    logo: "/favicon-32x32.png",
+
     editLink: {
       pattern: 'https://github.com/smilyorg/photofield/edit/main/docs/:path'
     },

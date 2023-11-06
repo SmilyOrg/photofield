@@ -85,7 +85,7 @@
         </ui-icon-button>
         <a
           v-if="!collection && capabilities?.docs?.supported"
-          href="/docs/usage"
+          :href="capabilities?.docs?.url"
         >
           <ui-icon-button
             icon="help_outline"

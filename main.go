@@ -643,6 +643,10 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
+	docsUrl := os.Getenv("PHOTOFIELD_DOCS_URL")
+	if docsUrl == "" {
+		docsUrl = "/docs/usage"
+	}
 	respond(w, r, http.StatusOK, openapi.Capabilities{
 		Search: openapi.Capability{
 			Supported: imageSource.AI.Available(),
@@ -650,8 +654,11 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 		Tags: openapi.Capability{
 			Supported: tagsEnabled,
 		},
-		Docs: openapi.Capability{
-			Supported: StaticDocsPath != "",
+		Docs: openapi.DocsCapability{
+			Capability: openapi.Capability{
+				Supported: docsUrl != "",
+			},
+			Url: docsUrl,
 		},
 	})
 }

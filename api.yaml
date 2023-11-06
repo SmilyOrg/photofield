@@ -678,7 +678,7 @@ components:
         tags:
           $ref: "#/components/schemas/Capability"
         docs:
-          $ref: "#/components/schemas/Capability"
+          $ref: "#/components/schemas/DocsCapability"
           
     Capability:
       type: object
@@ -687,6 +687,18 @@ components:
       properties:
         supported:
           type: boolean
+
+    DocsCapability:
+      allOf:
+        - $ref: "#/components/schemas/Capability"
+        - type: object
+          required: 
+            - url
+          properties:
+            url:
+              type: string
+              description: URL to the documentation to link to from the UI.
+              default: /docs/usage
           
     Region:
       type: object
