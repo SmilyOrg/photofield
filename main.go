@@ -1584,7 +1584,7 @@ func listenAndServe(addr string, handler http.Handler) error {
 		if url.local {
 			prefix = "local"
 		}
-		fmt.Printf("  %-8s %s\n", prefix, url.url)
+		log.Printf("  %-8s %s\n", prefix, url.url)
 	}
 	return srv.Serve(ln)
 }

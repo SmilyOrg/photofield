@@ -15,6 +15,9 @@ build-docs:
 build-local:
   goreleaser build --snapshot --single-target --clean
 
+e2e *args:
+  npm run watch
+
 # Download geopackage to be embedded via -tags embedgeo
 assets:
   mkdir -p data/geo
@@ -51,6 +54,9 @@ ui:
 
 watch:
   watchexec --exts go,yaml -r just run
+
+watch-build:
+  watchexec --exts go,yaml -r 'just build && echo build successful'
 
 db-add migration_file_name:
   migrate create -ext sql -dir db/migrations -seq {{migration_file_name}}

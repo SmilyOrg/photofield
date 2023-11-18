@@ -18,6 +18,16 @@
       "mode": "auto",
       "program": "${workspaceFolder}",
       "buildFlags": "-tags embedui"
-    }
+    },
+    {
+      "name": "Debug bddgen",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/playwright-bdd/dist/cli/index.js",
+      "autoAttachChildProcesses": true,
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "type": "node"
+    },
   ]
 }
