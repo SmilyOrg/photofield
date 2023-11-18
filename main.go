@@ -11,15 +11,16 @@ import (
 	"image/draw"
 	"image/png"
 	"io/fs"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"mime"
+	"net"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1113,7 +1114,7 @@ func loadConfiguration(path string) AppConfig {
 	var appConfig AppConfig
 
 	log.Printf("config path %v", path)
-	bytes, err := ioutil.ReadFile(path)
+	bytes, err := os.ReadFile(path)
 	if err != nil {
 		log.Printf("unable to open %s, using defaults (%s)\n", path, err.Error())
 		appConfig = defaults
@@ -1239,6 +1240,10 @@ func main() {
 	var err error
 
 	startupTime = time.Now()
+
+	log.SetFlags(
+		0,
+	)
 
 	testing.Init()
 	versionFlag := flag.Bool("version", false, "print version and exit")
@@ -1443,11 +1448,11 @@ func main() {
 		r.Mount("/", openapi.Handler(&api))
 		r.Mount("/metrics", promhttp.Handler())
 	})
-	msg := fmt.Sprintf("api at %v%v", addr, apiPrefix)
 
 	r.Mount("/debug", middleware.Profiler())
 	r.Handle("/debug/fgprof", fgprof.Handler())
 
+	msg := ""
 	if apiPrefix != "/" {
 		// Hardcode well-known mime types, see https://github.com/golang/go/issues/32350
 		mime.AddExtensionType(".js", "text/javascript")
@@ -1488,11 +1493,98 @@ func main() {
 			}
 			r.Handle("/*", uihandler)
 		})
-		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
+		msg = fmt.Sprintf("app running (api under %s)", apiPrefix)
+	} else {
+		msg = "api running"
 	}
 
 	// addExampleScene()
 
+	log.Printf("")
 	log.Println(msg)
-	log.Fatal(http.ListenAndServe(addr, r))
+	log.Fatal(listenAndServe(addr, r))
+}
+
+type listenUrl struct {
+	local bool
+	ipv6  bool
+	url   string
+}
+
+func getListenUrls(addr net.Addr) ([]listenUrl, error) {
+	var urls []listenUrl
+	switch vaddr := addr.(type) {
+	case *net.TCPAddr:
+		if vaddr.IP.IsUnspecified() {
+			ifaces, err := net.Interfaces()
+			if err != nil {
+				return urls, fmt.Errorf("unable to list interfaces: %v", err)
+			}
+			for _, i := range ifaces {
+				addrs, err := i.Addrs()
+				if err != nil {
+					return urls, fmt.Errorf("unable to list addresses for %v: %v", i.Name, err)
+				}
+				for _, a := range addrs {
+					switch v := a.(type) {
+					case *net.IPNet:
+						urls = append(urls, listenUrl{
+							local: v.IP.IsLoopback(),
+							ipv6:  v.IP.To4() == nil,
+							url:   fmt.Sprintf("http://%v", net.JoinHostPort(v.IP.String(), strconv.Itoa(vaddr.Port))),
+						})
+					default:
+						urls = append(urls, listenUrl{
+							url: fmt.Sprintf("http://%v", v),
+						})
+					}
+				}
+			}
+		} else {
+			urls = append(urls, listenUrl{
+				local: vaddr.IP.IsLoopback(),
+				url:   fmt.Sprintf("http://%v", vaddr.AddrPort()),
+			})
+		}
+	default:
+		urls = append(urls, listenUrl{
+			url: fmt.Sprintf("http://%v", addr),
+		})
+	}
+	return urls, nil
+}
+
+func listenAndServe(addr string, handler http.Handler) error {
+	srv := &http.Server{Addr: addr, Handler: handler}
+	if addr == "" {
+		addr = ":http"
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	a := ln.Addr()
+	urls, err := getListenUrls(a)
+	if err != nil {
+		return err
+	}
+	// Sort by ipv4 first, then local, then url
+	sort.Slice(urls, func(i, j int) bool {
+		if urls[i].ipv6 != urls[j].ipv6 {
+			return !urls[i].ipv6
+		}
+		if urls[i].local != urls[j].local {
+			return urls[i].local
+		}
+		return urls[i].url < urls[j].url
+	})
+
+	for _, url := range urls {
+		prefix := "network"
+		if url.local {
+			prefix = "local"
+		}
+		fmt.Printf("  %-8s %s\n", prefix, url.url)
+	}
+	return srv.Serve(ln)
 }
