@@ -140,10 +140,17 @@ export function useApi(getUrl, config) {
       items,
     }));
   };
+  const errorTime = computed(() => {
+    if (response.error.value) {
+      return new Date();
+    }
+    return null;
+  });
   return {
     ...response,
     items,
     itemsMutate,
+    errorTime,
   }
 }
 
@@ -242,6 +249,19 @@ async function bufferFetcher(endpoint) {
 
 export function useBufferApi(getUrl, config) {
   return useSWRV(getUrl, bufferFetcher, config);
+}
+
+async function textFetcher(endpoint) {
+  const response = await fetch(host + endpoint);
+  if (!response.ok) {
+    console.error(response);
+    throw new Error(response.statusText);
+  }
+  return await response.text();
+}
+
+export function useTextApi(getUrl, config) {
+  return useSWRV(getUrl, textFetcher, config);
 }
 
 export function useTasks() {

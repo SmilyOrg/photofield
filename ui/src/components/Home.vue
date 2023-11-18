@@ -1,8 +1,28 @@
 <template>
   <div class="container">
-    <page-title :title="pageTitle"></page-title>
-    
-    <div class="collections">
+    <page-title title="Photos"></page-title>
+
+    <!-- <response :response="response"></response> -->
+    <response-loader
+      :response="response"
+    ></response-loader>
+    <center-message
+      icon="image_not_supported"
+      v-if="collections?.length === 0"
+    >
+      <h1>No collections found!</h1>
+      This may be because:
+      <ul>
+        <li>You are using the default configuration and there are no folders in the working directory.</li>
+        <li>You have not configured any collections in the <code>configuration.yaml</code>.</li>
+        <li>Your <code>configuration.yaml</code> is not being loaded correctly.</li>
+      </ul>
+      <response-retry-button :response="response"></response-retry-button>
+    </center-message>
+    <div
+      v-else
+      class="collections"
+    >
       <collection-link
         class="collection"
         v-for="c in collections"
@@ -13,33 +33,16 @@
   </div>
 </template>
 
-<script>
+<script setup>
 import { useApi } from '../api';
 import PageTitle from './PageTitle.vue';
 import CollectionLink from './CollectionLink.vue';
+import ResponseLoader from './ResponseLoader.vue';
+import ResponseRetryButton from './ResponseRetryButton.vue';
+import CenterMessage from './CenterMessage.vue';
 
-export default {
-
-  components: {
-    PageTitle,
-    CollectionLink,
-  },
-
-  setup() {
-    const { items: collections } = useApi(() => "/collections");
-
-    return {
-      collections,
-    }
-  },
-
-  computed: {
-    pageTitle() {
-      return "Photos";
-    },
-  }
-
-}
+const response = useApi(() => "/collections");
+const collections = response.items;
 </script>
 
 <style scoped>
@@ -50,4 +53,10 @@ export default {
   flex-direction: row;
   flex-wrap: wrap;
 }
+
+.config {
+  max-height: 400px;
+  overflow: auto;
+}
+
 </style>
