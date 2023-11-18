@@ -1495,7 +1495,7 @@ func main() {
 		})
 		msg = fmt.Sprintf("app running (api under %s)", apiPrefix)
 	} else {
-		msg = "api running"
+		msg = "app running (api only)"
 	}
 
 	// addExampleScene()

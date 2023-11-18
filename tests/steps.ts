@@ -9,10 +9,6 @@ Given('an empty working directory', async ({ app }) => {
   console.log("CWD:", app.cwd);
 });
 
-Given('local ui', async ({ app }) => {
-  app.uiUrl = 'http://localhost:3000';
-});
-
 When('the user runs the app', async ({ app }) => {
   await app.run();
 });
@@ -71,3 +67,12 @@ When('the user switches away and back to the page', async ({ page }) => {
 When('the user clicks {string}', async ({ page }, text: string) => {
   await page.getByText(text).click();
 });
+
+When('the user adds a folder {string}', async ({ app }, name: string) => {
+  await app.addDir(name);
+});
+
+When('the user clicks "Retry', async ({ page }) => {
+  await page.getByRole('button', { name: 'Retry' }).click();
+});
+  

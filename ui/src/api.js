@@ -3,10 +3,33 @@ import { computed, watch, ref } from "vue";
 import qs from "qs";
 import { useRetry } from "./use";
 
-const host = import.meta.env.VITE_API_HOST || "/api";
+let _host = null;
+function host() {
+  if (_host) {
+    return _host;
+  }
+  const cookieHost = getCookie("photofield-api-host");
+  if (cookieHost) {
+    _host = cookieHost;
+    return _host;
+  }
+  _host = import.meta.env.VITE_API_HOST || "/api";
+  return _host;
+}
+
+function getCookie(name) {
+  const cookies = document.cookie.split("; ");
+  for (let i = 0; i < cookies.length; i++) {
+    const cookie = cookies[i].split("=");
+    if (cookie[0] === name) {
+      return cookie[1];
+    }
+  }
+  return null;
+}
 
 async function fetcher(endpoint) {
-  const response = await fetch(host + endpoint);
+  const response = await fetch(host() + endpoint);
   if (!response.ok) {
     console.error(response);
     throw new Error(response.statusText);
@@ -15,7 +38,7 @@ async function fetcher(endpoint) {
 }
 
 export async function get(endpoint, def) {
-  const response = await fetch(host + endpoint);
+  const response = await fetch(host() + endpoint);
   if (!response.ok) {
     if (def !== undefined) {
       return def;
@@ -27,7 +50,7 @@ export async function get(endpoint, def) {
 }
 
 export async function post(endpoint, body, def) {
-  const response = await fetch(host + endpoint, {
+  const response = await fetch(host() + endpoint, {
     method: "POST",
     body: JSON.stringify(body),
     headers: {
@@ -108,15 +131,15 @@ export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extr
   if (backgroundColor) {
     params.background_color = backgroundColor;
   }
-  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
+  let url = `${host()}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
   return url;
 }
 
 export function getFileUrl(id, filename) {
   if (!filename) {
-    return `${host}/files/${id}`;
+    return `${host()}/files/${id}`;
   }
-  return `${host}/files/${id}/original/${filename}`;
+  return `${host()}/files/${id}/original/${filename}`;
 }
 
 export async function getFileBlob(id) {
@@ -124,7 +147,7 @@ export async function getFileBlob(id) {
 }
 
 export function getThumbnailUrl(id, size, filename) {
-  return `${host}/files/${id}/variants/${size}/${filename}`;
+  return `${host()}/files/${id}/variants/${size}/${filename}`;
 }
 
 export function useApi(getUrl, config) {
@@ -239,7 +262,7 @@ export function useScene({
 }
 
 async function bufferFetcher(endpoint) {
-  const response = await fetch(host + endpoint);
+  const response = await fetch(host() + endpoint);
   if (!response.ok) {
     console.error(response);
     throw new Error(response.statusText);
@@ -252,7 +275,7 @@ export function useBufferApi(getUrl, config) {
 }
 
 async function textFetcher(endpoint) {
-  const response = await fetch(host + endpoint);
+  const response = await fetch(host() + endpoint);
   if (!response.ok) {
     console.error(response);
     throw new Error(response.statusText);

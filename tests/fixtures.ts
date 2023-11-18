@@ -3,7 +3,7 @@ import { test as base } from 'playwright-bdd';
 import fs from 'fs/promises';
 import { join } from 'path';
 import { ChildProcess, spawn } from 'child_process';
-import { Page } from '@playwright/test';
+import { BrowserContext, Page } from '@playwright/test';
 
 const LISTEN_REGEX = /local\s+(http:\/\/\S+)/;
 
@@ -17,10 +17,13 @@ class App {
   public listenUrl: string = '';
   proc?: ChildProcess;
   exitCode: number | null;
+  uiLocal: boolean = false;
   uiUrl: string;
 
-  constructor(public page: Page) {
-  }
+  constructor(
+    public page: Page,
+    public context: BrowserContext,
+  ) {}
 
   async useTempDir() {
     const tmpDir = 'test-tmp/'
@@ -34,16 +37,21 @@ class App {
     await fs.mkdir(this.cwd);
   }
 
+  async addDir(dir: string) {
+    console.log("Adding dir:", dir);
+    await fs.mkdir(join(this.cwd, dir));
+  }
 
   async run() {
     const exe = process.platform === 'win32' ? '.exe' : '';
     const command = join(process.cwd(), './photofield' + exe);
 
     const address = `${this.host}:${this.port}`;
-    this.uiUrl = `http://${address}`;
 
     const env = {
       PHOTOFIELD_ADDRESS: address,
+      PHOTOFIELD_API_PREFIX: '/',
+      PHOTOFIELD_CORS_ALLOWED_ORIGINS: 'http://localhost:3000',
     };
 
     console.log("Running:", command, env);
@@ -59,12 +67,23 @@ class App {
       this.stdout += data.toString();
     });
     this.proc.stderr!.on('data', (data) => {
-      console.error(data.toString());
-      const match = data.toString().match(LISTEN_REGEX);
+      const msg = data.toString();
+      console.error(msg);
+      if (msg.includes('api only')) {
+        console.log("API only mode, using local UI")
+        if (!this.uiUrl) {
+          this.uiLocal = true;
+          this.uiUrl = `http://localhost:3000`;
+        }
+      }
+      const match = msg.match(LISTEN_REGEX);
       if (match) {
         this.listenUrl = match[1];
+        if (!this.uiUrl) {
+          this.uiUrl = this.listenUrl;
+        }
       }
-      this.stderr += data.toString();
+      this.stderr += msg;
     });
     this.proc.on('close', (code) => {
       this.exitCode = code;
@@ -72,7 +91,17 @@ class App {
   }
 
   async goto(path: string) {
-    await this.page.goto(`${this.listenUrl}${path}`);
+    if (this.uiLocal) {
+      await this.context.addCookies([
+        {
+          name: 'photofield-api-host',
+          value: this.listenUrl,
+          url: this.uiUrl,
+        }
+      ]);
+      console.log(await this.context.cookies())
+    }
+    await this.page.goto(`${this.uiUrl}${path}`);
   }
 
   async stop() {
@@ -94,8 +123,8 @@ class App {
 
 // export custom test function
 export const test = base.extend<{ app: App }>({
-  app: async ({ page }, use) => {
-    const app = new App(page);
+  app: async ({ page, context }, use) => {
+    const app = new App(page, context);
     await use(app);
     await app.cleanup();
   }
