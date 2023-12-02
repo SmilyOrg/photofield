@@ -22,7 +22,7 @@ type SceneSource struct {
 	DefaultScene render.Scene
 
 	maxSize    int64
-	sceneCache *ristretto.Cache
+	sceneCache *ristretto.Cache[string, *render.Scene]
 	scenes     sync.Map
 }
 
@@ -48,7 +48,7 @@ func NewSceneSource() *SceneSource {
 	source := SceneSource{
 		maxSize: 1 << 26, // 67 MB
 	}
-	source.sceneCache, err = ristretto.NewCache(&ristretto.Config{
+	source.sceneCache, err = ristretto.NewCache(&ristretto.Config[string, *render.Scene]{
 		NumCounters: 10000,   // number of keys to track frequency of, 10x max expected key count
 		MaxCost:     1 << 50, // maximum size/cost of cache, managed externally
 		BufferItems: 64,      // number of keys per Get buffer.
@@ -197,7 +197,7 @@ func (source *SceneSource) pruneScenes() {
 func (source *SceneSource) GetSceneById(id string, imageSource *image.Source) *render.Scene {
 	value, found := source.sceneCache.Get(id)
 	if found {
-		return value.(*render.Scene)
+		return value
 	}
 
 	stored, loaded := source.scenes.Load(id)

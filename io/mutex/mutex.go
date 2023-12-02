@@ -13,6 +13,10 @@ type Mutex struct {
 	loading sync.Map
 }
 
+func (m Mutex) Close() error {
+	return m.Source.Close()
+}
+
 type loadingResult struct {
 	result io.Result
 	loaded chan struct{}

@@ -108,6 +108,7 @@ type Source interface {
 	GetDurationEstimate(original Size) time.Duration
 	Exists(ctx context.Context, id ImageId, path string) bool
 	Get(ctx context.Context, id ImageId, path string) Result
+	Close() error
 }
 
 type Sink interface {
@@ -125,6 +126,11 @@ type Decoder interface {
 type ReadDecoder interface {
 	Reader
 	Decoder
+}
+
+type ReadDecoderSource interface {
+	Source
+	ReadDecoder
 }
 
 type Sources []Source
@@ -176,6 +182,15 @@ func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
 		}
 	}
 	return costs
+}
+
+func (sources Sources) Close() {
+	for _, s := range sources {
+		err := s.Close()
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 type SourceCost struct {

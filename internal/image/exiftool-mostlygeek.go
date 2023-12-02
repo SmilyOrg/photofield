@@ -197,5 +197,6 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeBytes(path string, tagName string
 func (decoder *ExifToolMostlyGeekLoader) Close() {
 	if decoder.exifTool != nil {
 		decoder.exifTool.Stop()
+		decoder.exifTool = nil
 	}
 }

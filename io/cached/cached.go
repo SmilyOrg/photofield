@@ -2,6 +2,7 @@ package cached
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"photofield/io"
 	"photofield/io/ristretto"
@@ -16,6 +17,13 @@ type Cached struct {
 	Source  io.Source
 	Cache   ristretto.Ristretto
 	loading singleflight.Group
+}
+
+func (c *Cached) Close() error {
+	return errors.Join(
+		c.Source.Close(),
+		c.Cache.Close(),
+	)
 }
 
 func (c *Cached) Name() string {

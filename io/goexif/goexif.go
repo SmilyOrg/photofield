@@ -22,6 +22,10 @@ type Exif struct {
 	Fit    io.AspectRatioFit
 }
 
+func (e Exif) Close() error {
+	return nil
+}
+
 func (e Exif) Name() string {
 	return "goexif"
 }

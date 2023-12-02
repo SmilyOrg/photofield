@@ -141,6 +141,14 @@ func NewDatabase(path string, migrations embed.FS) *Database {
 	return &source
 }
 
+func (source *Database) Close() {
+	if source == nil {
+		return
+	}
+	source.pool.Close()
+	close(source.pending)
+}
+
 func (source *Database) open() *sqlite.Conn {
 	conn, err := sqlite.OpenConn(source.path, 0)
 	if err != nil {
@@ -308,11 +316,7 @@ func (source *Database) writePendingInfosSqlite() {
 	pendingCompactionTags := tagSet{}
 
 	defer func() {
-		err := sqlitex.Execute(conn, "COMMIT;", nil)
-		source.transactionMutex.Unlock()
-		if err != nil {
-			panic(err)
-		}
+		source.WaitForCommit()
 	}()
 
 	commitTicker := &time.Ticker{}
@@ -353,7 +357,11 @@ func (source *Database) writePendingInfosSqlite() {
 			source.transactionMutex.Unlock()
 			inTransaction = false
 
-		case imageInfo := <-source.pending:
+		case imageInfo, ok := <-source.pending:
+			if !ok {
+				log.Println("database closing")
+				return
+			}
 
 			if !inTransaction {
 				source.transactionMutex.Lock()

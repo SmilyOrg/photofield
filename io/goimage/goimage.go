@@ -21,6 +21,10 @@ type Image struct {
 	Decoder func(goio.Reader) (image.Image, error)
 }
 
+func (o Image) Close() error {
+	return nil
+}
+
 func (o Image) Name() string {
 	return "original"
 }

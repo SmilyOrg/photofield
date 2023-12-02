@@ -25,83 +25,6 @@ var dir = "photos/"
 
 // var dir = "E:/photos/"
 
-var cache = ristretto.New()
-var goimg goimage.Image
-
-var ffmpegPath = ffmpeg.FindPath()
-
-var sources = io.Sources{
-	// cache,
-	sqlite.New(path.Join(dir, "../data/photofield.thumbs.db"), embed.FS{}),
-	goexif.Exif{},
-	thumb.New(
-		"S",
-		"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg",
-		io.FitInside,
-		120,
-		120,
-	),
-	thumb.New(
-		"SM",
-		"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg",
-		io.FitOutside,
-		240,
-		240,
-	),
-	thumb.New(
-		"M",
-		"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg",
-		io.FitOutside,
-		320,
-		320,
-	),
-	thumb.New(
-		"B",
-		"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg",
-		io.FitInside,
-		640,
-		640,
-	),
-	thumb.New(
-		"XL",
-		"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg",
-		io.FitOutside,
-		1280,
-		1280,
-	),
-	goimg,
-	ffmpeg.FFmpeg{
-		Path:   ffmpegPath,
-		Width:  128,
-		Height: 128,
-		Fit:    io.FitInside,
-	},
-	ffmpeg.FFmpeg{
-		Path:   ffmpegPath,
-		Width:  256,
-		Height: 256,
-		Fit:    io.FitInside,
-	},
-	ffmpeg.FFmpeg{
-		Path:   ffmpegPath,
-		Width:  512,
-		Height: 512,
-		Fit:    io.FitInside,
-	},
-	ffmpeg.FFmpeg{
-		Path:   ffmpegPath,
-		Width:  1280,
-		Height: 1280,
-		Fit:    io.FitInside,
-	},
-	ffmpeg.FFmpeg{
-		Path:   ffmpegPath,
-		Width:  4096,
-		Height: 4096,
-		Fit:    io.FitInside,
-	},
-}
-
 var files = []struct {
 	name string
 	path string
@@ -114,7 +37,86 @@ var files = []struct {
 	// {name: "cow", path: "formats/cow.avif"},
 }
 
+func createTestSources() io.Sources {
+	var goimg goimage.Image
+	var ffmpegPath = ffmpeg.FindPath()
+	return io.Sources{
+		// cache,
+		sqlite.New(path.Join(dir, "../data/photofield.thumbs.db"), embed.FS{}),
+		goexif.Exif{},
+		thumb.New(
+			"S",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg",
+			io.FitInside,
+			120,
+			120,
+		),
+		thumb.New(
+			"SM",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg",
+			io.FitOutside,
+			240,
+			240,
+		),
+		thumb.New(
+			"M",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg",
+			io.FitOutside,
+			320,
+			320,
+		),
+		thumb.New(
+			"B",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg",
+			io.FitInside,
+			640,
+			640,
+		),
+		thumb.New(
+			"XL",
+			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg",
+			io.FitOutside,
+			1280,
+			1280,
+		),
+		goimg,
+		ffmpeg.FFmpeg{
+			Path:   ffmpegPath,
+			Width:  128,
+			Height: 128,
+			Fit:    io.FitInside,
+		},
+		ffmpeg.FFmpeg{
+			Path:   ffmpegPath,
+			Width:  256,
+			Height: 256,
+			Fit:    io.FitInside,
+		},
+		ffmpeg.FFmpeg{
+			Path:   ffmpegPath,
+			Width:  512,
+			Height: 512,
+			Fit:    io.FitInside,
+		},
+		ffmpeg.FFmpeg{
+			Path:   ffmpegPath,
+			Width:  1280,
+			Height: 1280,
+			Fit:    io.FitInside,
+		},
+		ffmpeg.FFmpeg{
+			Path:   ffmpegPath,
+			Width:  4096,
+			Height: 4096,
+			Fit:    io.FitInside,
+		},
+	}
+}
+
 func BenchmarkSources(b *testing.B) {
+	var cache = ristretto.New()
+	var goimg goimage.Image
+	sources := createTestSources()
 	ctx := context.Background()
 	for _, bm := range files {
 		bm := bm
@@ -161,6 +163,7 @@ func BenchmarkSources(b *testing.B) {
 }
 
 func TestCost(t *testing.T) {
+	sources := createTestSources()
 	cases := []struct {
 		zoom int
 		o    io.Size
@@ -193,6 +196,7 @@ func TestCost(t *testing.T) {
 }
 
 func TestCostSmallest(t *testing.T) {
+	sources := createTestSources()
 	costs := sources.EstimateCost(io.Size{X: 5472, Y: 3648}, io.Size{X: 1, Y: 1})
 	costs.Sort()
 	for i, c := range costs {

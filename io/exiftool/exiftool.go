@@ -34,6 +34,11 @@ func New(tag string) *Exif {
 	return &e
 }
 
+func (e Exif) Close() error {
+	e.exifTool.Stop()
+	return nil
+}
+
 func (e Exif) Name() string {
 	return fmt.Sprintf("exiftool-%s", e.Tag)
 }

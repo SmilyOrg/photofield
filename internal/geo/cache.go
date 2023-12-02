@@ -11,26 +11,36 @@ import (
 )
 
 type Cache struct {
-	cache *ristretto.Cache
+	cache *ristretto.Cache[int64, geom.Geometry]
 }
 
 func NewCache() (*Cache, error) {
 	g := &Cache{}
-	c, err := ristretto.NewCache(&ristretto.Config{
+	c, err := ristretto.NewCache(&ristretto.Config[int64, geom.Geometry]{
 		NumCounters: 100000,     // number of keys to track frequency of, 10x max expected key count
 		MaxCost:     64_000_000, // maximum size/cost of cache
 		BufferItems: 64,         // number of keys per Get buffer.
 		Metrics:     true,
-		Cost: func(value interface{}) int64 {
-			return estimateGeometryMemorySize(value.(geom.Geometry))
+		Cost: func(g geom.Geometry) int64 {
+			return estimateGeometryMemorySize(g)
 		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create geometry cache: %w", err)
 	}
+	c.Close()
 	metrics.AddRistretto("geometry_cache", c)
 	g.cache = c
 	return g, nil
+}
+
+func (g *Cache) Close() {
+	if g == nil || g.cache == nil {
+		return
+	}
+	g.cache.Clear()
+	g.cache.Close()
+	g.cache = nil
 }
 
 func (g *Cache) Get(fid gpkg.FeatureId) (geom.Geometry, error) {
@@ -38,7 +48,7 @@ func (g *Cache) Get(fid gpkg.FeatureId) (geom.Geometry, error) {
 	if !ok {
 		return geom.Geometry{}, gpkg.ErrNotFound
 	}
-	return v.(geom.Geometry), nil
+	return v, nil
 }
 
 func (g *Cache) Set(fid gpkg.FeatureId, geom geom.Geometry) error {

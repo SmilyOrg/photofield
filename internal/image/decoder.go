@@ -39,6 +39,9 @@ func NewDecoder(exifToolCount int) *Decoder {
 }
 
 func (decoder *Decoder) Close() {
+	if decoder == nil {
+		return
+	}
 	decoder.loader.Close()
 }
 

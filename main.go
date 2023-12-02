@@ -16,7 +16,6 @@ import (
 	"mime"
 	"net"
 	"path"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -40,20 +39,17 @@ import (
 	chirender "github.com/go-chi/render"
 	"github.com/grafana/pyroscope-go"
 	"github.com/hako/durafmt"
-	"github.com/imdario/mergo"
 	"github.com/joho/godotenv"
 	"github.com/lpar/gzipped"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
 
-	"github.com/goccy/go-yaml"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 
-	"photofield/internal/clip"
 	"photofield/internal/codec"
 	"photofield/internal/collection"
 	"photofield/internal/geo"
@@ -106,6 +102,7 @@ type TilePool struct {
 }
 
 var imageSource *image.Source
+var globalGeo *geo.Geo
 var sceneSource *scene.SceneSource
 var collections []collection.Collection
 
@@ -326,16 +323,16 @@ func popBestTileRequest() (bool, TileRequest) {
 
 func processTileRequests(concurrency int) {
 	for i := 0; i < concurrency; i++ {
-		go func() {
+		go func(i int) {
 			for {
 				ok, request := popBestTileRequest()
 				if !ok {
-					panic("Mismatching tileRequestsIn and tileRequestsOut")
+					log.Printf("tile request worker %v exiting", i)
 				}
 				request.Process <- struct{}{}
 				<-request.Done
 			}
-		}()
+		}(i)
 	}
 }
 
@@ -1061,29 +1058,6 @@ type TileRequestConfig struct {
 	LogStats    bool `json:"log_stats"`
 }
 
-type AppConfig struct {
-	Collections  []collection.Collection `json:"collections"`
-	Layout       layout.Layout           `json:"layout"`
-	Render       render.Render           `json:"render"`
-	Media        image.Config            `json:"media"`
-	AI           clip.AI                 `json:"ai"`
-	Geo          geo.Config              `json:"geo"`
-	Tags         tag.Config              `json:"tags"`
-	TileRequests TileRequestConfig       `json:"tile_requests"`
-}
-
-func expandCollections(collections *[]collection.Collection) {
-	expanded := make([]collection.Collection, 0)
-	for _, collection := range *collections {
-		if collection.ExpandSubdirs {
-			expanded = append(expanded, collection.Expand()...)
-		} else {
-			expanded = append(expanded, collection)
-		}
-	}
-	*collections = expanded
-}
-
 func indexCollection(collection *collection.Collection) (task Task, existing bool) {
 	task = newFileIndexTask(collection)
 	stored, existing := globalTasks.LoadOrStore(task.Id, task)
@@ -1107,38 +1081,6 @@ func indexCollection(collection *collection.Collection) (task Task, existing boo
 		close(counter)
 	}()
 	return
-}
-
-func loadConfiguration(path string) AppConfig {
-
-	var appConfig AppConfig
-
-	log.Printf("config path %v", path)
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		log.Printf("unable to open %s, using defaults (%s)\n", path, err.Error())
-		appConfig = defaults
-	} else if err := yaml.Unmarshal(bytes, &appConfig); err != nil {
-		log.Printf("unable to parse %s, using defaults (%s)\n", path, err.Error())
-		appConfig = defaults
-	} else if err := mergo.Merge(&appConfig, defaults); err != nil {
-		panic("unable to merge configuration with defaults")
-	}
-
-	expandCollections(&appConfig.Collections)
-	for i := range appConfig.Collections {
-		collection := &appConfig.Collections[i]
-		collection.GenerateId()
-		collection.Layout = strings.ToUpper(collection.Layout)
-		if collection.Limit > 0 && collection.IndexLimit == 0 {
-			collection.IndexLimit = collection.Limit
-		}
-	}
-
-	appConfig.Media.AI = appConfig.AI
-	appConfig.Tags.Enable = appConfig.Tags.Enable || appConfig.Tags.Enabled
-
-	return appConfig
 }
 
 func addExampleScene() {
@@ -1236,6 +1178,66 @@ func benchmarkSources(collection *collection.Collection, seed int64, sampleSize 
 	bench.BenchmarkSources(seed, sources, samples, count)
 }
 
+func applyConfig(appConfig *AppConfig) {
+	if globalGeo != nil {
+		err := globalGeo.Close()
+		if err != nil {
+			log.Printf("unable to close geo: %v", err)
+		}
+		globalGeo = nil
+	}
+
+	if imageSource != nil {
+		imageSource.Close()
+		imageSource = nil
+	}
+
+	if tileRequestConfig.Concurrency > 0 {
+		close(tileRequestsOut)
+	}
+
+	if len(appConfig.Collections) > 0 {
+		defaultSceneConfig.Collection = appConfig.Collections[0]
+	}
+	collections = appConfig.Collections
+	defaultSceneConfig.Layout = appConfig.Layout
+	defaultSceneConfig.Render = appConfig.Render
+	tileRequestConfig = appConfig.TileRequests
+	tagsEnabled = appConfig.Tags.Enable
+
+	var err error
+	globalGeo, err = geo.New(
+		appConfig.Geo,
+		GeoFs,
+	)
+	if err != nil {
+		log.Printf("geo disabled: %v", err)
+	} else {
+		log.Printf("%v", globalGeo.String())
+	}
+
+	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, nil)
+	if tileRequestConfig.Concurrency > 0 {
+		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
+		tileRequestsOut = make(chan struct{}, 10000)
+		processTileRequests(tileRequestConfig.Concurrency)
+	}
+
+	extensions := strings.Join(appConfig.Media.ListExtensions, ", ")
+	log.Printf("extensions %v", extensions)
+
+	log.Printf("%v collections", len(collections))
+	for i := range collections {
+		collection := &collections[i]
+		collection.UpdateStatus(imageSource)
+		indexedAgo := "N/A"
+		if collection.IndexedAt != nil {
+			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
+		}
+		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+	}
+}
+
 func main() {
 	var err error
 
@@ -1301,46 +1303,10 @@ func main() {
 		})
 	}
 
-	if err := yaml.Unmarshal(defaultsYaml, &defaults); err != nil {
-		panic(err)
-	}
-
+	initDefaults()
 	dataDir, exists := os.LookupEnv("PHOTOFIELD_DATA_DIR")
 	if !exists {
 		dataDir = "."
-	}
-	configurationPath := filepath.Join(dataDir, "configuration.yaml")
-
-	appConfig := loadConfiguration(configurationPath)
-	appConfig.Media.DataDir = dataDir
-	tagsEnabled = appConfig.Tags.Enable
-
-	if len(appConfig.Collections) > 0 {
-		defaultSceneConfig.Collection = appConfig.Collections[0]
-	}
-	collections = appConfig.Collections
-	defaultSceneConfig.Layout = appConfig.Layout
-	defaultSceneConfig.Render = appConfig.Render
-	tileRequestConfig = appConfig.TileRequests
-
-	geo, err := geo.New(
-		appConfig.Geo,
-		GeoFs,
-	)
-	if err != nil {
-		log.Printf("geo disabled: %v", err)
-	} else {
-		log.Printf("%v", geo.String())
-	}
-	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, geo)
-	defer imageSource.Close()
-
-	if *vacuumFlag {
-		err := imageSource.Vacuum()
-		if err != nil {
-			panic(err)
-		}
-		return
 	}
 
 	sceneSource = scene.NewSceneSource()
@@ -1360,18 +1326,24 @@ func main() {
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
-	extensions := strings.Join(appConfig.Media.ListExtensions, ", ")
-	log.Printf("extensions %v", extensions)
-
-	log.Printf("%v collections", len(collections))
-	for i := range collections {
-		collection := &collections[i]
-		collection.UpdateStatus(imageSource)
-		indexedAgo := "N/A"
-		if collection.IndexedAt != nil {
-			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
+	watchConfig(dataDir, func(init bool) {
+		if !init {
+			log.Printf("config change detected, reloading")
 		}
-		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+		appConfig, err := loadConfig(dataDir)
+		if err != nil {
+			log.Printf("unable to load configuration: %v", err)
+			return
+		}
+		applyConfig(appConfig)
+	})
+
+	if *vacuumFlag {
+		err := imageSource.Vacuum()
+		if err != nil {
+			panic(err)
+		}
+		return
 	}
 
 	if *benchFlag {
@@ -1418,12 +1390,6 @@ func main() {
 	if tileRequestConfig.LogStats {
 		log.Printf("logging tile request stats")
 		fmt.Printf("priority,start,end,latency\n")
-	}
-
-	tileRequestsOut = make(chan struct{}, 10000)
-	if tileRequestConfig.Concurrency > 0 {
-		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
-		processTileRequests(tileRequestConfig.Concurrency)
 	}
 
 	r := chi.NewRouter()

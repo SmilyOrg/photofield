@@ -16,6 +16,10 @@ type Filtered struct {
 	Extensions []string
 }
 
+func (f *Filtered) Close() error {
+	return f.Source.Close()
+}
+
 func (f *Filtered) Name() string {
 	return f.Source.Name()
 }
