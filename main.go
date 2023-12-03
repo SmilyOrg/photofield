@@ -477,10 +477,14 @@ func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
 		collection := &collections[i]
 		collection.UpdateStatus(imageSource)
 	}
+	items := collections
+	if items == nil {
+		items = make([]collection.Collection, 0)
+	}
 	respond(w, r, http.StatusOK, struct {
 		Items []collection.Collection `json:"items"`
 	}{
-		Items: collections,
+		Items: items,
 	})
 }
 
@@ -645,20 +649,14 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	if docsUrl == "" {
 		docsUrl = "/docs/usage"
 	}
-	respond(w, r, http.StatusOK, openapi.Capabilities{
-		Search: openapi.Capability{
-			Supported: imageSource.AI.Available(),
-		},
-		Tags: openapi.Capability{
-			Supported: tagsEnabled,
-		},
-		Docs: openapi.DocsCapability{
-			Capability: openapi.Capability{
-				Supported: docsUrl != "",
-			},
-			Url: docsUrl,
-		},
-	})
+	capabilities := openapi.Capabilities{}
+	if imageSource != nil {
+		capabilities.Search.Supported = imageSource.AI.Available()
+	}
+	capabilities.Tags.Supported = tagsEnabled
+	capabilities.Docs.Supported = docsUrl != ""
+	capabilities.Docs.Url = docsUrl
+	respond(w, r, http.StatusOK, capabilities)
 }
 
 func (*Api) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
@@ -1326,15 +1324,7 @@ func main() {
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
-	watchConfig(dataDir, func(init bool) {
-		if !init {
-			log.Printf("config change detected, reloading")
-		}
-		appConfig, err := loadConfig(dataDir)
-		if err != nil {
-			log.Printf("unable to load configuration: %v", err)
-			return
-		}
+	watchConfig(dataDir, func(appConfig *AppConfig) {
 		applyConfig(appConfig)
 	})
 

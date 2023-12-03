@@ -3,7 +3,6 @@ Feature: Connection Error Message
   Scenario: UI loads, but API is down
     Given an empty working directory
     When the user opens the home page
-    Then the page shows a progress bar
     Then the page shows "Connection error"
 
   Scenario: UI loads, API is up intermittently

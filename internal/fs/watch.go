@@ -50,6 +50,29 @@ func NewFileWatcher(path string) (*Watcher, error) {
 	return w, nil
 }
 
+func NewPathsWatcher(paths []string) (*Watcher, error) {
+	w := &Watcher{
+		Events: make(chan Event, 100),
+		c:      make(chan notify.EventInfo, 100),
+	}
+	for _, path := range paths {
+		err := notify.Watch(
+			path,
+			w.c,
+			notify.Remove,
+			notify.Rename,
+			notify.Create,
+			notify.Write,
+		)
+		if err != nil {
+			w.Close()
+			return nil, err
+		}
+	}
+	go w.run()
+	return w, nil
+}
+
 func NewRecursiveWatcher(dirs []string) (*Watcher, error) {
 	w := &Watcher{
 		Events: make(chan Event, 100),
@@ -117,6 +140,9 @@ func (w *Watcher) run() {
 				tickerRunning = false
 			}
 		case e := <-w.c:
+			if e == nil {
+				return
+			}
 			// println("event", e.Path(), e.Event())
 			if w.filename != "" && filepath.Base(e.Path()) != w.filename {
 				// println("skip", e.Path())
@@ -125,7 +151,7 @@ func (w *Watcher) run() {
 			switch e.Event() {
 			case notify.Rename:
 				if pendingRenamePath != "" {
-					println("rename", pendingRenamePath, e.Path())
+					// println("rename", pendingRenamePath, e.Path())
 					ev := Event{
 						Op:      Rename,
 						Path:    pendingRenamePath,
@@ -175,7 +201,7 @@ func (w *Watcher) run() {
 					Op:   Remove,
 					Path: e.Path(),
 				}
-				println("remove", ev.Path)
+				// println("remove", ev.Path)
 				if removePathFromEvents(next, ev.Path) {
 					continue
 				}
@@ -189,5 +215,14 @@ func (w *Watcher) run() {
 }
 
 func (w *Watcher) Close() {
-	notify.Stop(w.c)
+	if w == nil {
+		return
+	}
+	if w.c != nil {
+		notify.Stop(w.c)
+		close(w.c)
+	}
+	if w.Events != nil {
+		close(w.Events)
+	}
 }
