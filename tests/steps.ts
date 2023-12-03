@@ -1,12 +1,21 @@
 import { Page, expect } from '@playwright/test';
 import { createBdd } from 'playwright-bdd';
 import { test } from './fixtures';
+import fs from 'fs/promises';
+import path from 'path';
+
 
 const { Given, When, Then } = createBdd(test);
 
 Given('an empty working directory', async ({ app }) => {
   await app.useTempDir();
   console.log("CWD:", app.cwd);
+});
+
+
+Given('the config {string}', async ({ app }, p: string) => {
+  const configPath = path.resolve(__dirname, p);
+  await fs.copyFile(configPath, app.path("configuration.yaml"));
 });
 
 When('the user runs the app', async ({ app }) => {
@@ -21,6 +30,10 @@ Given('a running API', async ({ app }) => {
 });
 
 When('the API goes down', async ({ app }) => {
+  await app.stop();
+});
+
+When('the user stops the app', async ({ app }) => {
   await app.stop();
 });
 
@@ -55,7 +68,7 @@ Then('the page shows a progress bar', async ({ page }) => {
 });
 
 Then('the page shows {string}', async ({ page }, text) => {
-  await expect(page.getByText(text)).toBeVisible();
+  await expect(page.getByText(text).first()).toBeVisible();
 });
 
 Then('the page does not show {string}', async ({ page }, text: string) => {
@@ -69,7 +82,7 @@ When('the user switches away and back to the page', async ({ page }) => {
 });
 
 When('the user clicks {string}', async ({ page }, text: string) => {
-  await page.getByText(text).click();
+  await page.getByText(text).first().click();
 });
 
 When('the user adds a folder {string}', async ({ app }, name: string) => {
@@ -79,4 +92,17 @@ When('the user adds a folder {string}', async ({ app }, name: string) => {
 When('the user clicks "Retry', async ({ page }) => {
   await page.getByRole('button', { name: 'Retry' }).click();
 });
-  
+
+
+Then('the file {string} exists', async ({ app }, filePath: string) => {
+  await fs.stat(app.path(filePath));
+});
+
+Then('the file {string} does not exist', async ({ app }, filePath: string) => {
+  try {
+    await fs.stat(app.path(filePath));
+    throw new Error("File exists");
+  } catch (error) {
+    expect(error.code).toBe('ENOENT');
+  }
+});

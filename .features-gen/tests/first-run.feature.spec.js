@@ -26,6 +26,24 @@ test.describe("First User Experience", () => {
     await Then("the page does not show \"No collections\"", null, { page });
   });
 
+  test("Preconfigured Basic", async ({ Given, app, And, When, Then, page }) => {
+    await Given("an empty working directory", null, { app });
+    await And("the config \"configs/three-collections.yaml\"", null, { app });
+    await When("the user runs the app", null, { app });
+    await Then("the app logs \"app running\"", null, { app });
+    await And("the app logs \"config path configuration.yaml\"", null, { app });
+    await And("the app logs \"test123\"", null, { app });
+    await And("the app logs \"test456\"", null, { app });
+    await And("the app logs \"test789\"", null, { app });
+    await When("the user opens the home page", null, { app });
+    await Then("the page shows \"Photos\"", null, { page });
+    await When("the user opens the home page", null, { app });
+    await Then("the page shows \"Photos\"", null, { page });
+    await And("the page shows \"test123\"", null, { page });
+    await And("the page shows \"test456\"", null, { page });
+    await And("the page shows \"test789\"", null, { page });
+  });
+
 });
 
 // == technical section ==

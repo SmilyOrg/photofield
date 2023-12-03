@@ -42,6 +42,10 @@ class App {
     await fs.mkdir(join(this.cwd, dir));
   }
 
+  path(path: string) {
+    return join(this.cwd, path);
+  }
+
   async run() {
     const exe = process.platform === 'win32' ? '.exe' : '';
     const command = join(process.cwd(), './photofield' + exe);
@@ -105,7 +109,7 @@ class App {
   }
 
   async stop() {
-    this.proc?.kill();
+    this.proc?.kill('SIGTERM');
     this.proc = undefined;
     // Remove the temporary directory
     // await fs.rmdir(this.cwd, { recursive: true });

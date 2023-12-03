@@ -360,6 +360,14 @@ func (source *Database) writePendingInfosSqlite() {
 		case imageInfo, ok := <-source.pending:
 			if !ok {
 				log.Println("database closing")
+				if inTransaction {
+					err := sqlitex.Execute(conn, "COMMIT;", nil)
+					if err != nil {
+						panic(err)
+					}
+					source.transactionMutex.Unlock()
+					inTransaction = false
+				}
 				return
 			}
 

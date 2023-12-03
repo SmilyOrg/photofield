@@ -282,6 +282,11 @@ func (source *Source) Close() {
 	source.contentsQueue.Close()
 }
 
+func (source *Source) Shutdown() {
+	source.database.Close()
+	source.thumbnailSink.Close()
+}
+
 func (source *Source) IsSupportedImage(path string) bool {
 	supportedImage := false
 	pathExt := strings.ToLower(filepath.Ext(path))

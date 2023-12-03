@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"mime"
 	"net"
+	"os/signal"
 	"path"
 	"regexp"
 	"runtime"
@@ -22,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1236,6 +1238,19 @@ func applyConfig(appConfig *AppConfig) {
 	}
 }
 
+func listenForShutdown() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signals
+		log.Printf("shutdown requested")
+		if imageSource != nil {
+			imageSource.Shutdown()
+		}
+		os.Exit(0)
+	}()
+}
+
 func main() {
 	var err error
 
@@ -1323,6 +1338,8 @@ func main() {
 		Debug:  fontFamily.Face(34.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
+
+	listenForShutdown()
 
 	watchConfig(dataDir, func(appConfig *AppConfig) {
 		applyConfig(appConfig)
