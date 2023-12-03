@@ -22,7 +22,7 @@ test.describe("First User Experience", () => {
     await Then("the page does not show \"Connection error\"", null, { page });
     await And("the page shows \"No collections\"", null, { page });
     await When("the user adds a folder \"vacation\"", null, { app });
-    await And("the user clicks \"Retry\"", null, { page });
+    await And("the user clicks \"Reload Configuration\"", null, { page });
     await Then("the page does not show \"No collections\"", null, { page });
   });
 

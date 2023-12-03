@@ -60,12 +60,15 @@ func loadConfig(dataDir string) (*AppConfig, error) {
 
 	log.Printf("config path %v", path)
 	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read %s: %w", path, err)
-	} else if err := yaml.Unmarshal(bytes, &appConfig); err != nil {
-		return nil, fmt.Errorf("unable to parse %s: %w", path, err)
-	} else if err := mergo.Merge(&appConfig, defaults); err != nil {
-		return nil, fmt.Errorf("unable to merge defaults: %w", err)
+	if err == nil {
+		if err := yaml.Unmarshal(bytes, &appConfig); err != nil {
+			return nil, fmt.Errorf("unable to parse %s: %w", path, err)
+		} else if err := mergo.Merge(&appConfig, defaults); err != nil {
+			return nil, fmt.Errorf("unable to merge defaults: %w", err)
+		}
+	} else {
+		log.Printf("config read failed (using defaults) for %s: %v", path, err)
+		appConfig = defaults
 	}
 
 	appConfig.Collections = expandCollections(appConfig.Collections)

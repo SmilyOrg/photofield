@@ -5,7 +5,7 @@ import { join } from 'path';
 import { ChildProcess, spawn } from 'child_process';
 import { BrowserContext, Page } from '@playwright/test';
 
-const LISTEN_REGEX = /local\s+(http:\/\/\S+)/;
+const LISTEN_REGEX = /local\s+http:\/\/(\S+)/;
 
 class App {
 
@@ -14,11 +14,11 @@ class App {
   public stderr: string;
   public host: string = 'localhost';
   public port: number = 0;
-  public listenUrl: string = '';
+  public listenHost: string = '';
   proc?: ChildProcess;
   exitCode: number | null;
-  uiLocal: boolean = false;
-  uiUrl: string;
+  uiLocal: boolean = true;
+  uiUrl: string = "http://localhost:3000";
 
   constructor(
     public page: Page,
@@ -49,7 +49,7 @@ class App {
     const address = `${this.host}:${this.port}`;
 
     const env = {
-      PHOTOFIELD_ADDRESS: address,
+      PHOTOFIELD_ADDRESS: this.listenHost || address,
       PHOTOFIELD_API_PREFIX: '/',
       PHOTOFIELD_CORS_ALLOWED_ORIGINS: 'http://localhost:3000',
     };
@@ -78,9 +78,9 @@ class App {
       }
       const match = msg.match(LISTEN_REGEX);
       if (match) {
-        this.listenUrl = match[1];
+        this.listenHost = match[1];
         if (!this.uiUrl) {
-          this.uiUrl = this.listenUrl;
+          this.uiUrl = "http://" + this.listenHost;
         }
       }
       this.stderr += msg;
@@ -95,8 +95,8 @@ class App {
       await this.context.addCookies([
         {
           name: 'photofield-api-host',
-          value: this.listenUrl,
-          url: this.uiUrl,
+          value: "http://" + (this.listenHost || "localhost:99999"),
+          url: this.uiUrl || "http://localhost:3000",
         }
       ]);
       console.log(await this.context.cookies())

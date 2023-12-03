@@ -12,7 +12,7 @@
     >
     </ui-spinner>
     <span v-if="!loading">
-      Retry
+      <slot></slot>
     </span>
   </ui-button>
 </template>

@@ -67,6 +67,7 @@ import (
 //go:embed defaults.yaml
 var defaultsYaml []byte
 var defaults AppConfig
+var dataDir string
 
 var tagsEnabled bool
 
@@ -477,10 +478,14 @@ func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
 		collection := &collections[i]
 		collection.UpdateStatus(imageSource)
 	}
+	items := collections
+	if items == nil {
+		items = make([]collection.Collection, 0)
+	}
 	respond(w, r, http.StatusOK, struct {
 		Items []collection.Collection `json:"items"`
 	}{
-		Items: collections,
+		Items: items,
 	})
 }
 
@@ -586,10 +591,13 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	collection := getCollectionById(string(data.CollectionId))
-	if collection == nil {
-		problem(w, r, http.StatusBadRequest, "Collection not found")
-		return
+	var collection *collection.Collection
+	if data.CollectionId != nil {
+		collection = getCollectionById(string(*data.CollectionId))
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection not found")
+			return
+		}
 	}
 
 	switch data.Type {
@@ -603,6 +611,10 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case openapi.TaskTypeINDEXMETADATA:
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection required")
+			return
+		}
 		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{
 			Metadata: true,
 		})
@@ -611,6 +623,10 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTS:
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection required")
+			return
+		}
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Color:     true,
 			Embedding: true,
@@ -620,6 +636,10 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTSCOLOR:
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection required")
+			return
+		}
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Color: true,
 		})
@@ -628,12 +648,24 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTSAI:
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection required")
+			return
+		}
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Embedding: true,
 		})
 		stored, _ := globalTasks.Load("index-contents")
 		task := stored.(Task)
 		respond(w, r, http.StatusAccepted, task)
+
+	case openapi.TaskTypeRELOADCONFIG:
+		err := reloadConfig()
+		if err != nil {
+			problem(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+		respond(w, r, http.StatusAccepted, nil)
 
 	default:
 		problem(w, r, http.StatusBadRequest, "Unsupported task type")
@@ -645,20 +677,14 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	if docsUrl == "" {
 		docsUrl = "/docs/usage"
 	}
-	respond(w, r, http.StatusOK, openapi.Capabilities{
-		Search: openapi.Capability{
-			Supported: imageSource.AI.Available(),
-		},
-		Tags: openapi.Capability{
-			Supported: tagsEnabled,
-		},
-		Docs: openapi.DocsCapability{
-			Capability: openapi.Capability{
-				Supported: docsUrl != "",
-			},
-			Url: docsUrl,
-		},
-	})
+	capabilities := openapi.Capabilities{}
+	if imageSource != nil {
+		capabilities.Search.Supported = imageSource.AI.Available()
+	}
+	capabilities.Tags.Supported = tagsEnabled
+	capabilities.Docs.Supported = docsUrl != ""
+	capabilities.Docs.Url = docsUrl
+	respond(w, r, http.StatusOK, capabilities)
 }
 
 func (*Api) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
@@ -1238,6 +1264,15 @@ func applyConfig(appConfig *AppConfig) {
 	}
 }
 
+func reloadConfig() error {
+	appConfig, err := loadConfig(dataDir)
+	if err != nil {
+		return err
+	}
+	applyConfig(appConfig)
+	return nil
+}
+
 func main() {
 	var err error
 
@@ -1304,10 +1339,11 @@ func main() {
 	}
 
 	initDefaults()
-	dataDir, exists := os.LookupEnv("PHOTOFIELD_DATA_DIR")
+	dir, exists := os.LookupEnv("PHOTOFIELD_DATA_DIR")
 	if !exists {
-		dataDir = "."
+		dir = "."
 	}
+	dataDir = dir
 
 	sceneSource = scene.NewSceneSource()
 
@@ -1330,12 +1366,10 @@ func main() {
 		if !init {
 			log.Printf("config change detected, reloading")
 		}
-		appConfig, err := loadConfig(dataDir)
+		err := reloadConfig()
 		if err != nil {
-			log.Printf("unable to load configuration: %v", err)
-			return
+			log.Printf("unable to reload config: %v", err)
 		}
-		applyConfig(appConfig)
 	})
 
 	if *vacuumFlag {

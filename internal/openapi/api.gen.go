@@ -45,6 +45,8 @@ const (
 	TaskTypeINDEXFILES TaskType = "INDEX_FILES"
 
 	TaskTypeINDEXMETADATA TaskType = "INDEX_METADATA"
+
+	TaskTypeRELOADCONFIG TaskType = "RELOAD_CONFIG"
 )
 
 // Bounds defines model for Bounds.
@@ -298,8 +300,8 @@ type GetTasksParams struct {
 
 // PostTasksJSONBody defines parameters for PostTasks.
 type PostTasksJSONBody struct {
-	CollectionId CollectionId `json:"collection_id"`
-	Type         TaskType     `json:"type"`
+	CollectionId *CollectionId `json:"collection_id,omitempty"`
+	Type         TaskType      `json:"type"`
 }
 
 // PostScenesJSONRequestBody defines body for PostScenes for application/json ContentType.

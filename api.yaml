@@ -465,7 +465,6 @@ paths:
               type: object
               required:
                 - type
-                - collection_id
               properties:
                 type:
                   $ref: "#/components/schemas/TaskType"
@@ -789,6 +788,7 @@ components:
         - INDEX_CONTENTS
         - INDEX_CONTENTS_COLOR
         - INDEX_CONTENTS_AI
+        - RELOAD_CONFIG
     
     CollectionId:
       type: string

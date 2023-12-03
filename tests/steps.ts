@@ -13,20 +13,10 @@ When('the user runs the app', async ({ app }) => {
   await app.run();
 });
 
-Then('debug wait {int}', async ({}, ms: number) => {
-  await new Promise(resolve => setTimeout(resolve, ms));
-});
-
-Then('the app logs {string}', async ({ app }, log: string) => {
-  await expect(async () => {
-    expect(app.stderr).toContain(log);
-  }).toPass();
-});
-
 Given('a running API', async ({ app }) => {
   await app.run();
   await expect(async () => {
-    expect(app.stderr).toContain("api at :8080/");
+    expect(app.stderr).toContain("app running");
   }).toPass();
 });
 
@@ -36,6 +26,16 @@ When('the API goes down', async ({ app }) => {
 
 When('the API comes back up', async ({ app }) => {
   await app.run();
+});
+
+Then('debug wait {int}', async ({}, ms: number) => {
+  await new Promise(resolve => setTimeout(resolve, ms));
+});
+
+Then('the app logs {string}', async ({ app }, log: string) => {
+  await expect(async () => {
+    expect(app.stderr).toContain(log);
+  }).toPass();
 });
 
 When('the user waits for {int} seconds', async ({ page }, sec: number) => { 

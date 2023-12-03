@@ -17,7 +17,9 @@
         <li>You have not configured any collections in the <code>configuration.yaml</code>.</li>
         <li>Your <code>configuration.yaml</code> is not being loaded correctly.</li>
       </ul>
-      <response-retry-button :response="response"></response-retry-button>
+      <response-retry-button @click="reload" :response="response">
+        Reload Configuration
+      </response-retry-button>
     </center-message>
     <div
       v-else
@@ -34,7 +36,7 @@
 </template>
 
 <script setup>
-import { useApi } from '../api';
+import { createTask, useApi } from '../api';
 import PageTitle from './PageTitle.vue';
 import CollectionLink from './CollectionLink.vue';
 import ResponseLoader from './ResponseLoader.vue';
@@ -43,6 +45,11 @@ import CenterMessage from './CenterMessage.vue';
 
 const response = useApi(() => "/collections");
 const collections = response.items;
+
+const reload = async () => {
+  await createTask("RELOAD_CONFIG");
+  await response.mutate();
+}
 </script>
 
 <style scoped>

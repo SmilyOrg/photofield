@@ -6,7 +6,6 @@ test.describe("Connection Error Message", () => {
   test("UI loads, but API is down", async ({ Given, app, When, Then, page }) => {
     await Given("an empty working directory", null, { app });
     await When("the user opens the home page", null, { app });
-    await Then("the page shows a progress bar", null, { page });
     await Then("the page shows \"Connection error\"", null, { page });
   });
 

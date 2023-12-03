@@ -18,5 +18,5 @@ Feature: First User Experience
     Then the page does not show "Connection error"
     And the page shows "No collections"
     When the user adds a folder "vacation"
-    And the user clicks "Retry"
+    And the user clicks "Reload Configuration"
     Then the page does not show "No collections"
