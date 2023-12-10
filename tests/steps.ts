@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { createBdd } from 'playwright-bdd';
-import { test } from './fixtures';
+import { DataTable } from '@cucumber/cucumber';
+import { test, App } from './fixtures';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -18,11 +19,29 @@ Given('the config {string}', async ({ app }, p: string) => {
   await fs.copyFile(configPath, app.path("configuration.yaml"));
 });
 
+async function addFiles(dataTable: DataTable, app: App) {
+  for (const row of dataTable.rows()) {
+    const [src, dst] = row;
+    const srcPath = path.resolve(__dirname, "..", src);
+    const dstPath = app.path(dst);
+    await fs.mkdir(path.dirname(dstPath), { recursive: true });
+    await fs.copyFile(srcPath, dstPath);
+  }
+}
+
+Given('the following files:', async ({ app }, dataTable: DataTable) => {
+  await addFiles(dataTable, app);
+});
+
+When('the user adds the following files:', async ({ app }, dataTable: DataTable) => {
+  await addFiles(dataTable, app);
+});
+
 When('the user runs the app', async ({ app }) => {
   await app.run();
 });
 
-Given('a running API', async ({ app }) => {
+Given('a running app', async ({ app }) => {
   await app.run();
   await expect(async () => {
     expect(app.stderr).toContain("app running");
@@ -61,6 +80,10 @@ When('waits a second', async ({ page }) => {
 
 When('the user opens the home page', async ({ app }) => {
   await app.goto("/");
+});
+
+When('the user opens {string}', async ({ app }, path: string) => {
+  await app.goto(path);
 });
 
 Then('the page shows a progress bar', async ({ page }) => {
@@ -105,4 +128,8 @@ Then('the file {string} does not exist', async ({ app }, filePath: string) => {
   } catch (error) {
     expect(error.code).toBe('ENOENT');
   }
+});
+
+Then('the page shows photo {string}', async ({ app, page }, path: string) => {
+  
 });

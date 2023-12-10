@@ -24,6 +24,26 @@ Feature: First User Experience
     And the user clicks "Retry"
     Then the page does not show "No collections"
 
+  Scenario: Add one photo in a dir
+    Given an empty working directory
+    
+    When the user runs the app
+    Then the app logs "app running"
+    
+    When the user opens the home page
+    Then the page shows "Photos"
+    And the page shows "No collections"
+
+    When the user adds a folder "photos"
+    And the user adds the following files:
+      | src                       | dst          |
+      | docs/assets/logo-wide.jpg | photos/a.jpg |
+
+    When the user clicks "Retry"
+    Then the page does not show "No collections"
+
+
+
   Scenario: Preconfigured Basic
     Given an empty working directory
     And the config "configs/three-collections.yaml"

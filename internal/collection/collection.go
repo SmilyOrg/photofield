@@ -23,10 +23,25 @@ type Collection struct {
 	Dirs          []string   `json:"dirs"`
 	IndexedAt     *time.Time `json:"indexed_at,omitempty"`
 	IndexedCount  int        `json:"indexed_count"`
+	InvalidatedAt *time.Time `json:"-"`
 }
 
 func (collection *Collection) GenerateId() {
 	collection.Id = slug.Make(collection.Name)
+}
+
+func (collection *Collection) UpdatedAt() time.Time {
+	if collection.InvalidatedAt != nil && collection.IndexedAt != nil {
+		if collection.InvalidatedAt.After(*collection.IndexedAt) {
+			return *collection.InvalidatedAt
+		}
+		return *collection.IndexedAt
+	} else if collection.InvalidatedAt != nil {
+		return *collection.InvalidatedAt
+	} else if collection.IndexedAt != nil {
+		return *collection.IndexedAt
+	}
+	return time.Time{}
 }
 
 func (collection *Collection) Expand() []Collection {

@@ -209,6 +209,7 @@ export function useScene({
   const scene = computed(() => {
     const list = scenes?.value;
     if (!list || list.length == 0) return null;
+    if (list[0].stale) return null;
     return list[0];
   });
 
@@ -220,10 +221,13 @@ export function useScene({
     recreateScenesInProgress.value = recreateScenesInProgress.value - 1;
   }
 
-  watch(scenes, async newScene => {
-    // Create scene if a matching one hasn't been found
-    if (newScene?.length === 0) {
+  watch(scenes, async scenes => {
+    console.log("scene changed", scenes);
+    if (!scenes || scenes.length === 0) {
       console.log("scene not found, creating...");
+      await recreateScene();
+    } else if (scenes.length >= 1 && scenes[0].stale) {
+      console.log("scene stale, recreating...");
       await recreateScene();
     }
   })

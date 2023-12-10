@@ -381,7 +381,7 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 		problem(w, r, http.StatusBadRequest, "Collection not found")
 		return
 	}
-	sceneConfig.Collection = *collection
+	sceneConfig.Collection = collection
 
 	sceneConfig.Layout.ViewportWidth = float64(data.ViewportWidth)
 	sceneConfig.Layout.ViewportHeight = float64(data.ViewportHeight)
@@ -447,7 +447,7 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 		problem(w, r, http.StatusBadRequest, "Collection not found")
 		return
 	}
-	sceneConfig.Collection = *collection
+	sceneConfig.Collection = collection
 
 	scenes := sceneSource.GetScenesWithConfig(sceneConfig)
 	sort.Slice(scenes, func(i, j int) bool {
@@ -1079,6 +1079,10 @@ func indexCollection(collection *collection.Collection) (task Task, existing boo
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{})
 		globalTasks.Delete(task.Id)
 		close(counter)
+
+		now := time.Now()
+		collection.IndexedAt = &now
+		collection.IndexedCount = task.Done
 	}()
 	return
 }
@@ -1091,7 +1095,7 @@ func addExampleScene() {
 	sceneConfig.Layout.ImageHeight = 300
 	sceneConfig.Layout.Type = layout.Map
 	sceneConfig.Layout.Order = layout.DateAsc
-	sceneConfig.Collection = *getCollectionById("geo")
+	sceneConfig.Collection = getCollectionById("geo")
 	sceneSource.Add(sceneConfig, imageSource)
 }
 
@@ -1178,6 +1182,28 @@ func benchmarkSources(collection *collection.Collection, seed int64, sampleSize 
 	bench.BenchmarkSources(seed, sources, samples, count)
 }
 
+func invalidateDirs(dirs []string) {
+	now := time.Now()
+	for i := range collections {
+		collection := &collections[i]
+		updated := false
+		for _, dir := range dirs {
+			for _, d := range collection.Dirs {
+				if strings.HasPrefix(dir, d) {
+					updated = true
+					break
+				}
+			}
+			if updated {
+				break
+			}
+		}
+		if updated {
+			collection.InvalidatedAt = &now
+		}
+	}
+}
+
 func applyConfig(appConfig *AppConfig) {
 	if globalGeo != nil {
 		err := globalGeo.Close()
@@ -1197,7 +1223,7 @@ func applyConfig(appConfig *AppConfig) {
 	}
 
 	if len(appConfig.Collections) > 0 {
-		defaultSceneConfig.Collection = appConfig.Collections[0]
+		defaultSceneConfig.Collection = &appConfig.Collections[0]
 	}
 	collections = appConfig.Collections
 	defaultSceneConfig.Layout = appConfig.Layout
@@ -1217,6 +1243,7 @@ func applyConfig(appConfig *AppConfig) {
 	}
 
 	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, nil)
+	imageSource.HandleDirUpdates(invalidateDirs)
 	if tileRequestConfig.Concurrency > 0 {
 		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
 		tileRequestsOut = make(chan struct{}, 10000)

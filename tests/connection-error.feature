@@ -7,7 +7,7 @@ Feature: Connection Error Message
 
   Scenario: UI loads, API is up intermittently
     Given an empty working directory
-    And a running API
+    And a running app
     When the user opens the home page
     Then the page shows "Photos"
     Then the page does not show "Connection error"

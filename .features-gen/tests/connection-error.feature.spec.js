@@ -11,7 +11,7 @@ test.describe("Connection Error Message", () => {
 
   test("UI loads, API is up intermittently", async ({ Given, app, And, When, Then, page }) => {
     await Given("an empty working directory", null, { app });
-    await And("a running API", null, { app });
+    await And("a running app", null, { app });
     await When("the user opens the home page", null, { app });
     await Then("the page shows \"Photos\"", null, { page });
     await Then("the page does not show \"Connection error\"", null, { page });

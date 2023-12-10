@@ -7,7 +7,7 @@ import { BrowserContext, Page } from '@playwright/test';
 
 const LISTEN_REGEX = /local\s+http:\/\/(\S+)/;
 
-class App {
+export class App {
 
   public cwd: string;
   public stdout: string;

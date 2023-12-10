@@ -1,6 +1,9 @@
 <template>
   <div class="collection-settings">
-    <span class="grow">{{ fileCount }} file{{ fileCount == 1 ? "" : "s" }} indexed {{ ago(collection?.indexed_at) }}</span>
+    <span class="grow">
+      {{ fileCount }} file{{ fileCount == 1 ? "" : "s" }}
+      indexed {{ ago(collection?.indexed_at) }}
+    </span>
     <ui-button @click="emit('reindex')">Rescan</ui-button>
     <ui-icon-button class="expand" @click="expand = !expand">
       {{ expand ? "expand_less" : "expand_more" }}
@@ -34,17 +37,17 @@ const {
 } = toRefs(props);
 
 const fileCount = computed(() => {
-    if (collection.value) {
-      for (const task of tasks.value) {
-        if (task.type != "INDEX") continue;
-        if (task.collection_id != collection.value.id) continue;
-        return task.done.toLocaleString();
-      }
+  if (collection.value) {
+    for (const task of tasks.value) {
+      if (task.type != "INDEX") continue;
+      if (task.collection_id != collection.value.id) continue;
+      return task.done.toLocaleString();
     }
-    const scene = scenes.value && scenes.value.length > 0 && scenes.value[0];
-    return scene?.file_count !== undefined ?
-      scene.file_count.toLocaleString() : 
-      null;
+  }
+  const scene = scenes.value && scenes.value.length > 0 && scenes.value[0];
+  return scene?.file_count !== undefined ?
+    scene.file_count.toLocaleString() : 
+    null;
 });
 
 const ago = (at) => {

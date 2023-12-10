@@ -26,6 +26,19 @@ test.describe("First User Experience", () => {
     await Then("the page does not show \"No collections\"", null, { page });
   });
 
+  test("Add one photo in a dir", async ({ Given, app, When, Then, page, And }) => {
+    await Given("an empty working directory", null, { app });
+    await When("the user runs the app", null, { app });
+    await Then("the app logs \"app running\"", null, { app });
+    await When("the user opens the home page", null, { app });
+    await Then("the page shows \"Photos\"", null, { page });
+    await And("the page shows \"No collections\"", null, { page });
+    await When("the user adds a folder \"photos\"", null, { app });
+    await And("the user adds the following files:", {"dataTable":{"rows":[{"cells":[{"value":"src"},{"value":"dst"}]},{"cells":[{"value":"docs/assets/logo-wide.jpg"},{"value":"photos/a.jpg"}]}]}}, { app });
+    await When("the user clicks \"Retry\"", null, { page });
+    await Then("the page does not show \"No collections\"", null, { page });
+  });
+
   test("Preconfigured Basic", async ({ Given, app, And, When, Then, page }) => {
     await Given("an empty working directory", null, { app });
     await And("the config \"configs/three-collections.yaml\"", null, { app });

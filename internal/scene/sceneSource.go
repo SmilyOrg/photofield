@@ -38,7 +38,7 @@ type storedScene struct {
 
 type SceneConfig struct {
 	Render     render.Render
-	Collection collection.Collection
+	Collection *collection.Collection
 	Layout     layout.Layout
 	Scene      render.Scene
 }
@@ -154,6 +154,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				Source: imageSource,
 			}
 		}
+		scene.Dependencies = append(scene.Dependencies, config.Collection)
 		scene.FileCount = len(scene.Photos)
 		scene.Loading = false
 		finished()
@@ -195,14 +196,15 @@ func (source *SceneSource) pruneScenes() {
 }
 
 func (source *SceneSource) GetSceneById(id string, imageSource *image.Source) *render.Scene {
-	value, found := source.sceneCache.Get(id)
-	if found {
-		return value
+	if scene, ok := source.sceneCache.Get(id); ok {
+		scene.UpdateStaleness()
+		return scene
 	}
 
 	stored, loaded := source.scenes.Load(id)
 	if loaded {
 		scene := stored.(storedScene).scene
+		scene.UpdateStaleness()
 		source.sceneCache.Set(id, scene, getSceneCost(scene))
 		return scene
 	}
@@ -269,6 +271,7 @@ func (source *SceneSource) GetScenesWithConfig(config SceneConfig) []*render.Sce
 	source.scenes.Range(func(_, value interface{}) bool {
 		stored := value.(storedScene)
 		if sceneConfigEqual(stored.config, config) {
+			stored.scene.UpdateStaleness()
 			scenes = append(scenes, stored.scene)
 		}
 		return true

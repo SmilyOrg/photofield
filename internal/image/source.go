@@ -266,6 +266,10 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 	return &source
 }
 
+func (source *Source) HandleDirUpdates(fn DirsFunc) {
+	source.database.HandleDirUpdates(fn)
+}
+
 func (source *Source) Vacuum() error {
 	return source.database.vacuum()
 }
