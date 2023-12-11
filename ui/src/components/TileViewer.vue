@@ -188,8 +188,6 @@ export default {
     },
     projectionExtent() {
       let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
-      if (width < 1) width = 1;
-      if (height < 1) height = 1;
       return [0, 0, width, height];
     },
     minViewportZoom() {
@@ -212,12 +210,16 @@ export default {
       const power = 1 << zoom;
       let width = power*tileSize;
       let height = power*tileSize;
-      const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
+      const sw = Math.max(this.scene.bounds.w, this.viewport.width.value);
+      const sh = Math.max(this.scene.bounds.h, this.viewport.height.value);
+      const sceneAspect = sw / sh;
       if (sceneAspect < 1) {
         width = height * sceneAspect;
       } else {
         height = width / sceneAspect;
       }
+      if (width < 1) width = 1;
+      if (height < 1) height = 1;
       return { width, height }
     },
 

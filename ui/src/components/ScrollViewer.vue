@@ -215,7 +215,7 @@ const view = computed(() => {
     return region.value.bounds;
   }
 
-  const maxScrollY = Math.max(1, (scene.value?.bounds.h || 0) - viewport.height.value);
+  const maxScrollY = Math.max(1, canvas.value.height - viewport.height.value);
   const sy = Math.min(scrollY.value, maxScrollY - 1);
 
   return {
