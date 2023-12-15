@@ -222,7 +222,6 @@ export function useScene({
   }
 
   watch(scenes, async scenes => {
-    console.log("scene changed", scenes);
     if (!scenes || scenes.length === 0) {
       console.log("scene not found, creating...");
       await recreateScene();

@@ -190,6 +190,10 @@ export default {
       let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
       return [0, 0, width, height];
     },
+    viewExtent() {
+      let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
+      return [0, -height*2, width, height];
+    },
     minViewportZoom() {
       if (!this.v || !this.viewport.width.value) {
         return 0;
@@ -210,16 +214,12 @@ export default {
       const power = 1 << zoom;
       let width = power*tileSize;
       let height = power*tileSize;
-      const sw = Math.max(this.scene.bounds.w, this.viewport.width.value);
-      const sh = Math.max(this.scene.bounds.h, this.viewport.height.value);
-      const sceneAspect = sw / sh;
+      const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
       if (sceneAspect < 1) {
         width = height * sceneAspect;
       } else {
         height = width / sceneAspect;
       }
-      if (width < 1) width = 1;
-      if (height < 1) height = 1;
       return { width, height }
     },
 
@@ -382,7 +382,7 @@ export default {
           enableRotation: false,
         });
       } else {
-        const extent = this.projectionExtent;
+        const extent = this.viewExtent;
         this.v = new View({
           center: [extent[2]/2, extent[3]],
           projection: this.projection,
