@@ -64,11 +64,14 @@ const ago = useTimeAgo(errorTime, {
 
 <style scoped>
 
+.response {
+  position: absolute;
+  z-index: 10;
+}
+
 .spinner {
   --size: 48px;
-  position: absolute;
-  width: 100%;
-  height: 100%;
+  position: fixed;
   width: var(--size);
   height: var(--size);
   top: calc(50% - var(--size) / 2);

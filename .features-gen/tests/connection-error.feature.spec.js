@@ -28,6 +28,13 @@ test.describe("Connection Error Message", () => {
     await And("the page does not show \"Connection error\"", null, { page });
   });
 
+  test("Collection page opens, but API is down", async ({ Given, app, And, When, Then, page }) => {
+    await Given("an empty working directory", null, { app });
+    await And("the following files:", {"dataTable":{"rows":[{"cells":[{"value":"src"},{"value":"dst"}]},{"cells":[{"value":"docs/assets/logo-wide.jpg"},{"value":"vacation/a.jpg"}]}]}}, { app });
+    await When("the user opens \"/collections/vacation\"", null, { app });
+    await Then("the page shows \"Connection error\"", null, { page });
+  });
+
 });
 
 // == technical section ==
