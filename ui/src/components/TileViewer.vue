@@ -33,6 +33,13 @@ import "ol/ol.css";
 import { getTileUrl } from '../api';
 import Kinetic from 'ol/Kinetic';
 import { toLonLat, get as getProjection, fromLonLat } from 'ol/proj';
+import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
+import VectorLayer from 'ol/layer/Vector';
+import VectorSource from 'ol/source/Vector';
+import { Polygon } from 'ol/geom';
+import Feature from 'ol/Feature';
+import Style from 'ol/style/Style';
+import Fill from 'ol/style/Fill';
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
   const originalEvent = /** @type {KeyboardEvent|MouseEvent|TouchEvent} */ (
@@ -43,7 +50,6 @@ function ctrlWithMaybeShift(mapBrowserEvent) {
     (MAC ? originalEvent.metaKey : originalEvent.ctrlKey)
   );
 };
-
 
 export default {
 
@@ -61,6 +67,7 @@ export default {
     kinetic: Boolean,
     tileSize: Number,
     view: Object,
+    clipview: Object,
     backgroundColor: String,
     selectTagId: String,
     debug: Object,
@@ -94,6 +101,8 @@ export default {
   },
   async mounted() {
     this.latestView = null;
+    this.clipviewChangeTime = 0;
+    this.lastAnimationTime = 0;
     this.reset();
   },
   watch: {
@@ -169,6 +178,10 @@ export default {
 
     view(view) {
       this.setView(view);
+    },
+
+    clipview() {
+      this.clipviewChangeTime = Date.now();
     },
 
     selectTagId() {
@@ -265,6 +278,99 @@ export default {
           ctx.globalCompositeOperation = "source-over";
         });
       }
+
+      
+      main.on("prerender", event => {
+        // Clip to the top left square
+        const ctx = event.context;
+        const size = this.map.getSize();
+        // const view = this.map.getView();
+        // const extent = view.calculateExtent(size);
+        const view = this.clipview;
+        if (!view) return;
+        
+        // const corners = this.pixelCornersFromView(view);
+        // const pixelRatio = window.devicePixelRatio;
+        // corners.tl[0] *= pixelRatio;
+        // corners.tl[1] *= pixelRatio;
+        // corners.tr[0] *= pixelRatio;
+        // corners.tr[1] *= pixelRatio;
+        // corners.br[0] *= pixelRatio;
+        // corners.br[1] *= pixelRatio;
+        // corners.bl[0] *= pixelRatio;
+        // corners.bl[1] *= pixelRatio;
+
+        // ctx.save();
+        // ctx.rect(
+        //   corners.tl[0],
+        //   corners.tl[1],
+        //   corners.tr[0] - corners.tl[0],
+        //   corners.bl[1] - corners.tl[1],
+        // );
+        // ctx.clip();
+
+        // ctx.strokeStyle = "green";
+        // ctx.lineWidth = 20;
+        // // ctx.beginPath();
+        
+        // ctx.strokeRect(
+        //   corners.tl[0],
+        //   corners.tl[1],
+        //   corners.tr[0] - corners.tl[0],
+        //   corners.bl[1] - corners.tl[1],
+        // );
+
+        // Highlight the view instead
+      });
+
+      main.on("postrender", event => {
+        const ctx = event.context;
+        const view = this.clipview;
+        if (!view) return;
+
+        // ctx.restore();
+        
+        const size = this.map.getSize();
+        const corners = this.pixelCornersFromView(view);
+
+        const pixelRatio = window.devicePixelRatio;
+        size[0] *= pixelRatio;
+        size[1] *= pixelRatio;
+        corners.tl[0] *= pixelRatio;
+        corners.tl[1] *= pixelRatio;
+        corners.tr[0] *= pixelRatio;
+        corners.tr[1] *= pixelRatio;
+        corners.br[0] *= pixelRatio;
+        corners.br[1] *= pixelRatio;
+        corners.bl[0] *= pixelRatio;
+        corners.bl[1] *= pixelRatio;
+
+        const alpha = 
+          this.lastAnimationTime ?
+            Math.max(0, Math.min(1, (Date.now() - this.clipviewChangeTime) / (this.lastAnimationTime*1000))) :
+            1;
+
+        // TODO: Fade based on distance instead of time
+        console.log(this.zoomFromView(this.latestView), this.zoomFromView(view));
+
+        const e = 1;
+        
+        ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+        ctx.beginPath();
+        ctx.rect(0, 0, size[0], size[1]);
+        ctx.moveTo(corners.tl[0] + e, corners.tl[1] + e);
+        ctx.lineTo(corners.tr[0] - e, corners.tr[1] + e);
+        ctx.lineTo(corners.br[0] - e, corners.br[1] - e);
+        ctx.lineTo(corners.bl[0] + e, corners.bl[1] - e);
+        ctx.closePath();
+        ctx.fill("evenodd");
+
+        if (alpha === 1 || alpha === 0) {
+          return;
+        }
+
+        // this.map.render();
+      });
       
       return main;
     },
@@ -272,6 +378,29 @@ export default {
     createLayers() {
 
       const main = this.createMainLayer();
+
+      // const clip = new VectorLayer({
+      //   source: new VectorSource({
+      //     features: [
+      //       new Feature({
+      //         geometry: new Polygon([
+      //           [
+      //             [0, 0],
+      //             [0, 5.5e11],
+      //             [2e11, 2e11],
+      //             [2e11, 0],
+      //             [0, 0],
+      //           ],
+      //         ]),
+      //       }),
+      //     ],
+      //   }),
+      //   style: new Style({
+      //     fill: new Fill({
+      //       color: "rgba(0, 0, 0, 0.5)",
+      //     }),
+      //   }),
+      // });
 
       if (this.geo) {
 
@@ -317,6 +446,7 @@ export default {
       } else {
         return [
           main,
+          // clip,
         ];
       }
     },
@@ -393,6 +523,7 @@ export default {
           extent,
           smoothExtentConstraint: false,
           showFullExtent: true,
+          constrainOnlyCenter: true,
         });
       }
 
@@ -653,6 +784,37 @@ export default {
       }
     },
 
+    elementFromView(view) {
+      if (!this.scene) return null;
+      const fullExtent = this.projection.getExtent();
+      const [xa, ya, xb, yb] = fullExtent;
+      const sw = this.scene.bounds.w;
+      const sh = this.scene.bounds.h;
+      const extent = this.extentFromView(view);
+      return {
+        x: extent[0] * sw / (xb - xa) + xa,
+        y: -extent[1] * sh / (yb - ya) + ya,
+        w: extent[2] * sw / (xb - xa) - extent[0] * sw / (xb - xa),
+        h: -extent[3] * sh / (yb - ya) + extent[1] * sh / (yb - ya),
+      }
+    },
+
+    pixelCornersFromView(view) {
+      if (!this.map) return null;
+      const extent = this.extentFromView(view);
+      // Coordinate from extent
+      const tl = getTopLeft(extent);
+      const tr = getTopRight(extent);
+      const bl = getBottomLeft(extent);
+      const br = getBottomRight(extent);
+      return {
+        tl: this.map.getPixelFromCoordinate(tl),
+        tr: this.map.getPixelFromCoordinate(tr),
+        bl: this.map.getPixelFromCoordinate(bl),
+        br: this.map.getPixelFromCoordinate(br),
+      }
+    },
+
     setPendingAnimationTime(t) {
       this.pendingAnimationTime = t;
     },
@@ -734,7 +896,11 @@ export default {
         const zoom = this.zoomFromView(view);
         const zoomDiff = Math.abs(zoom - prevZoom);
         if (zoomDiff > 1e-4 && !options) {
-          const t = zoomDiff * 0.05;
+          console.log(zoomDiff)
+          // const t = zoomDiff * 0.05;
+          // const t = zoomDiff * 0.2;
+          // const t = zoomDiff * 1;
+          const t = Math.pow(zoomDiff, 0.5) * 0.08;
           options = { animationTime: t }
         }
       }
@@ -750,12 +916,26 @@ export default {
       }
 
       const targetExtent = this.extentFromView(view);
+
+      this.lastAnimationTime = options?.animationTime || 0;
       
       const fitOpts = options ? {
         duration: options.animationTime*1000,
-        easing: function(t) {
-          return 1 - Math.pow(1 - t, 10)
+        easing: function(x) {
+          return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
         },
+        // easing: function(x) {
+        //   return x * x * x * (x * (6.0 * x - 15.0) + 10.0);
+        // },
+        // easing: function(t) {
+        //   return Math.pow(t, 0.5) + 0.3;
+        // },
+        // easing: function(t) {
+        //   return Math.pow(2, -50 * t) * Math.sin(((t - 0.1) * (2 * Math.PI)) / 0.3) + 1
+        // },
+        // easing: function(t) {
+        //   return Math.pow(2, -80 * t) * Math.sin(((t - 0.1) * (2 * Math.PI)) / 0.3) + 1
+        // },
       } : undefined;
 
       this.v.fit(targetExtent, fitOpts);

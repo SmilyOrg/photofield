@@ -7,6 +7,7 @@
       :style="{ transform: `translate(0, ${scrollY}px)` }"
       :scene="scene"
       :view="view"
+      :clipview="region?.bounds"
       :selectTagId="selectTagId"
       :debug="debug"
       :tileSize="512"
@@ -99,6 +100,7 @@ const emit = defineEmits({
   region: null,
   selectTagId: null,
   search: null,
+  elementView: null,
 })
 
 const {
@@ -141,7 +143,11 @@ useEventBus("recreate-scene").on(scene => {
   recreateScene();
 });
 
-const { region } = useSeekableRegion({
+const {
+  region,
+  navigate,
+  exit,
+} = useSeekableRegion({
   scene,
   collectionId,
   regionId,
@@ -301,6 +307,20 @@ const onView = (view) => {
     }
   }
   lastView.value = view;
+  // console.log("view", Object.assign({}, view));
+  // console.log("region", Object.assign({}, region.value?.bounds));
+  // console.log("element", viewer.value?.elementFromView(view));
+  // console.log("screen", getScreenView(region.value?.bounds));
+  // const corners = viewer.value?.pixelCornersFromView(region.value?.bounds);
+  // console.log(
+  //   "x", corners?.tl[0],
+  //   "y", corners?.tl[1],
+  //   "w", corners?.br[0] - corners?.tl[0],
+  //   "h", corners?.br[1] - corners?.tl[1],
+  // );
+  if (region.value?.bounds) {
+    emit("elementView", getScreenView(region.value.bounds));
+  }
 }
 
 const onBoxSelect = async (bounds, shift) => {
@@ -367,6 +387,8 @@ defineExpose({
   drawViewToCanvas,
   centerToBounds,
   getScreenView,
+  navigate,
+  exit,
 })
 
 </script>

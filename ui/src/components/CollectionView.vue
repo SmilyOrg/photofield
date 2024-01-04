@@ -6,7 +6,7 @@
       :response="collectionResponse"
     ></response-loader>
 
-    <map-viewer
+    <!-- <map-viewer
       v-if="layout == 'MAP'"
       ref="mapViewer"
       :interactive="true"
@@ -22,13 +22,14 @@
       @scene="mapScene = $event"
       @search="onSearch"
     >
-    </map-viewer>
+    </map-viewer> -->
 
+    <!-- v-else -->
     <scroll-viewer
-      v-else
       ref="scrollViewer"
-      :interactive="!stripVisible"
+      :interactive="true"
       :collectionId="collectionId"
+      :regionId="regionId"
       :layout="layout"
       :sort="sort"
       :imageHeight="imageHeight"
@@ -39,12 +40,37 @@
       :selectTagId="selectTagId"
       @selectTagId="onSelectTagId"
       @region="onScrollRegion"
+      @elementView="lastView = $event"
       @scene="scrollScene = $event"
       @search="onSearch"
     >
     </scroll-viewer>
+    
+    <!-- v-if="region"
+    :region="region"
+    :scene="scene"
+    :tags-enabled="tagsSupported"
+      @navigate="navigate($event)"
+      @favorite="favorite($event)"
+      @exit="resetZoomOrExit()"
+      @add-tag="addTag($event)"
+      @remove-tag="removeTag($event)" -->
+    <controls
+      class="controls"
+      :region="lastScrollRegion"
+      :scene="scrollScene"
+      @navigate="navigate($event)"
+      @exit="exit()"
+    ></controls>
 
-    <strip-viewer
+    <!-- <photo-frame
+      class="photoframe"
+      :view="lastView"
+    >
+
+    </photo-frame> -->
+
+    <!-- <strip-viewer
       ref="stripViewer"
       class="strip"
       :class="{ visible: stripVisible }"
@@ -60,7 +86,7 @@
       @scene="stripScene = $event"
       @search="onSearch"
     >
-    </strip-viewer>
+    </strip-viewer> -->
 
   </div>
 </template>
@@ -72,6 +98,8 @@ import { useRoute, useRouter } from 'vue-router';
 
 import ResponseLoader from './ResponseLoader.vue';
 import StripViewer from './StripViewer.vue';
+import PhotoFrame from './PhotoFrame.vue';
+import Controls from './Controls.vue';
 import ScrollViewer from './ScrollViewer.vue';
 import MapViewer from './MapViewer.vue';
 import { useApi } from '../api';
@@ -102,6 +130,7 @@ const stripViewer = ref(null);
 const stripView = ref(null);
 const lastScrollRegion = ref(null);
 const lastStripRegion = ref(null);
+const lastView = ref(null);
 
 const route = useRoute();
 const router = useRouter();
@@ -110,6 +139,15 @@ const initWithStrip = !!regionId.value;
 const stripVisible = ref(initWithStrip);
 const lastRegionId = ref(null);
 const transitionRegionId = ref(null);
+
+const navigate = computed(() => {
+  return scrollViewer.value?.navigate;
+});
+
+const exit = () => {
+  scrollViewer.value?.exit();
+  lastView.value = null;
+}
 
 const scrollScene = ref(null);
 const mapScene = ref(null);
@@ -299,6 +337,18 @@ const onMapRegion = async (region) => {
 </script>
 
 <style scoped>
+
+.controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+.photoframe {
+  position: fixed;
+  top: 0;
+  left: 0;
+}
 
 .strip {
   visibility: hidden;
