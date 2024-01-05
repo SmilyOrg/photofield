@@ -15,7 +15,7 @@ Given('an empty working directory', async ({ app }) => {
 
 
 Given('the config {string}', async ({ app }, p: string) => {
-  const configPath = path.resolve(__dirname, p);
+  const configPath = path.resolve(__dirname, "..", "configs", p);
   await fs.copyFile(configPath, app.path("configuration.yaml"));
 });
 

@@ -16,8 +16,4 @@ tools/jupyter/data
 .env
 dist/
 node_modules/
-/test-results/
-/test-tmp/
-/playwright-report/
 /blob-report/
-/playwright/.cache/

@@ -36,8 +36,8 @@ Feature: First User Experience
 
     When the user adds a folder "photos"
     And the user adds the following files:
-      | src                       | dst          |
-      | docs/assets/logo-wide.jpg | photos/a.jpg |
+      | src                          | dst          |
+      | ../docs/assets/logo-wide.jpg | photos/a.jpg |
 
     When the user clicks "Retry"
     Then the page does not show "No collections"
@@ -46,7 +46,7 @@ Feature: First User Experience
 
   Scenario: Preconfigured Basic
     Given an empty working directory
-    And the config "configs/three-collections.yaml"
+    And the config "three-collections.yaml"
     
     When the user runs the app
     Then the app logs "app running"

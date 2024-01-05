@@ -26,8 +26,8 @@ Feature: Connection Error Message
   Scenario: Collection page opens, but API is down
     Given an empty working directory
     And the following files:
-      | src                       | dst            |
-      | docs/assets/logo-wide.jpg | vacation/a.jpg |
+      | src                          | dst            |
+      | ../docs/assets/logo-wide.jpg | vacation/a.jpg |
 
     When the user opens "/collections/vacation"
     Then the page shows "Connection error"

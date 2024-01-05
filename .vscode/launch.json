@@ -22,7 +22,7 @@
     {
       "name": "Debug bddgen",
       "request": "launch",
-      "program": "${workspaceFolder}/node_modules/playwright-bdd/dist/cli/index.js",
+      "program": "${workspaceFolder}/e2e/node_modules/playwright-bdd/dist/cli/index.js",
       "autoAttachChildProcesses": true,
       "skipFiles": [
         "<node_internals>/**"
