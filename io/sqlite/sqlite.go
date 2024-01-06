@@ -32,6 +32,7 @@ type Source struct {
 	path    string
 	pool    *sqlitex.Pool
 	pending chan Thumb
+	closed  bool
 }
 
 type Thumb struct {
@@ -94,6 +95,15 @@ func New(path string, migrations embed.FS) *Source {
 	return &source
 }
 
+func (s *Source) Close() error {
+	if s == nil || s.closed {
+		return nil
+	}
+	s.closed = true
+	close(s.pending)
+	return s.pool.Close()
+}
+
 func setPragma(conn *sqlite.Conn, name string, value interface{}) error {
 	sql := fmt.Sprintf("PRAGMA %s = %v;", name, value)
 	return sqlitex.ExecuteTransient(conn, sql, &sqlitex.ExecOptions{})
@@ -147,7 +157,8 @@ func (s *Source) init() {
 func (s *Source) migrate(migrations embed.FS) {
 	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations-thumbs")
 	if err != nil {
-		log.Fatalf("failed to create migrate source: %v", err)
+		log.Printf("migrations not found, skipping: %v", err)
+		return
 	}
 	url := fmt.Sprintf("sqlite://%v", filepath.ToSlash(s.path))
 	m, err := migrate.NewWithSourceInstance(
@@ -207,6 +218,11 @@ func (s *Source) Delete(id uint32) error {
 func (s *Source) writePending() {
 	c := s.pool.Get(context.Background())
 	defer s.pool.Put(c)
+
+	if c == nil {
+		log.Println("database write unable to get connection, stopping")
+		return
+	}
 
 	insert := c.Prep(`
 		INSERT OR REPLACE INTO thumb256(id, created_at_unix, data)

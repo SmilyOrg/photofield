@@ -19,7 +19,7 @@ import (
 )
 
 type Ristretto struct {
-	cache *drist.Cache
+	cache *drist.Cache[IdWithName, io.Result]
 }
 
 type IdWithSize struct {
@@ -38,7 +38,8 @@ func (ids IdWithSize) String() string {
 
 func New() *Ristretto {
 	maxSizeBytes := int64(256000000)
-	cache, err := drist.NewCache(&drist.Config{
+
+	cache, err := drist.NewCache(&drist.Config[IdWithName, io.Result]{
 		NumCounters: 1e6,          // number of keys to track frequency of
 		MaxCost:     maxSizeBytes, // maximum cost of cache
 		BufferItems: 64,           // number of keys per Get buffer
@@ -55,70 +56,55 @@ func New() *Ristretto {
 	}
 }
 
-func keyToHash(key interface{}) (uint64, uint64) {
-	switch k := key.(type) {
-	case IdWithSize:
-		a, b := uint64(k.Id), (uint64(k.Size.X)<<32)|(uint64(k.Size.Y))
-		fmt.Printf("%x %x\n", a, b)
-		return uint64(k.Id), (uint64(k.Size.X) << 32) | (uint64(k.Size.Y))
-	case IdWithName:
-		// a, b := uint64(k.Id), z.MemHashString(k.Name)
-		// fmt.Printf("%x %x\n", a, b)
-		// b = 0
-		// return a, b
-		str := fmt.Sprintf("%d %s", k.Id, k.Name)
-		return z.KeyToHash(str)
+func (r *Ristretto) Close() error {
+	if r == nil || r.cache == nil {
+		return nil
 	}
-
-	return z.KeyToHash(key)
-	// ids, ok := key.(IdWithSize)
-	// if ok {
-
-	// }
-	// return
+	r.cache.Clear()
+	r.cache.Close()
+	r.cache = nil
+	return nil
 }
 
-func (r Ristretto) Name() string {
+func keyToHash(k IdWithName) (uint64, uint64) {
+	str := fmt.Sprintf("%d %s", k.Id, k.Name)
+	return z.KeyToHash(str)
+}
+
+func (r *Ristretto) Name() string {
 	return "ristretto"
 }
 
-func (r Ristretto) Size(size io.Size) io.Size {
+func (r *Ristretto) Size(size io.Size) io.Size {
 	return io.Size{}
 }
 
-func (r Ristretto) GetDurationEstimate(size io.Size) time.Duration {
+func (r *Ristretto) GetDurationEstimate(size io.Size) time.Duration {
 	return 80 * time.Nanosecond
 }
 
-func (r Ristretto) Get(ctx context.Context, id io.ImageId, path string) io.Result {
-	value, found := r.cache.Get(uint32(id))
+func (r *Ristretto) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+	idn := IdWithName{Id: id}
+	value, found := r.cache.Get(idn)
 	if found {
-		return value.(io.Result)
+		return value
 	}
 	return io.Result{}
 }
 
-func (r Ristretto) GetWithSize(ctx context.Context, ids IdWithSize) io.Result {
-	value, found := r.cache.Get(ids)
-	if found {
-		return value.(io.Result)
-	}
-	return io.Result{}
-}
-
-func (r Ristretto) GetWithName(ctx context.Context, id io.ImageId, name string) io.Result {
+func (r *Ristretto) GetWithName(ctx context.Context, id io.ImageId, name string) io.Result {
 	idn := IdWithName{
 		Id:   id,
 		Name: name,
 	}
 	value, found := r.cache.Get(idn)
 	if found {
-		return value.(io.Result)
+		return value
 	}
 	return io.Result{}
 }
 
-func (r Ristretto) SetWithName(ctx context.Context, id io.ImageId, name string, v io.Result) bool {
+func (r *Ristretto) SetWithName(ctx context.Context, id io.ImageId, name string, v io.Result) bool {
 	idn := IdWithName{
 		Id:   id,
 		Name: name,
@@ -126,16 +112,12 @@ func (r Ristretto) SetWithName(ctx context.Context, id io.ImageId, name string, 
 	return r.cache.SetWithTTL(idn, v, 0, 10*time.Minute)
 }
 
-func (r Ristretto) Set(ctx context.Context, id io.ImageId, path string, v io.Result) bool {
-	return r.cache.SetWithTTL(uint32(id), v, 0, 10*time.Minute)
+func (r *Ristretto) Set(ctx context.Context, id io.ImageId, path string, v io.Result) bool {
+	idn := IdWithName{Id: id}
+	return r.cache.SetWithTTL(idn, v, 0, 10*time.Minute)
 }
 
-func (r Ristretto) SetWithSize(ctx context.Context, ids IdWithSize, v io.Result) bool {
-	return r.cache.SetWithTTL(ids, v, 0, 10*time.Minute)
-}
-
-func cost(value interface{}) int64 {
-	r := value.(io.Result)
+func cost(r io.Result) int64 {
 	img := r.Image
 	if img == nil {
 		return 1

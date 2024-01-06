@@ -23,7 +23,6 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -146,13 +145,14 @@ type Source struct {
 	decoder  *Decoder
 	database *Database
 
+	imageCache     *ristretto.Ristretto
 	imageInfoCache InfoCache
 	pathCache      PathCache
 
 	metadataQueue queue.Queue
 	contentsQueue queue.Queue
 
-	thumbnailSources    []io.ReadDecoder
+	thumbnailSources    []io.ReadDecoderSource
 	thumbnailGenerators io.Sources
 	thumbnailSink       *sqlite.Source
 
@@ -169,43 +169,36 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 	source.pathCache = newPathCache()
 	source.Geo = geo
 
-	source.SourceLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: metrics.Namespace,
-		Name:      "source_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
-	},
+	source.SourceLatencyHistogram = metrics.AddHistogram(
+		"source_latency",
+		[]float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
 		[]string{"source"},
 	)
 
-	source.SourceLatencyAbsDiffHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: metrics.Namespace,
-		Name:      "source_latency_abs_diff",
-		Buckets:   []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 200000, 500000, 1000000},
-	},
+	source.SourceLatencyAbsDiffHistogram = metrics.AddHistogram(
+		"source_latency_abs_diff",
+		[]float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 200000, 500000, 1000000},
 		[]string{"source"},
 	)
 
-	source.SourcePerOriginalMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: metrics.Namespace,
-		Name:      "source_per_original_megapixel_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
-	},
+	source.SourcePerOriginalMegapixelLatencyHistogram = metrics.AddHistogram(
+		"source_per_original_megapixel_latency",
+		[]float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
 		[]string{"source"},
 	)
 
-	source.SourcePerResizedMegapixelLatencyHistogram = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: metrics.Namespace,
-		Name:      "source_per_resized_megapixel_latency",
-		Buckets:   []float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
-	},
+	source.SourcePerResizedMegapixelLatencyHistogram = metrics.AddHistogram(
+		"source_per_resized_megapixel_latency",
+		[]float64{500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000, 250000, 500000, 1000000, 2000000, 5000000, 10000000},
 		[]string{"source"},
 	)
 
+	source.imageCache = ristretto.New()
 	env := SourceEnvironment{
 		SourceTypes: config.SourceTypes,
 		FFmpegPath:  ffmpeg.FindPath(),
 		Migrations:  migrationsThumbs,
-		ImageCache:  ristretto.New(),
+		ImageCache:  source.imageCache,
 		DataDir:     config.DataDir,
 	}
 
@@ -224,7 +217,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 		log.Fatalf("failed to create thumbnail sources: %s", err)
 	}
 	for _, s := range tsrcs {
-		rd, ok := s.(io.ReadDecoder)
+		rd, ok := s.(io.ReadDecoderSource)
 		if !ok {
 			log.Fatalf("source %s does not implement io.ReadDecoder", s.Name())
 		}
@@ -251,6 +244,8 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 		log.Printf("skipping load info")
 	} else {
 
+		source.Clip = config.AI
+
 		source.metadataQueue = queue.Queue{
 			ID:          "index_metadata",
 			Name:        "index metadata",
@@ -259,9 +254,6 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 		}
 		go source.metadataQueue.Run()
 
-		source.Clip = config.AI
-		// }
-
 		source.contentsQueue = queue.Queue{
 			ID:          "index_contents",
 			Name:        "index contents",
@@ -269,10 +261,13 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 			WorkerCount: 8,
 		}
 		go source.contentsQueue.Run()
-
 	}
 
 	return &source
+}
+
+func (source *Source) HandleDirUpdates(fn DirsFunc) {
+	source.database.HandleDirUpdates(fn)
 }
 
 func (source *Source) Vacuum() error {
@@ -281,6 +276,19 @@ func (source *Source) Vacuum() error {
 
 func (source *Source) Close() {
 	source.decoder.Close()
+	source.database.Close()
+	source.imageCache.Close()
+	source.imageInfoCache.Close()
+	source.pathCache.Close()
+	source.Sources.Close()
+	source.thumbnailSink.Close()
+	source.metadataQueue.Close()
+	source.contentsQueue.Close()
+}
+
+func (source *Source) Shutdown() {
+	source.database.Close()
+	source.thumbnailSink.Close()
 }
 
 func (source *Source) IsSupportedImage(path string) bool {

@@ -68,6 +68,10 @@ func (f FFmpeg) Name() string {
 	return fmt.Sprintf("ffmpeg-%dx%d-%s%s", f.Width, f.Height, fit, found)
 }
 
+func (f FFmpeg) Close() error {
+	return nil
+}
+
 func (f FFmpeg) DisplayName() string {
 	return "FFmpeg JPEG"
 }

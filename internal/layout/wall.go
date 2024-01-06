@@ -32,37 +32,31 @@ func LayoutWall(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 		edgeCount = 1
 	}
 
+	sceneMargin := 10.
 	scene.Bounds.W = layout.ViewportWidth
 	cols := edgeCount
 
+	bounds := render.Rect{
+		X: sceneMargin,
+		Y: sceneMargin + 64,
+		W: scene.Bounds.W - sceneMargin*2,
+		H: scene.Bounds.H - sceneMargin*2,
+	}
+
 	layoutConfig := Layout{}
-	layoutConfig.ImageSpacing = layout.ViewportWidth / float64(edgeCount) * 0.02
+	layoutConfig.ImageSpacing = bounds.W / float64(cols) * 0.02
 	layoutConfig.LineSpacing = layoutConfig.ImageSpacing
+	imageWidth := bounds.W / float64(cols)
 
 	log.Printf("layout wall width %v cols %v\n", scene.Bounds.W, cols)
 
-	imageWidth := scene.Bounds.W / (float64(cols) - layoutConfig.ImageSpacing)
 	imageHeight := imageWidth * 2 / 3 * 1.2
 
 	log.Printf("layout wall image %f %f\n", imageWidth, imageHeight)
 
-	rows := int(math.Ceil(float64(photoCount) / float64(cols)))
-
-	scene.Bounds.H = float64(rows) * (imageHeight + layoutConfig.LineSpacing)
-
-	sceneMargin := 10.
 	layoutConfig.ImageHeight = imageHeight
 
-	x := sceneMargin
-	y := sceneMargin
-
 	layoutFinished := metrics.Elapsed("layout")
-	bounds := render.Rect{
-		X: x,
-		Y: y,
-		W: scene.Bounds.W - sceneMargin*2,
-		H: scene.Bounds.H - sceneMargin*2,
-	}
 	newBounds := addSectionToScene(&section, scene, bounds, layoutConfig, source)
 	layoutFinished()
 

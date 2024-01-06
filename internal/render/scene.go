@@ -69,6 +69,10 @@ type RegionSource interface {
 
 type SceneId = string
 
+type Dependency interface {
+	UpdatedAt() time.Time
+}
+
 type Scene struct {
 	Id              SceneId        `json:"id"`
 	CreatedAt       time.Time      `json:"created_at"`
@@ -85,6 +89,18 @@ type Scene struct {
 	Solids          []Solid        `json:"-"`
 	Texts           []Text         `json:"-"`
 	RegionSource    RegionSource   `json:"-"`
+	Stale           bool           `json:"stale"`
+	Dependencies    []Dependency   `json:"-"`
+}
+
+func (scene *Scene) UpdateStaleness() {
+	for _, dep := range scene.Dependencies {
+		if dep.UpdatedAt().After(scene.CreatedAt) {
+			scene.Stale = true
+			return
+		}
+	}
+	scene.Stale = false
 }
 
 type Scales struct {

@@ -15,3 +15,5 @@ tmp
 tools/jupyter/data
 .env
 dist/
+node_modules/
+/blob-report/

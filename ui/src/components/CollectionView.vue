@@ -1,6 +1,11 @@
 <template>
   <div class="collection">
 
+    <response-loader
+      class="response"
+      :response="collectionResponse"
+    ></response-loader>
+
     <map-viewer
       v-if="layout == 'MAP'"
       ref="mapViewer"
@@ -65,6 +70,7 @@ import { computed, nextTick, ref, toRefs, watch } from 'vue';
 import { timeout, useTask } from 'vue-concurrency';
 import { useRoute, useRouter } from 'vue-router';
 
+import ResponseLoader from './ResponseLoader.vue';
 import StripViewer from './StripViewer.vue';
 import ScrollViewer from './ScrollViewer.vue';
 import MapViewer from './MapViewer.vue';
@@ -126,9 +132,10 @@ const scenes = computed(() => {
 });
 watch(scenes, scenes => emit("scenes", scenes));
 
-const { data: collection } = useApi(
+const collectionResponse = useApi(
   () => collectionId.value && `/collections/${collectionId.value}`
 );
+const { data: collection } = collectionResponse;
 
 const layout = computed(() => {
   return route.query.layout || collection.value?.layout || undefined;

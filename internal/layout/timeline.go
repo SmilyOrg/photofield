@@ -86,7 +86,7 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 
 	rect := render.Rect{
 		X: sceneMargin,
-		Y: sceneMargin,
+		Y: sceneMargin + 64,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: 0,
 	}

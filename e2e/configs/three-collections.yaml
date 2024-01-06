@@ -1,0 +1,12 @@
+collections:
+  - name: test123
+    dirs:
+      - ./
+
+  - name: test456
+    dirs:
+      - ./
+
+  - name: test789
+    dirs:
+      - ./

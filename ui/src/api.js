@@ -3,10 +3,33 @@ import { computed, watch, ref } from "vue";
 import qs from "qs";
 import { useRetry } from "./use";
 
-const host = import.meta.env.VITE_API_HOST || "/api";
+let _host = null;
+function host() {
+  if (_host) {
+    return _host;
+  }
+  const cookieHost = getCookie("photofield-api-host");
+  if (cookieHost) {
+    _host = cookieHost;
+    return _host;
+  }
+  _host = import.meta.env.VITE_API_HOST || "/api";
+  return _host;
+}
+
+function getCookie(name) {
+  const cookies = document.cookie.split("; ");
+  for (let i = 0; i < cookies.length; i++) {
+    const cookie = cookies[i].split("=");
+    if (cookie[0] === name) {
+      return cookie[1];
+    }
+  }
+  return null;
+}
 
 async function fetcher(endpoint) {
-  const response = await fetch(host + endpoint);
+  const response = await fetch(host() + endpoint);
   if (!response.ok) {
     console.error(response);
     throw new Error(response.statusText);
@@ -15,7 +38,7 @@ async function fetcher(endpoint) {
 }
 
 export async function get(endpoint, def) {
-  const response = await fetch(host + endpoint);
+  const response = await fetch(host() + endpoint);
   if (!response.ok) {
     if (def !== undefined) {
       return def;
@@ -27,7 +50,7 @@ export async function get(endpoint, def) {
 }
 
 export async function post(endpoint, body, def) {
-  const response = await fetch(host + endpoint, {
+  const response = await fetch(host() + endpoint, {
     method: "POST",
     body: JSON.stringify(body),
     headers: {
@@ -108,15 +131,15 @@ export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extr
   if (backgroundColor) {
     params.background_color = backgroundColor;
   }
-  let url = `${host}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
+  let url = `${host()}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
   return url;
 }
 
 export function getFileUrl(id, filename) {
   if (!filename) {
-    return `${host}/files/${id}`;
+    return `${host()}/files/${id}`;
   }
-  return `${host}/files/${id}/original/${filename}`;
+  return `${host()}/files/${id}/original/${filename}`;
 }
 
 export async function getFileBlob(id) {
@@ -124,7 +147,7 @@ export async function getFileBlob(id) {
 }
 
 export function getThumbnailUrl(id, size, filename) {
-  return `${host}/files/${id}/variants/${size}/${filename}`;
+  return `${host()}/files/${id}/variants/${size}/${filename}`;
 }
 
 export function useApi(getUrl, config) {
@@ -140,10 +163,17 @@ export function useApi(getUrl, config) {
       items,
     }));
   };
+  const errorTime = computed(() => {
+    if (response.error.value) {
+      return new Date();
+    }
+    return null;
+  });
   return {
     ...response,
     items,
     itemsMutate,
+    errorTime,
   }
 }
 
@@ -179,6 +209,7 @@ export function useScene({
   const scene = computed(() => {
     const list = scenes?.value;
     if (!list || list.length == 0) return null;
+    if (list[0].stale) return null;
     return list[0];
   });
 
@@ -190,10 +221,12 @@ export function useScene({
     recreateScenesInProgress.value = recreateScenesInProgress.value - 1;
   }
 
-  watch(scenes, async newScene => {
-    // Create scene if a matching one hasn't been found
-    if (newScene?.length === 0) {
+  watch(scenes, async scenes => {
+    if (!scenes || scenes.length === 0) {
       console.log("scene not found, creating...");
+      await recreateScene();
+    } else if (scenes.length >= 1 && scenes[0].stale) {
+      console.log("scene stale, recreating...");
       await recreateScene();
     }
   })
@@ -232,7 +265,7 @@ export function useScene({
 }
 
 async function bufferFetcher(endpoint) {
-  const response = await fetch(host + endpoint);
+  const response = await fetch(host() + endpoint);
   if (!response.ok) {
     console.error(response);
     throw new Error(response.statusText);
@@ -242,6 +275,19 @@ async function bufferFetcher(endpoint) {
 
 export function useBufferApi(getUrl, config) {
   return useSWRV(getUrl, bufferFetcher, config);
+}
+
+async function textFetcher(endpoint) {
+  const response = await fetch(host() + endpoint);
+  if (!response.ok) {
+    console.error(response);
+    throw new Error(response.statusText);
+  }
+  return await response.text();
+}
+
+export function useTextApi(getUrl, config) {
+  return useSWRV(getUrl, textFetcher, config);
 }
 
 export function useTasks() {

@@ -10,10 +10,13 @@ build-ui:
   cd ui && npm run build
 
 build-docs:
-  cd ui && npm run docs:build
+  cd docs && npm run docs:build
 
 build-local:
   goreleaser build --snapshot --single-target --clean
+
+e2e *args:
+  cd e2e && npm run watch
 
 # Download geopackage to be embedded via -tags embedgeo
 assets:
@@ -50,7 +53,10 @@ ui:
   cd ui && npm run dev
 
 watch:
-  watchexec --exts go,yaml -r just run
+  watchexec --exts go -r just run
+
+watch-build:
+  watchexec --exts go,yaml -r 'just build && echo build successful'
 
 db-add migration_file_name:
   migrate create -ext sql -dir db/migrations -seq {{migration_file_name}}
@@ -83,3 +89,11 @@ prof-heap:
   filepath=profiles/heap/heap-$(date +"%F-%H%M%S").pprof && \
   curl --progress-bar -o $filepath {{pprof}}/heap && \
   go tool pprof -http=: $filepath
+
+prof-reload:
+  go test -benchmem -benchtime 10s '-run=^$' -bench '^BenchmarkReload$' photofield
+
+test-reload:
+  mkdir -p profiles/
+  go test -v '-run=^TestReloadLeaks$' photofield
+  go tool pprof -http ':' -diff_base profiles/reload-before.pprof profiles/reload-after.pprof

@@ -11,17 +11,19 @@ import (
 	"image/draw"
 	"image/png"
 	"io/fs"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"mime"
+	"net"
+	"os/signal"
 	"path"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -39,20 +41,17 @@ import (
 	chirender "github.com/go-chi/render"
 	"github.com/grafana/pyroscope-go"
 	"github.com/hako/durafmt"
-	"github.com/imdario/mergo"
 	"github.com/joho/godotenv"
 	"github.com/lpar/gzipped"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
 
-	"github.com/goccy/go-yaml"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 
-	"photofield/internal/clip"
 	"photofield/internal/codec"
 	"photofield/internal/collection"
 	"photofield/internal/geo"
@@ -105,6 +104,7 @@ type TilePool struct {
 }
 
 var imageSource *image.Source
+var globalGeo *geo.Geo
 var sceneSource *scene.SceneSource
 var collections []collection.Collection
 
@@ -325,16 +325,16 @@ func popBestTileRequest() (bool, TileRequest) {
 
 func processTileRequests(concurrency int) {
 	for i := 0; i < concurrency; i++ {
-		go func() {
+		go func(i int) {
 			for {
 				ok, request := popBestTileRequest()
 				if !ok {
-					panic("Mismatching tileRequestsIn and tileRequestsOut")
+					log.Printf("tile request worker %v exiting", i)
 				}
 				request.Process <- struct{}{}
 				<-request.Done
 			}
-		}()
+		}(i)
 	}
 }
 
@@ -381,7 +381,7 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 		problem(w, r, http.StatusBadRequest, "Collection not found")
 		return
 	}
-	sceneConfig.Collection = *collection
+	sceneConfig.Collection = collection
 
 	sceneConfig.Layout.ViewportWidth = float64(data.ViewportWidth)
 	sceneConfig.Layout.ViewportHeight = float64(data.ViewportHeight)
@@ -447,7 +447,7 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 		problem(w, r, http.StatusBadRequest, "Collection not found")
 		return
 	}
-	sceneConfig.Collection = *collection
+	sceneConfig.Collection = collection
 
 	scenes := sceneSource.GetScenesWithConfig(sceneConfig)
 	sort.Slice(scenes, func(i, j int) bool {
@@ -479,10 +479,14 @@ func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
 		collection := &collections[i]
 		collection.UpdateStatus(imageSource)
 	}
+	items := collections
+	if items == nil {
+		items = make([]collection.Collection, 0)
+	}
 	respond(w, r, http.StatusOK, struct {
 		Items []collection.Collection `json:"items"`
 	}{
-		Items: collections,
+		Items: items,
 	})
 }
 
@@ -647,20 +651,14 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	if docsUrl == "" {
 		docsUrl = "/docs/usage"
 	}
-	respond(w, r, http.StatusOK, openapi.Capabilities{
-		Search: openapi.Capability{
-			Supported: imageSource.AI.Available(),
-		},
-		Tags: openapi.Capability{
-			Supported: tagsEnabled,
-		},
-		Docs: openapi.DocsCapability{
-			Capability: openapi.Capability{
-				Supported: docsUrl != "",
-			},
-			Url: docsUrl,
-		},
-	})
+	capabilities := openapi.Capabilities{}
+	if imageSource != nil {
+		capabilities.Search.Supported = imageSource.AI.Available()
+	}
+	capabilities.Tags.Supported = tagsEnabled
+	capabilities.Docs.Supported = docsUrl != ""
+	capabilities.Docs.Url = docsUrl
+	respond(w, r, http.StatusOK, capabilities)
 }
 
 func (*Api) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
@@ -1060,29 +1058,6 @@ type TileRequestConfig struct {
 	LogStats    bool `json:"log_stats"`
 }
 
-type AppConfig struct {
-	Collections  []collection.Collection `json:"collections"`
-	Layout       layout.Layout           `json:"layout"`
-	Render       render.Render           `json:"render"`
-	Media        image.Config            `json:"media"`
-	AI           clip.AI                 `json:"ai"`
-	Geo          geo.Config              `json:"geo"`
-	Tags         tag.Config              `json:"tags"`
-	TileRequests TileRequestConfig       `json:"tile_requests"`
-}
-
-func expandCollections(collections *[]collection.Collection) {
-	expanded := make([]collection.Collection, 0)
-	for _, collection := range *collections {
-		if collection.ExpandSubdirs {
-			expanded = append(expanded, collection.Expand()...)
-		} else {
-			expanded = append(expanded, collection)
-		}
-	}
-	*collections = expanded
-}
-
 func indexCollection(collection *collection.Collection) (task Task, existing bool) {
 	task = newFileIndexTask(collection)
 	stored, existing := globalTasks.LoadOrStore(task.Id, task)
@@ -1104,40 +1079,12 @@ func indexCollection(collection *collection.Collection) (task Task, existing boo
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{})
 		globalTasks.Delete(task.Id)
 		close(counter)
+
+		now := time.Now()
+		collection.IndexedAt = &now
+		collection.IndexedCount = task.Done
 	}()
 	return
-}
-
-func loadConfiguration(path string) AppConfig {
-
-	var appConfig AppConfig
-
-	log.Printf("config path %v", path)
-	bytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		log.Printf("unable to open %s, using defaults (%s)\n", path, err.Error())
-		appConfig = defaults
-	} else if err := yaml.Unmarshal(bytes, &appConfig); err != nil {
-		log.Printf("unable to parse %s, using defaults (%s)\n", path, err.Error())
-		appConfig = defaults
-	} else if err := mergo.Merge(&appConfig, defaults); err != nil {
-		panic("unable to merge configuration with defaults")
-	}
-
-	expandCollections(&appConfig.Collections)
-	for i := range appConfig.Collections {
-		collection := &appConfig.Collections[i]
-		collection.GenerateId()
-		collection.Layout = strings.ToUpper(collection.Layout)
-		if collection.Limit > 0 && collection.IndexLimit == 0 {
-			collection.IndexLimit = collection.Limit
-		}
-	}
-
-	appConfig.Media.AI = appConfig.AI
-	appConfig.Tags.Enable = appConfig.Tags.Enable || appConfig.Tags.Enabled
-
-	return appConfig
 }
 
 func addExampleScene() {
@@ -1148,7 +1095,7 @@ func addExampleScene() {
 	sceneConfig.Layout.ImageHeight = 300
 	sceneConfig.Layout.Type = layout.Map
 	sceneConfig.Layout.Order = layout.DateAsc
-	sceneConfig.Collection = *getCollectionById("geo")
+	sceneConfig.Collection = getCollectionById("geo")
 	sceneSource.Add(sceneConfig, imageSource)
 }
 
@@ -1235,10 +1182,110 @@ func benchmarkSources(collection *collection.Collection, seed int64, sampleSize 
 	bench.BenchmarkSources(seed, sources, samples, count)
 }
 
+func invalidateDirs(dirs []string) {
+	now := time.Now()
+	for i := range collections {
+		collection := &collections[i]
+		updated := false
+		for _, dir := range dirs {
+			for _, d := range collection.Dirs {
+				if strings.HasPrefix(dir, d) {
+					updated = true
+					break
+				}
+			}
+			if updated {
+				break
+			}
+		}
+		if updated {
+			collection.InvalidatedAt = &now
+		}
+	}
+}
+
+func applyConfig(appConfig *AppConfig) {
+	if globalGeo != nil {
+		err := globalGeo.Close()
+		if err != nil {
+			log.Printf("unable to close geo: %v", err)
+		}
+		globalGeo = nil
+	}
+
+	if imageSource != nil {
+		imageSource.Close()
+		imageSource = nil
+	}
+
+	if tileRequestConfig.Concurrency > 0 {
+		close(tileRequestsOut)
+	}
+
+	if len(appConfig.Collections) > 0 {
+		defaultSceneConfig.Collection = &appConfig.Collections[0]
+	}
+	collections = appConfig.Collections
+	defaultSceneConfig.Layout = appConfig.Layout
+	defaultSceneConfig.Render = appConfig.Render
+	tileRequestConfig = appConfig.TileRequests
+	tagsEnabled = appConfig.Tags.Enable
+
+	var err error
+	globalGeo, err = geo.New(
+		appConfig.Geo,
+		GeoFs,
+	)
+	if err != nil {
+		log.Printf("geo disabled: %v", err)
+	} else {
+		log.Printf("%v", globalGeo.String())
+	}
+
+	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, nil)
+	imageSource.HandleDirUpdates(invalidateDirs)
+	if tileRequestConfig.Concurrency > 0 {
+		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
+		tileRequestsOut = make(chan struct{}, 10000)
+		processTileRequests(tileRequestConfig.Concurrency)
+	}
+
+	extensions := strings.Join(appConfig.Media.ListExtensions, ", ")
+	log.Printf("extensions %v", extensions)
+
+	log.Printf("%v collections", len(collections))
+	for i := range collections {
+		collection := &collections[i]
+		collection.UpdateStatus(imageSource)
+		indexedAgo := "N/A"
+		if collection.IndexedAt != nil {
+			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
+		}
+		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+	}
+}
+
+func listenForShutdown() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-signals
+		log.Printf("shutdown requested")
+		if imageSource != nil {
+			imageSource.Shutdown()
+		}
+		os.Exit(0)
+	}()
+}
+
 func main() {
 	var err error
 
 	startupTime = time.Now()
+
+	log.SetFlags(
+		0,
+	)
 
 	testing.Init()
 	versionFlag := flag.Bool("version", false, "print version and exit")
@@ -1296,46 +1343,10 @@ func main() {
 		})
 	}
 
-	if err := yaml.Unmarshal(defaultsYaml, &defaults); err != nil {
-		panic(err)
-	}
-
+	initDefaults()
 	dataDir, exists := os.LookupEnv("PHOTOFIELD_DATA_DIR")
 	if !exists {
 		dataDir = "."
-	}
-	configurationPath := filepath.Join(dataDir, "configuration.yaml")
-
-	appConfig := loadConfiguration(configurationPath)
-	appConfig.Media.DataDir = dataDir
-	tagsEnabled = appConfig.Tags.Enable
-
-	if len(appConfig.Collections) > 0 {
-		defaultSceneConfig.Collection = appConfig.Collections[0]
-	}
-	collections = appConfig.Collections
-	defaultSceneConfig.Layout = appConfig.Layout
-	defaultSceneConfig.Render = appConfig.Render
-	tileRequestConfig = appConfig.TileRequests
-
-	geo, err := geo.New(
-		appConfig.Geo,
-		GeoFs,
-	)
-	if err != nil {
-		log.Printf("geo disabled: %v", err)
-	} else {
-		log.Printf("%v", geo.String())
-	}
-	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, geo)
-	defer imageSource.Close()
-
-	if *vacuumFlag {
-		err := imageSource.Vacuum()
-		if err != nil {
-			panic(err)
-		}
-		return
 	}
 
 	sceneSource = scene.NewSceneSource()
@@ -1355,18 +1366,18 @@ func main() {
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
-	extensions := strings.Join(appConfig.Media.ListExtensions, ", ")
-	log.Printf("extensions %v", extensions)
+	listenForShutdown()
 
-	log.Printf("%v collections", len(collections))
-	for i := range collections {
-		collection := &collections[i]
-		collection.UpdateStatus(imageSource)
-		indexedAgo := "N/A"
-		if collection.IndexedAt != nil {
-			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
+	watchConfig(dataDir, func(appConfig *AppConfig) {
+		applyConfig(appConfig)
+	})
+
+	if *vacuumFlag {
+		err := imageSource.Vacuum()
+		if err != nil {
+			panic(err)
 		}
-		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+		return
 	}
 
 	if *benchFlag {
@@ -1415,12 +1426,6 @@ func main() {
 		fmt.Printf("priority,start,end,latency\n")
 	}
 
-	tileRequestsOut = make(chan struct{}, 10000)
-	if tileRequestConfig.Concurrency > 0 {
-		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
-		processTileRequests(tileRequestConfig.Concurrency)
-	}
-
 	r := chi.NewRouter()
 
 	// r.Use(middleware.Logger)
@@ -1443,11 +1448,11 @@ func main() {
 		r.Mount("/", openapi.Handler(&api))
 		r.Mount("/metrics", promhttp.Handler())
 	})
-	msg := fmt.Sprintf("api at %v%v", addr, apiPrefix)
 
 	r.Mount("/debug", middleware.Profiler())
 	r.Handle("/debug/fgprof", fgprof.Handler())
 
+	msg := ""
 	if apiPrefix != "/" {
 		// Hardcode well-known mime types, see https://github.com/golang/go/issues/32350
 		mime.AddExtensionType(".js", "text/javascript")
@@ -1488,11 +1493,98 @@ func main() {
 			}
 			r.Handle("/*", uihandler)
 		})
-		msg = fmt.Sprintf("ui at %v, %s", addr, msg)
+		msg = fmt.Sprintf("app running (api under %s)", apiPrefix)
+	} else {
+		msg = "app running (api only)"
 	}
 
 	// addExampleScene()
 
+	log.Printf("")
 	log.Println(msg)
-	log.Fatal(http.ListenAndServe(addr, r))
+	log.Fatal(listenAndServe(addr, r))
+}
+
+type listenUrl struct {
+	local bool
+	ipv6  bool
+	url   string
+}
+
+func getListenUrls(addr net.Addr) ([]listenUrl, error) {
+	var urls []listenUrl
+	switch vaddr := addr.(type) {
+	case *net.TCPAddr:
+		if vaddr.IP.IsUnspecified() {
+			ifaces, err := net.Interfaces()
+			if err != nil {
+				return urls, fmt.Errorf("unable to list interfaces: %v", err)
+			}
+			for _, i := range ifaces {
+				addrs, err := i.Addrs()
+				if err != nil {
+					return urls, fmt.Errorf("unable to list addresses for %v: %v", i.Name, err)
+				}
+				for _, a := range addrs {
+					switch v := a.(type) {
+					case *net.IPNet:
+						urls = append(urls, listenUrl{
+							local: v.IP.IsLoopback(),
+							ipv6:  v.IP.To4() == nil,
+							url:   fmt.Sprintf("http://%v", net.JoinHostPort(v.IP.String(), strconv.Itoa(vaddr.Port))),
+						})
+					default:
+						urls = append(urls, listenUrl{
+							url: fmt.Sprintf("http://%v", v),
+						})
+					}
+				}
+			}
+		} else {
+			urls = append(urls, listenUrl{
+				local: vaddr.IP.IsLoopback(),
+				url:   fmt.Sprintf("http://%v", vaddr.AddrPort()),
+			})
+		}
+	default:
+		urls = append(urls, listenUrl{
+			url: fmt.Sprintf("http://%v", addr),
+		})
+	}
+	return urls, nil
+}
+
+func listenAndServe(addr string, handler http.Handler) error {
+	srv := &http.Server{Addr: addr, Handler: handler}
+	if addr == "" {
+		addr = ":http"
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	a := ln.Addr()
+	urls, err := getListenUrls(a)
+	if err != nil {
+		return err
+	}
+	// Sort by ipv4 first, then local, then url
+	sort.Slice(urls, func(i, j int) bool {
+		if urls[i].ipv6 != urls[j].ipv6 {
+			return !urls[i].ipv6
+		}
+		if urls[i].local != urls[j].local {
+			return urls[i].local
+		}
+		return urls[i].url < urls[j].url
+	})
+
+	for _, url := range urls {
+		prefix := "network"
+		if url.local {
+			prefix = "local"
+		}
+		log.Printf("  %-8s %s\n", prefix, url.url)
+	}
+	return srv.Serve(ln)
 }

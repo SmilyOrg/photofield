@@ -188,9 +188,11 @@ export default {
     },
     projectionExtent() {
       let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
-      if (width < 1) width = 1;
-      if (height < 1) height = 1;
       return [0, 0, width, height];
+    },
+    viewExtent() {
+      let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
+      return [0, -height*2, width, height];
     },
     minViewportZoom() {
       if (!this.v || !this.viewport.width.value) {
@@ -380,7 +382,7 @@ export default {
           enableRotation: false,
         });
       } else {
-        const extent = this.projectionExtent;
+        const extent = this.viewExtent;
         this.v = new View({
           center: [extent[2]/2, extent[3]],
           projection: this.projection,

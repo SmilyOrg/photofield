@@ -123,6 +123,11 @@ func (g *Geo) Close() error {
 		return nil
 	}
 	if g.gp != nil {
+		c, ok := g.gp.Cache.(*Cache)
+		if !ok {
+			return fmt.Errorf("error closing geopackage: cache is not a *Cache")
+		}
+		c.Close()
 		err := g.gp.Close()
 		if err != nil {
 			return fmt.Errorf("error closing geopackage: %w", err)

@@ -5,8 +5,6 @@ import (
 	"photofield/internal/metrics"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sheerun/queue"
 )
 
@@ -16,22 +14,20 @@ type Queue struct {
 	Name        string
 	Worker      func(<-chan interface{})
 	WorkerCount int
+	Stop        chan bool
 }
 
 func (q *Queue) Run() {
 	if q.queue == nil {
 		q.queue = queue.New()
+		q.Stop = make(chan bool)
 	}
 
 	loadCount := 0
 	lastLoadCount := 0
 	lastLogTime := time.Now()
 	logInterval := 2 * time.Second
-	metrics.AddQueue(q.ID, q.queue)
-	var doneCounter = promauto.NewCounter(prometheus.CounterOpts{
-		Namespace: metrics.Namespace,
-		Name:      q.ID + "_done",
-	})
+	m := metrics.AddQueue(q.ID, q.queue)
 
 	logging := false
 
@@ -52,11 +48,12 @@ func (q *Queue) Run() {
 			item := q.queue.Pop()
 			if item == nil {
 				log.Printf("%s queue stopping\n", q.Name)
+				close(q.Stop)
 				return
 			}
 			items <- item
 		}
-		doneCounter.Inc()
+		m.Done.Inc()
 
 		now := time.Now()
 		elapsed := now.Sub(lastLogTime)
@@ -85,6 +82,16 @@ func (q *Queue) Run() {
 			log.Printf("%s queue %5d pending\n", q.Name, q.queue.Length())
 		}
 	}
+}
+
+func (q *Queue) Close() {
+	if q == nil || q.queue == nil {
+		return
+	}
+	q.queue.Clean()
+	q.queue.Append(nil)
+	<-q.Stop
+	q.queue = nil
 }
 
 func (q *Queue) Length() int {

@@ -58,6 +58,10 @@ func New(name string, cost Cost, source io.Source) *Configured {
 	return &c
 }
 
+func (c *Configured) Close() error {
+	return c.Source.Close()
+}
+
 func (c *Configured) Name() string {
 	return c.NameStr
 }

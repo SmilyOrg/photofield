@@ -96,6 +96,10 @@ func New(
 	return t
 }
 
+func (t *Thumb) Close() error {
+	return nil
+}
+
 func (t Thumb) Name() string {
 	return fmt.Sprintf("thumb-%dx%d-%s", t.Width, t.Height, t.ThumbName)
 }

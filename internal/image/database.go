@@ -42,11 +42,30 @@ type ListOptions struct {
 	Query   *search.Query
 }
 
+type DirsFunc func(dirs []string)
+type stringSet map[string]struct{}
+
+func (s *stringSet) Add(str string) {
+	if _, ok := (*s)[str]; ok {
+		return
+	}
+	(*s)[str] = struct{}{}
+}
+
+func (s *stringSet) Slice() []string {
+	out := make([]string, 0, len(*s))
+	for k := range *s {
+		out = append(out, k)
+	}
+	return out
+}
+
 type Database struct {
 	path             string
 	pool             *sqlitex.Pool
 	pending          chan *InfoWrite
 	transactionMutex sync.RWMutex
+	dirUpdateFuncs   []DirsFunc
 }
 
 type InfoWriteType int32
@@ -141,6 +160,15 @@ func NewDatabase(path string, migrations embed.FS) *Database {
 	return &source
 }
 
+func (source *Database) Close() {
+	if source == nil {
+		return
+	}
+	source.dirUpdateFuncs = nil
+	source.pool.Close()
+	close(source.pending)
+}
+
 func (source *Database) open() *sqlite.Conn {
 	conn, err := sqlite.OpenConn(source.path, 0)
 	if err != nil {
@@ -197,6 +225,10 @@ func (source *Database) migrate(migrations embed.FS) {
 	if derr != nil {
 		panic(derr)
 	}
+}
+
+func (db *Database) HandleDirUpdates(fn DirsFunc) {
+	db.dirUpdateFuncs = append(db.dirUpdateFuncs, fn)
 }
 
 func (source *Database) writePendingInfosSqlite() {
@@ -306,13 +338,10 @@ func (source *Database) writePendingInfosSqlite() {
 	inTransaction := false
 
 	pendingCompactionTags := tagSet{}
+	pendingUpdatedDirs := make(stringSet)
 
 	defer func() {
-		err := sqlitex.Execute(conn, "COMMIT;", nil)
-		source.transactionMutex.Unlock()
-		if err != nil {
-			panic(err)
-		}
+		source.WaitForCommit()
 	}()
 
 	commitTicker := &time.Ticker{}
@@ -326,6 +355,7 @@ func (source *Database) writePendingInfosSqlite() {
 				continue
 			}
 
+			// Perform pending tag compaction
 			if pendingCompactionTags.Len() > 0 {
 				for id := range pendingCompactionTags {
 					source.CompactTag(id)
@@ -339,6 +369,14 @@ func (source *Database) writePendingInfosSqlite() {
 				panic(err)
 			}
 
+			// Flush updated dirs
+			dirs := pendingUpdatedDirs.Slice()
+			for _, fn := range source.dirUpdateFuncs {
+				fn(dirs)
+			}
+			clear(pendingUpdatedDirs)
+
+			// Optimize if needed
 			if time.Since(lastOptimize).Hours() >= 1 {
 				lastOptimize = time.Now()
 				log.Println("database optimizing")
@@ -353,7 +391,19 @@ func (source *Database) writePendingInfosSqlite() {
 			source.transactionMutex.Unlock()
 			inTransaction = false
 
-		case imageInfo := <-source.pending:
+		case imageInfo, ok := <-source.pending:
+			if !ok {
+				log.Println("database closing")
+				if inTransaction {
+					err := sqlitex.Execute(conn, "COMMIT;", nil)
+					if err != nil {
+						panic(err)
+					}
+					source.transactionMutex.Unlock()
+					inTransaction = false
+				}
+				return
+			}
 
 			if !inTransaction {
 				source.transactionMutex.Lock()
@@ -391,6 +441,8 @@ func (source *Database) writePendingInfosSqlite() {
 				if err != nil {
 					panic(err)
 				}
+				pendingUpdatedDirs.Add(dir)
+
 			case UpdateMeta:
 				dir, file := filepath.Split(imageInfo.Path)
 				_, timezoneOffsetSeconds := imageInfo.DateTime.Zone()
@@ -419,6 +471,8 @@ func (source *Database) writePendingInfosSqlite() {
 				if err != nil {
 					panic(err)
 				}
+				pendingUpdatedDirs.Add(dir)
+
 			case UpdateColor:
 				dir, file := filepath.Split(imageInfo.Path)
 
@@ -435,6 +489,7 @@ func (source *Database) writePendingInfosSqlite() {
 				if err != nil {
 					panic(err)
 				}
+				pendingUpdatedDirs.Add(dir)
 
 			case UpdateAI:
 				updateAI.BindInt64(1, int64(imageInfo.Id))
@@ -517,6 +572,7 @@ func (source *Database) writePendingInfosSqlite() {
 				if err != nil {
 					panic(err)
 				}
+				pendingUpdatedDirs.Add(imageInfo.Path)
 
 			case AddTag:
 				tagName := imageInfo.Path
