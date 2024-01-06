@@ -44,6 +44,10 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+
+      - name: Set up QEMU for Multiarch Builds
+        uses: docker/setup-qemu-action@v3
+
       - name: Run GoReleaser (Push)
         if: github.event_name == 'push'
         uses: goreleaser/goreleaser-action@v4
