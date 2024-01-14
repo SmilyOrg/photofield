@@ -11,8 +11,8 @@
 * [BalmUI] - Material UI components
 * [OpenLayers] - in-browser tiled image rendering
 * [geoBoundaries](https://www.geoboundaries.org/) for geographic boundary data used for reverse geolocation
-* [+ more Go libraries](go.mod)
-* [+ more npm libraries](ui/package.json)
+* + more Go libraries
+* + more npm libraries
 
 ## Special Thanks
 
@@ -26,11 +26,11 @@
 Thanks to all the authors of the third party libraries used in this project.
 
 ### API
-<<< @/../../go.mod
+<<< @/../go.mod
 
 ### UI
 
-<<< @/../package.json
+<<< @/../ui/package.json
 
 
 [open an issue]: https://github.com/SmilyOrg/photofield/issues

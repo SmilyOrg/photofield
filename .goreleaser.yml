@@ -5,7 +5,7 @@ before:
   hooks:
     - go mod tidy
     - go generate -x
-    - sh -c "cd ui && npm install && npm run build && npm run docs:build"
+    - sh -c "cd docs && npm install && npm run docs:build && cd ../ui && npm install && npm run build"
 builds:
   - env:
       - CGO_ENABLED=0
@@ -23,11 +23,43 @@ builds:
       - embedgeo
 dockers:
   - dockerfile: Dockerfile-goreleaser
+    use: buildx
     image_templates:
-      - "ghcr.io/smilyorg/photofield:{{ .Tag }}"
-      - "ghcr.io/smilyorg/photofield:v{{ .Major }}"
-      - "ghcr.io/smilyorg/photofield:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/smilyorg/photofield:latest"
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-amd64"
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
+
+  - dockerfile: Dockerfile-goreleaser
+    use: buildx
+    image_templates:
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-arm64"
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/smilyorg/photofield:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-amd64"
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-arm64"
+
+  - name_template: "ghcr.io/smilyorg/photofield:v{{ .Major }}"
+    image_templates:
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-amd64"
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-arm64"
+      
+  - name_template: "ghcr.io/smilyorg/photofield:v{{ .Major }}.{{ .Minor }}"
+    image_templates:
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-amd64"
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-arm64"
+      
+  - name_template: "ghcr.io/smilyorg/photofield:latest"
+    image_templates:
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-amd64"
+      - "ghcr.io/smilyorg/photofield:{{ .Tag }}-arm64"
+
 archives:  
   - format: zip
     name_template: >-

@@ -10,13 +10,13 @@ build-ui:
   cd ui && npm run build
 
 build-docs:
-  cd ui && npm run docs:build
+  cd docs && npm run docs:build
 
 build-local:
   goreleaser build --snapshot --single-target --clean
 
 e2e *args:
-  npm run watch
+  cd e2e && npm run watch
 
 # Download geopackage to be embedded via -tags embedgeo
 assets:

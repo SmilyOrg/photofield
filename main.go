@@ -54,6 +54,7 @@ import (
 
 	"photofield/internal/codec"
 	"photofield/internal/collection"
+	"photofield/internal/fs/rewrite"
 	"photofield/internal/geo"
 	"photofield/internal/image"
 	"photofield/internal/layout"
@@ -647,17 +648,17 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
-	docsUrl := os.Getenv("PHOTOFIELD_DOCS_URL")
-	if docsUrl == "" {
-		docsUrl = "/docs/usage"
+	docsurl := os.Getenv("PHOTOFIELD_DOCS_URL")
+	if docsurl == "" {
+		docsurl = "/docs/usage"
 	}
 	capabilities := openapi.Capabilities{}
 	if imageSource != nil {
 		capabilities.Search.Supported = imageSource.AI.Available()
 	}
 	capabilities.Tags.Supported = tagsEnabled
-	capabilities.Docs.Supported = docsUrl != ""
-	capabilities.Docs.Url = docsUrl
+	capabilities.Docs.Supported = docsurl != ""
+	capabilities.Docs.Url = docsurl
 	respond(w, r, http.StatusOK, capabilities)
 }
 
@@ -1482,6 +1483,24 @@ func main() {
 				docfs, err := fs.Sub(StaticDocsFs, StaticDocsPath)
 				if err != nil {
 					panic(err)
+				}
+				docspath := os.Getenv("PHOTOFIELD_DOCS_PATH")
+				if docspath != "" {
+					// rewriteDocs(docfs, docsurl)
+					var err error
+					docfs, err = rewrite.FS(
+						docfs,
+						[]string{
+							"html",
+							"css",
+							"js",
+						},
+						`("|url\()(/docs/)`,
+						`${1}`+docspath,
+					)
+					if err != nil {
+						panic(err)
+					}
 				}
 				dochandler := gzipped.FileServer(http.FS(docfs))
 				r.HandleFunc("/docs/*", func(w http.ResponseWriter, r *http.Request) {

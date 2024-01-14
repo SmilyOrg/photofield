@@ -4,8 +4,8 @@ Feature: Rescan
     Given an empty working directory
     And a running app
     And the following files:
-      | src                       | dst          |
-      | docs/assets/logo-wide.jpg | photos/a.jpg |
+      | src                          | dst          |
+      | ../docs/assets/logo-wide.jpg | photos/a.jpg |
 
     When the user opens "/collections/photos"
     And the user clicks "photos"

@@ -48,7 +48,7 @@ export class App {
 
   async run() {
     const exe = process.platform === 'win32' ? '.exe' : '';
-    const command = join(process.cwd(), './photofield' + exe);
+    const command = join(process.cwd(), '../photofield' + exe);
 
     const address = `${this.host}:${this.port}`;
 

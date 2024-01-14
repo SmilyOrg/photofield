@@ -35,5 +35,5 @@ collections:
 
 ## Defaults
 
-<<< @/../../defaults.yaml
+<<< @/../defaults.yaml
 
