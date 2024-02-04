@@ -252,7 +252,7 @@ export function useScene({
     reset();
     loadSpeed.value = 0;
     
-    if (newValue.stale && !newValue.loading && !oldValue?.loading) {
+    if (newValue?.stale && !newValue?.loading && !oldValue?.loading) {
       console.log("scene stale, recreating...");
       await recreateScene();
       return;

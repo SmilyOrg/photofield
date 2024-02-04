@@ -1,5 +1,5 @@
 <template>
-  <div class="scroll" :class="{ fullpage, fixed: !nativeScroll }">
+  <div class="scroll" :class="{ fullpage, fixed: false }">
 
     <tile-viewer
       class="viewer"
@@ -14,10 +14,12 @@
       :interactive="interactive"
       :pannable="!nativeScroll"
       :zoomable="!nativeScroll"
-      :zoom-transition="true"
+      :zoom-transition="zoomTransition"
       :viewport="viewport"
       @click="onClick"
       @view="onView"
+      @move-end="onMoveEnd"
+      @nav="onNav"
       @wheel="onWheel"
       @load-end="onLoadEnd"
       @contextmenu.prevent="onContextMenu"
@@ -76,6 +78,7 @@ import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
+import { tr } from 'date-fns/locale';
 
 const props = defineProps({
   interactive: Boolean,
@@ -118,8 +121,10 @@ const {
 
 const viewer = ref(null);
 const viewport = useViewport(viewer);
-const nativeScroll = ref(true);
+// const nativeScroll = ref(true);
+
 const lastView = ref(null);
+const lastNonNativeView = ref(null);
 
 const { scene, recreate: recreateScene, loadSpeed } = useScene({
   layout,
@@ -129,7 +134,6 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
   viewport,
   search,
 });
-
 
 watch(scene, async (newScene, oldScene) => {
   if (newScene?.search != oldScene?.search) {
@@ -146,12 +150,23 @@ useEventBus("recreate-scene").on(scene => {
 const {
   region,
   navigate,
-  exit,
+  exit: regionExit,
 } = useSeekableRegion({
   scene,
   collectionId,
   regionId,
 })
+
+const exit = async () => {
+  // const viewZoom = viewer.value.zoomFromView(view.value);
+  // const moveZoom = viewer.value.zoomFromView(lastView.value);
+  // const ratio = moveZoom / viewZoom;
+  // if (ratio > 1.1) {
+  //   zoomOut();
+  //   return;
+  // }
+  await regionExit();
+}
 
 const { data: capabilities } = useApi(() => "/capabilities");
 const tagsSupported = computed(() => capabilities.value?.tags?.supported);
@@ -178,10 +193,52 @@ const canvas = computed(() => {
   }
 });
 
+const lastZoom = computed(() => {
+  return scene.value?.bounds.w / lastView.value?.w;
+});
+
+const nativeScroll = computed(() => {
+  // const lastZoom = lastZoom.value;
+  // console.log(lastZoom.value);
+
+  if (lastZoom.value > 1.2) {
+    return false;
+  }
+
+  if (region.value) return false;
+  return true;
+});
+
+const zoomTransition = computed(() => {
+  // if (!viewer.value) return false;
+  // const viewZoom = viewer.value?.zoomFromView(view.value);
+  // const moveZoom = viewer.value?.zoomFromView(lastView.value);
+  // const regionZoom = viewer.value?.zoomFromView(region.value?.bounds);
+  // if (!viewZoom || !moveZoom) return false;
+  // const ratio = moveZoom / regionZoom;
+  // console.log(ratio)
+  // if (Math.abs(1 - ratio) < 0.1) return false;
+  return true;
+});
+
+watch(nativeScroll, async (newValue, oldValue) => {
+  if (newValue == oldValue) {
+    return;
+  }
+  if (newValue) {
+    // console.log("nativey", lastView.value?.y, lastNonNativeView.value?.y);
+    await centerToBounds(lastNonNativeView.value);
+  }
+});
+
+
 const centerToBounds = async (bounds) => {
   const by = bounds.y + bounds.h * 0.5;
   const vy = viewport.height.value * 0.5;
-  nativeScroll.value = true;
+  // nativeScroll.value = true;
+  // if (region.value) {
+  //   await exit();
+  // }
   await nextTick();
   scrollToPixels(by - vy);
   await nextTick();
@@ -205,7 +262,10 @@ const zoomOut = () => {
   viewer.value?.setView(view.value);
 }
 
-const scrollSleep = computed(() => !nativeScroll.value);
+// const scrollSleep = computed(() => !nativeScroll.value);
+const scrollSleep = computed(() => {
+  return !nativeScroll.value || lastZoom.value > 1.0001;
+});
 
 const {
   y: scrollY,
@@ -217,6 +277,8 @@ const {
 const { date: scrollDate } = useTimeline({ scene, viewport, scrollRatio });
 
 const view = computed(() => {
+  // console.log("view", region.value);
+
   if (region.value) {
     return region.value.bounds;
   }
@@ -231,6 +293,15 @@ const view = computed(() => {
     h: viewport.height.value,
   }
 });
+
+// watch(region, async (newRegion, oldRegion) => {
+//   if (newRegion == null && oldRegion == null) {
+//     // nativeScroll.value = false;
+//   } else if (newRegion === null && oldRegion != null) {
+//     // nativeScroll.value = true;
+//     await centerToBounds(oldRegion.bounds);
+//   }
+// });
 
 const selectBounds = async (op, bounds) => {
   if (!tagsSupported.value) return;
@@ -274,39 +345,69 @@ const onClick = async (event) => {
 const onWheel = async (event) => {
   if (event.ctrlKey && nativeScroll.value) {
     event.preventDefault();
-    if (event.deltaY < 0) {
-      // Ctrl+scroll zoom in to disabled scroll mode
-      nativeScroll.value = false;
-      await nextTick();
+    // if (event.deltaY < 0) {
+    //   // Ctrl+scroll zoom in to disabled scroll mode
+    //   // nativeScroll.value = false;
+    //   await nextTick();
       
-      const target = viewer.value.pointerTarget;
-      const redirected = new event.constructor(event.type, event);
-      target.dispatchEvent(redirected);
-    }
+    //   const target = viewer.value.pointerTarget;
+    //   const redirected = new event.constructor(event.type, event);
+    //   target.dispatchEvent(redirected);
+    // }
   }
 }
 
-const onView = (view) => {
+const onView = (event) => {
   if (!scene.value?.bounds.w) {
     return;
   }
   if (lastView.value) {
     const lastZoom = scene.value.bounds.w / lastView.value.w;
-    const zoom = scene.value.bounds.w / view.w;
+    const viewZoom = scene.value.bounds.w / view.value?.w;
+    const zoom = scene.value.bounds.w / event.w;
     const zoomDiff = zoom - lastZoom;
-    if (zoom <= 1.0001 && zoomDiff < -0.000001) {
-      // Zoom out to native scroll
-      if (!nativeScroll.value) {
-        nativeScroll.value = true;
-      }
-    } else if (zoom >= 1.0001) {
-      // Zoom in via tileviewer movement (e.g. pinch gesture)
-      if (nativeScroll.value) {
-        nativeScroll.value = false;
-      }
-    }
+    const zoomingOut = zoomDiff < -0.000001;
+    // if (zoom <= 1.1 && zoomingOut) {
+    //   exit();
+    //   return;
+    // }
+    // if (viewZoom) {
+    //   const ratio = zoom / viewZoom;
+    //   console.log("ratio", ratio);
+    //   if (ratio < 0.8 && zoomingOut) {
+    //     exit();
+    //     return;
+    //   }
+    // }
+    // console.log("zoom", zoom, "lastZoom", lastZoom, "viewZoom", viewZoom, "zoomDiff", zoomDiff, "zoomingOut", zoomingOut);
+    // if (zoom <= 1.1) {
+    //   // Zoom out to native scroll
+    //   if (!nativeScroll.value) {
+    //     nativeScroll.value = true;
+    //   }
+    // } else if (zoom >= 1.0001) {
+    //   // Zoom in via tileviewer movement (e.g. pinch gesture)
+    //   if (nativeScroll.value) {
+    //     nativeScroll.value = false;
+    //   }
+    // }
+    // if (zoom <= 1.1 && zoomingOut) {
+    //   // Zoom out to native scroll
+    //   if (!nativeScroll.value) {
+    //     nativeScroll.value = true;
+    //   }
+    // } else if (zoom >= 1.0001) {
+    //   // Zoom in via tileviewer movement (e.g. pinch gesture)
+    //   if (nativeScroll.value) {
+    //     nativeScroll.value = false;
+    //   }
+    // }
   }
-  lastView.value = view;
+  lastView.value = event;
+  if (!nativeScroll.value) {
+    lastNonNativeView.value = event;
+  }
+  // console.log("y", nativeScroll.value, event.y)
   // console.log("view", Object.assign({}, view));
   // console.log("region", Object.assign({}, region.value?.bounds));
   // console.log("element", viewer.value?.elementFromView(view));
@@ -321,6 +422,44 @@ const onView = (view) => {
   if (region.value?.bounds) {
     emit("elementView", getScreenView(region.value.bounds));
   }
+}
+
+const onMoveEnd = async (event) => {
+  if (!scene.value?.bounds.w || !view.value || !viewer.value) {
+    return;
+  }
+  // const viewZoom = scene.value.bounds.w / view.value.w;
+  // const moveZoom = scene.value.bounds.w / event.w;
+  const viewZoom = viewer.value.zoomFromView(view.value);
+  const moveZoom = viewer.value.zoomFromView(event);
+  const ratio = moveZoom / viewZoom;
+  // console.log("ratio", ratio);
+  
+  // if (ratio < 0.7) {
+  //   await exit();
+  //   return;
+  // }
+  // if (ratio < 1.1) {
+  //   zoomOut();
+  //   return;
+  // }
+}
+
+const onNav = async (event) => {
+  // console.log("nav", event);
+  // const zoom = scene.value.bounds.w / lastView.value?.w;
+  // console.log("zoom", zoom);
+  if (event.x) {
+    await navigate(event.x);
+    return;
+  }
+  if (event.y < 0 && view.value) {
+    await exit();
+    return;
+  }
+  // if (event.external) {
+  // }
+  zoomOut();
 }
 
 const onBoxSelect = async (bounds, shift) => {

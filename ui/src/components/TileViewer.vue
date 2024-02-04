@@ -26,6 +26,7 @@ import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } fro
 import { defaults as defaultControls } from 'ol/control';
 import {MAC} from 'ol/src/has.js';
 import equal from 'fast-deep-equal';
+import CrossDragPan from './openlayers/CrossDragPan';
 
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
@@ -40,6 +41,8 @@ import { Polygon } from 'ol/geom';
 import Feature from 'ol/Feature';
 import Style from 'ol/style/Style';
 import Fill from 'ol/style/Fill';
+import { watchEffect } from 'vue';
+
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
   const originalEvent = /** @type {KeyboardEvent|MouseEvent|TouchEvent} */ (
@@ -88,19 +91,22 @@ export default {
     "load-end",
     "key-down",
     "viewer",
-    "box-select"
+    "box-select",
+    "nav",
   ],
 
   data() {
     return {
       viewer: null,
       maxZoom: 30,
+      clipviewZoom: 1,
     }
   },
   async created() {
   },
   async mounted() {
     this.latestView = null;
+    this.lastClipview = null;
     this.clipviewChangeTime = 0;
     this.lastAnimationTime = 0;
     this.reset();
@@ -182,6 +188,23 @@ export default {
 
     clipview() {
       this.clipviewChangeTime = Date.now();
+      // this.setCrossPanActive(!!this.clipview);
+    },
+
+    crossPanActive: {
+      immediate: true,
+      handler(active) {
+        // console.log("crossPanActive", active)
+        this.crossPan?.setActive(active);
+      }
+    },
+
+    dragPanActive: {
+      immediate: true,
+      handler(active) {
+        // console.log("dragPanActive", active)
+        this.dragPan?.setActive(active);
+      }
     },
 
     selectTagId() {
@@ -206,6 +229,12 @@ export default {
     viewExtent() {
       let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
       return [0, -height*2, width, height];
+    },
+    crossPanActive() {
+      return this.clipview && this.clipviewZoom < 1.1;
+    },
+    dragPanActive() {
+      return this.pannable && !this.crossPanActive;
     },
     minViewportZoom() {
       if (!this.v || !this.viewport.width.value) {
@@ -332,10 +361,9 @@ export default {
         
         const size = this.map.getSize();
         const corners = this.pixelCornersFromView(view);
-
         const pixelRatio = window.devicePixelRatio;
-        size[0] *= pixelRatio;
-        size[1] *= pixelRatio;
+        const mapw = size[0] * pixelRatio;
+        const maph = size[1] * pixelRatio;
         corners.tl[0] *= pixelRatio;
         corners.tl[1] *= pixelRatio;
         corners.tr[0] *= pixelRatio;
@@ -345,19 +373,38 @@ export default {
         corners.bl[0] *= pixelRatio;
         corners.bl[1] *= pixelRatio;
 
-        const alpha = 
+        const animFrac = 
           this.lastAnimationTime ?
             Math.max(0, Math.min(1, (Date.now() - this.clipviewChangeTime) / (this.lastAnimationTime*1000))) :
             1;
+        
+        const latestZoom = this.zoomFromView(this.latestView);
+        const zoom = this.zoomFromView(view);
+        const zoomFrac = Math.min(1, latestZoom/zoom + 1e-4);
+        
+        const mapExtent = this.v.getProjection().getExtent();
+        const mapRes = this.v.getResolutionForExtent([
+          0,
+          0,
+          mapExtent[2],
+          mapExtent[2],
+        ]);
+        const viewExtent = this.extentFromView(view);
+        const viewRes = this.v.getResolutionForExtent(viewExtent);
+        const res = this.v.getResolution();
+        const resFrac = 1 - Math.min(1, (res - viewRes) / (mapRes - viewRes));
+        // console.log(resFrac)
 
-        // TODO: Fade based on distance instead of time
-        console.log(this.zoomFromView(this.latestView), this.zoomFromView(view));
+        // const alpha = animFrac * resFrac;
+        const alpha = resFrac;
 
         const e = 1;
         
         ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+        ctx.strokeStyle = "green";
+        ctx.lineWidth = 20;
         ctx.beginPath();
-        ctx.rect(0, 0, size[0], size[1]);
+        ctx.rect(0, 0, mapw, maph);
         ctx.moveTo(corners.tl[0] + e, corners.tl[1] + e);
         ctx.lineTo(corners.tr[0] - e, corners.tr[1] + e);
         ctx.lineTo(corners.br[0] - e, corners.br[1] - e);
@@ -369,7 +416,7 @@ export default {
           return;
         }
 
-        // this.map.render();
+        this.map.render();
       });
       
       return main;
@@ -476,6 +523,10 @@ export default {
       // }
 
       const dragPan = new DragPan();
+      const crossPan = new CrossDragPan();
+      crossPan.on("nav", event => {
+        this.onNav(event);
+      });
       const mouseWheelZoom = new MouseWheelZoom();
       const dragBox = new DragBox({
         condition: ctrlWithMaybeShift,
@@ -490,12 +541,15 @@ export default {
         doubleClickZoom: false,
       }).extend([
         dragPan,
+        crossPan,
         mouseWheelZoom,
         dragBox,
       ]);
       this.interactions = interactions;
       this.dragPan = dragPan;
-      this.dragPan.setActive(this.pannable);
+      this.crossPan = crossPan;
+      this.dragPan.setActive(this.dragPanActive);
+      this.crossPan.setActive(this.crossPanActive);
 
       this.mouseWheelZoom = mouseWheelZoom;
       this.mouseWheelZoom.setActive(this.zoomable);
@@ -581,7 +635,7 @@ export default {
         kinetic: this.dragPanKinetic,
       });
       this.interactions.push(this.dragPan);
-      this.dragPan.setActive(this.pannable);
+      this.dragPan.setActive(this.dragPanActive);
     },
 
     onClick(event) {
@@ -602,6 +656,11 @@ export default {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
+      // console.log("moveend", view)
+      if (this.clipview) {
+        this.navOnZoom();
+        return;
+      }
       this.$emit("move-end", view);
     },
 
@@ -622,7 +681,7 @@ export default {
       }
     },
 
-    onResolutionChange() {
+    onResolutionChange(event) {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
@@ -633,6 +692,34 @@ export default {
         this.lastGeoview = geoview;
         this.$emit("geoview", geoview);
       }
+      if (this.clipview) {
+        const clipzoom = this.zoomFromView(this.clipview);
+        const viewzoom = this.zoomFromView(view);
+        const ratio = viewzoom / clipzoom;
+        this.clipviewZoom = ratio;
+      }
+      // if (this.clipview && !this.crossPan.axis) {
+      //   const resDiff = event.target.get(event.key) - event.oldValue;
+      //   if (resDiff > 0) {
+      //     const clipzoom = this.zoomFromView(this.clipview);
+      //     const viewzoom = this.zoomFromView(view);
+      //     const ratio = viewzoom / clipzoom;
+      //     if (ratio < 0.8) {
+      //       this.$emit("nav", {
+      //         x: 0,
+      //         y: -1,
+      //       })
+      //     }
+      //   }
+      // }
+      // console.log("resolution change", this.zoomFromView(this.clipview), this.zoomFromView(view), this.zoomFromView(view) / this.zoomFromView(this.clipview), this.crossPan.panning)
+      // if (this.resolutionChangeTimer) {
+      //   clearTimeout(this.resolutionChangeTimer);
+      // }
+      // this.resolutionChangeTimer = setTimeout(() => {
+      //   this.resolutionChangeTimer = null;
+      //   this.$emit("move-end", view);
+      // }, 100);
     },
 
     onBoxSelect(event, extent) {
@@ -640,6 +727,23 @@ export default {
       const view = this.viewFromExtent(extent);
       if (!view) return;
       this.$emit("box-select", view, shift);
+    },
+
+    onNav(event) {
+      if (event.interrupted) {
+        this.navOnZoom(event);
+        return;
+      }
+      this.$emit("nav", event);
+    },
+
+    navOnZoom() {
+      const ratio = this.clipviewZoom;
+      if (ratio < 0.6) {
+        this.$emit("nav", { x: 0, y: -1 });
+      } else if (ratio < 1.2) {
+        this.$emit("nav", { x: 0, y: 0 });
+      }
     },
 
     reset() {
@@ -738,14 +842,46 @@ export default {
     },
 
     zoomFromView(view) {
-      if (!view) return null;
+      if (!view || !this.map) return null;
       const vw = view.w;
       const vh = view.h;
-      const sw = this.scene.bounds.w;
-      const sh = this.scene.bounds.h;
+      // const sw = this.scene.bounds.w;
+      // const sh = this.scene.bounds.h;
       const [mw, mh] = this.map.getSize();
       const zw = mw / vw;
       const zh = mh / vh;
+
+      // func (rect Rect) FitInside(container Rect) (out Rect) {
+      // 	imageRatio := rect.W / rect.H
+
+      // 	var scale float64
+      // 	if container.W/container.H < imageRatio {
+      // 		scale = container.W / rect.W
+      // 	} else {
+      // 		scale = container.H / rect.H
+      // 	}
+
+      // 	out.W = rect.W * scale
+      // 	out.H = rect.H * scale
+      // 	out.X = container.X + (container.W-out.W)*0.5
+      // 	out.Y = container.Y + (container.H-out.H)*0.5
+      // 	return out
+      // }
+
+      // const viewAspect = vw / vh;
+      // const mapAspect = mw / mh;
+      // const mapScale = mapAspect < viewAspect ? mw / vw : mh / vh;
+
+      // const sceneAspect = sw / sh;
+      // const sceneScale = sceneAspect < 1 ? sw / vw : sh / vh;
+
+      // const viewport = this.viewport;
+      // const [vpw, vph] = [viewport.width.value, viewport.height.value];
+      // const vpAspect = vpw / vph;
+      // const vpScale = vpAspect < viewAspect ? vpw / vw : vph / vh;
+
+      // // console.log({ vw, vh, sw, sh, zw, zh, min: Math.min(zw, zh), scale })
+      // console.log({ min: Math.min(zw, zh), mapScale, sceneScale, vpScale })
       return Math.min(zw, zh);
     },
 
@@ -844,6 +980,14 @@ export default {
       return geoview[2];
     },
 
+    // setCrossPanActive(active) {
+    //   // this.dragPan.setActive(this.pannable && !active);
+    //   // this.crossPan.setActive(active);
+    //   // Initially false
+    //   // on clipview this.setCrossPanActive(!!this.clipview);
+      
+    // },
+
     setView(view, options) {
 
       if (!this.map) {
@@ -895,17 +1039,27 @@ export default {
         const prevZoom = this.zoomFromView(this.latestView);
         const zoom = this.zoomFromView(view);
         const zoomDiff = Math.abs(zoom - prevZoom);
-        if (zoomDiff > 1e-4 && !options) {
-          console.log(zoomDiff)
+
+        const skipClipTransition =
+          this.lastClipview &&
+          this.latestView.x == this.lastClipview.x &&
+          this.latestView.y == this.lastClipview.y &&
+          this.latestView.w == this.lastClipview.w &&
+          this.latestView.h == this.lastClipview.h;
+          
+        if (zoomDiff > 1e-4 && !options && !skipClipTransition) {
+          // console.log(zoomDiff)
           // const t = zoomDiff * 0.05;
           // const t = zoomDiff * 0.2;
           // const t = zoomDiff * 1;
           const t = Math.pow(zoomDiff, 0.5) * 0.08;
+          // const t = Math.pow(zoomDiff, 1.5) * 0.08;
           options = { animationTime: t }
         }
       }
 
       this.latestView = view;
+      this.lastClipview = this.clipview;
       if (this.pendingAnimationTime && !options) {
         options = { animationTime: this.pendingAnimationTime }
       }
@@ -950,6 +1104,7 @@ export default {
 .container, .tileViewer {
   width: 100%;
   height: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .container {
