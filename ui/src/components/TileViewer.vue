@@ -22,6 +22,7 @@ import OSM from 'ol/source/OSM';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
+import { easeIn, easeOut, linear } from 'ol/easing';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
 import {MAC} from 'ol/src/has.js';
@@ -52,6 +53,10 @@ function ctrlWithMaybeShift(mapBrowserEvent) {
     !originalEvent.altKey &&
     (MAC ? originalEvent.metaKey : originalEvent.ctrlKey)
   );
+};
+
+function zoomEase(x) {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
 };
 
 export default {
@@ -228,7 +233,7 @@ export default {
     },
     viewExtent() {
       let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
-      return [0, -height*2, width, height];
+      return [-width*0.95, -height, width*1.95, height];
     },
     crossPanActive() {
       return this.clipview && this.clipviewZoom < 1.1;
@@ -577,7 +582,6 @@ export default {
           extent,
           smoothExtentConstraint: false,
           showFullExtent: true,
-          constrainOnlyCenter: true,
         });
       }
 
@@ -656,7 +660,6 @@ export default {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
-      // console.log("moveend", view)
       if (this.clipview) {
         this.navOnZoom();
         return;
@@ -698,28 +701,6 @@ export default {
         const ratio = viewzoom / clipzoom;
         this.clipviewZoom = ratio;
       }
-      // if (this.clipview && !this.crossPan.axis) {
-      //   const resDiff = event.target.get(event.key) - event.oldValue;
-      //   if (resDiff > 0) {
-      //     const clipzoom = this.zoomFromView(this.clipview);
-      //     const viewzoom = this.zoomFromView(view);
-      //     const ratio = viewzoom / clipzoom;
-      //     if (ratio < 0.8) {
-      //       this.$emit("nav", {
-      //         x: 0,
-      //         y: -1,
-      //       })
-      //     }
-      //   }
-      // }
-      // console.log("resolution change", this.zoomFromView(this.clipview), this.zoomFromView(view), this.zoomFromView(view) / this.zoomFromView(this.clipview), this.crossPan.panning)
-      // if (this.resolutionChangeTimer) {
-      //   clearTimeout(this.resolutionChangeTimer);
-      // }
-      // this.resolutionChangeTimer = setTimeout(() => {
-      //   this.resolutionChangeTimer = null;
-      //   this.$emit("move-end", view);
-      // }, 100);
     },
 
     onBoxSelect(event, extent) {
@@ -730,17 +711,66 @@ export default {
     },
 
     onNav(event) {
+      if (event.x) {
+        const dx = event.x > 0 ? 1 : -1;
+        // const dx = 1;
+        const t = 150 / Math.abs(event.x);
+        // const t = 1;
+        const cx = this.clipview.x;
+        const cw = this.clipview.w;
+        const vx = this.latestView.x;
+        const vw = this.latestView.w;
+        const hideFrac = (2*(cx - vx) + cw - vw) / (cw + vw);
+
+        const show = () => {
+          this.setPendingTransition({
+            t,
+            x: -dx * this.latestView.w,
+            ease: "linear",
+          });
+          this.$emit("nav", {
+            x: dx,
+            y: 0,
+          });
+        };
+        const hideT = t * (1 - Math.abs(hideFrac));
+        if (Math.abs(hideFrac) < 1) {
+          const hideX = cx + (cw + vw) * 0.5 * dx;
+          this.setView({
+            x: hideX,
+            y: this.clipview.y,
+            w: this.clipview.w,
+            h: this.clipview.h,
+          }, {
+            animationTime: hideT,
+            ease: "linear",
+          });
+          clearTimeout(this.navTimer);
+          this.navTimer = setTimeout(show, hideT * 1000);
+        } else {
+          show();
+        }
+        return;
+      }
+      if (event.y < 0) {
+        this.$emit("nav", {
+          zoom: -1,
+        });
+        return;
+      }
       if (event.interrupted) {
         this.navOnZoom(event);
         return;
       }
-      this.$emit("nav", event);
     },
 
     navOnZoom() {
       const ratio = this.clipviewZoom;
-      if (ratio < 0.6) {
-        this.$emit("nav", { x: 0, y: -1 });
+      if (Math.abs(1 - ratio) < 1e-4) {
+        return;
+      }
+      if (ratio < 0.8) {
+        this.$emit("nav", { zoom: -1 });
       } else if (ratio < 1.2) {
         this.$emit("nav", { x: 0, y: 0 });
       }
@@ -955,6 +985,10 @@ export default {
       this.pendingAnimationTime = t;
     },
 
+    setPendingTransition(t) {
+      this.pendingTransition = t;
+    },
+
     getGeoview() {
       const center = toLonLat(this.v.getCenter());
       const zoom = this.v.getZoom();
@@ -1065,19 +1099,35 @@ export default {
       }
       this.pendingAnimationTime = null;
 
+      if (this.pendingTransition) {
+        options = {
+          animationTime: this.pendingTransition.t,
+          ease: this.pendingTransition.ease,
+        }
+        const extent = this.extentFromView({
+          x: view.x + (this.pendingTransition.x || 0),
+          y: view.y + (this.pendingTransition.y || 0),
+          w: view.w,
+          h: view.h,
+        });
+        this.v.fit(extent);
+      }
+      this.pendingTransition = null;
+
       if (this.v.getAnimating()) {
         this.v.cancelAnimations();
       }
 
-      const targetExtent = this.extentFromView(view);
-
       this.lastAnimationTime = options?.animationTime || 0;
+      
       
       const fitOpts = options ? {
         duration: options.animationTime*1000,
-        easing: function(x) {
-          return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
-        },
+        easing:
+          options.ease == "in" ? easeIn :
+          options.ease == "out" ? easeOut :
+          options.ease == "linear" ? linear :
+          zoomEase,
         // easing: function(x) {
         //   return x * x * x * (x * (6.0 * x - 15.0) + 10.0);
         // },
@@ -1092,6 +1142,7 @@ export default {
         // },
       } : undefined;
 
+      const targetExtent = this.extentFromView(view);
       this.v.fit(targetExtent, fitOpts);
     },
 

@@ -189,10 +189,11 @@ export function useNavigation({ index, count, apply }) {
       throw new Error("Unsupported parameter: " + offsetOrRegion);
     }
     if (nextIndex <= 0 || nextIndex > count.value) {
-      return;
+      return false;
     }
     seekIndex.value = nextIndex;
     debouncedSeek(nextIndex);
+    return true;
   }
 
   const debouncedSeek = debounce(1000, index => {

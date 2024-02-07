@@ -14,7 +14,7 @@
       :interactive="interactive"
       :pannable="!nativeScroll"
       :zoomable="!nativeScroll"
-      :zoom-transition="zoomTransition"
+      :zoom-transition="true"
       :viewport="viewport"
       @click="onClick"
       @view="onView"
@@ -209,18 +209,6 @@ const nativeScroll = computed(() => {
   return true;
 });
 
-const zoomTransition = computed(() => {
-  // if (!viewer.value) return false;
-  // const viewZoom = viewer.value?.zoomFromView(view.value);
-  // const moveZoom = viewer.value?.zoomFromView(lastView.value);
-  // const regionZoom = viewer.value?.zoomFromView(region.value?.bounds);
-  // if (!viewZoom || !moveZoom) return false;
-  // const ratio = moveZoom / regionZoom;
-  // console.log(ratio)
-  // if (Math.abs(1 - ratio) < 0.1) return false;
-  return true;
-});
-
 watch(nativeScroll, async (newValue, oldValue) => {
   if (newValue == oldValue) {
     return;
@@ -345,15 +333,21 @@ const onClick = async (event) => {
 const onWheel = async (event) => {
   if (event.ctrlKey && nativeScroll.value) {
     event.preventDefault();
-    // if (event.deltaY < 0) {
-    //   // Ctrl+scroll zoom in to disabled scroll mode
-    //   // nativeScroll.value = false;
-    //   await nextTick();
-      
-    //   const target = viewer.value.pointerTarget;
-    //   const redirected = new event.constructor(event.type, event);
-    //   target.dispatchEvent(redirected);
-    // }
+    if (event.deltaY < 0) {
+      const bump = 0.3;
+      // Zoom into mouse cursor
+      const rx = event.x / viewport.width.value;
+      const ry = event.y / viewport.height.value;
+      viewer.value?.setView({
+        w: view.value.w * (1 - bump * 2),
+        h: view.value.h * (1 - bump * 2),
+        x: view.value.x + view.value.w * bump * rx * 2,
+        y: view.value.y + view.value.h * bump * ry * 2,
+      }, {
+        animationTime: 0.3,
+        ease: "out",
+      });
+    }
   }
 }
 
@@ -446,19 +440,22 @@ const onMoveEnd = async (event) => {
 }
 
 const onNav = async (event) => {
-  // console.log("nav", event);
-  // const zoom = scene.value.bounds.w / lastView.value?.w;
-  // console.log("zoom", zoom);
   if (event.x) {
-    await navigate(event.x);
+    const valid = await navigate(event.x);
+    if (!valid) {
+      viewer.value?.setPendingTransition({
+        t: 0.5,
+        x: lastView.value?.x,
+        ease: "out",
+      });
+      zoomOut();
+    }
     return;
   }
-  if (event.y < 0 && view.value) {
+  if (event.zoom < 0) {
     await exit();
     return;
   }
-  // if (event.external) {
-  // }
   zoomOut();
 }
 

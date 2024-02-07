@@ -2,6 +2,7 @@ import { Pointer as PointerInteraction } from 'ol/interaction';
 import { centroid as centroidFromPointers } from 'ol/interaction/Pointer';
 import { rotate as rotateCoordinate, scale as scaleCoordinate } from 'ol/coordinate';
 import { getBottomLeft, getBottomRight, getTopLeft, getTopRight } from 'ol/extent';
+import KalmanFilter from 'kalmanjs';
 
 const Axis = {
   None: 0,
@@ -18,6 +19,7 @@ class CrossDragPan extends PointerInteraction {
         if (this.targetPointers.length > 0) {
           this.centroid = centroidFromPointers(this.targetPointers);
           this.lastEventTime = null;
+          this.filter.cov = this.filter.x = NaN;
           return true;
         } else {
           return false;
@@ -46,7 +48,8 @@ class CrossDragPan extends PointerInteraction {
         ];
         this.delta = delta.slice();
         
-        const time = event.frameState.time;
+        // const time = event.frameState.time;
+        const time = Date.now();
         if (this.lastEventTime) {
           const dt = time - this.lastEventTime;
           this.velocity = [
@@ -54,9 +57,6 @@ class CrossDragPan extends PointerInteraction {
             (centroid[1] - this.lastCentroid[1]) / dt,
           ];
         }
-        this.lastCentroid = centroid;
-        this.lastEventTime = time;
-
 
         switch (this.axis) {
           case Axis.None:
@@ -73,6 +73,7 @@ class CrossDragPan extends PointerInteraction {
             break;
           case Axis.X:
             delta[1] = 0;
+            this.speed = this.filter.filter(this.velocity[0]);
             scaleCoordinate(delta, view.getResolution());
             rotateCoordinate(delta, view.getRotation());
             view.setCenterInternal([
@@ -82,6 +83,7 @@ class CrossDragPan extends PointerInteraction {
             break;
           case Axis.Y:
             delta[0] = 0;
+            this.speed = this.filter.filter(this.velocity[1]);
             const dy = delta[1];
             scaleCoordinate(delta, view.getResolution());
             rotateCoordinate(delta, view.getRotation());
@@ -161,6 +163,9 @@ class CrossDragPan extends PointerInteraction {
             // console.log(view.calculateExtentInternal())
             break;
         }
+
+        this.lastCentroid = centroid;
+        this.lastEventTime = time;
         
         event.originalEvent.preventDefault();
       },
@@ -175,13 +180,12 @@ class CrossDragPan extends PointerInteraction {
 
           switch (this.axis) {
             case Axis.X:
-              const dx = this.delta[0] + this.velocity[0]*this.navXSpeed;
+              const dx = this.delta[0] + this.speed*this.navXSpeed;
               const minw = map.getSize()[0] * this.navXDist;
-              const x = dx < -minw ? 1 : dx > minw ? -1 : 0;
-              if (x) {
+              if (dx < -minw || dx > minw) {
                 this.dispatchEvent({
                   type: 'nav',
-                  x,
+                  x: -dx,
                   y: 0,
                 });
                 dispatched = true;
@@ -227,6 +231,7 @@ class CrossDragPan extends PointerInteraction {
     this.lastCentroid = null;
     this.lastEventTime = null;
     this.velocity = [0, 0];
+    this.speed = 0;
     this.zoom = null;
     this.resolution = null;
     this.panning = false;
@@ -237,6 +242,7 @@ class CrossDragPan extends PointerInteraction {
     this.navXDist = 0.5;
     this.navYSpeed = 1000;
     this.navYDist = 0.05;
+    this.filter = new KalmanFilter({R: 0.01, Q: 3});
   }
 }
 
