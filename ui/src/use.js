@@ -381,7 +381,7 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
     !scene?.value?.loading &&
     viewport?.height.value &&
     `/scenes/${scene.value.id}/dates?${qs.stringify({
-      height: viewport.height.value,
+      height: Math.round(viewport.height.value),
     })}`
   )
 
