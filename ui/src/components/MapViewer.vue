@@ -14,7 +14,7 @@
       :crossNav="!!region"
       :geo="true"
       :view="view"
-      :zoom-transition="true"
+      :zoom-transition="regionTransition"
       :viewport="viewport"
       @nav="onNav"
       @view="onView"
@@ -104,6 +104,8 @@ const {
 const viewer = ref(null);
 const viewport = useViewport(viewer);
 
+const regionTransition = ref(false);
+
 // Maps are always a square,
 // so the layout is viewport-independent
 const staticViewport = {
@@ -142,6 +144,10 @@ watch(scene, async (newScene, oldScene) => {
   emit("scene", newScene);
 });
 
+watch(region, async (newRegion, oldRegion) => {
+  regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+});
+
 const contextMenu = ref(null);
 const {
   onContextMenu,
@@ -177,11 +183,14 @@ const geoviewView = computed(() => {
 });
 
 const view = computed(() => {
-  if (region.value) return region.value.bounds;
+  if (region.value) {
+    return region.value.bounds;
+  }
   return geoviewView.value;
 });
 
 const applyGeoview = async (geoview) => {
+  if (!geoview) return;
   const [lon, lat, z] = geoview;
   await router.replace({
     query: {
@@ -230,13 +239,17 @@ const externalExit = async () => {
   await regionExit();
 }
 
+const zoomOut = () => {
+  viewer.value?.setView(view.value);
+}
+
 const onNav = async (event) => {
   if (event.x) {
     const valid = await navigate(event.x);
     if (!valid) {
       viewer.value?.setPendingTransition({
         t: 0.5,
-        x: lastView.value?.x,
+        x: (lastView.value?.x - view.value?.x) / 2,
         ease: "out",
       });
       zoomOut();
@@ -247,6 +260,7 @@ const onNav = async (event) => {
     await exit();
     return;
   }
+  zoomOut();
 }
 
 const onClick = async (event) => {

@@ -3,7 +3,7 @@
     class="container"
     ref="container"
     :style="{ backgroundColor }"
-    :class="{ interactive }"
+    :class="{ interactive, focus }"
     tabindex="1"
   >
     <div class="tileViewer" ref="map"></div>
@@ -99,7 +99,7 @@ export default {
     return {
       viewer: null,
       maxZoom: 30,
-      focusZoom: 0,
+      focusZoom: 1,
     }
   },
   async created() {
@@ -593,6 +593,8 @@ export default {
         const viewzoom = this.zoomFromView(view);
         const ratio = viewzoom / focuszoom;
         this.focusZoom = ratio;
+      } else {
+        this.focusZoom = 0;
       }
     },
 
@@ -655,6 +657,10 @@ export default {
         this.navOnZoom(event);
         return;
       }
+      this.setView(this.view, {
+        animationTime: 0.3,
+        ease: "out",
+      });
     },
 
     navOnZoom() {
@@ -937,11 +943,10 @@ export default {
         this.v.cancelAnimations();
       }
 
-      this.lastAnimationTime = options?.animationTime || 0;
-      
+      this.lastAnimationTime = options?.animationTime || 0;      
       
       const fitOpts = options ? {
-        duration: options.animationTime*1000,
+        duration: (options.animationTime || 0)*1000,
         easing:
           options.ease == "in" ? easeIn :
           options.ease == "out" ? easeOut :
@@ -980,6 +985,10 @@ export default {
 .container {
   position: relative;
   /* padding-top: 60px; */
+}
+
+.container.focus {
+  background: black;
 }
 
 .interactive {

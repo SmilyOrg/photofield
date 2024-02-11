@@ -446,7 +446,7 @@ const onNav = async (event) => {
     if (!valid) {
       viewer.value?.setPendingTransition({
         t: 0.5,
-        x: lastView.value?.x,
+        x: (lastView.value?.x - view.value?.x) / 2,
         ease: "out",
       });
       zoomOut();
