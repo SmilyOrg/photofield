@@ -26,23 +26,18 @@ import { easeIn, easeOut, linear } from 'ol/easing';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
 import {MAC} from 'ol/src/has.js';
+import Kinetic from 'ol/Kinetic';
+import { get as getProjection } from 'ol/proj';
+import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
+
 import equal from 'fast-deep-equal';
 import CrossDragPan from './openlayers/CrossDragPan';
+import Geoview from './openlayers/geoview.js';
 
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
 import { getTileUrl } from '../api';
-import Kinetic from 'ol/Kinetic';
-import { toLonLat, get as getProjection, fromLonLat } from 'ol/proj';
-import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
-import VectorLayer from 'ol/layer/Vector';
-import VectorSource from 'ol/source/Vector';
-import { Polygon } from 'ol/geom';
-import Feature from 'ol/Feature';
-import Style from 'ol/style/Style';
-import Fill from 'ol/style/Fill';
-import { watchEffect } from 'vue';
 
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
@@ -76,12 +71,13 @@ export default {
     tileSize: Number,
     view: Object,
     clipview: Object,
+    crossNav: Boolean,
+    focus: Boolean,
     backgroundColor: String,
     selectTagId: String,
     debug: Object,
     loading: Boolean,
     geo: Boolean,
-    geoview: Array,
     viewport: Object,
   },
 
@@ -90,7 +86,6 @@ export default {
     "click",
     "pointer-down",
     "view",
-    "geoview",
     "move-end",
     "reset",
     "load-end",
@@ -104,15 +99,13 @@ export default {
     return {
       viewer: null,
       maxZoom: 30,
-      clipviewZoom: 1,
+      focusZoom: 0,
     }
   },
   async created() {
   },
   async mounted() {
     this.latestView = null;
-    this.lastClipview = null;
-    this.clipviewChangeTime = 0;
     this.lastAnimationTime = 0;
     this.reset();
   },
@@ -131,6 +124,12 @@ export default {
       if (oldScene?.loading && !newScene?.loading) {
         this.reload();
         return;
+      }
+    },
+
+    geo(newGeo, oldGeo) {
+      if (newGeo != oldGeo) {
+        this.reset();
       }
     },
 
@@ -164,25 +163,6 @@ export default {
       }
     },
 
-    geoview: {
-      immediate: true,
-      handler(geoview) {
-        if (!geoview) return;
-        if (
-          this.lastGeoview &&
-          Math.abs(geoview[0] - this.lastGeoview[0]) < 1e-4 &&
-          Math.abs(geoview[1] - this.lastGeoview[1]) < 1e-4 &&
-          Math.abs(geoview[2] - this.lastGeoview[2]) < 1e-1
-        ) {
-          // Geoview is already close enough, nothing to do.
-          // This usually happens after the geoview is applied
-          // to the url and then the url is read back.
-          return;
-        }
-        this.setGeoview(geoview);
-      }
-    },
-
     kinetic(kinetic) {
       this.setKinetic(kinetic);
     },
@@ -191,9 +171,11 @@ export default {
       this.setView(view);
     },
 
-    clipview() {
-      this.clipviewChangeTime = Date.now();
-      // this.setCrossPanActive(!!this.clipview);
+    geoLayersActive(active) {
+      this.map.getLayers().forEach(layer => {
+        if (!layer.get("geo")) return;
+        layer.setVisible(active);
+      });
     },
 
     crossPanActive: {
@@ -236,10 +218,16 @@ export default {
       return [-width*0.95, -height, width*1.95, height];
     },
     crossPanActive() {
-      return this.clipview && this.clipviewZoom < 1.1;
+      return this.crossNav && this.focusZoom < 1.1;
     },
     dragPanActive() {
       return this.pannable && !this.crossPanActive;
+    },
+    geoLayersActive() {
+      if (!this.geo) return false;
+      if (!this.focus) return true;
+
+      return this.focusZoom < 0.99;
     },
     minViewportZoom() {
       if (!this.v || !this.viewport.width.value) {
@@ -313,57 +301,13 @@ export default {
         });
       }
 
-      
-      main.on("prerender", event => {
-        // Clip to the top left square
-        const ctx = event.context;
-        const size = this.map.getSize();
-        // const view = this.map.getView();
-        // const extent = view.calculateExtent(size);
-        const view = this.clipview;
-        if (!view) return;
-        
-        // const corners = this.pixelCornersFromView(view);
-        // const pixelRatio = window.devicePixelRatio;
-        // corners.tl[0] *= pixelRatio;
-        // corners.tl[1] *= pixelRatio;
-        // corners.tr[0] *= pixelRatio;
-        // corners.tr[1] *= pixelRatio;
-        // corners.br[0] *= pixelRatio;
-        // corners.br[1] *= pixelRatio;
-        // corners.bl[0] *= pixelRatio;
-        // corners.bl[1] *= pixelRatio;
-
-        // ctx.save();
-        // ctx.rect(
-        //   corners.tl[0],
-        //   corners.tl[1],
-        //   corners.tr[0] - corners.tl[0],
-        //   corners.bl[1] - corners.tl[1],
-        // );
-        // ctx.clip();
-
-        // ctx.strokeStyle = "green";
-        // ctx.lineWidth = 20;
-        // // ctx.beginPath();
-        
-        // ctx.strokeRect(
-        //   corners.tl[0],
-        //   corners.tl[1],
-        //   corners.tr[0] - corners.tl[0],
-        //   corners.bl[1] - corners.tl[1],
-        // );
-
-        // Highlight the view instead
-      });
-
       main.on("postrender", event => {
+        if (!this.focus) return;
+
         const ctx = event.context;
-        const view = this.clipview;
+        const view = this.view;
         if (!view) return;
 
-        // ctx.restore();
-        
         const size = this.map.getSize();
         const corners = this.pixelCornersFromView(view);
         const pixelRatio = window.devicePixelRatio;
@@ -378,29 +322,12 @@ export default {
         corners.bl[0] *= pixelRatio;
         corners.bl[1] *= pixelRatio;
 
-        const animFrac = 
-          this.lastAnimationTime ?
-            Math.max(0, Math.min(1, (Date.now() - this.clipviewChangeTime) / (this.lastAnimationTime*1000))) :
-            1;
-        
-        const latestZoom = this.zoomFromView(this.latestView);
-        const zoom = this.zoomFromView(view);
-        const zoomFrac = Math.min(1, latestZoom/zoom + 1e-4);
-        
-        const mapExtent = this.v.getProjection().getExtent();
-        const mapRes = this.v.getResolutionForExtent([
-          0,
-          0,
-          mapExtent[2],
-          mapExtent[2],
-        ]);
         const viewExtent = this.extentFromView(view);
         const viewRes = this.v.getResolutionForExtent(viewExtent);
+        const refRes = viewRes * 3;
         const res = this.v.getResolution();
-        const resFrac = 1 - Math.min(1, (res - viewRes) / (mapRes - viewRes));
-        // console.log(resFrac)
-
-        // const alpha = animFrac * resFrac;
+        const resFrac = 1 - Math.min(1, (res - viewRes) / (refRes - viewRes));
+        
         const alpha = resFrac;
 
         const e = 1;
@@ -431,32 +358,12 @@ export default {
 
       const main = this.createMainLayer();
 
-      // const clip = new VectorLayer({
-      //   source: new VectorSource({
-      //     features: [
-      //       new Feature({
-      //         geometry: new Polygon([
-      //           [
-      //             [0, 0],
-      //             [0, 5.5e11],
-      //             [2e11, 2e11],
-      //             [2e11, 0],
-      //             [0, 0],
-      //           ],
-      //         ]),
-      //       }),
-      //     ],
-      //   }),
-      //   style: new Style({
-      //     fill: new Fill({
-      //       color: "rgba(0, 0, 0, 0.5)",
-      //     }),
-      //   }),
-      // });
-
       if (this.geo) {
 
         const mask = new TileLayer({
+          properties: {
+            geo: true,
+          },
           preload: 2,
           source: new XYZ({
             tileUrlFunction: this.maskUrlFunction,
@@ -469,6 +376,9 @@ export default {
         });
 
         const osmLayer = new TileLayer({
+          properties: {
+            geo: true,
+          },
           preload: 2,
           source: new OSM({
             attributions: [
@@ -504,17 +414,6 @@ export default {
     },
 
     initOpenLayers(element) {
-
-      if (this.geo) {
-        this.projection = getProjection("EPSG:3857");
-      } else {
-        this.projection = new Projection({
-          code: "tiles",
-          units: "pixels",
-          extent: this.projectionExtent,
-        });
-      }
-
       // Limit minimum size loaded to avoid
       // loading tiled images with very little content
       // let minZoom = 0;
@@ -528,7 +427,9 @@ export default {
       // }
 
       const dragPan = new DragPan();
-      const crossPan = new CrossDragPan();
+      const crossPan = new CrossDragPan({
+        centerZoom: this.geo,
+      });
       crossPan.on("nav", event => {
         this.onNav(event);
       });
@@ -560,17 +461,19 @@ export default {
       this.mouseWheelZoom.setActive(this.zoomable);
 
       if (this.geo) {
+        this.projection = getProjection("EPSG:3857");
         this.v = new View({
           projection: this.projection,
-          center: this.pendingGeoview ?
-            this.geoviewToCenter(this.pendingGeoview) :
-            [0, 0],
-          zoom: this.pendingGeoview ?
-            this.geoviewToZoom(this.pendingGeoview) :
-            2,
+          center: [0, 0],
+          zoom: 0,
           enableRotation: false,
         });
       } else {
+        this.projection = new Projection({
+          code: "tiles",
+          units: "pixels",
+          extent: this.projectionExtent,
+        });
         const extent = this.viewExtent;
         this.v = new View({
           center: [extent[2]/2, extent[3]],
@@ -660,7 +563,7 @@ export default {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
-      if (this.clipview) {
+      if (this.crossNav) {
         this.navOnZoom();
         return;
       }
@@ -677,11 +580,6 @@ export default {
       if (!view) return;
       this.latestView = view;
       this.$emit("view", view);
-      if (this.geo) {
-        const geoview = this.getGeoview();
-        this.lastGeoview = geoview;
-        this.$emit("geoview", geoview);
-      }
     },
 
     onResolutionChange(event) {
@@ -690,16 +588,11 @@ export default {
       if (!view) return;
       this.latestView = view;
       this.$emit("view", view);
-      if (this.geo) {
-        const geoview = this.getGeoview();
-        this.lastGeoview = geoview;
-        this.$emit("geoview", geoview);
-      }
-      if (this.clipview) {
-        const clipzoom = this.zoomFromView(this.clipview);
+      if (this.focus) {
+        const focuszoom = this.zoomFromView(this.view);
         const viewzoom = this.zoomFromView(view);
-        const ratio = viewzoom / clipzoom;
-        this.clipviewZoom = ratio;
+        const ratio = viewzoom / focuszoom;
+        this.focusZoom = ratio;
       }
     },
 
@@ -716,8 +609,8 @@ export default {
         // const dx = 1;
         const t = 150 / Math.abs(event.x);
         // const t = 1;
-        const cx = this.clipview.x;
-        const cw = this.clipview.w;
+        const cx = this.view.x;
+        const cw = this.view.w;
         const vx = this.latestView.x;
         const vw = this.latestView.w;
         const hideFrac = (2*(cx - vx) + cw - vw) / (cw + vw);
@@ -738,9 +631,9 @@ export default {
           const hideX = cx + (cw + vw) * 0.5 * dx;
           this.setView({
             x: hideX,
-            y: this.clipview.y,
-            w: this.clipview.w,
-            h: this.clipview.h,
+            y: this.view.y,
+            w: this.view.w,
+            h: this.view.h,
           }, {
             animationTime: hideT,
             ease: "linear",
@@ -765,7 +658,7 @@ export default {
     },
 
     navOnZoom() {
-      const ratio = this.clipviewZoom;
+      const ratio = this.focusZoom;
       if (Math.abs(1 - ratio) < 1e-4) {
         return;
       }
@@ -857,61 +750,14 @@ export default {
       return this.viewFromCoordinate(coord);
     },
 
-    extentFromView(view) {
-      if (!this.scene) throw new Error("Scene not found");
-      const fullExtent = this.projection.getExtent();
-      const fw = fullExtent[2] - fullExtent[0];
-      const fh = fullExtent[3] - fullExtent[1];
-      const sx = fw / this.scene.bounds.w;
-      const sy = fh / this.scene.bounds.h;
-      const tx = view.x * sx;
-      const ty = fh - view.y * sy;
-      const tw = view.w * sx;
-      const th = view.h * sy;
-      return [tx, ty-th, tx+tw, ty];
-    },
-
     zoomFromView(view) {
       if (!view || !this.map) return null;
+
       const vw = view.w;
       const vh = view.h;
-      // const sw = this.scene.bounds.w;
-      // const sh = this.scene.bounds.h;
       const [mw, mh] = this.map.getSize();
       const zw = mw / vw;
       const zh = mh / vh;
-
-      // func (rect Rect) FitInside(container Rect) (out Rect) {
-      // 	imageRatio := rect.W / rect.H
-
-      // 	var scale float64
-      // 	if container.W/container.H < imageRatio {
-      // 		scale = container.W / rect.W
-      // 	} else {
-      // 		scale = container.H / rect.H
-      // 	}
-
-      // 	out.W = rect.W * scale
-      // 	out.H = rect.H * scale
-      // 	out.X = container.X + (container.W-out.W)*0.5
-      // 	out.Y = container.Y + (container.H-out.H)*0.5
-      // 	return out
-      // }
-
-      // const viewAspect = vw / vh;
-      // const mapAspect = mw / mh;
-      // const mapScale = mapAspect < viewAspect ? mw / vw : mh / vh;
-
-      // const sceneAspect = sw / sh;
-      // const sceneScale = sceneAspect < 1 ? sw / vw : sh / vh;
-
-      // const viewport = this.viewport;
-      // const [vpw, vph] = [viewport.width.value, viewport.height.value];
-      // const vpAspect = vpw / vph;
-      // const vpScale = vpAspect < viewAspect ? vpw / vw : vph / vh;
-
-      // // console.log({ vw, vh, sw, sh, zw, zh, min: Math.min(zw, zh), scale })
-      // console.log({ min: Math.min(zw, zh), mapScale, sceneScale, vpScale })
       return Math.min(zw, zh);
     },
 
@@ -928,16 +774,27 @@ export default {
       const fh = fullExtent[3] - fullExtent[1];
       const sx = this.scene.bounds.w / fw;
       const sy = this.scene.bounds.h / fh;
-      const tx = extent[0];
-      const ty = extent[3];
-      const tw = extent[2]-tx;
-      const th = ty-extent[1];
       return {
-        x: tx * sx,
-        y: (fh-ty)*sy,
-        w: tw * sx,
-        h: th * sy,
+        x: (extent[0] - fullExtent[0]) * sx,
+        y: (fullExtent[3] - extent[3]) * sy,
+        w: (extent[2] - extent[0]) * sx,
+        h: (extent[3] - extent[1]) * sy,
       }
+    },
+
+    extentFromView(view) {
+      if (!this.scene) throw new Error("Scene not found");
+      const fullExtent = this.projection.getExtent();
+      const fw = fullExtent[2] - fullExtent[0];
+      const fh = fullExtent[3] - fullExtent[1];
+      const sx = fw / this.scene.bounds.w;
+      const sy = fh / this.scene.bounds.h;
+      return [
+        fullExtent[0] + view.x * sx,
+        fullExtent[3] - (view.y + view.h) * sy,
+        fullExtent[0] + (view.x + view.w) * sx,
+        fullExtent[3] - view.y * sy,
+      ];
     },
 
     viewFromCoordinate(coord) {
@@ -989,39 +846,6 @@ export default {
       this.pendingTransition = t;
     },
 
-    getGeoview() {
-      const center = toLonLat(this.v.getCenter());
-      const zoom = this.v.getZoom();
-      return [center[0], center[1], zoom];
-    },
-
-    setGeoview(geoview) {
-      this.lastGeoview = geoview;
-      if (!this.map) {
-        console.info("Map not initialized yet, setting pending geoview", geoview);
-        this.pendingGeoview = geoview;
-        return;
-      }
-      this.v.setCenter(this.geoviewToCenter(geoview));
-      this.v.setZoom(this.geoviewToZoom(geoview));
-    },
-
-    geoviewToCenter(geoview) {
-      return fromLonLat(geoview.slice(0, 2));
-    },
-
-    geoviewToZoom(geoview) {
-      return geoview[2];
-    },
-
-    // setCrossPanActive(active) {
-    //   // this.dragPan.setActive(this.pannable && !active);
-    //   // this.crossPan.setActive(active);
-    //   // Initially false
-    //   // on clipview this.setCrossPanActive(!!this.clipview);
-      
-    // },
-
     setView(view, options) {
 
       if (!this.map) {
@@ -1070,30 +894,25 @@ export default {
       }
       
       if (this.zoomTransition && this.latestView) {
-        const prevZoom = this.zoomFromView(this.latestView);
-        const zoom = this.zoomFromView(view);
+        const prevZoom = Geoview.fromView(this.latestView, this.scene.bounds)[2];
+        const zoom = Geoview.fromView(view, this.scene.bounds)[2];
         const zoomDiff = Math.abs(zoom - prevZoom);
 
-        const skipClipTransition =
-          this.lastClipview &&
-          this.latestView.x == this.lastClipview.x &&
-          this.latestView.y == this.lastClipview.y &&
-          this.latestView.w == this.lastClipview.w &&
-          this.latestView.h == this.lastClipview.h;
-          
-        if (zoomDiff > 1e-4 && !options && !skipClipTransition) {
+        if (zoomDiff > 1e-4 && !options) {
           // console.log(zoomDiff)
           // const t = zoomDiff * 0.05;
           // const t = zoomDiff * 0.2;
           // const t = zoomDiff * 1;
-          const t = Math.pow(zoomDiff, 0.5) * 0.08;
+          // const t = Math.pow(zoomDiff, 0.5) * 0.08;
+          // const t = Math.pow(zoomDiff, 0.5) * 0.2;
+          // const t = Math.pow(zoomDiff, 2) * 0.01;
+          const t = Math.pow(zoomDiff, 0.8) * 0.1;
           // const t = Math.pow(zoomDiff, 1.5) * 0.08;
           options = { animationTime: t }
         }
       }
 
       this.latestView = view;
-      this.lastClipview = this.clipview;
       if (this.pendingAnimationTime && !options) {
         options = { animationTime: this.pendingAnimationTime }
       }

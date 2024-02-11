@@ -10,7 +10,7 @@ const Axis = {
   Y: 2,
 }
 class CrossDragPan extends PointerInteraction {
-  constructor() {
+  constructor(options = {}) {
     super({
       handleDownEvent: (event) => {
         this.center = event.map.getView().getCenter();
@@ -48,7 +48,6 @@ class CrossDragPan extends PointerInteraction {
         ];
         this.delta = delta.slice();
         
-        // const time = event.frameState.time;
         const time = Date.now();
         if (this.lastEventTime) {
           const dt = time - this.lastEventTime;
@@ -88,79 +87,27 @@ class CrossDragPan extends PointerInteraction {
             scaleCoordinate(delta, view.getResolution());
             rotateCoordinate(delta, view.getRotation());
 
-            // const mapExtent = view.getProjection().getExtent();
-            // const viewExtent = view.calculateExtent();
-            // const zoomedOutExtent = [
-            //   0,
-            //   0,
-            //   mapExtent[2],
-            //   mapExtent[3] * 3,
-            // ]
-            // // const outZoom = (mapExtent[2] - mapExtent[0]) / (viewExtent[2] - viewExtent[0]);
-            // const zoom = view.getZoom();
-            // let frac = 1 - (zoom - 7.417) / (this.zoom - 7.417);
-            // frac *= frac;
-            // // const mapZoom = view.getZoomForResolution(view.getResolutionForExtent(mapExtent))
-            // console.log(this.zoom, zoom, frac);
-
-            // const topLeft = getTopLeft(mapExtent);
-            // const topRight = getTopRight(mapExtent);
-            // const width = topRight[0] - topLeft[0];
-            // const center = width * 0.5;
-            // const x = this.center[0] * (1 - frac) + center * frac;
-
-            // view.setCenterInternal([
-            //   x,
-            //   this.center[1],
-            // ]);
-            // const zoom = this.zoom - delta[1] * 1e-4;
-            // view.setZoom(zoom);
-            // const pix = map.getPixelFromCoordinateInternal(delta);
-            
             const resolution = this.resolution * Math.max(1, 1 + dy * 0.01);
-            // console.log(this.resolution, resolution, pix);
-            // console.log(map.getPixelFromCoordinate(this.center));
-            // console.log(map.getPixelFromCoordinate(centroid));
-            // console.log(base[1] - centroid[1]);
             view.setResolution(resolution);
 
-            const mapExtent = view.getProjection().getExtent();
-            // const mapRes = view.getResolutionForExtent(mapExtent);
-            const mapRes = view.getResolutionForExtent([
-              0,
-              0,
-              mapExtent[2],
-              mapExtent[2],
-            ]);
-            const frac = Math.min(1, (resolution - this.resolution) / (mapRes - this.resolution));
-            // console.log(mapRes, this.resolution, resolution, mapRes / resolution);
-            // console.log(frac);
-            
-            const topLeft = getTopLeft(mapExtent);
-            const topRight = getTopRight(mapExtent);
-            const bottomLeft = getBottomLeft(mapExtent);
-            const bottomRight = getBottomRight(mapExtent);
-            const width = topRight[0] - topLeft[0];
-            const height = bottomLeft[1] - topLeft[1];
-
-            const x = this.center[0] * (1 - frac) + (width * 0.5) * frac;
-            const y = this.center[1] * (1 - frac) + (height) * frac;
-            
-            view.setCenterInternal([
-              x,
-              this.center[1],
-            ]);
-
-            // const zoomedOutCenter = [
-            //   this.center[0] + width * 1,
-            //   this.center[1],
-            // ];
-            // view.adjustResolution(Math.max(1, 1 - dy * 0.0005));
-            // const dres = 1 - dy * 0.0005;
-            // view.adjustResolution(dres, zoomedOutCenter);
-            // console.log(mapExtent);
-            // console.log(viewExtent);
-            // console.log(view.calculateExtentInternal())
+            if (!options.centerZoom) {
+              const mapExtent = view.getProjection().getExtent();
+              const mapRes = view.getResolutionForExtent([
+                0,
+                0,
+                mapExtent[2],
+                mapExtent[2],
+              ]);
+              const frac = Math.min(1, (resolution - this.resolution) / (mapRes - this.resolution));
+              const topLeft = getTopLeft(mapExtent);
+              const topRight = getTopRight(mapExtent);
+              const width = topRight[0] - topLeft[0];
+              const x = this.center[0] * (1 - frac) + (width * 0.5) * frac;
+              view.setCenterInternal([
+                x,
+                this.center[1],
+              ]);
+            }
             break;
         }
 
@@ -195,7 +142,6 @@ class CrossDragPan extends PointerInteraction {
               const dy = this.delta[1] + this.velocity[1]*this.navYSpeed;
               const minh = map.getSize()[1] * this.navYDist;
               const y = dy < -minh ? 1 : dy > minh ? -1 : 0;
-              console.log("delta", this.delta[1], "velocity", this.velocity[1], "dy", dy, "minh", minh, "y", y);
               if (y !== 0) {
                 this.dispatchEvent({
                   type: 'nav',

@@ -6,11 +6,12 @@
       :response="collectionResponse"
     ></response-loader>
 
-    <!-- <map-viewer
+    <map-viewer
       v-if="layout == 'MAP'"
       ref="mapViewer"
       :interactive="true"
       :collectionId="collectionId"
+      :regionId="regionId"
       :layout="layout"
       :sort="sort"
       :imageHeight="imageHeight"
@@ -22,10 +23,10 @@
       @scene="mapScene = $event"
       @search="onSearch"
     >
-    </map-viewer> -->
+    </map-viewer>
 
-    <!-- v-else -->
     <scroll-viewer
+      v-if="layout != 'MAP'"
       ref="scrollViewer"
       :interactive="true"
       :collectionId="collectionId"
@@ -46,47 +47,13 @@
     >
     </scroll-viewer>
     
-    <!-- v-if="region"
-    :region="region"
-    :scene="scene"
-    :tags-enabled="tagsSupported"
-      @navigate="navigate($event)"
-      @favorite="favorite($event)"
-      @exit="resetZoomOrExit()"
-      @add-tag="addTag($event)"
-      @remove-tag="removeTag($event)" -->
     <controls
       class="controls"
-      :region="lastScrollRegion"
+      :region="lastScrollRegion || lastMapRegion"
       :scene="scrollScene"
       @navigate="navigate($event)"
       @exit="exit()"
     ></controls>
-
-    <!-- <photo-frame
-      class="photoframe"
-      :view="lastView"
-    >
-
-    </photo-frame> -->
-
-    <!-- <strip-viewer
-      ref="stripViewer"
-      class="strip"
-      :class="{ visible: stripVisible }"
-      :interactive="stripVisible"
-      :collectionId="collectionId"
-      :sort="sort"
-      :regionId="transitionRegionId || regionId"
-      :search="search"
-      :debug="debug"
-      :screenView="stripView"
-      :fullpage="true"
-      @region="onStripRegion"
-      @scene="stripScene = $event"
-      @search="onSearch"
-    >
-    </strip-viewer> -->
 
   </div>
 </template>
@@ -97,8 +64,6 @@ import { timeout, useTask } from 'vue-concurrency';
 import { useRoute, useRouter } from 'vue-router';
 
 import ResponseLoader from './ResponseLoader.vue';
-import StripViewer from './StripViewer.vue';
-import PhotoFrame from './PhotoFrame.vue';
 import Controls from './Controls.vue';
 import ScrollViewer from './ScrollViewer.vue';
 import MapViewer from './MapViewer.vue';
@@ -126,9 +91,10 @@ const {
 } = toRefs(props);
 
 const scrollViewer = ref(null);
+const mapViewer = ref(null);
 const stripViewer = ref(null);
-const stripView = ref(null);
 const lastScrollRegion = ref(null);
+const lastMapRegion = ref(null);
 const lastStripRegion = ref(null);
 const lastView = ref(null);
 
@@ -141,11 +107,11 @@ const lastRegionId = ref(null);
 const transitionRegionId = ref(null);
 
 const navigate = computed(() => {
-  return scrollViewer.value?.navigate;
+  return (scrollViewer.value || mapViewer.value)?.navigate;
 });
 
 const exit = () => {
-  scrollViewer.value?.exit();
+  (scrollViewer.value || mapViewer.value)?.exit();
   lastView.value = null;
 }
 
@@ -320,16 +286,12 @@ const onScrollRegion = async (region) => {
 }
 
 const onMapRegion = async (region) => {
-  const stripRegion = await stripViewer.value?.getRegionIdFromFileId(region?.data?.id);
-  if (!stripRegion) {
-    console.error("No strip region found for", region);
-    return;
-  }
+  lastMapRegion.value = region;
   router.push({
     name: "region",
     params: {
       collectionId: collectionId.value,
-      regionId: stripRegion?.id,
+      regionId: region?.id,
     },
     query: route.query,
   });

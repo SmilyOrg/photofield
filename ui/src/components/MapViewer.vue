@@ -10,11 +10,14 @@
       :interactive="interactive"
       :pannable="true"
       :zoomable="true"
+      :focus="!!region"
+      :crossNav="!!region"
       :geo="true"
+      :view="view"
       :zoom-transition="true"
       :viewport="viewport"
-      :geoview="geoview"
-      @geoview="onGeoview"
+      @nav="onNav"
+      @view="onView"
       @contextmenu.prevent="onContextMenu"
       @click="onClick"
     ></tile-viewer>
@@ -54,11 +57,12 @@ import ContextMenu from '@overcoder/vue-context-menu';
 import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getRegions, useScene } from '../api';
-import { useContextMenu, useViewport } from '../use.js';
+import { useContextMenu, useSeekableRegion, useViewport } from '../use.js';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
 import { useEventBus } from '@vueuse/core';
+import Geoview from './openlayers/geoview.js';
 
 const props = defineProps({
   interactive: Boolean,
@@ -88,6 +92,7 @@ const emit = defineEmits({
 const {
   interactive,
   collectionId,
+  regionId,
   layout,
   sort,
   imageHeight,
@@ -114,6 +119,16 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
   viewport: staticViewport,
   search,
 });
+
+const {
+  region,
+  navigate,
+  exit: regionExit,
+} = useSeekableRegion({
+  scene,
+  collectionId,
+  regionId,
+})
 
 useEventBus("recreate-scene").on(scene => {
   if (scene?.name && scene?.name != "Map") return;
@@ -146,18 +161,29 @@ const geoview = computed(() => {
   if (zstr.endsWith("z")) {
     zstr = zstr.slice(0, -1);
   }
-
+  
   const lat = parseFloat(latstr);
   const lon = parseFloat(lonstr);
   const z = parseFloat(zstr);
   if (isNaN(lat) || isNaN(lon) || isNaN(z)) return;
   const geoview = [lon, lat, z];
+
   return geoview;
 });
 
-const applyGeoview = (geoview) => {
+const geoviewView = computed(() => {
+  const view = Geoview.toView(geoview.value, scene.value?.bounds);
+  return view;
+});
+
+const view = computed(() => {
+  if (region.value) return region.value.bounds;
+  return geoviewView.value;
+});
+
+const applyGeoview = async (geoview) => {
   const [lon, lat, z] = geoview;
-  router.replace({
+  await router.replace({
     query: {
       ...router.currentRoute.value.query,
       p: `${lat.toFixed(7)},${lon.toFixed(7)},${z.toFixed(2)}z`,
@@ -165,10 +191,62 @@ const applyGeoview = (geoview) => {
   });
 }
 
-const debouncedApplyGeoview = debounce(1000, applyGeoview);
+const applyView = (view) => {
+  const pg = geoview.value;
+  const g = Geoview.fromView(view, scene.value?.bounds);
+  
+  if (Geoview.equal(g, pg)) return;
+  applyGeoview(g);
+}
 
-const onGeoview = (geoview) => {
-  debouncedApplyGeoview(geoview);
+const debouncedApplyView = debounce(1000, applyView);
+
+const onView = (view) => {
+  debouncedApplyView(view);
+  lastView.value = view;
+}
+
+const lastView = ref(null);
+
+const exit = async () => {
+  if (!region.value) {
+    return;
+  }
+  const g = Geoview.fromView(lastView.value, scene.value?.bounds);
+  await applyGeoview(g);
+  await regionExit();
+}
+
+const externalExit = async () => {
+  if (!region.value) {
+    return;
+  }
+  const g = Geoview.fromView(view.value, scene.value?.bounds);
+  await applyGeoview([
+    g[0],
+    g[1],
+    Math.max(1, g[2] - 3),
+  ])
+  await regionExit();
+}
+
+const onNav = async (event) => {
+  if (event.x) {
+    const valid = await navigate(event.x);
+    if (!valid) {
+      viewer.value?.setPendingTransition({
+        t: 0.5,
+        x: lastView.value?.x,
+        ease: "out",
+      });
+      zoomOut();
+    }
+    return;
+  }
+  if (event.zoom < 0) {
+    await exit();
+    return;
+  }
 }
 
 const onClick = async (event) => {
@@ -181,6 +259,11 @@ const onClick = async (event) => {
   }
   return false;
 }
+
+defineExpose({
+  navigate,
+  exit: externalExit,
+})
 
 </script>
 
