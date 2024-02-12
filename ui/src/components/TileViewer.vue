@@ -2,8 +2,8 @@
   <div
     class="container"
     ref="container"
-    :style="{ backgroundColor }"
-    :class="{ interactive, focus }"
+    :style="{ backgroundColor: containerBackgroundColor }"
+    :class="{ interactive }"
     tabindex="1"
   >
     <div class="tileViewer" ref="map"></div>
@@ -241,6 +241,12 @@ export default {
       });
       return this.v.getZoomForResolution(this.v.getResolutionForExtent(extent));
     },
+    containerBackgroundColor() {
+      return this.backgroundColor || (
+        this.focus && this.focusZoom > 0.99 ?
+          "black" : null
+      );
+    }
   },
   methods: {
 

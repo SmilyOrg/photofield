@@ -13,7 +13,7 @@
       :interactive="interactive"
       :pannable="!nativeScroll"
       :zoomable="!nativeScroll"
-      :zoom-transition="true"
+      :zoom-transition="regionTransition"
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
@@ -157,6 +157,11 @@ const {
   collectionId,
   regionId,
 })
+
+const regionTransition = ref(false);
+watch(region, async (newRegion, oldRegion) => {
+  regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+});
 
 const exit = async () => {
   // const viewZoom = viewer.value.zoomFromView(view.value);
