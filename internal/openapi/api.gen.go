@@ -164,7 +164,8 @@ type Sort string
 
 // Tag defines model for Tag.
 type Tag struct {
-	Id *string `json:"id,omitempty"`
+	Id   *string `json:"id,omitempty"`
+	Name *string `json:"name,omitempty"`
 }
 
 // Perform the specified tag operation for the specified files.
@@ -174,10 +175,14 @@ type TagFilesPost struct {
 	FileId  *FileId   `json:"file_id,omitempty"`
 	Op      Operation `json:"op"`
 	SceneId *SceneId  `json:"scene_id,omitempty"`
+	TagId   *TagId    `json:"tag_id,omitempty"`
 }
 
 // TagId defines model for TagId.
 type TagId string
+
+// Tags defines model for Tags.
+type Tags []Tag
 
 // Create a new tag based on the provided parameters.
 type TagsPost struct {
@@ -364,6 +369,9 @@ type ServerInterface interface {
 
 	// (POST /tags/{id}/files)
 	PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id TagIdPathParam)
+
+	// (GET /tags/{id}/files-tags)
+	GetTagsIdFilesTags(w http.ResponseWriter, r *http.Request, id TagIdPathParam)
 
 	// (GET /tasks)
 	GetTasks(w http.ResponseWriter, r *http.Request, params GetTasksParams)
@@ -1078,6 +1086,32 @@ func (siw *ServerInterfaceWrapper) PostTagsIdFiles(w http.ResponseWriter, r *htt
 	handler(w, r.WithContext(ctx))
 }
 
+// GetTagsIdFilesTags operation middleware
+func (siw *ServerInterfaceWrapper) GetTagsIdFilesTags(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id TagIdPathParam
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTagsIdFilesTags(w, r, id)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
 // GetTasks operation middleware
 func (siw *ServerInterfaceWrapper) GetTasks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1219,6 +1253,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tags/{id}/files", wrapper.PostTagsIdFiles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tags/{id}/files-tags", wrapper.GetTagsIdFilesTags)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tasks", wrapper.GetTasks)

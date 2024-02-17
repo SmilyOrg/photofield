@@ -942,7 +942,7 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		return
 	}
 
-	ids := make(chan image.ImageId, 100)
+	ids := image.NewIds()
 	if data.SceneId != nil && data.Bounds != nil {
 		scene := sceneSource.GetSceneById(string(*data.SceneId), imageSource)
 		if scene == nil {
@@ -957,18 +957,19 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 			H: float64(data.Bounds.H),
 		}
 
-		go func() {
-			defer close(ids)
-			photos := scene.GetVisiblePhotos(bounds)
-			for p := range photos {
-				ids <- image.ImageId(p.Id)
-			}
-		}()
+		photos := scene.GetVisiblePhotos(bounds)
+		for p := range photos {
+			ids.AddInt(int(p.Id))
+		}
 	} else if data.FileId != nil {
-		go func() {
-			defer close(ids)
-			ids <- image.ImageId(*data.FileId)
-		}()
+		ids.AddInt(int(*data.FileId))
+	} else if data.TagId != nil {
+		srct, err := imageSource.GetOrCreateTagFromNameRev(string(*data.TagId))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+		ids = imageSource.GetTagImageIds(srct.Id)
 	} else {
 		problem(w, r, http.StatusBadRequest, "Either scene_id+bounds or file_id required")
 		return
@@ -994,6 +995,34 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 	}
 
 	respond(w, r, http.StatusOK, t)
+}
+
+func (*Api) GetTagsIdFilesTags(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
+
+	t, err := imageSource.GetTagFromNameRev(string(id))
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	count, ok := imageSource.GetTagFilesCount(t.Id)
+	if !ok {
+		problem(w, r, http.StatusInternalServerError, "Failed to count tag ids")
+		return
+	}
+
+	tags := make([]tag.Tag, 0)
+	for t := range imageSource.ListTagsOfTag(t.Id, 10) {
+		tags = append(tags, t)
+	}
+
+	respond(w, r, http.StatusOK, struct {
+		Items []tag.Tag `json:"items"`
+		Count int       `json:"file_count"`
+	}{
+		Items: tags,
+		Count: count,
+	})
 }
 
 func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {

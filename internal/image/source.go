@@ -534,35 +534,49 @@ func (source *Source) ListTags(q string, limit int) <-chan tag.Tag {
 	return source.database.ListTags(q, limit)
 }
 
-func (source *Source) AddTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
-	ids := NewIds()
-	for id := range ch {
-		ids.AddInt(int(id))
-	}
-	rev, err = source.database.AddTagIds(id, ids)
-	return
+func (source *Source) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
+	return source.database.ListTagsOfTag(id, limit)
 }
 
-func (source *Source) RemoveTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
-	ids := NewIds()
-	for id := range ch {
-		ids.AddInt(int(id))
-	}
-	rev, err = source.database.RemoveTagIds(id, ids)
-	return
+func (source *Source) AddTagIds(id tag.Id, ids Ids) (rev int, err error) {
+	return source.database.AddTagIds(id, ids)
 }
 
-func (source *Source) InvertTagIds(id tag.Id, ch <-chan ImageId) (rev int, err error) {
+func (source *Source) RemoveTagIds(id tag.Id, ids Ids) (rev int, err error) {
+	return source.database.RemoveTagIds(id, ids)
+}
+
+func (source *Source) InvertTagIds(id tag.Id, ids Ids) (rev int, err error) {
+	return source.database.InvertTagIds(id, ids)
+}
+
+func (source *Source) IdChanToIds(ch <-chan ImageId) Ids {
 	ids := NewIds()
 	for id := range ch {
 		ids.AddInt(int(id))
 	}
-	rev, err = source.database.InvertTagIds(id, ids)
-	return
+	return ids
 }
 
 func (source *Source) GetTagId(name string) (tag.Id, bool) {
 	return source.database.GetTagId(name)
+}
+
+func (source *Source) GetTagFilesCount(id tag.Id) (int, bool) {
+	return source.database.GetTagFilesCount(id)
+}
+
+func (source *Source) GetTagFromNameRev(nameRev string) (tag.Tag, error) {
+	t, err := tag.FromNameRev(nameRev)
+	if err != nil {
+		return tag.Tag{}, err
+	}
+	id, ok := source.GetTagId(t.Name)
+	if !ok {
+		return tag.Tag{}, ErrNotFound
+	}
+	t.Id = id
+	return t, nil
 }
 
 func (source *Source) GetOrCreateTagFromNameRev(nameRev string) (tag.Tag, error) {

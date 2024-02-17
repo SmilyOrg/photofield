@@ -2,14 +2,26 @@
   <div class="app">
     <ui-top-app-bar
       class="top-bar"
-      :class="{ immersive, search: searchActive }"
+      :class="{ immersive, search: searchActive && !selecting }"
       :fixed="true"
       contentSelector="#content"
     >
       <span class="title">
-        <span v-if="!collection">Photos</span>
         <span
-          v-else-if="!selecting"
+          v-if="selecting"
+        >
+          Selection
+          &nbsp;
+          <a
+            :href="'/tags/' + query.select_tag"
+          >
+            <ui-icon class="inline">
+              edit
+            </ui-icon>
+          </a>
+        </span>
+        <span
+          v-else-if="collection"
           ref="title"
           @mousedown="collectionExpandedPending = true"
           @click="toggleFocus()"
@@ -19,11 +31,7 @@
             {{ collectionExpanded ? 'expand_less' : 'expand_more' }}
           </ui-icon>
         </span>
-        <span
-          v-else
-        >
-          Selection
-        </span>
+        <span v-else>{{ title }}</span>
       </span>
 
       <template #nav-icon>
@@ -53,7 +61,7 @@
         </collection-panel>
 
         <search-input
-          v-if="capabilities?.search.supported && collection"
+          v-if="capabilities?.search.supported && collection && !selecting"
           :loading="query.search && scrollScene?.loading"
           :modelValue="query.search"
           :error="scrollScene?.error"
@@ -110,8 +118,6 @@
     </ui-top-app-bar>
     <div id="content">
       <router-view
-        class="viewer"
-        ref="viewer"
         :fullpage="true"
         :scrollbar="scrollbar"
         @load="onLoad"
@@ -119,6 +125,7 @@
         @immersive="onImmersive"
         @tasks="tasks => viewerTasks = tasks"
         @reindex="() => reindex()"
+        @title="pageTitle = $event"
       >
       </router-view>
     </div>
@@ -127,7 +134,7 @@
 
 <script>
 import { createTask, useApi, useTasks } from './api';
-import { computed, toRef } from 'vue';
+import { computed, ref, toRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ExpandButton from './components/ExpandButton.vue'
 import SearchInput from './components/SearchInput.vue'
@@ -221,6 +228,12 @@ export default {
 
     const recreateEvent = useEventBus("recreate-scene");
 
+    const pageTitle = ref("");
+
+    const title = computed(() => {
+      return pageTitle.value || "Photos";
+    });
+
     return {
       goBack,
       query,
@@ -235,6 +248,8 @@ export default {
       collections,
       capabilities,
       recreateEvent,
+      pageTitle,
+      title,
     }
   },
   async mounted() {
@@ -496,10 +511,6 @@ button {
 
 .task-progress {
   --mdc-theme-primary: var(--mdc-theme-on-primary);
-}
-
-.viewer {
-  height: calc(100vh - 64px);
 }
 
 </style>

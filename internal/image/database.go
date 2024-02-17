@@ -1171,6 +1171,26 @@ func (source *Database) GetTagId(name string) (tag.Id, bool) {
 	return tag.Id(stmt.ColumnInt(0)), true
 }
 
+func (source *Database) GetTagFilesCount(id tag.Id) (int, bool) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT SUM(len+1)
+	FROM infos_tag
+	WHERE tag_id = ?`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return 0, false
+	}
+
+	return stmt.ColumnInt(0), true
+}
+
 func (source *Database) GetTagName(id tag.Id) (string, bool) {
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
@@ -1277,6 +1297,56 @@ func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 		defer stmt.Reset()
 
 		stmt.BindText(1, "%"+q+"%")
+		stmt.BindInt64(2, int64(limit))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing tags: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			out <- tag.Tag{
+				Id:       tag.Id(stmt.ColumnInt(0)),
+				Name:     stmt.ColumnText(1),
+				Revision: stmt.ColumnInt(2),
+			}
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
+	out := make(chan tag.Tag, 100)
+	go func() {
+		conn := source.pool.Get(nil)
+		defer source.pool.Put(conn)
+
+		sql := `
+		SELECT id, name, revision
+		FROM tag
+		WHERE id IN (
+			WITH sel AS (
+				SELECT file_id, len
+				FROM infos_tag
+				WHERE tag_id = ?
+			)
+			SELECT DISTINCT tag_id
+			FROM infos_tag AS a
+			JOIN sel ON (a.file_id + a.len) > sel.file_id AND a.file_id < (sel.file_id+sel.len)
+		)
+		`
+
+		sql += defaultTagConditions
+
+		sql += `
+		ORDER BY name ASC
+		LIMIT ?;`
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		stmt.BindInt64(1, int64(id))
 		stmt.BindInt64(2, int64(limit))
 
 		for {
@@ -1412,8 +1482,9 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		bindIndex := 1
 
-		for _, tag := range tags {
-			stmt.BindText(bindIndex, tag)
+		for _, t := range tags {
+			t = tag.StripRev(t)
+			stmt.BindText(bindIndex, t)
 			bindIndex++
 		}
 

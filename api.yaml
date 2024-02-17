@@ -416,9 +416,12 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Tag"
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    $ref: "#/components/schemas/Tags"
     post:
       description: Add tag
       tags: ["Tags"]
@@ -451,6 +454,29 @@ paths:
       responses:
         "200":
           description: Tag operation successfully completed on the files.
+
+  /tags/{id}/files-tags:
+    get:
+      description: Get all tags of files with the specified tag
+      tags: ["Tags"]
+      parameters:
+        - $ref: "#/components/parameters/TagIdPathParam"
+      responses:
+        "200":
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    $ref: "#/components/schemas/Tags"
+                  files_count:
+                    type: integer
+                    minimum: 0
+                    example: 13
 
   /tasks:
     post:
@@ -768,6 +794,8 @@ components:
           $ref: "#/components/schemas/Bounds"
         file_id:
           $ref: "#/components/schemas/FileId"
+        tag_id:
+          $ref: "#/components/schemas/TagId"
 
     Tags:
       type: array
@@ -778,6 +806,8 @@ components:
       type: object
       properties:
         id:
+          type: string
+        name:
           type: string
 
           
@@ -839,7 +869,7 @@ components:
 
     TagId:
       type: string
-      example: 0
+      example: fav:r0
 
     TileCoord:
       type: integer

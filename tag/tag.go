@@ -70,6 +70,23 @@ func FromNameRev(id string) (Tag, error) {
 	return t, nil
 }
 
+func StripRev(id string) string {
+	revIndex := strings.LastIndexByte(id, ':')
+	if revIndex < 0 {
+		return id
+	}
+	revStr := id[revIndex+1:]
+	if revStr[:1] != "r" {
+		return id
+	}
+	revStr = revStr[1:]
+	_, err := strconv.Atoi(revStr)
+	if err != nil {
+		return id
+	}
+	return id[:revIndex]
+}
+
 func (t Tag) NameRev() string {
 	return fmt.Sprintf("%s:r%d", t.Name, t.Revision)
 }

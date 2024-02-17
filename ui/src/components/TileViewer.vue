@@ -472,7 +472,7 @@ export default {
         });
         const extent = this.viewExtent;
         this.v = new View({
-          center: [extent[2]/2, extent[3]],
+          center: [extent[2]/4, extent[3]],
           projection: this.projection,
           zoom: 0,
           minZoom: 0,

@@ -1,6 +1,19 @@
 <template>
   <div class="tags">
+    <div
+      v-if="readonly"
+      class="multiselect__tags mtags"
+    >
+      <span
+        v-for="tag in tags"
+        :key="tag.id"
+        class="multiselect__tag mtag"
+      >
+        {{ tag.name }}
+      </span>
+    </div>
     <VueMultiselect
+      v-else
       v-model="tags"
       :options="options"
       :multiple="true"
@@ -32,6 +45,7 @@ import qs from "qs";
 
 const props = defineProps({
   tags: Array,
+  readonly: Boolean,
 });
 
 const emit = defineEmits([
@@ -46,7 +60,6 @@ const {
 const options = ref([])
 const loading = ref(false);
 
-
 const onSearch = async (query) => {
   loading.value = true;
   const tags = await get(`/tags?${qs.stringify({ q: query })}`);
@@ -55,16 +68,28 @@ const onSearch = async (query) => {
 }
 
 const add = (newTag) => {
-  const tagId = newTag + ":r0";
-  emit("add", tagId);
+  emit("add", {
+    id: newTag + ":r0",
+    name: newTag,
+  });
 }
 
 const select = (tag) => {
-  emit("add", tag.id);
+  emit("add", tag);
 }
 
 const remove = (tag) => {
-  emit("remove", tag.id);
+  emit("remove", tag);
 }
 
 </script>
+
+<style scoped>
+.mtags {
+  min-height: 32px;
+  padding: 8px 0 0 8px;
+}
+.mtag {
+  padding-right: 10px;
+}
+</style>
