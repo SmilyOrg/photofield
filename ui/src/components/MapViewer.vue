@@ -267,6 +267,7 @@ const onNav = async (event) => {
 
 const onClick = async (event) => {
   if (!event) return false;
+  if (region.value) return false;
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
   if (regions && regions.length > 0) {
     const region = regions[0];

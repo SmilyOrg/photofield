@@ -315,6 +315,7 @@ const selectBounds = async (op, bounds) => {
 
 const onClick = async (event) => {
   if (!event) return false;
+  if (region.value) return false;
   if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
     await selectBounds("INVERT", {
       x: event.x,
