@@ -10,7 +10,7 @@
     <map-viewer
       v-if="layout == 'MAP'"
       ref="mapViewer"
-      :interactive="true"
+      :interactive="interactive"
       :collectionId="collectionId"
       :regionId="regionId"
       :layout="layout"
@@ -30,7 +30,7 @@
     <scroll-viewer
       v-if="layout != 'MAP'"
       ref="scrollViewer"
-      :interactive="true"
+      :interactive="interactive"
       :collectionId="collectionId"
       :regionId="regionId"
       :layout="layout"
@@ -56,6 +56,7 @@
       :overlay="overlay"
       :scene="overlayScene"
       :active="!!regionId"
+      @interactive="interactive = $event"
       ></overlays>
 
     <controls
@@ -109,6 +110,7 @@ watch(regionId, (newRegionId) => {
 const scrollViewer = ref(null);
 const scrollTileViewer = ref(null);
 const mapTileViewer = ref(null);
+const interactive = ref(true);
 
 const overlayViewer = computed(() => {
   if (layout.value === 'MAP') {
@@ -234,6 +236,7 @@ const debug = computed(() => {
 });
 
 const onScrollRegion = async (region) => {
+  if (region?.id === lastScrollRegion.value?.id) return;
   lastScrollRegion.value = region;
   if (!region) return;
   router.push({
@@ -247,6 +250,7 @@ const onScrollRegion = async (region) => {
 }
 
 const onMapRegion = async (region) => {
+  if (region?.id === lastMapRegion.value?.id) return;
   lastMapRegion.value = region;
   if (!region) return;
   router.push({

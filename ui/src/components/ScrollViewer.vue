@@ -11,8 +11,8 @@
       :debug="debug"
       :tileSize="512"
       :interactive="interactive"
-      :pannable="!nativeScroll"
-      :zoomable="!nativeScroll"
+      :pannable="!nativeScroll && interactive"
+      :zoomable="!nativeScroll && interactive"
       :zoom-transition="regionTransition"
       :focus="!!region"
       :crossNav="!!region"
@@ -326,8 +326,10 @@ const onClick = async (event) => {
   }
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
   if (regions && regions.length > 0) {
-    const region = regions[0];
-    emit("region", region);
+    if (regions[0].id == region.value?.id) {
+      return false;
+    }
+    emit("region", regions[0]);
     return true;
   }
   return false;

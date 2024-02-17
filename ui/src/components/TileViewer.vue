@@ -149,13 +149,6 @@ export default {
       this.setInteractive(interactive);
     },
 
-    pannable: {
-      immediate: true,
-      handler(newValue) {
-        this.dragPan?.setActive(newValue);
-      }
-    },
-
     zoomable: {
       immediate: true,
       handler(newValue) {
@@ -218,7 +211,7 @@ export default {
       return [-width*0.95, -height, width*1.95, height];
     },
     crossPanActive() {
-      return this.crossNav && this.focusZoom < 1.1;
+      return this.pannable && this.crossNav && this.focusZoom < 1.1;
     },
     dragPanActive() {
       return this.pannable && !this.crossPanActive;

@@ -37,6 +37,8 @@ const {
   active
 } = toRefs(props);
 
+defineEmits(["interactive"]);
+
 const overlayRef = ref(null);
 
 const videoOverlay = computed(() => {
@@ -134,7 +136,4 @@ function extentFromView(viewer, scene, view) {
 </script>
 
 <style scoped>
-.overlay {
-  pointer-events: none;
-}
 </style>
