@@ -1,5 +1,6 @@
 <template>
   <div class="collection">
+    <page-title :title="pageTitle"></page-title>
 
     <response-loader
       class="response"
@@ -22,6 +23,7 @@
       @region="onMapRegion"
       @scene="mapScene = $event"
       @search="onSearch"
+      @viewer="mapTileViewer = $event"
     >
     </map-viewer>
 
@@ -44,9 +46,18 @@
       @elementView="lastView = $event"
       @scene="scrollScene = $event"
       @search="onSearch"
+      @viewer="scrollTileViewer = $event"
     >
     </scroll-viewer>
     
+    <overlays
+      class="overlays"
+      :viewer="overlayViewer"
+      :overlay="overlay"
+      :scene="overlayScene"
+      :active="!!regionId"
+      ></overlays>
+
     <controls
       class="controls"
       :region="lastScrollRegion || lastMapRegion"
@@ -67,6 +78,9 @@ import ResponseLoader from './ResponseLoader.vue';
 import Controls from './Controls.vue';
 import ScrollViewer from './ScrollViewer.vue';
 import MapViewer from './MapViewer.vue';
+import PageTitle from './PageTitle.vue';
+import Overlays from './Overlays.vue';
+
 import { useApi } from '../api';
 
 const props = defineProps([
@@ -91,6 +105,30 @@ const {
 } = toRefs(props);
 
 const scrollViewer = ref(null);
+const scrollTileViewer = ref(null);
+const mapTileViewer = ref(null);
+
+const overlayViewer = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapTileViewer.value;
+  }
+  return scrollTileViewer.value;
+});
+
+const overlay = computed(() => {
+  if (layout.value === 'MAP') {
+    return lastMapRegion.value;
+  }
+  return lastScrollRegion.value;
+});
+
+const overlayScene = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapScene.value;
+  }
+  return scrollScene.value;
+});
+
 const mapViewer = ref(null);
 const stripViewer = ref(null);
 const lastScrollRegion = ref(null);
@@ -148,6 +186,17 @@ const layout = computed(() => {
 const selectTagId = computed(() => {
   return route.query.select_tag || undefined;
 })
+
+const pageTitle = computed(() => {
+  if (!collection.value) {
+    return "Photos";
+  }
+  const id = regionId.value;
+  if (!id) {
+    return `${collection.value.name} - Photos`;
+  }
+  return `#${id} - ${collection.value.name} - Photos`;
+});
 
 const onSelectTagId = (id) => {
   router.replace({
@@ -275,6 +324,7 @@ const onStripRegion = async region => {
 
 const onScrollRegion = async (region) => {
   lastScrollRegion.value = region;
+  if (!region) return;
   router.push({
     name: "region",
     params: {
@@ -287,6 +337,7 @@ const onScrollRegion = async (region) => {
 
 const onMapRegion = async (region) => {
   lastMapRegion.value = region;
+  if (!region) return;
   router.push({
     name: "region",
     params: {

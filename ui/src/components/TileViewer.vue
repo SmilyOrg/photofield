@@ -692,6 +692,7 @@ export default {
     },
 
     reload() {
+      if (!this.map) return;
       const oldLayers = this.map.getLayers().getArray().slice();
       const newLayers = this.createLayers();
       const cleanup = () => {

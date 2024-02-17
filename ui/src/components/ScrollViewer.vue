@@ -26,6 +26,7 @@
       @contextmenu.prevent="onContextMenu"
       @keydown.esc="onEscape"
       @box-select="onBoxSelect"
+      @viewer="emit('viewer', $event)"
     ></tile-viewer>
 
     <Spinner
@@ -105,6 +106,7 @@ const emit = defineEmits({
   selectTagId: null,
   search: null,
   elementView: null,
+  viewer: null,
 })
 
 const {
@@ -161,16 +163,11 @@ const {
 const regionTransition = ref(false);
 watch(region, async (newRegion, oldRegion) => {
   regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+  emit("region", newRegion);
 });
 
 const exit = async () => {
-  // const viewZoom = viewer.value.zoomFromView(view.value);
-  // const moveZoom = viewer.value.zoomFromView(lastView.value);
-  // const ratio = moveZoom / viewZoom;
-  // if (ratio > 1.1) {
-  //   zoomOut();
-  //   return;
-  // }
+  await centerToBounds(lastNonNativeView.value);
   await regionExit();
 }
 

@@ -20,6 +20,7 @@
       @view="onView"
       @contextmenu.prevent="onContextMenu"
       @click="onClick"
+      @viewer="emit('viewer', $event)"
     ></tile-viewer>
 
     <Spinner
@@ -87,6 +88,7 @@ const emit = defineEmits({
   region: null,
   selectTagId: null,
   search: null,
+  viewer: null,
 })
 
 const {

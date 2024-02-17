@@ -48,6 +48,7 @@ export default {
   mounted() {
     this.player = new Plyr(this.$refs.video, {
       settings: ["captions", "quality", "speed", "loop"],
+      muted: true,
       quality: {
         default: originalQualitySize,
         options: qualities,
