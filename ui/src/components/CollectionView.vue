@@ -70,8 +70,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { timeout, useTask } from 'vue-concurrency';
+import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ResponseLoader from './ResponseLoader.vue';
@@ -86,7 +85,6 @@ import { useApi } from '../api';
 const props = defineProps([
   "collectionId",
   "regionId",
-  "fullpage",
   "scrollbar",
 ]);
 
@@ -103,6 +101,10 @@ const {
   collectionId,
   regionId,
 } = toRefs(props);
+
+watch(regionId, (newRegionId) => {
+  emit("immersive", newRegionId !== undefined);
+}, { immediate: true });
 
 const scrollViewer = ref(null);
 const scrollTileViewer = ref(null);
@@ -130,19 +132,12 @@ const overlayScene = computed(() => {
 });
 
 const mapViewer = ref(null);
-const stripViewer = ref(null);
 const lastScrollRegion = ref(null);
 const lastMapRegion = ref(null);
-const lastStripRegion = ref(null);
 const lastView = ref(null);
 
 const route = useRoute();
 const router = useRouter();
-
-const initWithStrip = !!regionId.value;
-const stripVisible = ref(initWithStrip);
-const lastRegionId = ref(null);
-const transitionRegionId = ref(null);
 
 const navigate = computed(() => {
   return (scrollViewer.value || mapViewer.value)?.navigate;
@@ -155,7 +150,6 @@ const exit = () => {
 
 const scrollScene = ref(null);
 const mapScene = ref(null);
-const stripScene = ref(null);
 const scenes = computed(() => {
   const scenes = [];
   if (scrollScene.value) scenes.push({
@@ -164,11 +158,7 @@ const scenes = computed(() => {
   });
   if (mapScene.value) scenes.push({
     name: "Map",
-    ...stripScene.value
-  });
-  if (stripScene.value) scenes.push({
-    name: "Strip",
-    ...stripScene.value
+    ...mapScene.value
   });
   return scenes;
 });
@@ -243,85 +233,6 @@ const debug = computed(() => {
   return v;
 });
 
-const showRegion = useTask(function*(_, regionId) {
-  if (regionId) {
-    if (stripVisible.value) return;
-
-    let view =
-      lastScrollRegion.value?.id == regionId &&
-      lastScrollRegion.value?.bounds;
-      
-    if (!view) {
-      view = yield scrollViewer.value.getRegionView(regionId);
-    }
-
-    view = scrollViewer.value.getScreenView(view);
-    yield stripViewer.value?.zoomInFromView(view);
-
-    stripVisible.value = true;
-    transitionRegionId.value = null;
-    if (lastStripRegion.value?.id != regionId) {
-      scrollViewer.value.drawViewToCanvas(view, stripViewer.value?.getCanvas());
-    }
-
-    yield nextTick();
-    stripViewer.value.focus();
-
-  } else {
-    let view = 
-      lastScrollRegion.value?.id == lastStripRegion.value.id &&
-      lastScrollRegion.value?.bounds;
-
-    if (!view) {
-      view = yield scrollViewer.value?.getRegionView(lastStripRegion.value.id);
-    }
-    if (!view) return;
-
-    if (lastScrollRegion.value?.id != lastStripRegion.value?.id) {
-      yield scrollViewer.value?.centerToBounds(view);
-    }
-
-    view = scrollViewer.value.getScreenView(view);
-    yield stripViewer.value?.zoomOutFromView(view);
-
-    yield timeout(300);
-    
-    stripVisible.value = false;
-    transitionRegionId.value = null;
-  }
-}).restartable();
-
-function showRegionImmediate(regionId) {
-  transitionRegionId.value = null;
-  stripViewer.value?.resetZoom();
-  if (regionId) {
-    stripVisible.value = true;
-  } else {
-    stripVisible.value = false;
-  }
-}
-
-watch(regionId, (newRegionId, oldRegionId) => {
-  lastRegionId.value = oldRegionId;
-  const showStrip = newRegionId !== undefined;
-  emit("immersive", showStrip);
-  if (layout.value === 'MAP') {
-    showRegionImmediate(newRegionId);
-  } else {
-    showRegion.perform(newRegionId);
-  }
-}, { immediate: true });
-
-const onStripRegion = async region => {
-  if (!region) return;
-  if (layout.value === 'MAP') {
-    showRegionImmediate(region.id);
-  } else {
-    showRegion.perform(region.id);
-  }
-  lastStripRegion.value = region;
-}
-
 const onScrollRegion = async (region) => {
   lastScrollRegion.value = region;
   if (!region) return;
@@ -355,23 +266,6 @@ const onMapRegion = async (region) => {
   position: fixed;
   top: 0;
   left: 0;
-}
-
-.photoframe {
-  position: fixed;
-  top: 0;
-  left: 0;
-}
-
-.strip {
-  visibility: hidden;
-  transition: none;
-  pointer-events: none;
-}
-
-.strip.visible {
-  visibility: visible;
-  pointer-events: all;
 }
 
 </style>
