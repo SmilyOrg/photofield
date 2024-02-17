@@ -229,14 +229,19 @@ const debug = computed(() => {
 
 const onRegion = async (region) => {
   if (!region) return;
-  router.push({
+  const r = {
     name: "region",
     params: {
       collectionId: collectionId.value,
       regionId: region?.id,
     },
     query: route.query,
-  });
+  };
+  if (regionId.value) {
+    router.replace(r);
+  } else {
+    router.push(r);
+  }
 }
 
 </script>
