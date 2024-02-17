@@ -405,9 +405,6 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 	}
 	if data.Search != nil {
 		sceneConfig.Scene.Search = string(*data.Search)
-		if sceneConfig.Layout.Type != layout.Strip {
-			sceneConfig.Layout.Type = layout.Search
-		}
 	}
 
 	scene := sceneSource.Add(sceneConfig, imageSource)
@@ -439,9 +436,6 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	}
 	if params.Search != nil {
 		sceneConfig.Scene.Search = string(*params.Search)
-		if sceneConfig.Layout.Type != layout.Strip {
-			sceneConfig.Layout.Type = layout.Search
-		}
 	}
 	collection := getCollectionById(string(params.CollectionId))
 	if collection == nil {
