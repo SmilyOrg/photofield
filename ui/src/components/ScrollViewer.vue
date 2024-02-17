@@ -1,5 +1,5 @@
 <template>
-  <div class="scroll" :class="{ fullpage, fixed: !nativeScroll }">
+  <div class="scroll" :class="{ fullpage, fixed: false }">
 
     <tile-viewer
       class="viewer"
@@ -11,17 +11,21 @@
       :debug="debug"
       :tileSize="512"
       :interactive="interactive"
-      :pannable="!nativeScroll"
-      :zoomable="!nativeScroll"
-      :zoom-transition="true"
+      :pannable="!nativeScroll && interactive"
+      :zoomable="!nativeScroll && interactive"
+      :zoom-transition="regionTransition"
+      :focus="!!region"
+      :crossNav="!!region"
       :viewport="viewport"
       @click="onClick"
       @view="onView"
+      @nav="onNav"
       @wheel="onWheel"
       @load-end="onLoadEnd"
       @contextmenu.prevent="onContextMenu"
       @keydown.esc="onEscape"
       @box-select="onBoxSelect"
+      @viewer="emit('viewer', $event)"
     ></tile-viewer>
 
     <Spinner
@@ -69,8 +73,8 @@
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus } from '@vueuse/core';
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { getRegion, getRegions, useScene, addTag, postTagFiles, useApi } from '../api';
-import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline } from '../use.js';
+import { getRegion, getRegions, useScene, useApi } from '../api';
+import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline, useTags } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
@@ -99,6 +103,8 @@ const emit = defineEmits({
   region: null,
   selectTagId: null,
   search: null,
+  elementView: null,
+  viewer: null,
 })
 
 const {
@@ -116,8 +122,9 @@ const {
 
 const viewer = ref(null);
 const viewport = useViewport(viewer);
-const nativeScroll = ref(true);
+
 const lastView = ref(null);
+const lastNonNativeView = ref(null);
 
 const { scene, recreate: recreateScene, loadSpeed } = useScene({
   layout,
@@ -127,7 +134,6 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
   viewport,
   search,
 });
-
 
 watch(scene, async (newScene, oldScene) => {
   if (newScene?.search != oldScene?.search) {
@@ -141,11 +147,26 @@ useEventBus("recreate-scene").on(scene => {
   recreateScene();
 });
 
-const { region } = useSeekableRegion({
+const {
+  region,
+  navigate,
+  exit: regionExit,
+} = useSeekableRegion({
   scene,
   collectionId,
   regionId,
 })
+
+const regionTransition = ref(false);
+watch(region, async (newRegion, oldRegion) => {
+  regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+  emit("region", newRegion);
+}, { immediate: true });
+
+const exit = async () => {
+  await centerToBounds(lastNonNativeView.value);
+  await regionExit();
+}
 
 const { data: capabilities } = useApi(() => "/capabilities");
 const tagsSupported = computed(() => capabilities.value?.tags?.supported);
@@ -172,16 +193,42 @@ const canvas = computed(() => {
   }
 });
 
+const lastZoom = computed(() => {
+  return scene.value?.bounds.w / lastView.value?.w;
+});
+
+const nativeScroll = computed(() => {
+  if (lastZoom.value > 1.2) {
+    return false;
+  }
+
+  if (region.value) return false;
+  return true;
+});
+
+watch(nativeScroll, async (newValue, oldValue) => {
+  if (newValue == oldValue) {
+    return;
+  }
+  if (newValue) {
+    await centerToBounds(lastNonNativeView.value);
+  }
+});
+
+
 const centerToBounds = async (bounds) => {
   const by = bounds.y + bounds.h * 0.5;
   const vy = viewport.height.value * 0.5;
-  nativeScroll.value = true;
   await nextTick();
   scrollToPixels(by - vy);
   await nextTick();
 }
 
 const onEscape = async () => {
+  if (selectTagId.value) {
+    emit("selectTagId", null);
+    return;
+  }
   zoomOut();
   if (lastView.value) {
     const lastZoom = scene.value.bounds.w / lastView.value.w;
@@ -189,17 +236,15 @@ const onEscape = async () => {
       return;
     }
   }
-  if (selectTagId.value) {
-    emit("selectTagId", null);
-    return;
-  }
 }
 
 const zoomOut = () => {
   viewer.value?.setView(view.value);
 }
 
-const scrollSleep = computed(() => !nativeScroll.value);
+const scrollSleep = computed(() => {
+  return !nativeScroll.value || lastZoom.value > 1.0001;
+});
 
 const {
   y: scrollY,
@@ -226,40 +271,34 @@ const view = computed(() => {
   }
 });
 
-const selectBounds = async (op, bounds) => {
-  if (!tagsSupported.value) return;
-  let id = selectTagId.value;
-  if (!id) {
-    const tag = await addTag({
-      selection: true,
-      collection_id: collectionId.value,
-    });
-    id = tag.id;
-  }
-  const tag = await postTagFiles(id, {
-    op,
-    scene_id: scene.value.id,
-    bounds
-  })
-  id = tag.id;
-  emit("selectTagId", id);
-}
+const {
+  selectBounds
+} = useTags({
+  supported: tagsSupported,
+  selectTagId,
+  collectionId,
+  scene,
+});
 
 const onClick = async (event) => {
   if (!event) return false;
+  if (region.value) return false;
   if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
-    await selectBounds("INVERT", {
+    const id = await selectBounds("INVERT", {
       x: event.x,
       y: event.y,
       w: 0,
       h: 0,
     });
+    emit("selectTagId", id);
     return false;
   }
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
   if (regions && regions.length > 0) {
-    const region = regions[0];
-    emit("region", region);
+    if (regions[0].id == region.value?.id) {
+      return false;
+    }
+    emit("region", regions[0]);
     return true;
   }
   return false;
@@ -269,43 +308,60 @@ const onWheel = async (event) => {
   if (event.ctrlKey && nativeScroll.value) {
     event.preventDefault();
     if (event.deltaY < 0) {
-      // Ctrl+scroll zoom in to disabled scroll mode
-      nativeScroll.value = false;
-      await nextTick();
-      
-      const target = viewer.value.pointerTarget;
-      const redirected = new event.constructor(event.type, event);
-      target.dispatchEvent(redirected);
+      const bump = 0.3;
+      // Zoom into mouse cursor
+      const rx = event.x / viewport.width.value;
+      const ry = event.y / viewport.height.value;
+      viewer.value?.setView({
+        w: view.value.w * (1 - bump * 2),
+        h: view.value.h * (1 - bump * 2),
+        x: view.value.x + view.value.w * bump * rx * 2,
+        y: view.value.y + view.value.h * bump * ry * 2,
+      }, {
+        animationTime: 0.3,
+        ease: "out",
+      });
     }
   }
 }
 
-const onView = (view) => {
+const onView = (event) => {
   if (!scene.value?.bounds.w) {
     return;
   }
-  if (lastView.value) {
-    const lastZoom = scene.value.bounds.w / lastView.value.w;
-    const zoom = scene.value.bounds.w / view.w;
-    const zoomDiff = zoom - lastZoom;
-    if (zoom <= 1.0001 && zoomDiff < -0.000001) {
-      // Zoom out to native scroll
-      if (!nativeScroll.value) {
-        nativeScroll.value = true;
-      }
-    } else if (zoom >= 1.0001) {
-      // Zoom in via tileviewer movement (e.g. pinch gesture)
-      if (nativeScroll.value) {
-        nativeScroll.value = false;
-      }
-    }
+  lastView.value = event;
+  if (!nativeScroll.value) {
+    lastNonNativeView.value = event;
   }
-  lastView.value = view;
+  if (region.value?.bounds) {
+    emit("elementView", getScreenView(region.value.bounds));
+  }
+}
+
+const onNav = async (event) => {
+  if (event.x) {
+    const valid = await navigate(event.x);
+    if (!valid) {
+      viewer.value?.setPendingTransition({
+        t: 0.5,
+        x: (lastView.value?.x - view.value?.x) / 2,
+        ease: "out",
+      });
+      zoomOut();
+    }
+    return;
+  }
+  if (event.zoom < 0) {
+    await exit();
+    return;
+  }
+  zoomOut();
 }
 
 const onBoxSelect = async (bounds, shift) => {
   const op = shift ? "SUBTRACT" : "ADD";
-  selectBounds(op, bounds);
+  const id = await selectBounds(op, bounds);
+  emit("selectTagId", id);
 }
 
 const onLoadEnd = (event) => {
@@ -367,6 +423,8 @@ defineExpose({
   drawViewToCanvas,
   centerToBounds,
   getScreenView,
+  navigate,
+  exit,
 })
 
 </script>

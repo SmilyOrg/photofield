@@ -4,19 +4,25 @@
     <tile-viewer
       class="viewer"
       ref="viewer"
+      :geo="true"
       :scene="scene"
+      :view="view"
+      :selectTagId="selectTagId"
       :debug="debug"
       :tileSize="512"
       :interactive="interactive"
-      :pannable="true"
-      :zoomable="true"
-      :geo="true"
-      :zoom-transition="true"
+      :pannable="interactive"
+      :zoomable="interactive"
+      :zoom-transition="regionTransition"
+      :focus="!!region"
+      :crossNav="!!region"
       :viewport="viewport"
-      :geoview="geoview"
-      @geoview="onGeoview"
+      @nav="onNav"
+      @view="onView"
       @contextmenu.prevent="onContextMenu"
       @click="onClick"
+      @box-select="onBoxSelect"
+      @viewer="emit('viewer', $event)"
     ></tile-viewer>
 
     <Spinner
@@ -53,12 +59,13 @@ import { debounce } from 'throttle-debounce';
 import ContextMenu from '@overcoder/vue-context-menu';
 import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getRegions, useScene } from '../api';
-import { useContextMenu, useViewport } from '../use.js';
+import { getRegions, useApi, useScene } from '../api';
+import { useContextMenu, useSeekableRegion, useTags, useViewport } from '../use.js';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
 import { useEventBus } from '@vueuse/core';
+import Geoview from './openlayers/geoview.js';
 
 const props = defineProps({
   interactive: Boolean,
@@ -83,11 +90,13 @@ const emit = defineEmits({
   region: null,
   selectTagId: null,
   search: null,
+  viewer: null,
 })
 
 const {
   interactive,
   collectionId,
+  regionId,
   layout,
   sort,
   imageHeight,
@@ -98,6 +107,8 @@ const {
 
 const viewer = ref(null);
 const viewport = useViewport(viewer);
+
+const regionTransition = ref(false);
 
 // Maps are always a square,
 // so the layout is viewport-independent
@@ -115,17 +126,31 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
   search,
 });
 
+const {
+  region,
+  navigate,
+  exit: regionExit,
+} = useSeekableRegion({
+  scene,
+  collectionId,
+  regionId,
+})
+
 useEventBus("recreate-scene").on(scene => {
   if (scene?.name && scene?.name != "Map") return;
   recreateScene();
 });
 
 watch(scene, async (newScene, oldScene) => {
-  if (newScene?.search != oldScene?.search) {
-    scrollToPixels(0);
-  }
   emit("scene", newScene);
 });
+
+watch(region, async (newRegion, oldRegion) => {
+  regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+}, { immediate: true });
+
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 
 const contextMenu = ref(null);
 const {
@@ -146,18 +171,32 @@ const geoview = computed(() => {
   if (zstr.endsWith("z")) {
     zstr = zstr.slice(0, -1);
   }
-
+  
   const lat = parseFloat(latstr);
   const lon = parseFloat(lonstr);
   const z = parseFloat(zstr);
   if (isNaN(lat) || isNaN(lon) || isNaN(z)) return;
   const geoview = [lon, lat, z];
+
   return geoview;
 });
 
-const applyGeoview = (geoview) => {
+const geoviewView = computed(() => {
+  const view = Geoview.toView(geoview.value, scene.value?.bounds);
+  return view;
+});
+
+const view = computed(() => {
+  if (region.value) {
+    return region.value.bounds;
+  }
+  return geoviewView.value;
+});
+
+const applyGeoview = async (geoview) => {
+  if (!geoview) return;
   const [lon, lat, z] = geoview;
-  router.replace({
+  await router.replace({
     query: {
       ...router.currentRoute.value.query,
       p: `${lat.toFixed(7)},${lon.toFixed(7)},${z.toFixed(2)}z`,
@@ -165,14 +204,95 @@ const applyGeoview = (geoview) => {
   });
 }
 
-const debouncedApplyGeoview = debounce(1000, applyGeoview);
-
-const onGeoview = (geoview) => {
-  debouncedApplyGeoview(geoview);
+const applyView = (view) => {
+  const pg = geoview.value;
+  const g = Geoview.fromView(view, scene.value?.bounds);
+  
+  if (Geoview.equal(g, pg)) return;
+  applyGeoview(g);
 }
+
+const debouncedApplyView = debounce(1000, applyView);
+
+const onView = (view) => {
+  debouncedApplyView(view);
+  lastView.value = view;
+}
+
+const lastView = ref(null);
+
+const exit = async () => {
+  if (selectTagId.value) {
+    emit("selectTagId", null);
+    return;
+  }
+  if (!region.value) {
+    return;
+  }
+  const g = Geoview.fromView(lastView.value, scene.value?.bounds);
+  await applyGeoview(g);
+  await regionExit();
+}
+
+const externalExit = async () => {
+  if (!region.value) {
+    return;
+  }
+  const g = Geoview.fromView(view.value, scene.value?.bounds);
+  await applyGeoview([
+    g[0],
+    g[1],
+    Math.max(1, g[2] - 3),
+  ])
+  await regionExit();
+}
+
+const zoomOut = () => {
+  viewer.value?.setView(view.value);
+}
+
+const onNav = async (event) => {
+  if (event.x) {
+    const valid = await navigate(event.x);
+    if (!valid) {
+      viewer.value?.setPendingTransition({
+        t: 0.5,
+        x: (lastView.value?.x - view.value?.x) / 2,
+        ease: "out",
+      });
+      zoomOut();
+    }
+    return;
+  }
+  if (event.zoom < 0) {
+    await exit();
+    return;
+  }
+  zoomOut();
+}
+
+const {
+  selectBounds
+} = useTags({
+  supported: tagsSupported,
+  selectTagId,
+  collectionId,
+  scene,
+});
 
 const onClick = async (event) => {
   if (!event) return false;
+  if (region.value) return false;
+  if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
+    const id = await selectBounds("INVERT", {
+      x: event.x,
+      y: event.y,
+      w: 0,
+      h: 0,
+    });
+    emit("selectTagId", id);
+    return false;
+  }
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
   if (regions && regions.length > 0) {
     const region = regions[0];
@@ -181,6 +301,17 @@ const onClick = async (event) => {
   }
   return false;
 }
+
+const onBoxSelect = async (bounds, shift) => {
+  const op = shift ? "SUBTRACT" : "ADD";
+  const id = await selectBounds(op, bounds);
+  emit("selectTagId", id);
+}
+
+defineExpose({
+  navigate,
+  exit: externalExit,
+})
 
 </script>
 

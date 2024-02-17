@@ -1,5 +1,6 @@
 <template>
   <div class="collection">
+    <page-title :title="pageTitle"></page-title>
 
     <response-loader
       class="response"
@@ -9,8 +10,9 @@
     <map-viewer
       v-if="layout == 'MAP'"
       ref="mapViewer"
-      :interactive="true"
+      :interactive="interactive"
       :collectionId="collectionId"
+      :regionId="regionId"
       :layout="layout"
       :sort="sort"
       :imageHeight="imageHeight"
@@ -18,17 +20,19 @@
       :debug="debug"
       :selectTagId="selectTagId"
       @selectTagId="onSelectTagId"
-      @region="onMapRegion"
+      @region="onRegion"
       @scene="mapScene = $event"
       @search="onSearch"
+      @viewer="mapTileViewer = $event"
     >
     </map-viewer>
 
     <scroll-viewer
-      v-else
+      v-if="layout != 'MAP'"
       ref="scrollViewer"
-      :interactive="!stripVisible"
+      :interactive="interactive"
       :collectionId="collectionId"
+      :regionId="regionId"
       :layout="layout"
       :sort="sort"
       :imageHeight="imageHeight"
@@ -38,48 +42,51 @@
       :scrollbar="scrollbar"
       :selectTagId="selectTagId"
       @selectTagId="onSelectTagId"
-      @region="onScrollRegion"
+      @region="onRegion"
+      @elementView="lastView = $event"
       @scene="scrollScene = $event"
       @search="onSearch"
+      @viewer="scrollTileViewer = $event"
     >
     </scroll-viewer>
+    
+    <overlays
+      class="overlays"
+      :viewer="currentViewer"
+      :active="!!regionId"
+      :regionId="regionId"
+      :scene="currentScene"
+      @interactive="interactive = $event"
+      ></overlays>
 
-    <strip-viewer
-      ref="stripViewer"
-      class="strip"
-      :class="{ visible: stripVisible }"
-      :interactive="stripVisible"
-      :collectionId="collectionId"
-      :sort="sort"
-      :regionId="transitionRegionId || regionId"
-      :search="search"
-      :debug="debug"
-      :screenView="stripView"
-      :fullpage="true"
-      @region="onStripRegion"
-      @scene="stripScene = $event"
-      @search="onSearch"
-    >
-    </strip-viewer>
+    <controls
+      class="controls"
+      v-if="!!regionId"
+      :scene="currentScene"
+      :regionId="regionId"
+      @navigate="navigate($event)"
+      @exit="exit()"
+    ></controls>
 
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { timeout, useTask } from 'vue-concurrency';
+import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ResponseLoader from './ResponseLoader.vue';
-import StripViewer from './StripViewer.vue';
+import Controls from './Controls.vue';
 import ScrollViewer from './ScrollViewer.vue';
 import MapViewer from './MapViewer.vue';
+import PageTitle from './PageTitle.vue';
+import Overlays from './Overlays.vue';
+
 import { useApi } from '../api';
 
 const props = defineProps([
   "collectionId",
   "regionId",
-  "fullpage",
   "scrollbar",
 ]);
 
@@ -97,23 +104,46 @@ const {
   regionId,
 } = toRefs(props);
 
+watch(regionId, (newRegionId) => {
+  emit("immersive", newRegionId !== undefined);
+}, { immediate: true });
+
 const scrollViewer = ref(null);
-const stripViewer = ref(null);
-const stripView = ref(null);
-const lastScrollRegion = ref(null);
-const lastStripRegion = ref(null);
+const scrollTileViewer = ref(null);
+const mapTileViewer = ref(null);
+const interactive = ref(true);
+
+const currentViewer = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapTileViewer.value;
+  }
+  return scrollTileViewer.value;
+});
+
+const currentScene = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapScene.value;
+  }
+  return scrollScene.value;
+});
+
+const mapViewer = ref(null);
+const lastView = ref(null);
 
 const route = useRoute();
 const router = useRouter();
 
-const initWithStrip = !!regionId.value;
-const stripVisible = ref(initWithStrip);
-const lastRegionId = ref(null);
-const transitionRegionId = ref(null);
+const navigate = computed(() => {
+  return (scrollViewer.value || mapViewer.value)?.navigate;
+});
+
+const exit = () => {
+  (scrollViewer.value || mapViewer.value)?.exit();
+  lastView.value = null;
+}
 
 const scrollScene = ref(null);
 const mapScene = ref(null);
-const stripScene = ref(null);
 const scenes = computed(() => {
   const scenes = [];
   if (scrollScene.value) scenes.push({
@@ -122,11 +152,7 @@ const scenes = computed(() => {
   });
   if (mapScene.value) scenes.push({
     name: "Map",
-    ...stripScene.value
-  });
-  if (stripScene.value) scenes.push({
-    name: "Strip",
-    ...stripScene.value
+    ...mapScene.value
   });
   return scenes;
 });
@@ -144,6 +170,17 @@ const layout = computed(() => {
 const selectTagId = computed(() => {
   return route.query.select_tag || undefined;
 })
+
+const pageTitle = computed(() => {
+  if (!collection.value) {
+    return "Photos";
+  }
+  const id = regionId.value;
+  if (!id) {
+    return `${collection.value.name} - Photos`;
+  }
+  return `#${id} - ${collection.value.name} - Photos`;
+});
 
 const onSelectTagId = (id) => {
   router.replace({
@@ -190,125 +227,31 @@ const debug = computed(() => {
   return v;
 });
 
-const showRegion = useTask(function*(_, regionId) {
-  if (regionId) {
-    if (stripVisible.value) return;
-
-    let view =
-      lastScrollRegion.value?.id == regionId &&
-      lastScrollRegion.value?.bounds;
-      
-    if (!view) {
-      view = yield scrollViewer.value.getRegionView(regionId);
-    }
-
-    view = scrollViewer.value.getScreenView(view);
-    yield stripViewer.value?.zoomInFromView(view);
-
-    stripVisible.value = true;
-    transitionRegionId.value = null;
-    if (lastStripRegion.value?.id != regionId) {
-      scrollViewer.value.drawViewToCanvas(view, stripViewer.value?.getCanvas());
-    }
-
-    yield nextTick();
-    stripViewer.value.focus();
-
-  } else {
-    let view = 
-      lastScrollRegion.value?.id == lastStripRegion.value.id &&
-      lastScrollRegion.value?.bounds;
-
-    if (!view) {
-      view = yield scrollViewer.value?.getRegionView(lastStripRegion.value.id);
-    }
-    if (!view) return;
-
-    if (lastScrollRegion.value?.id != lastStripRegion.value?.id) {
-      yield scrollViewer.value?.centerToBounds(view);
-    }
-
-    view = scrollViewer.value.getScreenView(view);
-    yield stripViewer.value?.zoomOutFromView(view);
-
-    yield timeout(300);
-    
-    stripVisible.value = false;
-    transitionRegionId.value = null;
-  }
-}).restartable();
-
-function showRegionImmediate(regionId) {
-  transitionRegionId.value = null;
-  stripViewer.value?.resetZoom();
-  if (regionId) {
-    stripVisible.value = true;
-  } else {
-    stripVisible.value = false;
-  }
-}
-
-watch(regionId, (newRegionId, oldRegionId) => {
-  lastRegionId.value = oldRegionId;
-  const showStrip = newRegionId !== undefined;
-  emit("immersive", showStrip);
-  if (layout.value === 'MAP') {
-    showRegionImmediate(newRegionId);
-  } else {
-    showRegion.perform(newRegionId);
-  }
-}, { immediate: true });
-
-const onStripRegion = async region => {
+const onRegion = async (region) => {
   if (!region) return;
-  if (layout.value === 'MAP') {
-    showRegionImmediate(region.id);
-  } else {
-    showRegion.perform(region.id);
-  }
-  lastStripRegion.value = region;
-}
-
-const onScrollRegion = async (region) => {
-  lastScrollRegion.value = region;
-  router.push({
+  const r = {
     name: "region",
     params: {
       collectionId: collectionId.value,
       regionId: region?.id,
     },
     query: route.query,
-  });
+  };
+  if (regionId.value) {
+    router.replace(r);
+  } else {
+    router.push(r);
+  }
 }
 
-const onMapRegion = async (region) => {
-  const stripRegion = await stripViewer.value?.getRegionIdFromFileId(region?.data?.id);
-  if (!stripRegion) {
-    console.error("No strip region found for", region);
-    return;
-  }
-  router.push({
-    name: "region",
-    params: {
-      collectionId: collectionId.value,
-      regionId: stripRegion?.id,
-    },
-    query: route.query,
-  });
-}
 </script>
 
 <style scoped>
 
-.strip {
-  visibility: hidden;
-  transition: none;
-  pointer-events: none;
-}
-
-.strip.visible {
-  visibility: visible;
-  pointer-events: all;
+.controls {
+  position: fixed;
+  top: 0;
+  left: 0;
 }
 
 </style>

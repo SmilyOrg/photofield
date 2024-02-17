@@ -2,7 +2,7 @@ import { computed, ref, watch, watchEffect } from "vue";
 import { refDebounced, useElementSize } from '@vueuse/core';
 import { useTask, timeout } from "vue-concurrency";
 import { useRoute, useRouter } from "vue-router";
-import { useApi, useBufferApi } from "./api";
+import { addTag, postTagFiles, useApi, useBufferApi } from "./api";
 import qs from "qs";
 import { debounce } from "throttle-debounce";
 
@@ -189,10 +189,11 @@ export function useNavigation({ index, count, apply }) {
       throw new Error("Unsupported parameter: " + offsetOrRegion);
     }
     if (nextIndex <= 0 || nextIndex > count.value) {
-      return;
+      return false;
     }
     seekIndex.value = nextIndex;
     debouncedSeek(nextIndex);
+    return true;
   }
 
   const debouncedSeek = debounce(1000, index => {
@@ -380,7 +381,7 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
     !scene?.value?.loading &&
     viewport?.height.value &&
     `/scenes/${scene.value.id}/dates?${qs.stringify({
-      height: viewport.height.value,
+      height: Math.round(viewport.height.value),
     })}`
   )
 
@@ -404,3 +405,28 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
     date,
   }
 }
+
+export function useTags({ supported, selectTagId, collectionId, scene }) {
+  const selectBounds = async (op, bounds) => {
+    if (!supported.value) return;
+    let id = selectTagId.value;
+    if (!id) {
+      const tag = await addTag({
+        selection: true,
+        collection_id: collectionId.value,
+      });
+      id = tag.id;
+    }
+    const tag = await postTagFiles(id, {
+      op,
+      scene_id: scene.value.id,
+      bounds
+    });
+    id = tag.id;
+    return id;
+  };
+
+  return {
+    selectBounds
+  };
+};

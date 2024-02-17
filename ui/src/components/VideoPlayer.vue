@@ -2,9 +2,6 @@
   <div
     class="video-player"
     v-show="active && show"
-    @pointerDown.capture="onPointerDown"
-    @click.capture="onCaptureClick"
-    @wheel="onWheel"
   >
     <video
       ref="video"
@@ -21,7 +18,6 @@
 <script>
 import { getFileUrl, getThumbnailUrl } from '../api';
 import Plyr from 'plyr';
-import { isCloseClick } from '../utils';
 
 const originalQualitySize = 1000000;
 const qualities = [originalQualitySize, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
@@ -41,13 +37,14 @@ export default {
       show: false,
       loading: 0,
       hasPlayed: false,
-      interactive: false,
+      interactive: true,
     };
   },
 
   mounted() {
     this.player = new Plyr(this.$refs.video, {
       settings: ["captions", "quality", "speed", "loop"],
+      muted: true,
       quality: {
         default: originalQualitySize,
         options: qualities,
@@ -58,40 +55,20 @@ export default {
         },
       },
     });
-    this.player.on("ready", this.onReady);
     this.player.on("loadstart", this.onLoadStart);
     this.player.on("canplay", this.onCanPlay);
     this.player.on("playing", this.onPlaying);
-    this.player.on("play", this.onPlay);
-    this.player.on("pause", this.onPause);
     this.player.on("error", this.onError);
-
-    // this.player.on("ready", () => console.log("ready"));
-    // this.player.on("loadstart", () => console.log("loadstart"));
-    // this.player.on("loadeddata", () => console.log("loadeddata"));
-    // this.player.on("loadedmetadata", () => console.log("loadedmetadata"));
-    // this.player.on("qualitychange", () => console.log("qualitychange"));
-    // this.player.on("canplay", () => console.log("canplay"));
-    // this.player.on("canplaythrough", () => console.log("canplaythrough"));
-    // this.player.on("play", () => console.log("play"));
-    // this.player.on("pause", () => console.log("pause"));
-    // this.player.on("stalled", () => console.log("stalled"));
-    // this.player.on("waiting", () => console.log("waiting"));
-    // this.player.on("emptied", () => console.log("emptied"));
-    // this.player.on("error", () => console.log("error"));
-    // this.player.on("playing", () => console.log("playing"));
-
+    this.player.on("ready", this.addControlsListeners);
     this.player.source = this.source;
   },
 
   unmounted() {
     if (!this.player) return;
-    this.player.off("ready", this.onReady);
+    this.removeControlsListeners();
     this.player.off("loadstart", this.onLoadStart);
     this.player.off("canplay", this.onCanPlay);
     this.player.off("playing", this.onPlaying);
-    this.player.off("play", this.onPlay);
-    this.player.off("pause", this.onPause);
     this.player.off("error", this.onError);
     this.player.destroy();
     this.player = null;
@@ -149,9 +126,19 @@ export default {
   },
 
   methods: {
+    addControlsListeners() {
+      this.removeControlsListeners();
+      if (!this.player?.elements?.controls) return;
+      this.player.elements.controls.addEventListener("pointerenter", this.onControlsPointerEnter);
+      this.player.elements.controls.addEventListener("pointerleave", this.onControlsPointerLeave);
+    },
+    removeControlsListeners() {
+      if (!this.player?.elements?.controls) return;
+      this.player.elements.controls.removeEventListener("pointerenter", this.onControlsPointerEnter);
+      this.player.elements.controls.removeEventListener("pointerleave", this.onControlsPointerLeave);
+    },
     onLoadStart() {
       this.loading++;
-      this.interactive = false;
     },
     onCanPlay() {
       this.loading--;
@@ -185,25 +172,11 @@ export default {
       this.hasPlayed = true;
       this.show = true;
     },
-    onPlay() {
-      // TODO: The locking of controls here does not work that well yet, so it's
-      // disabled for now
-      // this.interactive = true;
-    },
-    onPause() {
+    onControlsPointerEnter() {
       this.interactive = false;
     },
-    onPointerDown(event) {
-      this.lastPointerDownEvent = event;
-    },
-    onCaptureClick(event) {
-      if (!isCloseClick(this.lastPointerDownEvent, event)) {
-        // Do not play/pause video if the click was a drag instead of a click
-        event.stopPropagation();
-      }
-    },
-    onWheel() {
-      this.interactive = false;
+    onControlsPointerLeave() {
+      this.interactive = true;
     },
   }
 
