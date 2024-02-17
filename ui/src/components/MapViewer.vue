@@ -4,22 +4,24 @@
     <tile-viewer
       class="viewer"
       ref="viewer"
+      :geo="true"
       :scene="scene"
+      :view="view"
+      :selectTagId="selectTagId"
       :debug="debug"
       :tileSize="512"
       :interactive="interactive"
-      :pannable="true"
-      :zoomable="true"
+      :pannable="interactive"
+      :zoomable="interactive"
+      :zoom-transition="regionTransition"
       :focus="!!region"
       :crossNav="!!region"
-      :geo="true"
-      :view="view"
-      :zoom-transition="regionTransition"
       :viewport="viewport"
       @nav="onNav"
       @view="onView"
       @contextmenu.prevent="onContextMenu"
       @click="onClick"
+      @box-select="onBoxSelect"
       @viewer="emit('viewer', $event)"
     ></tile-viewer>
 
@@ -57,8 +59,8 @@ import { debounce } from 'throttle-debounce';
 import ContextMenu from '@overcoder/vue-context-menu';
 import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getRegions, useScene } from '../api';
-import { useContextMenu, useSeekableRegion, useViewport } from '../use.js';
+import { getRegions, useApi, useScene } from '../api';
+import { useContextMenu, useSeekableRegion, useTags, useViewport } from '../use.js';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
@@ -147,6 +149,9 @@ watch(region, async (newRegion, oldRegion) => {
   regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
 }, { immediate: true });
 
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
+
 const contextMenu = ref(null);
 const {
   onContextMenu,
@@ -217,6 +222,10 @@ const onView = (view) => {
 const lastView = ref(null);
 
 const exit = async () => {
+  if (selectTagId.value) {
+    emit("selectTagId", null);
+    return;
+  }
   if (!region.value) {
     return;
   }
@@ -262,9 +271,28 @@ const onNav = async (event) => {
   zoomOut();
 }
 
+const {
+  selectBounds
+} = useTags({
+  supported: tagsSupported,
+  selectTagId,
+  collectionId,
+  scene,
+});
+
 const onClick = async (event) => {
   if (!event) return false;
   if (region.value) return false;
+  if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
+    const id = await selectBounds("INVERT", {
+      x: event.x,
+      y: event.y,
+      w: 0,
+      h: 0,
+    });
+    emit("selectTagId", id);
+    return false;
+  }
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
   if (regions && regions.length > 0) {
     const region = regions[0];
@@ -272,6 +300,12 @@ const onClick = async (event) => {
     return true;
   }
   return false;
+}
+
+const onBoxSelect = async (bounds, shift) => {
+  const op = shift ? "SUBTRACT" : "ADD";
+  const id = await selectBounds(op, bounds);
+  emit("selectTagId", id);
 }
 
 defineExpose({

@@ -174,7 +174,6 @@ export default {
     crossPanActive: {
       immediate: true,
       handler(active) {
-        // console.log("crossPanActive", active)
         this.crossPan?.setActive(active);
       }
     },
@@ -182,7 +181,6 @@ export default {
     dragPanActive: {
       immediate: true,
       handler(active) {
-        // console.log("dragPanActive", active)
         this.dragPan?.setActive(active);
       }
     },
@@ -407,7 +405,6 @@ export default {
       } else {
         return [
           main,
-          // clip,
         ];
       }
     },
@@ -607,9 +604,7 @@ export default {
     onNav(event) {
       if (event.x) {
         const dx = event.x > 0 ? 1 : -1;
-        // const dx = 1;
         const t = 150 / Math.abs(event.x);
-        // const t = 1;
         const cx = this.view.x;
         const cw = this.view.w;
         const vx = this.latestView.x;
@@ -905,15 +900,7 @@ export default {
         const zoomDiff = Math.abs(zoom - prevZoom);
 
         if (zoomDiff > 1e-4 && !options) {
-          // console.log(zoomDiff)
-          // const t = zoomDiff * 0.05;
-          // const t = zoomDiff * 0.2;
-          // const t = zoomDiff * 1;
-          // const t = Math.pow(zoomDiff, 0.5) * 0.08;
-          // const t = Math.pow(zoomDiff, 0.5) * 0.2;
-          // const t = Math.pow(zoomDiff, 2) * 0.01;
           const t = Math.pow(zoomDiff, 0.8) * 0.1;
-          // const t = Math.pow(zoomDiff, 1.5) * 0.08;
           options = { animationTime: t }
         }
       }
@@ -952,18 +939,6 @@ export default {
           options.ease == "out" ? easeOut :
           options.ease == "linear" ? linear :
           zoomEase,
-        // easing: function(x) {
-        //   return x * x * x * (x * (6.0 * x - 15.0) + 10.0);
-        // },
-        // easing: function(t) {
-        //   return Math.pow(t, 0.5) + 0.3;
-        // },
-        // easing: function(t) {
-        //   return Math.pow(2, -50 * t) * Math.sin(((t - 0.1) * (2 * Math.PI)) / 0.3) + 1
-        // },
-        // easing: function(t) {
-        //   return Math.pow(2, -80 * t) * Math.sin(((t - 0.1) * (2 * Math.PI)) / 0.3) + 1
-        // },
       } : undefined;
 
       const targetExtent = this.extentFromView(view);
@@ -984,7 +959,6 @@ export default {
 
 .container {
   position: relative;
-  /* padding-top: 60px; */
 }
 
 .container.focus {

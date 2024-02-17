@@ -19,7 +19,6 @@
       :viewport="viewport"
       @click="onClick"
       @view="onView"
-      @move-end="onMoveEnd"
       @nav="onNav"
       @wheel="onWheel"
       @load-end="onLoadEnd"
@@ -74,13 +73,12 @@
 import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus } from '@vueuse/core';
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { getRegion, getRegions, useScene, addTag, postTagFiles, useApi } from '../api';
-import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline } from '../use.js';
+import { getRegion, getRegions, useScene, useApi } from '../api';
+import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline, useTags } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
-import { tr } from 'date-fns/locale';
 
 const props = defineProps({
   interactive: Boolean,
@@ -124,7 +122,6 @@ const {
 
 const viewer = ref(null);
 const viewport = useViewport(viewer);
-// const nativeScroll = ref(true);
 
 const lastView = ref(null);
 const lastNonNativeView = ref(null);
@@ -201,9 +198,6 @@ const lastZoom = computed(() => {
 });
 
 const nativeScroll = computed(() => {
-  // const lastZoom = lastZoom.value;
-  // console.log(lastZoom.value);
-
   if (lastZoom.value > 1.2) {
     return false;
   }
@@ -217,7 +211,6 @@ watch(nativeScroll, async (newValue, oldValue) => {
     return;
   }
   if (newValue) {
-    // console.log("nativey", lastView.value?.y, lastNonNativeView.value?.y);
     await centerToBounds(lastNonNativeView.value);
   }
 });
@@ -226,16 +219,16 @@ watch(nativeScroll, async (newValue, oldValue) => {
 const centerToBounds = async (bounds) => {
   const by = bounds.y + bounds.h * 0.5;
   const vy = viewport.height.value * 0.5;
-  // nativeScroll.value = true;
-  // if (region.value) {
-  //   await exit();
-  // }
   await nextTick();
   scrollToPixels(by - vy);
   await nextTick();
 }
 
 const onEscape = async () => {
+  if (selectTagId.value) {
+    emit("selectTagId", null);
+    return;
+  }
   zoomOut();
   if (lastView.value) {
     const lastZoom = scene.value.bounds.w / lastView.value.w;
@@ -243,17 +236,12 @@ const onEscape = async () => {
       return;
     }
   }
-  if (selectTagId.value) {
-    emit("selectTagId", null);
-    return;
-  }
 }
 
 const zoomOut = () => {
   viewer.value?.setView(view.value);
 }
 
-// const scrollSleep = computed(() => !nativeScroll.value);
 const scrollSleep = computed(() => {
   return !nativeScroll.value || lastZoom.value > 1.0001;
 });
@@ -268,8 +256,6 @@ const {
 const { date: scrollDate } = useTimeline({ scene, viewport, scrollRatio });
 
 const view = computed(() => {
-  // console.log("view", region.value);
-
   if (region.value) {
     return region.value.bounds;
   }
@@ -285,44 +271,26 @@ const view = computed(() => {
   }
 });
 
-// watch(region, async (newRegion, oldRegion) => {
-//   if (newRegion == null && oldRegion == null) {
-//     // nativeScroll.value = false;
-//   } else if (newRegion === null && oldRegion != null) {
-//     // nativeScroll.value = true;
-//     await centerToBounds(oldRegion.bounds);
-//   }
-// });
-
-const selectBounds = async (op, bounds) => {
-  if (!tagsSupported.value) return;
-  let id = selectTagId.value;
-  if (!id) {
-    const tag = await addTag({
-      selection: true,
-      collection_id: collectionId.value,
-    });
-    id = tag.id;
-  }
-  const tag = await postTagFiles(id, {
-    op,
-    scene_id: scene.value.id,
-    bounds
-  })
-  id = tag.id;
-  emit("selectTagId", id);
-}
+const {
+  selectBounds
+} = useTags({
+  supported: tagsSupported,
+  selectTagId,
+  collectionId,
+  scene,
+});
 
 const onClick = async (event) => {
   if (!event) return false;
   if (region.value) return false;
   if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
-    await selectBounds("INVERT", {
+    const id = await selectBounds("INVERT", {
       x: event.x,
       y: event.y,
       w: 0,
       h: 0,
     });
+    emit("selectTagId", id);
     return false;
   }
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
@@ -361,88 +329,13 @@ const onView = (event) => {
   if (!scene.value?.bounds.w) {
     return;
   }
-  if (lastView.value) {
-    const lastZoom = scene.value.bounds.w / lastView.value.w;
-    const viewZoom = scene.value.bounds.w / view.value?.w;
-    const zoom = scene.value.bounds.w / event.w;
-    const zoomDiff = zoom - lastZoom;
-    const zoomingOut = zoomDiff < -0.000001;
-    // if (zoom <= 1.1 && zoomingOut) {
-    //   exit();
-    //   return;
-    // }
-    // if (viewZoom) {
-    //   const ratio = zoom / viewZoom;
-    //   console.log("ratio", ratio);
-    //   if (ratio < 0.8 && zoomingOut) {
-    //     exit();
-    //     return;
-    //   }
-    // }
-    // console.log("zoom", zoom, "lastZoom", lastZoom, "viewZoom", viewZoom, "zoomDiff", zoomDiff, "zoomingOut", zoomingOut);
-    // if (zoom <= 1.1) {
-    //   // Zoom out to native scroll
-    //   if (!nativeScroll.value) {
-    //     nativeScroll.value = true;
-    //   }
-    // } else if (zoom >= 1.0001) {
-    //   // Zoom in via tileviewer movement (e.g. pinch gesture)
-    //   if (nativeScroll.value) {
-    //     nativeScroll.value = false;
-    //   }
-    // }
-    // if (zoom <= 1.1 && zoomingOut) {
-    //   // Zoom out to native scroll
-    //   if (!nativeScroll.value) {
-    //     nativeScroll.value = true;
-    //   }
-    // } else if (zoom >= 1.0001) {
-    //   // Zoom in via tileviewer movement (e.g. pinch gesture)
-    //   if (nativeScroll.value) {
-    //     nativeScroll.value = false;
-    //   }
-    // }
-  }
   lastView.value = event;
   if (!nativeScroll.value) {
     lastNonNativeView.value = event;
   }
-  // console.log("y", nativeScroll.value, event.y)
-  // console.log("view", Object.assign({}, view));
-  // console.log("region", Object.assign({}, region.value?.bounds));
-  // console.log("element", viewer.value?.elementFromView(view));
-  // console.log("screen", getScreenView(region.value?.bounds));
-  // const corners = viewer.value?.pixelCornersFromView(region.value?.bounds);
-  // console.log(
-  //   "x", corners?.tl[0],
-  //   "y", corners?.tl[1],
-  //   "w", corners?.br[0] - corners?.tl[0],
-  //   "h", corners?.br[1] - corners?.tl[1],
-  // );
   if (region.value?.bounds) {
     emit("elementView", getScreenView(region.value.bounds));
   }
-}
-
-const onMoveEnd = async (event) => {
-  if (!scene.value?.bounds.w || !view.value || !viewer.value) {
-    return;
-  }
-  // const viewZoom = scene.value.bounds.w / view.value.w;
-  // const moveZoom = scene.value.bounds.w / event.w;
-  const viewZoom = viewer.value.zoomFromView(view.value);
-  const moveZoom = viewer.value.zoomFromView(event);
-  const ratio = moveZoom / viewZoom;
-  // console.log("ratio", ratio);
-  
-  // if (ratio < 0.7) {
-  //   await exit();
-  //   return;
-  // }
-  // if (ratio < 1.1) {
-  //   zoomOut();
-  //   return;
-  // }
 }
 
 const onNav = async (event) => {
@@ -467,7 +360,8 @@ const onNav = async (event) => {
 
 const onBoxSelect = async (bounds, shift) => {
   const op = shift ? "SUBTRACT" : "ADD";
-  selectBounds(op, bounds);
+  const id = await selectBounds(op, bounds);
+  emit("selectTagId", id);
 }
 
 const onLoadEnd = (event) => {

@@ -2,7 +2,7 @@ import { computed, ref, watch, watchEffect } from "vue";
 import { refDebounced, useElementSize } from '@vueuse/core';
 import { useTask, timeout } from "vue-concurrency";
 import { useRoute, useRouter } from "vue-router";
-import { useApi, useBufferApi } from "./api";
+import { addTag, postTagFiles, useApi, useBufferApi } from "./api";
 import qs from "qs";
 import { debounce } from "throttle-debounce";
 
@@ -405,3 +405,28 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
     date,
   }
 }
+
+export function useTags({ supported, selectTagId, collectionId, scene }) {
+  const selectBounds = async (op, bounds) => {
+    if (!supported.value) return;
+    let id = selectTagId.value;
+    if (!id) {
+      const tag = await addTag({
+        selection: true,
+        collection_id: collectionId.value,
+      });
+      id = tag.id;
+    }
+    const tag = await postTagFiles(id, {
+      op,
+      scene_id: scene.value.id,
+      bounds
+    });
+    id = tag.id;
+    return id;
+  };
+
+  return {
+    selectBounds
+  };
+};
