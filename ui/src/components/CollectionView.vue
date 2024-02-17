@@ -20,7 +20,7 @@
       :debug="debug"
       :selectTagId="selectTagId"
       @selectTagId="onSelectTagId"
-      @region="onMapRegion"
+      @region="onRegion"
       @scene="mapScene = $event"
       @search="onSearch"
       @viewer="mapTileViewer = $event"
@@ -42,7 +42,7 @@
       :scrollbar="scrollbar"
       :selectTagId="selectTagId"
       @selectTagId="onSelectTagId"
-      @region="onScrollRegion"
+      @region="onRegion"
       @elementView="lastView = $event"
       @scene="scrollScene = $event"
       @search="onSearch"
@@ -52,17 +52,18 @@
     
     <overlays
       class="overlays"
-      :viewer="overlayViewer"
-      :overlay="overlay"
-      :scene="overlayScene"
+      :viewer="currentViewer"
       :active="!!regionId"
+      :regionId="regionId"
+      :scene="currentScene"
       @interactive="interactive = $event"
       ></overlays>
 
     <controls
       class="controls"
-      :region="lastScrollRegion || lastMapRegion"
-      :scene="scrollScene"
+      v-if="!!regionId"
+      :scene="currentScene"
+      :regionId="regionId"
       @navigate="navigate($event)"
       @exit="exit()"
     ></controls>
@@ -112,21 +113,14 @@ const scrollTileViewer = ref(null);
 const mapTileViewer = ref(null);
 const interactive = ref(true);
 
-const overlayViewer = computed(() => {
+const currentViewer = computed(() => {
   if (layout.value === 'MAP') {
     return mapTileViewer.value;
   }
   return scrollTileViewer.value;
 });
 
-const overlay = computed(() => {
-  if (layout.value === 'MAP') {
-    return lastMapRegion.value;
-  }
-  return lastScrollRegion.value;
-});
-
-const overlayScene = computed(() => {
+const currentScene = computed(() => {
   if (layout.value === 'MAP') {
     return mapScene.value;
   }
@@ -134,8 +128,6 @@ const overlayScene = computed(() => {
 });
 
 const mapViewer = ref(null);
-const lastScrollRegion = ref(null);
-const lastMapRegion = ref(null);
 const lastView = ref(null);
 
 const route = useRoute();
@@ -235,9 +227,7 @@ const debug = computed(() => {
   return v;
 });
 
-const onScrollRegion = async (region) => {
-  if (region?.id === lastScrollRegion.value?.id) return;
-  lastScrollRegion.value = region;
+const onRegion = async (region) => {
   if (!region) return;
   router.push({
     name: "region",
@@ -249,19 +239,6 @@ const onScrollRegion = async (region) => {
   });
 }
 
-const onMapRegion = async (region) => {
-  if (region?.id === lastMapRegion.value?.id) return;
-  lastMapRegion.value = region;
-  if (!region) return;
-  router.push({
-    name: "region",
-    params: {
-      collectionId: collectionId.value,
-      regionId: region?.id,
-    },
-    query: route.query,
-  });
-}
 </script>
 
 <style scoped>

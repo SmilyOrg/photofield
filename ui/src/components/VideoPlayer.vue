@@ -62,7 +62,6 @@ export default {
     this.player.elements.controls.addEventListener("pointerenter", this.onControlsPointerEnter);
     this.player.elements.controls.addEventListener("pointerleave", this.onControlsPointerLeave);
     this.player.source = this.source;
-    console.log(this.player);
   },
 
   unmounted() {

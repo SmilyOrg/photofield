@@ -9,7 +9,7 @@
     <div class="toolbar">
       <!-- <ui-icon light class="icon" size="32" @click="$event => download()">download</ui-icon> -->
       <ui-icon
-        v-if="tagsEnabled"
+        v-if="tagsSupported"
         light
         class="icon"
         size="32"
@@ -18,13 +18,13 @@
         tag
       </ui-icon>
       <ui-icon
-        v-if="tagsEnabled"
+        v-if="tagsSupported"
         light
         class="icon"
         size="32"
-        @click="$event => onFavorite()"
+        @click="toggleFavorite()"
       >
-        {{ favorite ? "favorite" : "favorite_outline" }}
+        {{ favoriteTag ? "favorite" : "favorite_outline" }}
       </ui-icon>
     </div>
     <Tags
@@ -50,22 +50,32 @@ import { onKeyStroke, useIdle } from '@vueuse/core';
 import Downloads from './Downloads.vue';
 import Tags from './Tags.vue';
 import { computed, ref, toRefs } from 'vue';
+import { postTagFiles, useApi } from '../api';
+import { useRegion } from '../use';
 
 const props = defineProps({
-  region: Object,
-  tagsEnabled: Boolean,
+  scene: Object,
+  regionId: String,
 });
 
 const {
-  region,
+  scene,
+  regionId,
 } = toRefs(props);
+
+const {
+  region,
+  mutate: updateRegion,
+} = useRegion({ scene, id: regionId })
+
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
+
+const fileId = computed(() => region.value?.data?.id);
 
 const emit = defineEmits([
   "navigate",
   "exit",
-  "favorite",
-  "add-tag",
-  "remove-tag",
 ]);
 
 const { idle } = useIdle(5000, {
@@ -75,7 +85,7 @@ const { idle } = useIdle(5000, {
 
 const showTags = ref(false);
 
-const favorite = computed(() => {
+const favoriteTag = computed(() => {
   return region.value?.data?.tags?.find(tag => tag.name == "fav");
 })
 
@@ -91,16 +101,38 @@ const exit = () => {
   emit("exit");
 }
 
-const onFavorite = () => {
-  emit("favorite", favorite.value);
+const toggleFavorite = async () => {
+  const tagId = favoriteTag?.id || "fav:r0";
+  if (!fileId.value) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "INVERT",
+    file_id: fileId.value,
+  });
+  await updateRegion();
 }
 
-const addTag = (tag) => {
-  emit("add-tag", tag);
+const addTag = async (tagId) => {
+  if (!fileId.value || !tagId) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "ADD",
+    file_id: fileId.value,
+  });
+  await updateRegion();
 }
 
-const removeTag = (tag) => {
-  emit("remove-tag", tag);
+const removeTag = async (tagId) => {
+  if (!fileId.value || !tagId) {
+    return;
+  }
+  await postTagFiles(tagId, {
+    op: "SUBTRACT",
+    file_id: fileId.value,
+  });
+  await updateRegion();
 }
 
 onKeyStroke(["ArrowLeft"], left);

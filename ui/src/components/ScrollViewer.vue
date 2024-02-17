@@ -164,7 +164,7 @@ const regionTransition = ref(false);
 watch(region, async (newRegion, oldRegion) => {
   regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
   emit("region", newRegion);
-});
+}, { immediate: true });
 
 const exit = async () => {
   await centerToBounds(lastNonNativeView.value);

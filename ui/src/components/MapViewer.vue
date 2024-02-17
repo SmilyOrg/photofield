@@ -140,15 +140,12 @@ useEventBus("recreate-scene").on(scene => {
 });
 
 watch(scene, async (newScene, oldScene) => {
-  if (newScene?.search != oldScene?.search) {
-    scrollToPixels(0);
-  }
   emit("scene", newScene);
 });
 
 watch(region, async (newRegion, oldRegion) => {
   regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
-});
+}, { immediate: true });
 
 const contextMenu = ref(null);
 const {

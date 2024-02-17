@@ -22,22 +22,33 @@
 import { ref, onUnmounted, watch, computed, toRefs } from 'vue';
 import VideoPlayer from './VideoPlayer.vue';
 import Overlay from 'ol/Overlay';
+import { useRegion } from '../use';
 
 const props = defineProps({
   viewer: Object,
-  overlay: Object,
+  regionId: String,
   scene: Object,
   active: Boolean,
 });
 
 const {
   viewer,
-  overlay,
+  regionId,
   scene,
   active
 } = toRefs(props);
 
 defineEmits(["interactive"]);
+
+const {
+  region,
+} = useRegion({ scene, id: regionId });
+
+const overlay = ref(null);
+watch(region, (newRegion, oldRegion) => {
+  if (newRegion?.id == oldRegion?.id) return;
+  overlay.value = newRegion;
+}, { immediate: true });
 
 const overlayRef = ref(null);
 
