@@ -59,15 +59,13 @@ export default {
     this.player.on("canplay", this.onCanPlay);
     this.player.on("playing", this.onPlaying);
     this.player.on("error", this.onError);
-    this.player.elements.controls.addEventListener("pointerenter", this.onControlsPointerEnter);
-    this.player.elements.controls.addEventListener("pointerleave", this.onControlsPointerLeave);
+    this.player.on("ready", this.addControlsListeners);
     this.player.source = this.source;
   },
 
   unmounted() {
     if (!this.player) return;
-    this.player.elements.controls.removeEventListener("pointerenter", this.onControlsPointerEnter);
-    this.player.elements.controls.removeEventListener("pointerleave", this.onControlsPointerLeave);
+    this.removeControlsListeners();
     this.player.off("loadstart", this.onLoadStart);
     this.player.off("canplay", this.onCanPlay);
     this.player.off("playing", this.onPlaying);
@@ -128,6 +126,17 @@ export default {
   },
 
   methods: {
+    addControlsListeners() {
+      this.removeControlsListeners();
+      if (!this.player?.elements?.controls) return;
+      this.player.elements.controls.addEventListener("pointerenter", this.onControlsPointerEnter);
+      this.player.elements.controls.addEventListener("pointerleave", this.onControlsPointerLeave);
+    },
+    removeControlsListeners() {
+      if (!this.player?.elements?.controls) return;
+      this.player.elements.controls.removeEventListener("pointerenter", this.onControlsPointerEnter);
+      this.player.elements.controls.removeEventListener("pointerleave", this.onControlsPointerLeave);
+    },
     onLoadStart() {
       this.loading++;
     },

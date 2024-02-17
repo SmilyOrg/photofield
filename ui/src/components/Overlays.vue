@@ -46,7 +46,7 @@ const {
 
 const overlay = ref(null);
 watch(region, (newRegion, oldRegion) => {
-  if (newRegion?.id == oldRegion?.id) return;
+  if (newRegion?.data?.id == oldRegion?.data?.id) return;
   overlay.value = newRegion;
 }, { immediate: true });
 
