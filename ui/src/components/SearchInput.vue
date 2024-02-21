@@ -61,6 +61,8 @@ export default {
       if (value) {
         active.value = true;
         inputValue.value = value;
+      } else {
+        active.value = false;
       }
     }, {
       immediate: true,

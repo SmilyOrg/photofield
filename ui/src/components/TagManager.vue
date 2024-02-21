@@ -114,6 +114,11 @@ const selection = computed(() => {
   return tagId.value?.startsWith("sys:select:");
 });
 
+const selectionCollectionId = computed(() => {
+  if (!selection.value) return;
+  return tagId.value.split(":")[3];
+});
+
 const fileCount = computed(() => {
   return data.value?.file_count;
 });
@@ -136,9 +141,26 @@ const pending = computed(() => {
 });
 
 const workingCopy = computed(() => {
-  return tags.value?.filter(
+  return tags.value
+  ?.map(
+    tag => (
+      !selectionCollectionId.value?
+      tag :
+      {
+        ...tag,
+        route: {
+          path: "/collections/" + selectionCollectionId.value,
+          query: {
+            search: `tag:${tag.name}`,
+          },
+        },
+      }
+    )
+  )
+  .filter(
     tag => !toRemove.value.has(tag.name)
-  ).concat(
+  )
+  .concat(
     Array.from(toAdd.value.values())
   );
 });

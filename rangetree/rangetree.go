@@ -22,6 +22,17 @@ func (r Range) String() string {
 	return fmt.Sprintf("[%d,%d]", r.Low, r.High)
 }
 
+func (r Range) Chan() <-chan int {
+	out := make(chan int)
+	go func() {
+		for i := r.Low; i <= r.High; i++ {
+			out <- i
+		}
+		close(out)
+	}()
+	return out
+}
+
 func FromTo(low, high int) Range {
 	return Range{Low: low, High: high}
 }
@@ -147,6 +158,16 @@ func (t *Tree) Slice() []Range {
 		s = append(s, i.(Range))
 		return true
 	})
+	return s
+}
+
+func (t *Tree) IntSlice() []int {
+	s := make([]int, 0)
+	for r := range t.RangeChan() {
+		for x := range r.Chan() {
+			s = append(s, x)
+		}
+	}
 	return s
 }
 

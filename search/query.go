@@ -2,6 +2,7 @@ package search
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/alecthomas/participle/v2"
@@ -13,9 +14,10 @@ type Query struct {
 }
 
 type Term struct {
-	String    *string        `parser:"@String" json:"string,omitempty"`
+	Not       bool           `parser:"@'NOT'?" json:"not,omitempty"`
+	String    *string        `parser:"(@String" json:"string,omitempty"`
 	Qualifier *Qualifier     `parser:"| @@" json:"qualifier,omitempty"`
-	Word      *string        `parser:"| @Word" json:"word,omitempty"`
+	Word      *string        `parser:"| @Word)" json:"word,omitempty"`
 	Pos       lexer.Position `parser:"" json:"start"`
 	EndPos    lexer.Position `parser:"" json:"end"`
 }
@@ -30,21 +32,45 @@ var par *participle.Parser[Query]
 
 func init() {
 	lex = lexer.MustSimple([]lexer.SimpleRule{
-		{Name: "Whitespace", Pattern: `[ \t]+`},
-		{Name: "Word", Pattern: `[^\s:]+`},
 		{Name: "String", Pattern: `"(\\"|[^"])*"`},
+		{Name: "Word", Pattern: `[^\s:]+`},
 		{Name: "Colon", Pattern: `:`},
+		{Name: "Whitespace", Pattern: `[ \t]+`},
 	})
-
 	par = participle.MustBuild[Query](
 		participle.Lexer(lex),
 		participle.Elide("Whitespace"),
 		participle.Unquote("String"),
+		participle.UseLookahead(2),
 	)
+}
+
+func PrintTokens(str string) {
+	l, err := lex.LexString("", str)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for {
+		tok, err := l.Next()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if tok.EOF() {
+			break
+		}
+		fmt.Println(tok.GoString())
+	}
 }
 
 func Parse(str string) (*Query, error) {
 	return par.ParseString("", str)
+}
+
+func ParseDebug(str string) (*Query, error) {
+	PrintTokens(str)
+	return par.ParseString("", str, participle.Trace(os.Stdout))
 }
 
 func (q *Query) QualifierInt(key string) (int, error) {

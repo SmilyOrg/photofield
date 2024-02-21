@@ -1171,6 +1171,47 @@ func (source *Database) GetTagId(name string) (tag.Id, bool) {
 	return tag.Id(stmt.ColumnInt(0)), true
 }
 
+func (source *Database) GetTagIds(names []string) ([]tag.Id, bool) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	sql := `
+	SELECT id
+	FROM tag
+	WHERE name IN (`
+
+	if len(names) == 0 {
+		return nil, true
+	}
+
+	length := len(names)
+	if length > 1 {
+		sql += strings.Repeat("?, ", length-1)
+	}
+	sql += `?);`
+
+	stmt := conn.Prep(sql)
+	defer stmt.Reset()
+
+	for i, name := range names {
+		stmt.BindText(1+i, name)
+	}
+
+	ids := make([]tag.Id, 0, length)
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error listing tags: %s\n", err.Error())
+		} else if !exists {
+			break
+		}
+		ids = append(ids, tag.Id(stmt.ColumnInt(0)))
+	}
+	if len(ids) != length {
+		return nil, false
+	}
+	return ids, true
+}
+
 func (source *Database) GetTagFilesCount(id tag.Id) (int, bool) {
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
@@ -1333,7 +1374,7 @@ func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 			)
 			SELECT DISTINCT tag_id
 			FROM infos_tag AS a
-			JOIN sel ON (a.file_id + a.len) > sel.file_id AND a.file_id < (sel.file_id+sel.len)
+			JOIN sel ON a.file_id <= (sel.file_id+sel.len) AND (a.file_id + a.len) >= sel.file_id
 		)
 		`
 

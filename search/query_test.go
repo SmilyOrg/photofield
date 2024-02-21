@@ -6,20 +6,14 @@ import (
 	"github.com/alecthomas/assert/v2"
 )
 
+func str(s string) *string { return &s }
+
 func TestBareHello(t *testing.T) {
-	query, err := Parse("hello")
+	query, err := ParseDebug("hello")
 	if err != nil {
 		t.Error(err)
 	}
-	if len(query.Terms) != 1 {
-		t.Error("Expected 1 term")
-	}
-	if query.Terms[0].Word == nil {
-		t.Error("Expected word")
-	}
-	if *query.Terms[0].Word != "hello" {
-		t.Errorf("Expected 'hello', got '%s'", *query.Terms[0].Word)
-	}
+	assert.Equal(t, query.Terms[0].Word, str("hello"))
 }
 
 func TestTag(t *testing.T) {
@@ -51,4 +45,52 @@ func TestQualifierValues(t *testing.T) {
 		[]string{"hello", "world"},
 		query.QualifierValues("tag"),
 	)
+}
+
+func TestNegation(t *testing.T) {
+	query, err := Parse("NOT tag:hello")
+	if err != nil {
+		t.Error(err)
+	}
+	assert.Equal(t, true, query.Terms[0].Not)
+	assert.Equal(t, []string{"hello"}, query.QualifierValues("tag"))
+}
+
+func TestString(t *testing.T) {
+	query, err := Parse(`"a photo of a person"`)
+	if err != nil {
+		t.Error(err)
+	}
+	assert.Equal(t, "a photo of a person", *query.Terms[0].String)
+}
+func TestKnn(t *testing.T) {
+	query, err := ParseDebug(`tagi:me NOT tagi:me:not "a photo of a person" NOT "a photo of nothing" k:5 bias:0.01`)
+	if err != nil {
+		t.Error(err)
+	}
+	assert.Equal(t, query.Terms[0].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[0].Qualifier.Value, "me")
+	assert.Equal(t, query.Terms[1].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[1].Qualifier.Value, "me:not")
+	assert.Equal(t, *query.Terms[2].String, "a photo of a person")
+	assert.Equal(t, query.Terms[3].Not, true)
+	assert.Equal(t, *query.Terms[3].String, "a photo of nothing")
+	assert.Equal(t, query.Terms[4].Qualifier.Key, "k")
+	assert.Equal(t, query.Terms[4].Qualifier.Value, "5")
+	assert.Equal(t, query.Terms[5].Qualifier.Key, "bias")
+	assert.Equal(t, query.Terms[5].Qualifier.Value, "0.01")
+}
+
+func TestKnn2(t *testing.T) {
+	query, err := ParseDebug(`tagi:k tagi:m NOT tagi:k:not 2`)
+	if err != nil {
+		t.Error(err)
+	}
+	assert.Equal(t, query.Terms[0].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[0].Qualifier.Value, "k")
+	assert.Equal(t, query.Terms[1].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[1].Qualifier.Value, "m")
+	assert.Equal(t, query.Terms[2].Not, true)
+	assert.Equal(t, query.Terms[2].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[2].Qualifier.Value, "k:not")
 }

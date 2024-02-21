@@ -33,7 +33,26 @@
       @tag="add"
       @select="select"
       @remove="remove"
-    ></VueMultiselect>
+    >
+      <template v-slot:noResult>
+        <span>No Matches found.</span>
+      </template>
+      <template v-slot:tag="{ option, remove }">
+        <span class="multiselect__tag" :key="option.id">
+          <router-link v-if="option.route" :to="option.route" v-text="option.name"></router-link>
+          <span v-else v-text="option.name"></span>
+          <i
+            tabindex="1"
+            @keypress.enter.prevent="remove(option)"
+            @mousedown.prevent="remove(option)"
+            class="multiselect__tag-icon"
+          ></i>
+        </span>
+      </template>
+      <!-- <template v-slot:option slot-scope="props">
+        world {{ props }}
+      </template> -->
+    </VueMultiselect>
   </div>
 </template>
 
@@ -92,4 +111,10 @@ const remove = (tag) => {
 .mtag {
   padding-right: 10px;
 }
+
+.multiselect__tag a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 </style>

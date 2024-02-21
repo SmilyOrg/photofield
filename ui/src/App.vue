@@ -2,7 +2,7 @@
   <div class="app">
     <ui-top-app-bar
       class="top-bar"
-      :class="{ immersive, search: searchActive && !selecting }"
+      :class="{ immersive, search: showSearch && searchActive }"
       :fixed="true"
       contentSelector="#content"
     >
@@ -61,7 +61,7 @@
         </collection-panel>
 
         <search-input
-          v-if="capabilities?.search.supported && collection && !selecting"
+          v-if="showSearch"
           :loading="query.search && scrollScene?.loading"
           :modelValue="query.search"
           :error="scrollScene?.error"
@@ -298,6 +298,9 @@ export default {
     scrollScene() {
       return this.scenes?.find(scene => scene.name == "Scroll");
     },
+    showSearch() {
+      return this.capabilities?.search.supported && this.collection && !this.selecting;
+    }
   },
   methods: {
     toggleFocus() {
