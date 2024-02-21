@@ -942,25 +942,6 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		return
 	}
 
-	if data.Op == "CLASSIFY" {
-
-		pos, err := imageSource.GetTagFromNameRev("k:r0")
-		if err != nil {
-			problem(w, r, http.StatusBadRequest, err.Error())
-			return
-		}
-		neg, err := imageSource.GetTagFromNameRev("k:not:r0")
-		if err != nil {
-			problem(w, r, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		imageSource.Classify(pos, neg)
-
-		respond(w, r, http.StatusOK, t)
-		return
-	}
-
 	ids := image.NewIds()
 	if data.SceneId != nil && data.Bounds != nil {
 		scene := sceneSource.GetSceneById(string(*data.SceneId), imageSource)
