@@ -476,7 +476,7 @@ func (*Api) GetScenesId(w http.ResponseWriter, r *http.Request, id openapi.Scene
 func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
 	for i := range collections {
 		collection := &collections[i]
-		collection.UpdateStatus(imageSource)
+		collection.UpdateIndexedAt(imageSource)
 	}
 	items := collections
 	if items == nil {
@@ -493,7 +493,8 @@ func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.
 
 	for _, collection := range collections {
 		if collection.Id == string(id) {
-			collection.UpdateStatus(imageSource)
+			collection.UpdateIndexedAt(imageSource)
+			collection.UpdateIndexedCount(imageSource)
 			respond(w, r, http.StatusOK, collection)
 			return
 		}
@@ -1292,7 +1293,8 @@ func applyConfig(appConfig *AppConfig) {
 	log.Printf("%v collections", len(collections))
 	for i := range collections {
 		collection := &collections[i]
-		collection.UpdateStatus(imageSource)
+		collection.UpdateIndexedAt(imageSource)
+		collection.UpdateIndexedCount(imageSource)
 		indexedAgo := "N/A"
 		if collection.IndexedAt != nil {
 			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()

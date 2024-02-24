@@ -81,7 +81,7 @@ func (collection *Collection) Expand() []Collection {
 	return collections
 }
 
-func (collection *Collection) UpdateStatus(source *image.Source) {
+func (collection *Collection) UpdateIndexedAt(source *image.Source) {
 	var earliestIndex *time.Time
 	for _, dir := range collection.Dirs {
 		info := source.GetDir(dir)
@@ -90,6 +90,9 @@ func (collection *Collection) UpdateStatus(source *image.Source) {
 		}
 	}
 	collection.IndexedAt = earliestIndex
+}
+
+func (collection *Collection) UpdateIndexedCount(source *image.Source) {
 	collection.IndexedCount = source.GetDirsCount(collection.Dirs)
 }
 
