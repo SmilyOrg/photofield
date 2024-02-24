@@ -378,15 +378,14 @@ func (source *Source) ListMissingContents(dirs []string, maxPhotos int, force Mi
 	return out
 }
 
-func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan SourcedInfo {
+func (source *Source) ListInfos(dirs []string, options ListOptions) (<-chan SourcedInfo, Dependencies) {
 	for i := range dirs {
 		dirs[i] = filepath.FromSlash(dirs[i])
 	}
 	out := make(chan SourcedInfo, 1000)
+	infos, deps := source.database.List(dirs, options)
 	go func() {
 		defer metrics.Elapsed("list infos")()
-
-		infos := source.database.List(dirs, options)
 		for info := range infos {
 			// if info.NeedsMeta() || info.NeedsColor() {
 			// 	info.Info = source.GetInfo(info.Id)
@@ -395,7 +394,7 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan Sourc
 		}
 		close(out)
 	}()
-	return out
+	return out, deps
 }
 
 func (source *Source) ListInfosWithExistence(dirs []string, options ListOptions) <-chan SourcedInfo {
@@ -406,7 +405,7 @@ func (source *Source) ListInfosWithExistence(dirs []string, options ListOptions)
 	go func() {
 		defer metrics.Elapsed("list infos")()
 
-		infos := source.database.List(dirs, options)
+		infos, _ := source.database.List(dirs, options)
 		for info := range infos {
 			if info.NeedsMeta() || info.NeedsColor() {
 				info.Info = source.GetInfo(info.Id)
@@ -515,7 +514,11 @@ func (source *Source) AddTag(name string) {
 	<-done
 }
 
-func (source *Source) GetTag(name string) (tag.Tag, bool) {
+func (source *Source) GetTag(id tag.Id) (tag.Tag, bool) {
+	return source.database.GetTag(id)
+}
+
+func (source *Source) GetTagByName(name string) (tag.Tag, bool) {
 	return source.database.GetTagByName(name)
 }
 
@@ -538,16 +541,16 @@ func (source *Source) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 	return source.database.ListTagsOfTag(id, limit)
 }
 
-func (source *Source) AddTagIds(id tag.Id, ids Ids) (rev int, err error) {
-	return source.database.AddTagIds(id, ids)
+func (source *Source) AddTagIds(id tag.Id, ids Ids) {
+	source.database.AddTagIds(id, ids)
 }
 
-func (source *Source) RemoveTagIds(id tag.Id, ids Ids) (rev int, err error) {
-	return source.database.RemoveTagIds(id, ids)
+func (source *Source) RemoveTagIds(id tag.Id, ids Ids) {
+	source.database.RemoveTagIds(id, ids)
 }
 
-func (source *Source) InvertTagIds(id tag.Id, ids Ids) (rev int, err error) {
-	return source.database.InvertTagIds(id, ids)
+func (source *Source) InvertTagIds(id tag.Id, ids Ids) {
+	source.database.InvertTagIds(id, ids)
 }
 
 func (source *Source) IdChanToIds(ch <-chan ImageId) Ids {
@@ -566,34 +569,14 @@ func (source *Source) GetTagFilesCount(id tag.Id) (int, bool) {
 	return source.database.GetTagFilesCount(id)
 }
 
-func (source *Source) GetTagFromNameRev(nameRev string) (tag.Tag, error) {
-	t, err := tag.FromNameRev(nameRev)
-	if err != nil {
-		return tag.Tag{}, err
-	}
-	id, ok := source.GetTagId(t.Name)
+func (source *Source) GetOrCreateTagFromNameRev(name string) (tag.Tag, error) {
+	t, ok := source.database.GetTagByName(name)
 	if !ok {
-		return tag.Tag{}, ErrNotFound
-	}
-	t.Id = id
-	return t, nil
-}
-
-func (source *Source) GetOrCreateTagFromNameRev(nameRev string) (tag.Tag, error) {
-	t, err := tag.FromNameRev(nameRev)
-	if err != nil {
-		return tag.Tag{}, err
-	}
-	id, ok := source.GetTagId(t.Name)
-	if ok {
-		t.Id = id
-	} else {
-		source.AddTag(t.Name)
-		id, ok := source.GetTagId(t.Name)
+		source.AddTag(name)
+		t, ok = source.database.GetTagByName(name)
 		if !ok {
 			return tag.Tag{}, ErrNotFound
 		}
-		t.Id = id
 	}
 	return t, nil
 }

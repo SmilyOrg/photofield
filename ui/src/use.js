@@ -406,10 +406,10 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
   }
 }
 
-export function useTags({ supported, selectTagId, collectionId, scene }) {
+export function useTags({ supported, selectTag, collectionId, scene }) {
   const selectBounds = async (op, bounds) => {
     if (!supported.value) return;
-    let id = selectTagId.value;
+    let id = selectTag.value?.id;
     if (!id) {
       const tag = await addTag({
         selection: true,
@@ -417,13 +417,11 @@ export function useTags({ supported, selectTagId, collectionId, scene }) {
       });
       id = tag.id;
     }
-    const tag = await postTagFiles(id, {
+    return await postTagFiles(id, {
       op,
       scene_id: scene.value.id,
       bounds
     });
-    id = tag.id;
-    return id;
   };
 
   return {

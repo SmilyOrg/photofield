@@ -111,6 +111,11 @@ paths:
           schema:
             $ref: "#/components/schemas/Search"
 
+        - name: limit
+          in: query
+          schema:
+            $ref: "#/components/schemas/Limit"
+
       responses:
         "200":
           description: List of scenes created for the specified collection
@@ -316,8 +321,7 @@ paths:
         - name: limit
           in: query
           schema:
-            type: integer
-            example: 3
+            $ref: "#/components/schemas/Limit"
     
       responses:
         "200":
@@ -434,6 +438,20 @@ paths:
       responses:
         "201":
           description: Tag created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+
+  /tags/{id}:
+    get:
+      description: Get a specific tag
+      tags: ["Tags"]
+      parameters:
+        - $ref: "#/components/parameters/TagIdPathParam"
+      responses:
+        "200":
+          description: Tag retrieved successfully
           content:
             application/json:
               schema:
@@ -869,7 +887,7 @@ components:
 
     TagId:
       type: string
-      example: fav:r0
+      example: fav
 
     TileCoord:
       type: integer
@@ -906,6 +924,10 @@ components:
 
     Sort:
       type: string
+
+    Limit:
+      type: integer
+      example: 3
 
     LayoutType:
       type: string

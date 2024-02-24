@@ -2,10 +2,9 @@ package tag
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"strconv"
-	"strings"
+	"hash/crc32"
+	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 )
@@ -13,15 +12,22 @@ import (
 type Id uint32
 
 type Tag struct {
-	Id       Id
-	Name     string
-	Revision int
+	Id        Id        `json:"id"`
+	Name      string    `json:"name"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+}
+
+func (t Tag) ETag() string {
+	str := t.UpdatedAt.Format(time.RFC3339)
+	h := crc32.ChecksumIEEE([]byte(str))
+	return fmt.Sprintf(`%x`, h)
 }
 
 type ExternalTag struct {
-	Id       string `json:"id"`
-	Name     string `json:"name"`
-	Revision int    `json:"revision"`
+	Id        string `json:"id"`
+	Name      string `json:"name"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	ETag      string `json:"etag,omitempty"`
 }
 
 func randomId() (string, error) {
@@ -30,9 +36,10 @@ func randomId() (string, error) {
 
 func (t Tag) MarshalJSON() ([]byte, error) {
 	return json.Marshal(ExternalTag{
-		Id:       t.NameRev(),
-		Name:     t.Name,
-		Revision: t.Revision,
+		Id:        t.Name,
+		Name:      t.Name,
+		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
+		ETag:      t.ETag(),
 	})
 }
 
@@ -42,51 +49,9 @@ func (t *Tag) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	tag, err := FromNameRev(externalTag.Id)
-	if err != nil {
-		return err
+	tag := Tag{
+		Name: externalTag.Name,
 	}
 	*t = tag
 	return nil
-}
-
-func FromNameRev(id string) (Tag, error) {
-	var t Tag
-	revIndex := strings.LastIndexByte(id, ':')
-	if revIndex < 0 {
-		return t, errors.New("invalid tag id")
-	}
-	t.Name = id[:revIndex]
-	revStr := id[revIndex+1:]
-	if revStr[:1] != "r" {
-		return t, errors.New("expected r in tag revision")
-	}
-	revStr = revStr[1:]
-	rev, err := strconv.Atoi(revStr)
-	if err != nil {
-		return t, err
-	}
-	t.Revision = rev
-	return t, nil
-}
-
-func StripRev(id string) string {
-	revIndex := strings.LastIndexByte(id, ':')
-	if revIndex < 0 {
-		return id
-	}
-	revStr := id[revIndex+1:]
-	if revStr[:1] != "r" {
-		return id
-	}
-	revStr = revStr[1:]
-	_, err := strconv.Atoi(revStr)
-	if err != nil {
-		return id
-	}
-	return id[:revIndex]
-}
-
-func (t Tag) NameRev() string {
-	return fmt.Sprintf("%s:r%d", t.Name, t.Revision)
 }

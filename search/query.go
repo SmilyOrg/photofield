@@ -82,19 +82,47 @@ func (q *Query) QualifierInt(key string) (int, error) {
 		return 0, fmt.Errorf("empty query")
 	}
 
-	if len(q.Terms) > 1 {
-		return 0, fmt.Errorf("too many terms")
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			return strconv.Atoi(term.Qualifier.Value)
+		}
+	}
+	return 0, fmt.Errorf("no qualifier")
+}
+
+func (q *Query) QualifierFloat32(key string) (float32, error) {
+	if q == nil {
+		return 0, fmt.Errorf("nil query")
 	}
 
-	if q.Terms[0].Qualifier == nil {
-		return 0, fmt.Errorf("no qualifier")
+	if len(q.Terms) == 0 {
+		return 0, fmt.Errorf("empty query")
 	}
 
-	if q.Terms[0].Qualifier.Key != key {
-		return 0, fmt.Errorf(`qualifier not %s`, key)
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			f, err := strconv.ParseFloat(term.Qualifier.Value, 32)
+			return float32(f), err
+		}
+	}
+	return 0, fmt.Errorf("no qualifier")
+}
+
+func (q *Query) QualifierString(key string) (string, error) {
+	if q == nil {
+		return "", fmt.Errorf("nil query")
 	}
 
-	return strconv.Atoi(q.Terms[0].Qualifier.Value)
+	if len(q.Terms) == 0 {
+		return "", fmt.Errorf("empty query")
+	}
+
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			return term.Qualifier.Value, nil
+		}
+	}
+	return "", fmt.Errorf("no qualifier")
 }
 
 func (q *Query) QualifierValues(key string) []string {

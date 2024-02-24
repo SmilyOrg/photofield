@@ -22,7 +22,6 @@
         </span>
         <span
           v-else-if="collection"
-          ref="title"
           @mousedown="collectionExpandedPending = true"
           @click="toggleFocus()"
         >

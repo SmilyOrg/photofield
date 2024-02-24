@@ -88,7 +88,7 @@ const onSearch = async (query) => {
 
 const add = (newTag) => {
   emit("add", {
-    id: newTag + ":r0",
+    id: newTag,
     name: newTag,
   });
 }

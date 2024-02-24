@@ -102,7 +102,7 @@ const exit = () => {
 }
 
 const toggleFavorite = async () => {
-  const tagId = favoriteTag?.id || "fav:r0";
+  const tagId = favoriteTag?.id || "fav";
   if (!fileId.value) {
     return;
   }

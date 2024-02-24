@@ -93,7 +93,7 @@ func (collection *Collection) UpdateStatus(source *image.Source) {
 	collection.IndexedCount = source.GetDirsCount(collection.Dirs)
 }
 
-func (collection *Collection) GetInfos(source *image.Source, options image.ListOptions) <-chan image.SourcedInfo {
+func (collection *Collection) GetInfos(source *image.Source, options image.ListOptions) (<-chan image.SourcedInfo, image.Dependencies) {
 	return source.ListInfos(collection.Dirs, options)
 }
 

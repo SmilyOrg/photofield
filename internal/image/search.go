@@ -170,6 +170,7 @@ type taggedImage struct {
 	TagId      tag.Id
 	Emb        []float32
 	EmbInvNorm float32
+	Weight     float32
 }
 
 type knnTag struct {
@@ -201,13 +202,13 @@ func (h *knnImageHeap) Pop() interface{} {
 func (source *Source) classifyEmbedding(timgs []taggedImage, emb clip.Embedding, k int) (tag.Id, float32, error) {
 	topk := make(knnImageHeap, 0, k)
 	for _, timg := range timgs {
-		dot, err := clip.DotProductFloat32Float32(timg.Emb, emb.Float32())
+		dot, err := clip.DotProductFloat32Float(timg.Emb, emb.Float())
 		if err != nil {
 			log.Printf("Unable to compute dot product for %d: %s", timg.Id, err.Error())
 			continue
 		}
 		cosine := dot * timg.EmbInvNorm * emb.InvNormFloat32()
-		dist := float32(math.Max(0, float64(1-cosine)))
+		dist := float32(math.Max(0, float64(1-cosine*timg.Weight)))
 
 		if len(topk) < k {
 			heap.Push(&topk, distTag{
@@ -251,28 +252,27 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 		// Parse tags from query
 		tags := make([]knnTag, 0, 10)
 		searchTags := make(map[tag.Id]struct{})
-		tagNames := make([]string, 0, 10)
 		for _, term := range options.Query.Terms {
-			if term.Qualifier != nil && term.Qualifier.Key == "tagi" {
+			if term.Qualifier != nil && term.Qualifier.Key == "tag" {
+				name := term.Qualifier.Value
+				id, ok := source.database.GetTagId(name)
+				if !ok {
+					continue
+				}
 				tags = append(tags, knnTag{
+					id:  id,
 					not: term.Not,
 				})
-				tagNames = append(tagNames, term.Qualifier.Value)
+				if !term.Not {
+					searchTags[id] = struct{}{}
+				}
+				println("tag", name, id, term.Not)
 			}
 		}
 
-		// Get tag ids
-		tagIds, ok := source.database.GetTagIds(tagNames)
-		if !ok {
-			log.Printf("Unable to get tag ids for %v", tagNames)
-			close(out)
-			return
-		}
-		for i, id := range tagIds {
-			tags[i].id = id
-			if !tags[i].not {
-				searchTags[id] = struct{}{}
-			}
+		bias, err := options.Query.QualifierFloat32("bias")
+		if err != nil {
+			bias = 0
 		}
 
 		// Get embeddings for all images with the specified tags
@@ -285,11 +285,16 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 					log.Printf("Unable to get embedding for %d: %s", id, err.Error())
 					continue
 				}
+				weight := float32(1)
+				if !tag.not {
+					weight = float32(1 + bias)
+				}
 				timgs = append(timgs, taggedImage{
 					Id:         id,
 					TagId:      tag.id,
 					Emb:        emb.Float32(),
 					EmbInvNorm: emb.InvNormFloat32(),
+					Weight:     weight,
 				})
 			}
 		}
@@ -304,7 +309,7 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 		done := metrics.Elapsed("list knn embeddings")
 		embeddings := source.database.ListEmbeddings(dirs, options)
 		for emb := range embeddings {
-			topTagId, meanDist, err := source.classifyEmbedding(timgs, emb, k)
+			topTagId, _, err := source.classifyEmbedding(timgs, emb, k)
 			if err != nil {
 				log.Printf("Unable to classify embedding for %d: %s", emb.Id, err.Error())
 				continue
@@ -317,7 +322,7 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 					Info: info.Info,
 				}
 			}
-			log.Printf("Image %d: %d, %f, %v", emb.Id, topTagId, meanDist, hit)
+			// log.Printf("Image %d: %d, %f, %v", emb.Id, topTagId, meanDist, hit)
 		}
 
 		done()

@@ -94,7 +94,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
 					}
 					scene.SearchEmbedding = embedding
-				} else if len(q.QualifierValues("tag")) > 0 || len(q.QualifierValues("tagi")) > 0 {
+				} else if len(q.QualifierValues("tag")) > 0 {
 					query = q
 				}
 			}
@@ -126,7 +126,8 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			}
 		} else {
 			var infos <-chan image.SourcedInfo
-			if len(query.QualifierValues("tagi")) > 0 {
+			filter, _ := query.QualifierString("filter")
+			if filter == "knn" {
 				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
 					OrderBy: image.ListOrder(config.Layout.Order),
 					Limit:   config.Collection.Limit,
@@ -134,11 +135,15 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				})
 			} else {
 				// Normal order
-				infos = config.Collection.GetInfos(imageSource, image.ListOptions{
+				var deps image.Dependencies
+				infos, deps = config.Collection.GetInfos(imageSource, image.ListOptions{
 					OrderBy: image.ListOrder(config.Layout.Order),
 					Limit:   config.Collection.Limit,
 					Query:   query,
 				})
+				for _, dep := range deps {
+					scene.Dependencies = append(scene.Dependencies, render.Dependency(&dep))
+				}
 			}
 			switch config.Layout.Type {
 			case layout.Timeline:

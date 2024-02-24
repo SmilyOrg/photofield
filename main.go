@@ -451,6 +451,10 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 		return a.CreatedAt.After(b.CreatedAt)
 	})
 
+	if params.Limit != nil && int(*params.Limit) < len(scenes) {
+		scenes = scenes[:int(*params.Limit)]
+	}
+
 	respond(w, r, http.StatusOK, struct {
 		Items []*render.Scene `json:"items"`
 	}{
@@ -723,17 +727,12 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	}
 
 	if params.SelectTag != nil {
-		t, err := tag.FromNameRev(string(*params.SelectTag))
-		if err != nil {
-			problem(w, r, http.StatusBadRequest, "Invalid tag id")
-			return
-		}
-		id, ok := imageSource.GetTagId(t.Name)
+		t, ok := imageSource.GetTagByName(string(*params.SelectTag))
 		if !ok {
 			problem(w, r, http.StatusBadRequest, "Unknown tag")
 			return
 		}
-		rn.Selected = imageSource.GetTagImageIds(id)
+		rn.Selected = imageSource.GetTagImageIds(t.Id)
 	}
 
 	if params.DebugOverdraw != nil {
@@ -825,12 +824,17 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 
 	var regions []render.Region
 
+	limit := 0
+	if params.Limit != nil {
+		limit = int(*params.Limit)
+	}
+
 	if params.FileId != nil {
 		if params.X != nil || params.Y != nil || params.W != nil || params.H != nil {
 			problem(w, r, http.StatusBadRequest, "file_id and bounds are mutually exclusive")
 			return
 		}
-		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), params.Limit)
+		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), limit)
 	} else {
 		if params.X == nil || params.Y == nil || params.W == nil || params.H == nil {
 			problem(w, r, http.StatusBadRequest, "bounds or file_id required")
@@ -844,7 +848,7 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 			H: float64(*params.H),
 		}
 
-		regions = scene.GetRegions(bounds, params.Limit)
+		regions = scene.GetRegions(bounds, limit)
 	}
 
 	respond(w, r, http.StatusOK, struct {
@@ -890,6 +894,16 @@ func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTa
 	})
 }
 
+func (*Api) GetTagsId(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
+	tag, exists := imageSource.GetTagByName(string(id))
+	if !exists {
+		problem(w, r, http.StatusNotFound, "Tag not found")
+		return
+	}
+	w.Header().Add("ETag", tag.ETag())
+	respond(w, r, http.StatusOK, tag)
+}
+
 func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
 
 	data := &openapi.TagsPost{}
@@ -915,7 +929,7 @@ func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
 	}
 	imageSource.AddTag(t.Name)
 
-	tag, exists := imageSource.GetTag(t.Name)
+	tag, exists := imageSource.GetTagByName(t.Name)
 	if !exists {
 		problem(w, r, http.StatusInternalServerError, err.Error())
 		return
@@ -924,7 +938,7 @@ func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
 	respond(w, r, http.StatusCreated, struct {
 		Id openapi.TagId `json:"id"`
 	}{
-		Id: openapi.TagId(tag.NameRev()),
+		Id: openapi.TagId(tag.Name),
 	})
 }
 
@@ -975,22 +989,20 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		return
 	}
 
-	var rev int
 	switch data.Op {
 	case "ADD":
-		rev, err = imageSource.AddTagIds(t.Id, ids)
+		imageSource.AddTagIds(t.Id, ids)
 	case "SUBTRACT":
-		rev, err = imageSource.RemoveTagIds(t.Id, ids)
+		imageSource.RemoveTagIds(t.Id, ids)
 	case "INVERT":
-		rev, err = imageSource.InvertTagIds(t.Id, ids)
+		imageSource.InvertTagIds(t.Id, ids)
 	default:
 		problem(w, r, http.StatusBadRequest, "Invalid op")
 		return
 	}
-	t.Revision = rev
-
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, err.Error())
+	t, ok := imageSource.GetTag(t.Id)
+	if !ok {
+		problem(w, r, http.StatusInternalServerError, "Failed to get tag")
 		return
 	}
 
@@ -999,9 +1011,9 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 
 func (*Api) GetTagsIdFilesTags(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
 
-	t, err := imageSource.GetTagFromNameRev(string(id))
-	if err != nil {
-		problem(w, r, http.StatusBadRequest, err.Error())
+	t, ok := imageSource.GetTagByName(string(id))
+	if !ok {
+		problem(w, r, http.StatusNotFound, "Tag not found")
 		return
 	}
 

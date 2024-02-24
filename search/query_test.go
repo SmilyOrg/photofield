@@ -64,13 +64,13 @@ func TestString(t *testing.T) {
 	assert.Equal(t, "a photo of a person", *query.Terms[0].String)
 }
 func TestKnn(t *testing.T) {
-	query, err := ParseDebug(`tagi:me NOT tagi:me:not "a photo of a person" NOT "a photo of nothing" k:5 bias:0.01`)
+	query, err := ParseDebug(`tag:me NOT tag:me:not "a photo of a person" NOT "a photo of nothing" k:5 bias:0.01`)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, query.Terms[0].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[0].Qualifier.Key, "tag")
 	assert.Equal(t, query.Terms[0].Qualifier.Value, "me")
-	assert.Equal(t, query.Terms[1].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[1].Qualifier.Key, "tag")
 	assert.Equal(t, query.Terms[1].Qualifier.Value, "me:not")
 	assert.Equal(t, *query.Terms[2].String, "a photo of a person")
 	assert.Equal(t, query.Terms[3].Not, true)
@@ -82,15 +82,15 @@ func TestKnn(t *testing.T) {
 }
 
 func TestKnn2(t *testing.T) {
-	query, err := ParseDebug(`tagi:k tagi:m NOT tagi:k:not 2`)
+	query, err := ParseDebug(`tag:k tag:m NOT tag:k:not 2`)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, query.Terms[0].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[0].Qualifier.Key, "tag")
 	assert.Equal(t, query.Terms[0].Qualifier.Value, "k")
-	assert.Equal(t, query.Terms[1].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[1].Qualifier.Key, "tag")
 	assert.Equal(t, query.Terms[1].Qualifier.Value, "m")
 	assert.Equal(t, query.Terms[2].Not, true)
-	assert.Equal(t, query.Terms[2].Qualifier.Key, "tagi")
+	assert.Equal(t, query.Terms[2].Qualifier.Key, "tag")
 	assert.Equal(t, query.Terms[2].Qualifier.Value, "k:not")
 }

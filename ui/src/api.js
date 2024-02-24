@@ -1,4 +1,4 @@
-import useSWRV from "swrv";
+import useSWRV, { mutate } from "swrv";
 import { computed, watch, ref } from "vue";
 import qs from "qs";
 import { useRetry } from "./use";
@@ -197,6 +197,7 @@ export function useScene({
       viewport_width: viewport.width.value,
       viewport_height: viewport.height.value,
       search: search?.value || undefined,
+      limit: 1,
     }
   );
 

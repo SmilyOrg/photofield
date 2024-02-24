@@ -2,7 +2,6 @@ package image
 
 import (
 	"embed"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -27,6 +26,14 @@ import (
 )
 
 var dateFormat = "2006-01-02 15:04:05.999999 -07:00"
+
+func fromUnixMs(unixms int64) time.Time {
+	return time.Unix(0, unixms*int64(time.Millisecond))
+}
+
+func toUnixMs(t time.Time) int64 {
+	return t.UnixMilli()
+}
 
 type ListOrder int32
 
@@ -166,6 +173,7 @@ func (source *Database) Close() {
 	}
 	source.dirUpdateFuncs = nil
 	source.pool.Close()
+	source.pool = nil
 	close(source.pending)
 }
 
@@ -302,8 +310,8 @@ func (source *Database) writePendingInfosSqlite() {
 	defer upsertIndex.Finalize()
 
 	upsertTag := conn.Prep(`
-		INSERT OR IGNORE INTO tag(name, revision)
-		VALUES (?, 1);`)
+		INSERT OR IGNORE INTO tag(name, updated_at_ms)
+		VALUES (?, ?);`)
 	defer upsertTag.Finalize()
 
 	getTagId := conn.Prep(`	
@@ -327,12 +335,11 @@ func (source *Database) writePendingInfosSqlite() {
 		VALUES (?, ?, ?);`)
 	defer insertTagRange.Finalize()
 
-	incrementTagRevision := conn.Prep(`
+	updateTag := conn.Prep(`
 		UPDATE tag
-		SET revision = revision + 1
-		WHERE id == ?
-		RETURNING revision;`)
-	defer incrementTagRevision.Finalize()
+		SET updated_at_ms = ?
+		WHERE id == ?;`)
+	defer updateTag.Finalize()
 
 	lastOptimize := time.Time{}
 	inTransaction := false
@@ -577,6 +584,7 @@ func (source *Database) writePendingInfosSqlite() {
 			case AddTag:
 				tagName := imageInfo.Path
 				upsertTag.BindText(1, tagName)
+				upsertTag.BindInt64(2, toUnixMs(time.Now()))
 				_, err := upsertTag.Step()
 				if err != nil {
 					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
@@ -682,23 +690,18 @@ func (source *Database) writePendingInfosSqlite() {
 					}
 				}
 
-				// Increment tag revision
-				incrementTagRevision.BindInt64(1, int64(tagId))
-				ok, err := incrementTagRevision.Step()
+				updateTag.BindInt64(1, toUnixMs(time.Now()))
+				updateTag.BindInt64(2, int64(tagId))
+				_, err = updateTag.Step()
 				if err != nil {
-					log.Printf("Unable to increment tag revision %d: %s\n", tagId, err.Error())
+					log.Printf("Unable to update tag date %d: %s\n", tagId, err.Error())
 					continue
 				}
-				if !ok {
-					panic("Unable to increment tag revision, returned false")
-				}
-				rev := incrementTagRevision.ColumnInt(0)
-				err = incrementTagRevision.Reset()
+				err = updateTag.Reset()
 				if err != nil {
 					panic(err)
 				}
 
-				imageInfo.Done <- rev
 				close(imageInfo.Done)
 			}
 		}
@@ -971,10 +974,7 @@ func (source *Database) AddTag(name string) (<-chan struct{}, error) {
 	return done, nil
 }
 
-func (source *Database) AddTagIds(id tag.Id, ids Ids) (int, error) {
-	if ids.Len() == 0 {
-		return source.GetTagRevision(id)
-	}
+func (source *Database) AddTagIds(id tag.Id, ids Ids) {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -982,19 +982,11 @@ func (source *Database) AddTagIds(id tag.Id, ids Ids) (int, error) {
 		Type: AddTagIds,
 		Done: done,
 	}
-	rev := (<-done).(int)
-	if rev == 0 {
-		return source.GetTagRevision(id)
-	} else {
-		source.WaitForCommit()
-		return rev, nil
-	}
+	<-done
+	source.WaitForCommit()
 }
 
-func (source *Database) RemoveTagIds(id tag.Id, ids Ids) (int, error) {
-	if ids.Len() == 0 {
-		return source.GetTagRevision(id)
-	}
+func (source *Database) RemoveTagIds(id tag.Id, ids Ids) {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -1002,19 +994,11 @@ func (source *Database) RemoveTagIds(id tag.Id, ids Ids) (int, error) {
 		Type: RemoveTagIds,
 		Done: done,
 	}
-	rev := (<-done).(int)
-	if rev == 0 {
-		return source.GetTagRevision(id)
-	} else {
-		source.WaitForCommit()
-		return rev, nil
-	}
+	<-done
+	source.WaitForCommit()
 }
 
-func (source *Database) InvertTagIds(id tag.Id, ids Ids) (int, error) {
-	if ids.Len() == 0 {
-		return source.GetTagRevision(id)
-	}
+func (source *Database) InvertTagIds(id tag.Id, ids Ids) {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -1022,13 +1006,8 @@ func (source *Database) InvertTagIds(id tag.Id, ids Ids) (int, error) {
 		Type: InvertTagIds,
 		Done: done,
 	}
-	rev := (<-done).(int)
-	if rev == 0 {
-		return source.GetTagRevision(id)
-	} else {
-		source.WaitForCommit()
-		return rev, nil
-	}
+	<-done
+	source.WaitForCommit()
 }
 
 func (source *Database) GetTagImageIds(id tag.Id) Ids {
@@ -1127,12 +1106,36 @@ func (source *Database) listImageTagRangesWithConn(conn *sqlite.Conn, id ImageId
 	return out
 }
 
+func (source *Database) GetTag(id tag.Id) (tag.Tag, bool) {
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT name, updated_at_ms
+	FROM tag
+	WHERE id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return tag.Tag{}, false
+	}
+
+	return tag.Tag{
+		Id:        id,
+		Name:      stmt.ColumnText(0),
+		UpdatedAt: fromUnixMs(stmt.ColumnInt64(1)),
+	}, true
+}
+
 func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-	SELECT id, revision
+	SELECT id, updated_at_ms
 	FROM tag
 	WHERE name = ?;`)
 	defer stmt.Reset()
@@ -1145,9 +1148,9 @@ func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
 	}
 
 	return tag.Tag{
-		Id:       tag.Id(stmt.ColumnInt(0)),
-		Name:     name,
-		Revision: stmt.ColumnInt(1),
+		Id:        tag.Id(stmt.ColumnInt(0)),
+		Name:      name,
+		UpdatedAt: fromUnixMs(stmt.ColumnInt64(1)),
 	}, true
 }
 
@@ -1252,26 +1255,6 @@ func (source *Database) GetTagName(id tag.Id) (string, bool) {
 	return stmt.ColumnText(0), true
 }
 
-func (source *Database) GetTagRevision(id tag.Id) (int, error) {
-	conn := source.pool.Get(nil)
-	defer source.pool.Put(conn)
-
-	stmt := conn.Prep(`
-	SELECT revision
-	FROM tag
-	WHERE id = ?;`)
-	defer stmt.Reset()
-
-	stmt.BindInt64(1, int64(id))
-
-	exists, _ := stmt.Step()
-	if !exists {
-		return 0, errors.New("tag not found")
-	}
-
-	return stmt.ColumnInt(0), nil
-}
-
 const defaultTagConditions string = `
 	AND name NOT LIKE 'sys:%'
 `
@@ -1283,7 +1266,7 @@ func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 		defer source.pool.Put(conn)
 
 		sql := `
-		SELECT id, name, revision
+		SELECT id, name, updated_at_ms
 		FROM infos_tag
 		JOIN tag ON infos_tag.tag_id = tag.id
 		WHERE :file_id >= file_id AND :file_id <= file_id + len
@@ -1306,9 +1289,9 @@ func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 				break
 			}
 			out <- tag.Tag{
-				Id:       tag.Id(stmt.ColumnInt(0)),
-				Name:     stmt.ColumnText(1),
-				Revision: stmt.ColumnInt(2),
+				Id:        tag.Id(stmt.ColumnInt(0)),
+				Name:      stmt.ColumnText(1),
+				UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
 			}
 		}
 		close(out)
@@ -1323,7 +1306,7 @@ func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 		defer source.pool.Put(conn)
 
 		sql := `
-		SELECT id, name, revision
+		SELECT id, name, updated_at_ms
 		FROM tag
 		WHERE name LIKE ?
 		`
@@ -1347,9 +1330,9 @@ func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 				break
 			}
 			out <- tag.Tag{
-				Id:       tag.Id(stmt.ColumnInt(0)),
-				Name:     stmt.ColumnText(1),
-				Revision: stmt.ColumnInt(2),
+				Id:        tag.Id(stmt.ColumnInt(0)),
+				Name:      stmt.ColumnText(1),
+				UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
 			}
 		}
 		close(out)
@@ -1364,7 +1347,7 @@ func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 		defer source.pool.Put(conn)
 
 		sql := `
-		SELECT id, name, revision
+		SELECT id, name, updated_at_ms
 		FROM tag
 		WHERE id IN (
 			WITH sel AS (
@@ -1397,9 +1380,9 @@ func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 				break
 			}
 			out <- tag.Tag{
-				Id:       tag.Id(stmt.ColumnInt(0)),
-				Name:     stmt.ColumnText(1),
-				Revision: stmt.ColumnInt(2),
+				Id:        tag.Id(stmt.ColumnInt(0)),
+				Name:      stmt.ColumnText(1),
+				UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
 			}
 		}
 		close(out)
@@ -1433,8 +1416,91 @@ func (source *Database) SetIndexed(dir string) {
 	}, Index)
 }
 
-func (source *Database) List(dirs []string, options ListOptions) <-chan InfoListResult {
+type Dependency struct {
+	db        *Database
+	tagNames  []string
+	updatedAt time.Time
+}
+type Dependencies []Dependency
+
+func (d *Dependency) UpdatedAt() time.Time {
+	sameSecond := d.updatedAt.Truncate(time.Second) == time.Now().Truncate(time.Second)
+	if sameSecond {
+		return d.updatedAt
+	}
+	d.db.UpdateStaleness(d)
+	return d.updatedAt
+}
+
+func (source *Database) UpdateStaleness(dep *Dependency) {
+	if len(dep.tagNames) > 0 {
+		tags := source.GetTagsByName(dep.tagNames)
+		updatedAt := time.Time{}
+		for _, t := range tags {
+			if t.UpdatedAt.After(updatedAt) {
+				updatedAt = t.UpdatedAt
+			}
+		}
+		dep.updatedAt = updatedAt
+	}
+}
+
+func (source *Database) GetTagsByName(tagNames []string) []tag.Tag {
+	if len(tagNames) == 0 {
+		return nil
+	}
+	if source.pool == nil {
+		return nil
+	}
+
+	conn := source.pool.Get(nil)
+	defer source.pool.Put(conn)
+
+	sql := `
+	SELECT id, name, updated_at_ms
+	FROM tag
+	WHERE name IN (`
+
+	length := len(tagNames)
+	if length > 1 {
+		sql += strings.Repeat("?, ", length-1)
+	}
+	sql += `?);`
+
+	stmt := conn.Prep(sql)
+	defer stmt.Reset()
+
+	for i, name := range tagNames {
+		stmt.BindText(1+i, name)
+	}
+
+	tags := make([]tag.Tag, 0, length)
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error listing tags: %s\n", err.Error())
+		} else if !exists {
+			break
+		}
+		tags = append(tags, tag.Tag{
+			Id:        tag.Id(stmt.ColumnInt(0)),
+			Name:      stmt.ColumnText(1),
+			UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
+		})
+	}
+	return tags
+}
+
+func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoListResult, Dependencies) {
 	out := make(chan InfoListResult, 1000)
+
+	tags := options.Query.QualifierValues("tag")
+	deps := Dependencies{
+		Dependency{
+			db:       source,
+			tagNames: tags,
+		},
+	}
+
 	go func() {
 		defer metrics.Elapsed("list infos sqlite")()
 
@@ -1443,7 +1509,6 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		sql := ""
 
-		tags := options.Query.QualifierValues("tag")
 		if len(tags) > 0 {
 			sql += `
 			WITH
@@ -1524,7 +1589,6 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		bindIndex := 1
 
 		for _, t := range tags {
-			t = tag.StripRev(t)
 			stmt.BindText(bindIndex, t)
 			bindIndex++
 		}
@@ -1576,7 +1640,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		close(out)
 	}()
-	return out
+	return out, deps
 }
 
 func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
