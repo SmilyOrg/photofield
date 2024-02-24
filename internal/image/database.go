@@ -355,6 +355,32 @@ func (source *Database) writePendingInfosSqlite() {
 	commitTicker := &time.Ticker{}
 	commitInterval := 200 * time.Millisecond
 
+	commit := func() {
+		if !inTransaction {
+			return
+		}
+		err := sqlitex.Execute(conn, "COMMIT;", nil)
+		if err != nil {
+			panic(err)
+		}
+		source.transactionMutex.Unlock()
+		inTransaction = false
+	}
+
+	commitRestart := func() {
+		if !inTransaction {
+			return
+		}
+		err := sqlitex.Execute(conn, "COMMIT;", nil)
+		if err != nil {
+			panic(err)
+		}
+		err = sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	for {
 		select {
 		case <-commitTicker.C:
@@ -402,14 +428,7 @@ func (source *Database) writePendingInfosSqlite() {
 		case imageInfo, ok := <-source.pending:
 			if !ok {
 				log.Println("database closing")
-				if inTransaction {
-					err := sqlitex.Execute(conn, "COMMIT;", nil)
-					if err != nil {
-						panic(err)
-					}
-					source.transactionMutex.Unlock()
-					inTransaction = false
-				}
+				commit()
 				return
 			}
 
@@ -691,7 +710,8 @@ func (source *Database) writePendingInfosSqlite() {
 					}
 				}
 
-				updateTag.BindInt64(1, toUnixMs(time.Now()))
+				updatedAt := time.Now()
+				updateTag.BindInt64(1, toUnixMs(updatedAt))
 				updateTag.BindInt64(2, int64(tagId))
 				_, err = updateTag.Step()
 				if err != nil {
@@ -703,6 +723,9 @@ func (source *Database) writePendingInfosSqlite() {
 					panic(err)
 				}
 
+				commitRestart()
+
+				imageInfo.Done <- updatedAt
 				close(imageInfo.Done)
 			}
 		}
@@ -975,7 +998,7 @@ func (source *Database) AddTag(name string) (<-chan struct{}, error) {
 	return done, nil
 }
 
-func (source *Database) AddTagIds(id tag.Id, ids Ids) {
+func (source *Database) AddTagIds(id tag.Id, ids Ids) time.Time {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -983,11 +1006,10 @@ func (source *Database) AddTagIds(id tag.Id, ids Ids) {
 		Type: AddTagIds,
 		Done: done,
 	}
-	<-done
-	source.WaitForCommit()
+	return (<-done).(time.Time)
 }
 
-func (source *Database) RemoveTagIds(id tag.Id, ids Ids) {
+func (source *Database) RemoveTagIds(id tag.Id, ids Ids) time.Time {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -995,11 +1017,10 @@ func (source *Database) RemoveTagIds(id tag.Id, ids Ids) {
 		Type: RemoveTagIds,
 		Done: done,
 	}
-	<-done
-	source.WaitForCommit()
+	return (<-done).(time.Time)
 }
 
-func (source *Database) InvertTagIds(id tag.Id, ids Ids) {
+func (source *Database) InvertTagIds(id tag.Id, ids Ids) time.Time {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -1007,8 +1028,7 @@ func (source *Database) InvertTagIds(id tag.Id, ids Ids) {
 		Type: InvertTagIds,
 		Done: done,
 	}
-	<-done
-	source.WaitForCommit()
+	return (<-done).(time.Time)
 }
 
 func (source *Database) GetTagImageIds(id tag.Id) Ids {

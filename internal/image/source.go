@@ -8,6 +8,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"time"
 
 	goio "io"
 
@@ -541,16 +542,16 @@ func (source *Source) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 	return source.database.ListTagsOfTag(id, limit)
 }
 
-func (source *Source) AddTagIds(id tag.Id, ids Ids) {
-	source.database.AddTagIds(id, ids)
+func (source *Source) AddTagIds(id tag.Id, ids Ids) time.Time {
+	return source.database.AddTagIds(id, ids)
 }
 
-func (source *Source) RemoveTagIds(id tag.Id, ids Ids) {
-	source.database.RemoveTagIds(id, ids)
+func (source *Source) RemoveTagIds(id tag.Id, ids Ids) time.Time {
+	return source.database.RemoveTagIds(id, ids)
 }
 
-func (source *Source) InvertTagIds(id tag.Id, ids Ids) {
-	source.database.InvertTagIds(id, ids)
+func (source *Source) InvertTagIds(id tag.Id, ids Ids) time.Time {
+	return source.database.InvertTagIds(id, ids)
 }
 
 func (source *Source) IdChanToIds(ch <-chan ImageId) Ids {
@@ -569,7 +570,7 @@ func (source *Source) GetTagFilesCount(id tag.Id) (int, bool) {
 	return source.database.GetTagFilesCount(id)
 }
 
-func (source *Source) GetOrCreateTagFromNameRev(name string) (tag.Tag, error) {
+func (source *Source) GetOrCreateTagFromName(name string) (tag.Tag, error) {
 	t, ok := source.database.GetTagByName(name)
 	if !ok {
 		source.AddTag(name)

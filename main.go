@@ -951,7 +951,7 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		return
 	}
 
-	t, err := imageSource.GetOrCreateTagFromNameRev(string(id))
+	t, err := imageSource.GetOrCreateTagFromName(string(id))
 	if err != nil {
 		problem(w, r, http.StatusBadRequest, err.Error())
 		return
@@ -979,7 +979,7 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 	} else if data.FileId != nil {
 		ids.AddInt(int(*data.FileId))
 	} else if data.TagId != nil {
-		srct, err := imageSource.GetOrCreateTagFromNameRev(string(*data.TagId))
+		srct, err := imageSource.GetOrCreateTagFromName(string(*data.TagId))
 		if err != nil {
 			problem(w, r, http.StatusBadRequest, err.Error())
 			return
@@ -992,18 +992,13 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 
 	switch data.Op {
 	case "ADD":
-		imageSource.AddTagIds(t.Id, ids)
+		t.UpdatedAt = imageSource.AddTagIds(t.Id, ids)
 	case "SUBTRACT":
-		imageSource.RemoveTagIds(t.Id, ids)
+		t.UpdatedAt = imageSource.RemoveTagIds(t.Id, ids)
 	case "INVERT":
-		imageSource.InvertTagIds(t.Id, ids)
+		t.UpdatedAt = imageSource.InvertTagIds(t.Id, ids)
 	default:
 		problem(w, r, http.StatusBadRequest, "Invalid op")
-		return
-	}
-	t, ok := imageSource.GetTag(t.Id)
-	if !ok {
-		problem(w, r, http.StatusInternalServerError, "Failed to get tag")
 		return
 	}
 
@@ -1409,6 +1404,12 @@ func main() {
 	watchConfig(dataDir, func(appConfig *AppConfig) {
 		applyConfig(appConfig)
 	})
+
+	// config, err := loadConfig(dataDir)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// applyConfig(config)
 
 	if *vacuumFlag {
 		err := imageSource.Vacuum()

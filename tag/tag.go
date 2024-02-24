@@ -18,8 +18,8 @@ type Tag struct {
 }
 
 func (t Tag) ETag() string {
-	str := t.UpdatedAt.Format(time.RFC3339)
-	h := crc32.ChecksumIEEE([]byte(str))
+	b, _ := t.UpdatedAt.MarshalBinary()
+	h := crc32.ChecksumIEEE(b)
 	return fmt.Sprintf(`%x`, h)
 }
 
