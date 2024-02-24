@@ -1,6 +1,7 @@
 package image
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log"
@@ -710,7 +711,7 @@ func (source *Database) writePendingInfosSqlite() {
 }
 
 func (source *Database) GetPathFromId(id ImageId) (string, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -732,7 +733,7 @@ func (source *Database) GetPathFromId(id ImageId) (string, bool) {
 
 func (source *Database) Get(id ImageId) (InfoResult, bool) {
 
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -777,7 +778,7 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 	out := make(chan InfoListResult, 1000)
 	go func() {
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -840,7 +841,7 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 
 func (source *Database) GetDir(dir string) (InfoResult, bool) {
 
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -865,7 +866,7 @@ func (source *Database) GetDir(dir string) (InfoResult, bool) {
 
 func (source *Database) GetDirsCount(dirs []string) (int, bool) {
 
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	sql := `
@@ -1011,7 +1012,7 @@ func (source *Database) InvertTagIds(id tag.Id, ids Ids) {
 }
 
 func (source *Database) GetTagImageIds(id tag.Id) Ids {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 	return source.getTagImageIdsWithConn(conn, id)
 }
@@ -1043,7 +1044,7 @@ func (source *Database) getTagImageIdsWithConn(conn *sqlite.Conn, id tag.Id) Ids
 func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
 	out := make(chan IdRange, 100)
 	go func() {
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		stmt := conn.Prep(`
@@ -1071,7 +1072,7 @@ func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
 }
 
 func (source *Database) ListImageTagRanges(id ImageId) <-chan TagIdRange {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 	return source.listImageTagRangesWithConn(conn, id)
 }
@@ -1107,7 +1108,7 @@ func (source *Database) listImageTagRangesWithConn(conn *sqlite.Conn, id ImageId
 }
 
 func (source *Database) GetTag(id tag.Id) (tag.Tag, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1131,7 +1132,7 @@ func (source *Database) GetTag(id tag.Id) (tag.Tag, bool) {
 }
 
 func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1155,7 +1156,7 @@ func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
 }
 
 func (source *Database) GetTagId(name string) (tag.Id, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1175,7 +1176,7 @@ func (source *Database) GetTagId(name string) (tag.Id, bool) {
 }
 
 func (source *Database) GetTagIds(names []string) ([]tag.Id, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	sql := `
@@ -1216,7 +1217,7 @@ func (source *Database) GetTagIds(names []string) ([]tag.Id, bool) {
 }
 
 func (source *Database) GetTagFilesCount(id tag.Id) (int, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1236,7 +1237,7 @@ func (source *Database) GetTagFilesCount(id tag.Id) (int, bool) {
 }
 
 func (source *Database) GetTagName(id tag.Id) (string, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1262,7 +1263,7 @@ const defaultTagConditions string = `
 func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 	out := make(chan tag.Tag, 100)
 	go func() {
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1302,7 +1303,7 @@ func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 	out := make(chan tag.Tag, 100)
 	go func() {
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1343,7 +1344,7 @@ func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 	out := make(chan tag.Tag, 100)
 	go func() {
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1453,7 +1454,7 @@ func (source *Database) GetTagsByName(tagNames []string) []tag.Tag {
 		return nil
 	}
 
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	sql := `
@@ -1504,7 +1505,7 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 	go func() {
 		defer metrics.Elapsed("list infos sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := ""
@@ -1644,7 +1645,7 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 }
 
 func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1678,7 +1679,7 @@ func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-cha
 	go func() {
 		defer metrics.Elapsed("list embeddings sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1755,7 +1756,7 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 	go func() {
 		defer metrics.Elapsed("list paths sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1817,7 +1818,7 @@ func (source *Database) ListIdPaths(dirs []string, limit int) <-chan IdPath {
 	go func() {
 		defer metrics.Elapsed("list id paths sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1883,7 +1884,7 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 	go func() {
 		defer metrics.Elapsed("list ids sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1959,7 +1960,7 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 	go func() {
 		defer metrics.Elapsed("list missing sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `

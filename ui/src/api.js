@@ -1,4 +1,4 @@
-import useSWRV, { mutate } from "swrv";
+import useSWRV from "swrv";
 import { computed, watch, ref } from "vue";
 import qs from "qs";
 import { useRetry } from "./use";

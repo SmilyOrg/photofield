@@ -14,7 +14,7 @@ func TestWatcher(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	w, err := NewWatcher([]string{dir})
+	w, err := NewPathsWatcher([]string{dir})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,9 +49,6 @@
           ></i>
         </span>
       </template>
-      <!-- <template v-slot:option slot-scope="props">
-        world {{ props }}
-      </template> -->
     </VueMultiselect>
   </div>
 </template>

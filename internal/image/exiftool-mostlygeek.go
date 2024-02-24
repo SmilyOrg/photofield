@@ -112,11 +112,14 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 				tags = append(tags, tag.NewExif(name, value))
 			}
 			if strings.Contains(name, "Date") || strings.Contains(name, "Time") {
+				// println(path, info.DateTime.IsZero(), name, value)
 				if info.DateTime.IsZero() {
 					info.DateTime, _, _, _ = parseDateTime(value)
+					println(path, "zero", info.DateTime.String())
 				} else if name != "FileModifyDate" && name != "FileCreateDate" {
 					// Prefer time with timezone if available
 					t, hasTimezone, _, _ := parseDateTime(value)
+					println(path, "nonzero", t.String(), "timezone", hasTimezone)
 					if hasTimezone && info.DateTime.Location() == time.UTC {
 						info.DateTime = t
 					}
