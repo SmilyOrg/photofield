@@ -30,7 +30,6 @@ func (text *Text) Draw(config *Render, c *canvas.Context, scales Scales) {
 			return
 		}
 
-		// textLine := canvas.NewTextLine(*text.Font, text.Text, canvas.Left)
 		textLine := canvas.NewTextBox(*text.Font, text.Text, text.Sprite.Rect.W, text.Sprite.Rect.H, text.HAlign, text.VAlign, 0, 0)
 		rect := text.Sprite.Rect
 		rect.Y -= rect.H

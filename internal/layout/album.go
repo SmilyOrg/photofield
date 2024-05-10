@@ -37,13 +37,14 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 				X: rect.X,
 				Y: rect.Y,
 				W: rect.W,
-				H: 30,
+				H: 40,
 			},
 			&font,
 			event.StartTime.Format(dateFormat),
 		)
+		text.VAlign = canvas.Bottom
 		scene.Texts = append(scene.Texts, text)
-		rect.Y += text.Sprite.Rect.H + 15
+		rect.Y += text.Sprite.Rect.H
 	}
 
 	font := scene.Fonts.Main.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
@@ -53,21 +54,20 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 			X: rect.X,
 			Y: rect.Y,
 			W: rect.W,
-			H: 30,
+			H: 40,
 		},
 		&font,
 		time,
 	)
+	text.VAlign = canvas.Bottom
 	scene.Texts = append(scene.Texts, text)
-	rect.Y += text.Sprite.Rect.H + 10
+	rect.Y += text.Sprite.Rect.H
 
 	newBounds := addSectionToScene(&event.Section, scene, rect, layout, source)
 
 	rect.Y = newBounds.Y + newBounds.H
 	if event.LastOnDay {
-		rect.Y += 40
-	} else {
-		rect.Y += 6
+		rect.Y += 32
 	}
 	return rect
 }
