@@ -6,6 +6,7 @@ import (
 	"context"
 	"math"
 	"photofield/internal/image"
+	"photofield/internal/layout/dag"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
 	"time"
@@ -14,49 +15,6 @@ import (
 	"github.com/golang/geo/s2"
 	"github.com/tdewolff/canvas"
 )
-
-type FlexPhoto struct {
-	Id          image.ImageId
-	AspectRatio float32
-	Aux         bool
-}
-
-type FlexAux struct {
-	Text string
-}
-
-type FlexNode struct {
-	Index          int
-	Cost           float32
-	TotalAspect    float32
-	ShortestParent int
-}
-
-// func (n *FlexNode) Dot() string {
-// 	// dot := ""
-
-// 	stack := []*FlexNode{n}
-// 	visited := make(map[int]bool)
-// 	dot := ""
-// 	for len(stack) > 0 {
-// 		node := stack[0]
-// 		stack = stack[1:]
-// 		if visited[node.Index] {
-// 			continue
-// 		}
-// 		visited[node.Index] = true
-// 		// dot += fmt.Sprintf("%d [label=\"%d\\nCost: %.0f\\nHeight: %.0f\\nTotalAspect: %.2f\"];\n", node.Index, node.Index, node.Cost, node.ImageHeight, node.TotalAspect)
-// 		// for _, link := range node.Links {
-// 		// 	attr := ""
-// 		// 	if link.Shortest == node {
-// 		// 		attr = " [penwidth=3]"
-// 		// 	}
-// 		// 	dot += fmt.Sprintf("\t%d -> %d%s;\n", node.Index, link.Index, attr)
-// 		// 	stack = append(stack, link)
-// 		// }
-// 	}
-// 	return dot
-// }
 
 func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
@@ -79,170 +37,132 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 
 	layoutPlaced := metrics.Elapsed("layout placing")
 
-	// row := make([]SectionPhoto, 0)
-
-	// x := 0.
-	// y := 0.
-
-	idealHeight := layout.ImageHeight
+	idealHeight := math.Min(layout.ImageHeight, layout.ViewportHeight*0.9)
+	auxHeight := math.Max(80, idealHeight)
+	minAuxHeight := auxHeight * 0.8
 	minHeight := 0.8 * idealHeight
 	maxHeight := 1.2 * idealHeight
 
-	// baseWidth := layout.ViewportWidth * 0.29
-
 	scene.Photos = scene.Photos[:0]
-	photos := make([]FlexPhoto, 0)
-	// photos2 := make([]dag.Item, 0)
+	photos := make([]dag.Photo, 0)
 
 	layoutCounter := metrics.Counter{
 		Name:     "layout",
 		Interval: 1 * time.Second,
 	}
 
-	auxs := make([]FlexAux, 0)
+	auxs := make([]dag.Aux, 0)
 
 	// Fetch all photos
-	var lastLoc s2.LatLng
-	var lastLocTime time.Time
-	var lastLocation string
+	var prevLoc s2.LatLng
+	var prevLocTime time.Time
+	var prevLocation string
+	var prevAuxTime time.Time
 	for info := range infos {
 		if source.Geo.Available() {
 			photoTime := info.DateTime
-			lastLocCheck := lastLocTime.Sub(photoTime)
+			lastLocCheck := prevLocTime.Sub(photoTime)
 			if lastLocCheck < 0 {
 				lastLocCheck = -lastLocCheck
 			}
-			queryLocation := lastLocTime.IsZero() || lastLocCheck > 15*time.Minute
-			// fmt.Printf("lastLocTime %v photoTime %v lastLocCheck %v queryLocation %v\n", lastLocTime, photoTime, lastLocCheck, queryLocation)
+			queryLocation := prevLocTime.IsZero() || lastLocCheck > 15*time.Minute
 			if queryLocation && image.IsValidLatLng(info.LatLng) {
-				lastLocTime = photoTime
-				dist := image.AngleToKm(lastLoc.Distance(info.LatLng))
+				prevLocTime = photoTime
+				dist := image.AngleToKm(prevLoc.Distance(info.LatLng))
 				if dist > 1 {
 					location, err := source.Geo.ReverseGeocode(context.TODO(), info.LatLng)
-					if err == nil && location != lastLocation {
-						lastLocation = location
-						aux := FlexAux{
-							Text: location,
+					if err == nil && location != prevLocation {
+						prevLocation = location
+						text := ""
+						if prevAuxTime.Year() != photoTime.Year() {
+							text += photoTime.Format("2006\r")
+						}
+						if prevAuxTime.YearDay() != photoTime.YearDay() {
+							text += photoTime.Format("Jan 2\rMonday\r")
+						}
+						prevAuxTime = photoTime
+						text += location
+						aux := dag.Aux{
+							Text: text,
 						}
 						auxs = append(auxs, aux)
-						photos = append(photos, FlexPhoto{
+						photos = append(photos, dag.Photo{
 							Id:          image.ImageId(len(auxs) - 1),
-							AspectRatio: float32(len(location)) / 5,
+							AspectRatio: 0.2 + float32(longestLine(text))/10,
 							Aux:         true,
 						})
 					}
-					lastLoc = info.LatLng
+					prevLoc = info.LatLng
 				}
 			}
 		}
-		photo := FlexPhoto{
+		photo := dag.Photo{
 			Id:          info.Id,
 			AspectRatio: float32(info.Width) / float32(info.Height),
 		}
 		photos = append(photos, photo)
-		// photos2 = append(photos2, dag.Item{
-		// 	Id:          info.Id,
-		// 	AspectRatio: float32(info.Width) / float32(info.Height),
-		// })
 		layoutCounter.Set(len(photos))
 	}
 
-	// root := &
-
-	q := deque.New[int](len(photos) / 4)
-	q.PushBack(-1)
-	indexToNode := make(map[int]FlexNode, len(photos))
-	indexToNode[-1] = FlexNode{
-		Index:          -1,
+	// Create a directed acyclic graph to find the optimal layout
+	root := dag.Node{
 		Cost:           0,
 		TotalAspect:    0,
-		ShortestParent: -1,
+		ShortestParent: -2,
 	}
 
-	// g := dag.New(photos2)
+	q := deque.New[dag.Index](len(photos) / 4)
+	q.PushBack(-1)
+	indexToNode := make(map[dag.Index]dag.Node, len(photos))
+	indexToNode[-1] = root
 
 	maxLineWidth := rect.W
 
-	// for node := g.Next(); node != nil; node = g.Next() {
-	// 	totalAspect := 0.
-	// 	fallback := false
-
-	// 	for i := node.ItemIndex + 1; i < len(photos2); i++ {
-	// 		photo := photos2[i]
-	// 		totalAspect += float64(photo.AspectRatio)
-	// 		totalSpacing := layout.ImageSpacing * float64(i-1-node.ItemIndex)
-	// 		photoHeight := (maxLineWidth - totalSpacing) / totalAspect
-	// 		valid := photoHeight >= minHeight && photoHeight <= maxHeight || i == len(photos)-1 || fallback
-	// 		badness := math.Abs(photoHeight - idealHeight)
-	// 		cost := badness*badness + 10
-	// 		if i < len(photos2)-1 && photos2[i+1].Aux {
-	// 			cost *= 0.1
-	// 		}
-
-	// 		if valid {
-	// 			n := g.Add(i, node.Cost + float32(cost))
-
 	for q.Len() > 0 {
-		// node.Index := q.PopFront()
-		node := indexToNode[q.PopFront()]
+		nodeIndex := q.PopFront()
+		node := indexToNode[nodeIndex]
 		totalAspect := 0.
 		fallback := false
+		hasAux := false
 
-		// fmt.Printf("queue %d\n", node.Index)
-		for i := node.Index + 1; i < len(photos); i++ {
+		for i := nodeIndex + 1; i < len(photos); i++ {
 			photo := photos[i]
 			totalAspect += float64(photo.AspectRatio)
-			totalSpacing := layout.ImageSpacing * float64(i-1-node.Index)
+			totalSpacing := layout.ImageSpacing * float64(i-1-nodeIndex)
 			photoHeight := (maxLineWidth - totalSpacing) / totalAspect
 			valid := photoHeight >= minHeight && photoHeight <= maxHeight || i == len(photos)-1 || fallback
+
 			badness := math.Abs(photoHeight - idealHeight)
 			cost := badness*badness + 10
 			if i < len(photos)-1 && photos[i+1].Aux {
-				cost *= 0.1
+				cost -= 1000000
 			}
-
-			// fmt.Printf("  photo %d aspect %f total %f width %f height %f valid %v badness %f cost %f\n", i, photo.AspectRatio, totalAspect, maxLineWidth, photoHeight, valid, badness, cost)
-
-			// Handle edge case where there is no other option
-			// but to accept a photo that would otherwise break outside of the desired size
-			// if i != len(photos)-1 && q.Len() == 0 {
-			// 	valid = true
-			// }
+			if hasAux && photoHeight < minAuxHeight {
+				auxDiff := (minAuxHeight - photoHeight) * 4
+				cost += auxDiff * auxDiff
+			}
+			if photo.Aux {
+				hasAux = true
+			}
 			if valid {
-				n, ok := indexToNode[i]
 				totalCost := node.Cost + float32(cost)
-				if ok {
-					if n.Cost > totalCost {
-						n.Cost = totalCost
-						n.TotalAspect = float32(totalAspect)
-						n.ShortestParent = node.Index
-						// fmt.Printf("  node %d exists, lower cost %f\n", i, n.Cost)
-					}
-					indexToNode[i] = n
-					// fmt.Printf("  node %d exists, keep cost %f\n", i, n.Cost)
-					// }
-				} else {
-					n = FlexNode{
-						Index:          i,
-						Cost:           totalCost,
-						TotalAspect:    float32(totalAspect),
-						ShortestParent: node.Index,
-					}
-					indexToNode[i] = n
-					if i < len(photos)-1 {
-						q.PushBack(i)
-					}
-					// fmt.Printf("  node %d added with cost %f\n", i, n.Cost)
+				n, ok := indexToNode[i]
+				if !ok || (ok && n.Cost > totalCost) {
+					n.Cost = totalCost
+					n.TotalAspect = float32(totalAspect)
+					n.ShortestParent = nodeIndex
 				}
-				// fmt.Printf("  node %d %v cost %f\n", i, ok, n.Cost)
+				if !ok && i < len(photos)-1 {
+					q.PushBack(i)
+				}
+				indexToNode[i] = n
 			}
 			if photoHeight < minHeight {
 				// Handle edge case where there is no other option
 				// but to accept a photo that would otherwise break outside of the desired size
 				if !fallback && i != len(photos)-1 && q.Len() == 0 {
 					fallback = true
-					for j := 0; j < 2 && i > node.Index; j++ {
-						// fmt.Printf("  fallback %d\n", i)
+					for j := 0; j < 2 && i > nodeIndex; j++ {
 						totalAspect -= float64(photos[i].AspectRatio)
 						i--
 					}
@@ -253,19 +173,11 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 		}
 	}
 
-	// dot := "digraph NodeGraph {\n"
-	// dot += root.Dot()
-	// dot += "}"
-	// fmt.Println(dot)
-
 	// Trace back the shortest path
-	shortestPath := make([]FlexNode, 0)
-
-	for parent := len(photos) - 1; parent > 0; {
-		node := indexToNode[parent]
-		// fmt.Printf("%d node %d cost %f\n", parent, node.Index, node.Cost)
-		shortestPath = append(shortestPath, node)
-		parent = node.ShortestParent
+	shortestPath := make([]int, 0)
+	for nodeIndex := len(photos) - 1; nodeIndex != -2; {
+		shortestPath = append(shortestPath, nodeIndex)
+		nodeIndex = indexToNode[nodeIndex].ShortestParent
 	}
 
 	// Finally, place the photos based on the shortest path breaks
@@ -273,27 +185,33 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 	y := 0.
 	idx := 0
 	for i := len(shortestPath) - 2; i >= 0; i-- {
-		node := shortestPath[i]
-		prev := shortestPath[i+1]
-		totalSpacing := layout.ImageSpacing * float64(node.Index-1-prev.Index)
+		nodeIdx := shortestPath[i]
+		prevIdx := shortestPath[i+1]
+		node := indexToNode[nodeIdx]
+		totalSpacing := layout.ImageSpacing * float64(nodeIdx-1-prevIdx)
 		imageHeight := (maxLineWidth - totalSpacing) / float64(node.TotalAspect)
-		// fmt.Printf("node %d (%d) cost %f total aspect %f height %f\n", node.Index, prev.Index, node.Cost, node.TotalAspect, imageHeight)
-		for ; idx <= node.Index; idx++ {
+		for ; idx <= nodeIdx; idx++ {
 			photo := photos[idx]
 			imageWidth := imageHeight * float64(photo.AspectRatio)
 			if photo.Aux {
 				aux := auxs[photo.Id]
-				font := scene.Fonts.Main.Face(imageHeight*0.6, canvas.Dimgray, canvas.FontRegular, canvas.FontNormal)
-				text := render.NewTextFromRect(
-					render.Rect{
-						X: rect.X + x + imageWidth*0.01,
-						Y: rect.Y + y - imageHeight*0.1,
-						W: imageWidth,
-						H: imageHeight,
+				size := imageHeight * 0.5
+				font := scene.Fonts.Main.Face(size, canvas.Dimgray, canvas.FontRegular, canvas.FontNormal)
+				padding := 2.
+				text := render.Text{
+					Sprite: render.Sprite{
+						Rect: render.Rect{
+							X: rect.X + x + padding,
+							Y: rect.Y + y + padding,
+							W: imageWidth - 2*padding,
+							H: imageHeight - 2*padding,
+						},
 					},
-					&font,
-					aux.Text,
-				)
+					Font:   &font,
+					Text:   aux.Text,
+					HAlign: canvas.Left,
+					VAlign: canvas.Bottom,
+				}
 				scene.Texts = append(scene.Texts, text)
 			} else {
 				scene.Photos = append(scene.Photos, render.Photo{
@@ -309,14 +227,10 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 				})
 			}
 			x += imageWidth + layout.ImageSpacing
-			// fmt.Printf("photo %d x %4.0f y %4.0f aspect %f height %f\n", idx, rect.X+x, rect.Y+y, photo.AspectRatio, imageHeight)
 		}
 		x = 0
 		y += imageHeight + layout.LineSpacing
 	}
-
-	// fmt.Printf("photos %d indextonode %d stack %d\n", len(photos), len(indexToNode), q.Len())
-	// fmt.Printf("photos %d stack %d\n", cap(photos), q.Cap())
 
 	rect.H = rect.Y + y + sceneMargin - layout.LineSpacing
 	scene.Bounds.H = rect.H

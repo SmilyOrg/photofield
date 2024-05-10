@@ -103,6 +103,17 @@ type PhotoRegionData struct {
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
 }
 
+func longestLine(s string) int {
+	lines := strings.Split(s, "\r")
+	longest := 0
+	for _, line := range lines {
+		if len(line) > longest {
+			longest = len(line)
+		}
+	}
+	return longest
+}
+
 func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.Photo, scene *render.Scene, regionConfig render.RegionConfig) render.Region {
 
 	source := regionSource.Source
