@@ -96,6 +96,10 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 				}
 			}
 		}
+		if info.Width == 0 || info.Height == 0 {
+			info.Width = 3
+			info.Height = 2
+		}
 		photo := dag.Photo{
 			Id:          info.Id,
 			AspectRatio: float32(info.Width) / float32(info.Height),
