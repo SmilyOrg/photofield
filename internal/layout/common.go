@@ -17,13 +17,15 @@ import (
 type Type string
 
 const (
-	Album    Type = "ALBUM"
-	Timeline Type = "TIMELINE"
-	Square   Type = "SQUARE"
-	Wall     Type = "WALL"
-	Map      Type = "MAP"
-	Search   Type = "SEARCH"
-	Strip    Type = "STRIP"
+	Album      Type = "ALBUM"
+	Timeline   Type = "TIMELINE"
+	Square     Type = "SQUARE"
+	Wall       Type = "WALL"
+	Map        Type = "MAP"
+	Search     Type = "SEARCH"
+	Strip      Type = "STRIP"
+	Highlights Type = "HIGHLIGHTS"
+	Flex       Type = "FLEX"
 )
 
 type Order int

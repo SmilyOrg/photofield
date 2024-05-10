@@ -1,6 +1,7 @@
 package image
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -124,6 +125,17 @@ type TagIdRange struct {
 }
 
 type tagSet map[tag.Id]struct{}
+
+func readEmbedding(stmt *sqlite.Stmt, invnormIndex int, embeddingIndex int) (clip.Embedding, error) {
+	invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(invnormIndex))
+	size := stmt.ColumnLen(embeddingIndex)
+	bytes := make([]byte, size)
+	read := stmt.ColumnBytes(embeddingIndex, bytes)
+	if read != size {
+		return nil, fmt.Errorf("unable to read embedding bytes, expected %d, got %d", size, read)
+	}
+	return clip.FromRaw(bytes, invnorm), nil
+}
 
 func (tags *tagSet) Add(id tag.Id) {
 	(*tags)[id] = struct{}{}
@@ -1467,6 +1479,115 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 	return out
 }
 
+func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <-chan InfoEmb {
+	out := make(chan InfoEmb, 1000)
+	go func() {
+		defer metrics.Elapsed("list infos sqlite")()
+
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
+		sql := ""
+
+		sql += `
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude, inv_norm, embedding
+			FROM infos
+			INNER JOIN clip_emb ON clip_emb.file_id = id
+		`
+
+		sql += `
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE `
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		switch options.OrderBy {
+		case None:
+		case DateAsc:
+			sql += `
+			ORDER BY created_at_unix ASC
+			`
+		case DateDesc:
+			sql += `
+			ORDER BY created_at_unix DESC
+			`
+		default:
+			panic("Unsupported listing order")
+		}
+
+		if options.Limit > 0 {
+			sql += `
+				LIMIT ?
+			`
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		bindIndex := 1
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if options.Limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(options.Limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+
+			var info InfoEmb
+			info.Id = (ImageId)(stmt.ColumnInt64(0))
+
+			info.Width = stmt.ColumnInt(1)
+			info.Height = stmt.ColumnInt(2)
+			info.Orientation = Orientation(stmt.ColumnInt(3))
+			info.Color = (uint32)(stmt.ColumnInt64(4))
+
+			unix := stmt.ColumnInt64(5)
+			timezoneOffset := stmt.ColumnInt(6)
+
+			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
+
+			if stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull {
+				info.LatLng = NaNLatLng()
+			} else {
+				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
+			}
+
+			emb, err := readEmbedding(stmt, 9, 10)
+			if err != nil {
+				log.Printf("Error reading embedding: %s\n", err.Error())
+			}
+			info.Embedding = emb
+
+			out <- info
+		}
+
+		close(out)
+	}()
+	return out
+}
+
 func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
@@ -1553,19 +1674,15 @@ func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-cha
 			}
 
 			id := (ImageId)(stmt.ColumnInt64(0))
-			invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(1))
-
-			size := stmt.ColumnLen(2)
-			bytes := make([]byte, size)
-			read := stmt.ColumnBytes(2, bytes)
-			if read != size {
-				log.Printf("Error reading embedding: buffer underrun, expected %d actual %d bytes\n", size, read)
+			emb, err := readEmbedding(stmt, 1, 2)
+			if err != nil {
+				log.Printf("Error reading embedding: %s\n", err.Error())
 				continue
 			}
 
 			out <- EmbeddingsResult{
 				Id:        id,
-				Embedding: clip.FromRaw(bytes, invnorm),
+				Embedding: emb,
 			}
 		}
 

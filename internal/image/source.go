@@ -80,6 +80,11 @@ type SimilarityInfo struct {
 	Similarity float32
 }
 
+type InfoEmb struct {
+	SourcedInfo
+	Embedding clip.Embedding
+}
+
 func SimilarityInfosToSourcedInfos(sinfos <-chan SimilarityInfo) <-chan SourcedInfo {
 	out := make(chan SourcedInfo)
 	go func() {
@@ -392,6 +397,23 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan Sourc
 			// 	info.Info = source.GetInfo(info.Id)
 			// }
 			out <- info.SourcedInfo
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Source) ListInfosEmb(dirs []string, options ListOptions) <-chan InfoEmb {
+	for i := range dirs {
+		dirs[i] = filepath.FromSlash(dirs[i])
+	}
+	out := make(chan InfoEmb, 1000)
+	go func() {
+		defer metrics.Elapsed("list infos embedded")()
+
+		infos := source.database.ListWithEmbeddings(dirs, options)
+		for info := range infos {
+			out <- info
 		}
 		close(out)
 	}()
