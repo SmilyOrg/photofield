@@ -26,37 +26,37 @@ type FlexAux struct {
 }
 
 type FlexNode struct {
-	Index       int
-	Cost        float32
-	TotalAspect float32
-	Shortest    *FlexNode
+	Index          int
+	Cost           float32
+	TotalAspect    float32
+	ShortestParent int
 }
 
-func (n *FlexNode) Dot() string {
-	// dot := ""
+// func (n *FlexNode) Dot() string {
+// 	// dot := ""
 
-	stack := []*FlexNode{n}
-	visited := make(map[int]bool)
-	dot := ""
-	for len(stack) > 0 {
-		node := stack[0]
-		stack = stack[1:]
-		if visited[node.Index] {
-			continue
-		}
-		visited[node.Index] = true
-		// dot += fmt.Sprintf("%d [label=\"%d\\nCost: %.0f\\nHeight: %.0f\\nTotalAspect: %.2f\"];\n", node.Index, node.Index, node.Cost, node.ImageHeight, node.TotalAspect)
-		// for _, link := range node.Links {
-		// 	attr := ""
-		// 	if link.Shortest == node {
-		// 		attr = " [penwidth=3]"
-		// 	}
-		// 	dot += fmt.Sprintf("\t%d -> %d%s;\n", node.Index, link.Index, attr)
-		// 	stack = append(stack, link)
-		// }
-	}
-	return dot
-}
+// 	stack := []*FlexNode{n}
+// 	visited := make(map[int]bool)
+// 	dot := ""
+// 	for len(stack) > 0 {
+// 		node := stack[0]
+// 		stack = stack[1:]
+// 		if visited[node.Index] {
+// 			continue
+// 		}
+// 		visited[node.Index] = true
+// 		// dot += fmt.Sprintf("%d [label=\"%d\\nCost: %.0f\\nHeight: %.0f\\nTotalAspect: %.2f\"];\n", node.Index, node.Index, node.Cost, node.ImageHeight, node.TotalAspect)
+// 		// for _, link := range node.Links {
+// 		// 	attr := ""
+// 		// 	if link.Shortest == node {
+// 		// 		attr = " [penwidth=3]"
+// 		// 	}
+// 		// 	dot += fmt.Sprintf("\t%d -> %d%s;\n", node.Index, link.Index, attr)
+// 		// 	stack = append(stack, link)
+// 		// }
+// 	}
+// 	return dot
+// }
 
 func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
@@ -92,6 +92,7 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 
 	scene.Photos = scene.Photos[:0]
 	photos := make([]FlexPhoto, 0)
+	// photos2 := make([]dag.Item, 0)
 
 	layoutCounter := metrics.Counter{
 		Name:     "layout",
@@ -139,23 +140,51 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 			AspectRatio: float32(info.Width) / float32(info.Height),
 		}
 		photos = append(photos, photo)
+		// photos2 = append(photos2, dag.Item{
+		// 	Id:          info.Id,
+		// 	AspectRatio: float32(info.Width) / float32(info.Height),
+		// })
 		layoutCounter.Set(len(photos))
 	}
 
-	root := &FlexNode{
-		Index:       -1,
-		Cost:        0,
-		TotalAspect: 0,
+	// root := &
+
+	q := deque.New[int](len(photos) / 4)
+	q.PushBack(-1)
+	indexToNode := make(map[int]FlexNode, len(photos))
+	indexToNode[-1] = FlexNode{
+		Index:          -1,
+		Cost:           0,
+		TotalAspect:    0,
+		ShortestParent: -1,
 	}
 
-	q := deque.New[*FlexNode](len(photos) / 4)
-	q.PushBack(root)
-	indexToNode := make(map[int]*FlexNode, len(photos))
+	// g := dag.New(photos2)
 
 	maxLineWidth := rect.W
 
+	// for node := g.Next(); node != nil; node = g.Next() {
+	// 	totalAspect := 0.
+	// 	fallback := false
+
+	// 	for i := node.ItemIndex + 1; i < len(photos2); i++ {
+	// 		photo := photos2[i]
+	// 		totalAspect += float64(photo.AspectRatio)
+	// 		totalSpacing := layout.ImageSpacing * float64(i-1-node.ItemIndex)
+	// 		photoHeight := (maxLineWidth - totalSpacing) / totalAspect
+	// 		valid := photoHeight >= minHeight && photoHeight <= maxHeight || i == len(photos)-1 || fallback
+	// 		badness := math.Abs(photoHeight - idealHeight)
+	// 		cost := badness*badness + 10
+	// 		if i < len(photos2)-1 && photos2[i+1].Aux {
+	// 			cost *= 0.1
+	// 		}
+
+	// 		if valid {
+	// 			n := g.Add(i, node.Cost + float32(cost))
+
 	for q.Len() > 0 {
-		node := q.PopFront()
+		// node.Index := q.PopFront()
+		node := indexToNode[q.PopFront()]
 		totalAspect := 0.
 		fallback := false
 
@@ -186,21 +215,22 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 					if n.Cost > totalCost {
 						n.Cost = totalCost
 						n.TotalAspect = float32(totalAspect)
-						n.Shortest = node
+						n.ShortestParent = node.Index
 						// fmt.Printf("  node %d exists, lower cost %f\n", i, n.Cost)
 					}
+					indexToNode[i] = n
 					// fmt.Printf("  node %d exists, keep cost %f\n", i, n.Cost)
 					// }
 				} else {
-					n = &FlexNode{
-						Index:       i,
-						Cost:        totalCost,
-						TotalAspect: float32(totalAspect),
-						Shortest:    node,
+					n = FlexNode{
+						Index:          i,
+						Cost:           totalCost,
+						TotalAspect:    float32(totalAspect),
+						ShortestParent: node.Index,
 					}
 					indexToNode[i] = n
 					if i < len(photos)-1 {
-						q.PushBack(n)
+						q.PushBack(i)
 					}
 					// fmt.Printf("  node %d added with cost %f\n", i, n.Cost)
 				}
@@ -229,11 +259,13 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 	// fmt.Println(dot)
 
 	// Trace back the shortest path
-	shortestPath := make([]*FlexNode, 0)
-	for node := indexToNode[len(photos)-1]; node != nil; {
-		// fmt.Printf("node %d cost %f\n", node.Index, node.Cost)
+	shortestPath := make([]FlexNode, 0)
+
+	for parent := len(photos) - 1; parent > 0; {
+		node := indexToNode[parent]
+		// fmt.Printf("%d node %d cost %f\n", parent, node.Index, node.Cost)
 		shortestPath = append(shortestPath, node)
-		node = node.Shortest
+		parent = node.ShortestParent
 	}
 
 	// Finally, place the photos based on the shortest path breaks
