@@ -173,7 +173,10 @@ func LayoutHighlights(infos <-chan image.InfoEmb, layout Layout, scene *render.S
 
 		// fmt.Printf("queue %d\n", node.Index)
 
-		prevHeight := photos[0].Height
+		prevHeight := float32(0.)
+		if nodeIndex+1 < len(photos) {
+			prevHeight = photos[nodeIndex+1].Height
+		}
 
 		for i := nodeIndex + 1; i < len(photos); i++ {
 			photo := photos[i]
@@ -185,7 +188,7 @@ func LayoutHighlights(infos <-chan image.InfoEmb, layout Layout, scene *render.S
 			valid := photoHeight >= minHeight && photoHeight <= maxHeight || i == len(photos)-1 || fallback
 			// badness := math.Abs(photoHeight - idealHeight)
 			badness := math.Abs(photoHeight - float64(photo.Height))
-			prevDiff := 0.1 * math.Abs(float64(prevHeight-photo.Height))
+			prevDiff := 10 * math.Abs(float64(prevHeight-photo.Height))
 			prevHeight = photo.Height
 			// viewportDiff := 1000. * float64(photoHeight)
 			viewportDiff := 1000. * math.Max(0, float64(photoHeight)-layout.ViewportHeight)
