@@ -2,7 +2,10 @@ package layout
 
 import (
 	"cmp"
+	"context"
+	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
@@ -13,8 +16,17 @@ import (
 
 	"github.com/golang/geo/r2"
 	"github.com/golang/geo/s2"
+	"github.com/tdewolff/canvas"
 	"golang.org/x/exp/slices"
 )
+
+type Cluster struct {
+	s2.Point
+	// s2.Loop
+	name   string
+	radius float64
+	count  int
+}
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
@@ -52,6 +64,10 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	pp := make([]r2.Point, 0)
 	pi := make([]int, 0)
 	photos := make([]render.Photo, 0)
+	// clusters := s2.NewShapeIndex()
+	clusters := make([]Cluster, 0)
+	// clusterMaxAngle := s1.ChordAngleFromAngle(image.KmToAngle(10))
+	clusterMaxAngle := image.KmToAngle(10)
 	loadCounter := metrics.Counter{
 		Name:     "load infos",
 		Interval: 1 * time.Second,
@@ -70,6 +86,98 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 				},
 			},
 		}
+		// fmt.Printf("point %f %f\n", info.LatLng.Lat.Degrees(), info.LatLng.Lng.Degrees())
+		s2p := s2.PointFromLatLng(info.LatLng)
+		addCluster := false
+		if len(clusters) == 0 {
+			addCluster = true
+		} else {
+			updated := false
+			for i, c := range clusters {
+				// fmt.Printf("  cluster %d %f %f\n", i, s2.LatLngFromPoint(c.Point).Lat.Degrees(), s2.LatLngFromPoint(c.Point).Lng.Degrees())
+				dist := c.Point.Distance(s2p)
+				if dist.Radians() < clusterMaxAngle.Radians() {
+					c.count++
+					frac := 1. / float64(c.count)
+					c.Point = s2.Interpolate(
+						frac,
+						c.Point,
+						s2p,
+					)
+					c.radius += image.AngleToKm(dist) * frac
+					// fmt.Printf("    update cluster %f %f\n", frac, image.AngleToKm(dist))
+					// fmt.Printf("    update cluster %f %f\n", s2.LatLngFromPoint(c.Point).Lat.Degrees(), s2.LatLngFromPoint(c.Point).Lng.Degrees())
+					clusters[i] = c
+					updated = true
+					break
+				}
+			}
+
+			// fmt.Printf("query %f %f\n", s2.LatLngFromPoint(s2p).Lat.Degrees(), s2.LatLngFromPoint(s2p).Lng.Degrees())
+			// eq := s2.NewClosestEdgeQuery(clusters, s2.NewClosestEdgeQueryOptions().DistanceLimit(clusterMaxAngle))
+			// eq := s2.NewClosestEdgeQuery(clusters, s2.NewClosestEdgeQueryOptions())
+			// target := s2.NewMinDistanceToPointTarget(s2p)
+
+			// for _, r := range eq.FindEdges(target) {
+			// fmt.Printf("result %d %f\n", r.ShapeID(), image.AngleToKm(r.Distance().Angle()))
+			// s := clusters.Shape(r.ShapeID())
+			// fmt.Printf("result %s\n", s.String())
+			// cluster := s.(*Cluster)
+			// clusters.Remove(s)
+			// cluster.count++
+			// frac := 1. / float64(cluster.count)
+			// cluster.PointVector[0] = s2.Interpolate(
+			// 	frac,
+			// 	cluster.PointVector[0],
+			// 	s2p,
+			// )
+			// clusters.Add(cluster)
+			// fmt.Printf("update cluster %f %f\n", s2.LatLngFromPoint(cluster.PointVector[0]).Lat.Degrees(), s2.LatLngFromPoint(cluster.PointVector[0]).Lng.Degrees())
+			// fmt.Printf("update cluster %s\n", cluster.name)
+			// 	updated = true
+			// 	break
+			// }
+			// eq.Reset()
+			if !updated {
+				addCluster = true
+			}
+			// if eq.IsDistanceGreater(s2.NewMaxDistanceToPointTarget(s2p), clusterMaxAngle) {
+			// 	addCluster = true
+			// }
+		}
+		if addCluster {
+			// fmt.Printf("  new cluster %f %f\n", info.LatLng.Lat.Degrees(), info.LatLng.Lng.Degrees())
+			// clusters.Add(&Cluster{
+			// 	// PointVector: s2.PointVector{s2p},
+			// 	Loop:   *s2.RegularLoop(s2p, s1.Angle(clusterMaxAngle), 12),
+			// 	name:   info.String(),
+			// 	radius: 0,
+			// 	count:  1,
+			// })
+			// clusters.Add(s2.RegularLoop(s2p, s1.Angle(clusterMaxAngle), 12))
+			// clusters.Add(s2.PolylineFromLatLngs([]s2.LatLng{info.LatLng}))
+			// idx := clusters.Add(&s2.PointVector{
+			// 	s2.PointFromCoords(rand.Float64(), rand.Float64(), rand.Float64()),
+			// })
+			// idx = clusters.Add(&s2.PointVector{
+			// 	s2.PointFromCoords(rand.Float64(), rand.Float64(), rand.Float64()),
+			// })
+			// idx = clusters.Add(&s2.PointVector{
+			// 	s2.PointFromCoords(rand.Float64(), rand.Float64(), rand.Float64()),
+			// })
+			// idx = clusters.Add(&s2.PointVector{
+			// 	s2.PointFromCoords(rand.Float64(), rand.Float64(), rand.Float64()),
+			// })
+			// fmt.Printf("before build %d\n", idx)
+			// clusters.Build()
+			clusters = append(clusters, Cluster{
+				Point:  s2p,
+				name:   fmt.Sprintf("cluster %d", len(clusters)),
+				radius: 0,
+				count:  1,
+			})
+			// fmt.Printf("after build\n")
+		}
 		pp = append(pp, p)
 		pi = append(pi, len(pi))
 		photos = append(photos, photo)
@@ -78,6 +186,63 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		scene.FileCount = index
 		scene.LoadCount = index
 		scene.LoadUnit = "files"
+	}
+
+	for i, c := range clusters {
+
+		latlng := s2.LatLngFromPoint(c.Point)
+
+		location, err := source.Geo.ReverseGeocode(context.TODO(), latlng)
+		if err == nil {
+			c.name = location
+		}
+
+		fmt.Printf("cluster %d %f %f %f\n", i, s2.LatLngFromPoint(c.Point).Lat.Degrees(), s2.LatLngFromPoint(c.Point).Lng.Degrees(), c.radius)
+		p := proj.FromLatLng(latlng)
+		font := scene.Fonts.Main.Face(10, canvas.Dimgray, canvas.FontRegular, canvas.FontNormal)
+
+		// size := math.Max(0.5, c.radius*0.1)
+
+		// square := render.Rect{}
+		// square.W = size
+		// square.H = size
+		// square.X = (maxlng+p.X)*scale - 0.5*square.W
+		// square.Y = (maxlng-p.Y)*scale - 0.5*square.H
+
+		// scene.Solids = append(scene.Solids, render.Solid{
+		// 	Sprite: render.Sprite{
+		// 		Rect: square,
+		// 	},
+		// 	Color: canvas.Lightgray,
+		// })
+
+		// square.Y -= math.Max(2, c.radius)
+
+		size := 30.
+
+		bg := render.Rect{}
+		bg.W = size
+		bg.H = size * 0.2
+		bg.X = (maxlng+p.X)*scale - 0.5*bg.W
+		bg.Y = (maxlng-p.Y)*scale - bg.H - math.Max(1, c.radius)
+
+		scene.Solids = append(scene.Solids, render.Solid{
+			Sprite: render.Sprite{
+				Rect: bg,
+			},
+			Color: canvas.Lightgray,
+		})
+
+		text := render.Text{
+			Text: c.name,
+			Sprite: render.Sprite{
+				Rect: bg,
+			},
+			Font:   &font,
+			HAlign: canvas.Center,
+			VAlign: canvas.Center,
+		}
+		scene.Texts = append(scene.Texts, text)
 	}
 
 	n := len(pp)
