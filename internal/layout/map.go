@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/golang/geo/r2"
 	"github.com/golang/geo/s2"
-	"github.com/tdewolff/canvas"
 	"golang.org/x/exp/slices"
 )
 
@@ -198,11 +196,36 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		}
 
 		fmt.Printf("cluster %d %f %f %f\n", i, s2.LatLngFromPoint(c.Point).Lat.Degrees(), s2.LatLngFromPoint(c.Point).Lng.Degrees(), c.radius)
-		p := proj.FromLatLng(latlng)
-		font := scene.Fonts.Main.Face(10, canvas.Dimgray, canvas.FontRegular, canvas.FontNormal)
+		// p := proj.FromLatLng(latlng)
+
+		if i < len(clusters)-1 {
+			nextc := clusters[i+1]
+			dist := image.AngleToKm(c.Point.Distance(nextc.Point))
+			// la := s2.InterpolateAtDistance(image.KmToAngle(10+c.radius), c.Point, nextc.Point)
+			// lb := s2.InterpolateAtDistance(image.KmToAngle(10+nextc.radius), nextc.Point, c.Point)
+			la := s2.InterpolateAtDistance(image.KmToAngle(dist*0.05+c.radius), c.Point, nextc.Point)
+			lb := s2.InterpolateAtDistance(image.KmToAngle(dist*0.05+nextc.radius), nextc.Point, c.Point)
+			a := proj.FromLatLng(s2.LatLngFromPoint(la))
+			b := proj.FromLatLng(s2.LatLngFromPoint(lb))
+			l := render.Line{
+				A: render.Point{
+					X: (maxlng + a.X) * scale,
+					Y: (maxlng - a.Y) * scale,
+				},
+				B: render.Point{
+					X: (maxlng + b.X) * scale,
+					Y: (maxlng - b.Y) * scale,
+				},
+				Width: dist / 1000,
+			}
+			scene.Lines = append(scene.Lines, l)
+		}
+
+		// font := scene.Fonts.Main.Face(10, canvas.Dimgray, canvas.FontRegular, canvas.FontNormal)
 
 		// size := math.Max(0.5, c.radius*0.1)
 
+		// size := 1.
 		// square := render.Rect{}
 		// square.W = size
 		// square.H = size
@@ -218,31 +241,32 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 		// square.Y -= math.Max(2, c.radius)
 
-		size := 30.
+		// size := 30.
 
-		bg := render.Rect{}
-		bg.W = size
-		bg.H = size * 0.2
-		bg.X = (maxlng+p.X)*scale - 0.5*bg.W
-		bg.Y = (maxlng-p.Y)*scale - bg.H - math.Max(1, c.radius)
+		// bg := render.Rect{}
+		// bg.W = size
+		// bg.H = size * 0.2
+		// bg.X = (maxlng+p.X)*scale - 0.5*bg.W
+		// bg.Y = (maxlng-p.Y)*scale - bg.H - math.Max(1, c.radius)
 
-		scene.Solids = append(scene.Solids, render.Solid{
-			Sprite: render.Sprite{
-				Rect: bg,
-			},
-			Color: canvas.Lightgray,
-		})
+		// scene.Solids = append(scene.Solids, render.Solid{
+		// 	Sprite: render.Sprite{
+		// 		Rect: bg,
+		// 	},
+		// 	Color: canvas.Lightgray,
+		// })
 
-		text := render.Text{
-			Text: c.name,
-			Sprite: render.Sprite{
-				Rect: bg,
-			},
-			Font:   &font,
-			HAlign: canvas.Center,
-			VAlign: canvas.Center,
-		}
-		scene.Texts = append(scene.Texts, text)
+		// text := render.Text{
+		// 	Text: c.name,
+		// 	Sprite: render.Sprite{
+		// 		Rect: bg,
+		// 	},
+		// 	Font:   &font,
+		// 	HAlign: canvas.Center,
+		// 	VAlign: canvas.Center,
+		// }
+		// scene.Texts = append(scene.Texts, text)
+
 	}
 
 	n := len(pp)

@@ -88,6 +88,7 @@ type Scene struct {
 	FileCount       int            `json:"file_count"`
 	Solids          []Solid        `json:"-"`
 	Texts           []Text         `json:"-"`
+	Lines           []Line         `json:"-"`
 	RegionSource    RegionSource   `json:"-"`
 	Stale           bool           `json:"stale"`
 	Dependencies    []Dependency   `json:"-"`
@@ -128,6 +129,11 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
 		solid.Draw(c, scales)
+	}
+
+	for i := range scene.Lines {
+		line := &scene.Lines[i]
+		line.Draw(config, c, scales)
 	}
 
 	// for i := range scene.Photos {
