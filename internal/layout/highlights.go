@@ -126,11 +126,10 @@ func LayoutHighlights(infos <-chan image.InfoEmb, layout Layout, scene *render.S
 				prevEmb,
 				emb,
 			)
-			if err != nil {
-				log.Printf("dot product error: %v", err)
+			if err == nil {
+				similarity = dot * prevInvNorm * invnorm
+				simHeight = idealHeight * math.Min(1, minHeightFrac+math.Pow(1-(float64(similarity)-simMin)/(1-simMin), simPow)*(1-minHeightFrac))
 			}
-			similarity = dot * prevInvNorm * invnorm
-			simHeight = idealHeight * math.Min(1, minHeightFrac+math.Pow(1-(float64(similarity)-simMin)/(1-simMin), simPow)*(1-minHeightFrac))
 		}
 		prevEmb = emb
 		prevInvNorm = invnorm

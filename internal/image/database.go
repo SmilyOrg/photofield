@@ -127,12 +127,15 @@ type TagIdRange struct {
 type tagSet map[tag.Id]struct{}
 
 func readEmbedding(stmt *sqlite.Stmt, invnormIndex int, embeddingIndex int) (clip.Embedding, error) {
+	if stmt.ColumnType(invnormIndex) == sqlite.TypeNull || stmt.ColumnType(embeddingIndex) == sqlite.TypeNull {
+		return clip.FromRaw(nil, 0), ErrNotFound
+	}
 	invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(invnormIndex))
 	size := stmt.ColumnLen(embeddingIndex)
 	bytes := make([]byte, size)
 	read := stmt.ColumnBytes(embeddingIndex, bytes)
 	if read != size {
-		return nil, fmt.Errorf("unable to read embedding bytes, expected %d, got %d", size, read)
+		return clip.FromRaw(nil, 0), fmt.Errorf("unable to read embedding bytes, expected %d, got %d", size, read)
 	}
 	return clip.FromRaw(bytes, invnorm), nil
 }
@@ -741,7 +744,7 @@ func (source *Database) GetPathFromId(id ImageId) (string, bool) {
 
 func (source *Database) Get(id ImageId) (InfoResult, bool) {
 
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1492,7 +1495,7 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 		sql += `
 			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude, inv_norm, embedding
 			FROM infos
-			INNER JOIN clip_emb ON clip_emb.file_id = id
+			LEFT JOIN clip_emb ON clip_emb.file_id = id
 		`
 
 		sql += `
@@ -1576,7 +1579,7 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 
 			emb, err := readEmbedding(stmt, 9, 10)
 			if err != nil {
-				log.Printf("Error reading embedding: %s\n", err.Error())
+				log.Printf("Error reading embedding for %d: %s\n", info.Id, err.Error())
 			}
 			info.Embedding = emb
 
