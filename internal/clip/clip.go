@@ -29,6 +29,19 @@ func DotProductFloat32Float(a []float32, b []Float) (float32, error) {
 	return dot, nil
 }
 
+func DotProductFloat32Float32(a []float32, b []float32) (float32, error) {
+	l := len(a)
+	if l != len(b) {
+		return 0, fmt.Errorf("slice lengths do not match, a %d b %d", l, len(b))
+	}
+
+	dot := float32(0)
+	for i := 0; i < l; i++ {
+		dot += a[i] * b[i]
+	}
+	return dot, nil
+}
+
 // Most real world inverse vector norms of embeddings fall
 // within ~500 of 11843, so it's more efficient to store
 // the inverse vector norm as an offset of this number.

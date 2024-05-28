@@ -10,6 +10,8 @@ type Text struct {
 	Sprite Sprite
 	Font   *canvas.FontFace
 	Text   string
+	HAlign canvas.TextAlign
+	VAlign canvas.TextAlign
 }
 
 func NewTextFromRect(rect Rect, font *canvas.FontFace, txt string) Text {
@@ -28,7 +30,9 @@ func (text *Text) Draw(config *Render, c *canvas.Context, scales Scales) {
 			return
 		}
 
-		textLine := canvas.NewTextLine(*text.Font, text.Text, canvas.Left)
-		c.RenderText(textLine, c.View().Mul(text.Sprite.Rect.GetMatrix()))
+		textLine := canvas.NewTextBox(*text.Font, text.Text, text.Sprite.Rect.W, text.Sprite.Rect.H, text.HAlign, text.VAlign, 0, 0)
+		rect := text.Sprite.Rect
+		rect.Y -= rect.H
+		c.RenderText(textLine, c.View().Mul(rect.GetMatrix()))
 	}
 }

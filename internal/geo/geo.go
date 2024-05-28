@@ -101,6 +101,9 @@ func (g *Geo) String() string {
 	if g == nil || !g.config.ReverseGeocode {
 		return "geo reverse geocoding disabled"
 	}
+	if g.gp == nil {
+		return "geo geopackage not loaded"
+	}
 	return "geo using " + g.uri
 }
 

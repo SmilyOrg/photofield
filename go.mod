@@ -10,6 +10,7 @@ require (
 	github.com/dgraph-io/ristretto v0.1.2-0.20230929213430-5239be55a219
 	github.com/docker/go-units v0.4.0
 	github.com/felixge/fgprof v0.9.1
+	github.com/gammazero/deque v0.2.1
 	github.com/go-chi/chi/v5 v5.0.4
 	github.com/go-chi/cors v1.2.0
 	github.com/go-chi/render v1.0.1

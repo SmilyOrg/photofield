@@ -53,14 +53,14 @@ func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, 
 
 	font := scene.Fonts.Main.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 
-	scene.Texts = append(scene.Texts,
-		render.NewTextFromRect(
-			textBounds,
-			&font,
-			headerText,
-		),
+	text := render.NewTextFromRect(
+		textBounds,
+		&font,
+		headerText,
 	)
-	rect.Y += textHeight + 15
+	text.VAlign = canvas.Bottom
+	scene.Texts = append(scene.Texts, text)
+	rect.Y += textHeight + 4
 
 	newBounds := addSectionToScene(&event.Section, scene, rect, layout, source)
 

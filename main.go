@@ -1237,7 +1237,7 @@ func applyConfig(appConfig *AppConfig) {
 		log.Printf("%v", globalGeo.String())
 	}
 
-	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, nil)
+	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, globalGeo)
 	imageSource.HandleDirUpdates(invalidateDirs)
 	if tileRequestConfig.Concurrency > 0 {
 		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)

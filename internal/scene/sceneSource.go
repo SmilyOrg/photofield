@@ -111,7 +111,14 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone()
 		}
 
-		if scene.SearchEmbedding != nil {
+		if config.Layout.Type == layout.Highlights {
+			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{
+				OrderBy: image.ListOrder(config.Layout.Order),
+				Limit:   config.Collection.Limit,
+			})
+
+			layout.LayoutHighlights(infos, config.Layout, &scene, imageSource)
+		} else if scene.SearchEmbedding != nil {
 			// Similarity order
 			infos := config.Collection.GetSimilar(imageSource, scene.SearchEmbedding, image.ListOptions{
 				Limit: config.Collection.Limit,
@@ -144,6 +151,8 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				layout.LayoutMap(infos, config.Layout, &scene, imageSource)
 			case layout.Strip:
 				layout.LayoutStrip(infos, config.Layout, &scene, imageSource)
+			case layout.Flex:
+				layout.LayoutFlex(infos, config.Layout, &scene, imageSource)
 			default:
 				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
 			}
