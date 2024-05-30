@@ -486,6 +486,10 @@ func (source *Source) IndexContents(dirs []string, maxPhotos int, force Missing)
 }
 
 func (source *Source) GetDir(dir string) Info {
+	if source == nil {
+		return Info{}
+	}
+
 	dir = filepath.FromSlash(dir)
 	result, _ := source.database.GetDir(dir)
 	return result.Info

@@ -21,10 +21,26 @@ const (
 	Rename
 )
 
+func (o Op) String() string {
+	switch o {
+	case Update:
+		return "Update"
+	case Remove:
+		return "Remove"
+	case Rename:
+		return "Rename"
+	}
+	return "Unknown"
+}
+
 type Watcher struct {
 	Events   chan Event
 	filename string
 	c        chan notify.EventInfo
+}
+
+var ignorePatterns = []string{
+	"*.db", "*.db-journal", "*.db-shm", "*.db-wal", "*.db-wal2", "*.tmp",
 }
 
 func NewFileWatcher(path string) (*Watcher, error) {
@@ -107,6 +123,25 @@ func removePathFromEvents(events []Event, path string) (found bool) {
 	return
 }
 
+func hasPathInEvents(events []Event, path string) (found bool) {
+	for i := range events {
+		e := &events[i]
+		if e.Path == path {
+			found = true
+		}
+	}
+	return
+}
+
+func shouldIgnorePath(path string) bool {
+	for _, pattern := range ignorePatterns {
+		if ok, _ := filepath.Match(pattern, filepath.Base(path)); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *Watcher) run() {
 	// Update events are delayed by 1x - 2x this interval to avoid multiple
 	// updates for the same file and out of order remove and update events.
@@ -146,6 +181,10 @@ func (w *Watcher) run() {
 			// println("event", e.Path(), e.Event())
 			if w.filename != "" && filepath.Base(e.Path()) != w.filename {
 				// println("skip", e.Path())
+				continue
+			}
+			if shouldIgnorePath(e.Path()) {
+				// println("ignore", e.Path())
 				continue
 			}
 			switch e.Event() {
@@ -189,10 +228,14 @@ func (w *Watcher) run() {
 
 			case notify.Create,
 				notify.Write:
-				pending = append(pending, Event{
+				ev := Event{
 					Op:   Update,
 					Path: e.Path(),
-				})
+				}
+				if hasPathInEvents(pending, ev.Path) {
+					continue
+				}
+				pending = append(pending, ev)
 				if !tickerRunning {
 					ticker = time.NewTicker(interval)
 				}
@@ -221,8 +264,10 @@ func (w *Watcher) Close() {
 	if w.c != nil {
 		notify.Stop(w.c)
 		close(w.c)
+		w.c = nil
 	}
 	if w.Events != nil {
 		close(w.Events)
+		w.Events = nil
 	}
 }

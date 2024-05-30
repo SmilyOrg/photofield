@@ -52,6 +52,9 @@ bench collection: build
 ui:
   cd ui && npm run dev
 
+docs:
+  cd docs && npm run docs:dev
+
 watch:
   watchexec --exts go -r just run
 

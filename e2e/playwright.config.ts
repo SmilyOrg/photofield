@@ -9,7 +9,7 @@ import { defineBddConfig } from 'playwright-bdd';
 
 const testDir = defineBddConfig({
   paths: ['./tests/**/*.feature'],
-  require: ['./src/**/*.ts'],
+  steps: ['./src/**/*.ts'],
   formatOptions: {
     // Fix for ERR_UNSUPPORTED_ESM_URL_SCHEME on Windows
     snippetSyntax: './node_modules/playwright-bdd/dist/snippets/snippetSyntaxTs.js'

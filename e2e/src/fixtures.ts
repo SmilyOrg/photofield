@@ -15,6 +15,7 @@ export class App {
   public host: string = 'localhost';
   public port: number = 0;
   public listenHost: string = '';
+  public disableAutostart: boolean = true;
   proc?: ChildProcess;
   exitCode: number | null;
   uiLocal: boolean = true;
@@ -86,6 +87,9 @@ export class App {
         if (!this.uiUrl) {
           this.uiUrl = "http://" + this.listenHost;
         }
+      }
+      if (!this.stderr) {
+        this.stderr = "";
       }
       this.stderr += msg;
     });

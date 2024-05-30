@@ -2,6 +2,7 @@ Feature: Connection Error Message
 
   Scenario: UI loads, but API is down
     Given an empty working directory
+    And no running app
     When the user opens the home page
     Then the page shows "Connection error"
 

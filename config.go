@@ -48,6 +48,7 @@ func watchConfig(dataDir string, callback func(appConfig *AppConfig)) {
 			log.Fatalln("Unable to load config", err)
 		}
 		expandWatcher.Close()
+		collectionsChanged = make(chan fs.Event)
 		if len(appConfig.ExpandedPaths) > 0 {
 			expandWatcher, err = fs.NewPathsWatcher(appConfig.ExpandedPaths)
 			if err != nil {
@@ -89,6 +90,8 @@ func watchConfig(dataDir string, callback func(appConfig *AppConfig)) {
 						// Removed item was not a collection dir
 						continue
 					}
+				default:
+					continue
 				}
 				log.Println("collection changed, reloading")
 			}
