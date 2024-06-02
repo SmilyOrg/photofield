@@ -470,10 +470,7 @@ func (*Api) GetScenesId(w http.ResponseWriter, r *http.Request, id openapi.Scene
 }
 
 func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
-	for i := range collections {
-		collection := &collections[i]
-		collection.UpdateStatus(imageSource)
-	}
+	// Explicitly do not update collection status to avoid long delays
 	items := collections
 	if items == nil {
 		items = make([]collection.Collection, 0)
