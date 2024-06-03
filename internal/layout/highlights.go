@@ -133,11 +133,6 @@ func LayoutHighlights(infos <-chan image.InfoEmb, layout Layout, scene *render.S
 		}
 		prevEmb = emb
 		prevInvNorm = invnorm
-
-		if info.Width == 0 || info.Height == 0 {
-			info.Width = 3
-			info.Height = 2
-		}
 		photo := HighlightPhoto{
 			Photo: dag.Photo{
 				Id:          info.Id,

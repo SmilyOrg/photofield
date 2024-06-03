@@ -39,6 +39,13 @@ func AngleToKm(a s1.Angle) float64 {
 	return a.Radians() * earthRadiusKm
 }
 
+func (info *Info) MakeValid() {
+	if info.Width == 0 || info.Height == 0 {
+		info.Width = 3
+		info.Height = 2
+	}
+}
+
 func (info *Info) Size() Size {
 	return Size{X: info.Width, Y: info.Height}
 }
