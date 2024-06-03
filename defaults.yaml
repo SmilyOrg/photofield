@@ -108,7 +108,7 @@ media:
       # Size of the image cache used while rendering images
       # A larger cache might make display/rendering faster, while a smaller
       # cache will conserve memory.
-      max_size: 256Mi
+      max_size: 1024Mi
     
   # File extensions to index on the file system
   extensions: [
