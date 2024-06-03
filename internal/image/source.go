@@ -109,7 +109,7 @@ func (config *CacheConfig) MaxSizeBytes() int64 {
 }
 
 type Caches struct {
-	Image CacheConfig
+	Image CacheConfig `json:"image"`
 }
 
 type Config struct {
@@ -198,7 +198,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 		[]string{"source"},
 	)
 
-	source.imageCache = ristretto.New()
+	source.imageCache = ristretto.New(config.Caches.Image.MaxSizeBytes())
 	env := SourceEnvironment{
 		SourceTypes: config.SourceTypes,
 		FFmpegPath:  ffmpeg.FindPath(),

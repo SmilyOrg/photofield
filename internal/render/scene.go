@@ -135,7 +135,7 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	// 	photo.Draw(config, scene, c, scales, source)
 	// }
 
-	concurrent := 10
+	concurrent := runtime.NumCPU()
 	photoCount := len(scene.Photos)
 	if photoCount < concurrent {
 		concurrent = photoCount
@@ -214,7 +214,7 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []image.ImageId) {
 }
 
 func (scene *Scene) GetVisiblePhotoRefs(view Rect, maxCount int) <-chan PhotoRef {
-	out := make(chan PhotoRef)
+	out := make(chan PhotoRef, 10)
 	go func() {
 		count := 0
 		if maxCount == 0 {
