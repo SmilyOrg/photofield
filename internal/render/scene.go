@@ -3,6 +3,7 @@ package render
 import (
 	"image/color"
 	"math"
+	"runtime"
 	"sync"
 	"time"
 
