@@ -82,11 +82,13 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
 		var query *search.Query
+		embFilter := false
 
 		if scene.Search != "" {
-			searchDone := metrics.Elapsed("search embed")
+			searchDone := metrics.Elapsed("search")
 			q, err := search.Parse(scene.Search)
 			if err == nil {
+				embFilter = len(q.QualifierValues("t")) > 0
 				if similar, err := q.QualifierInt("img"); err == nil {
 					embedding, err := imageSource.GetImageEmbedding(image.ImageId(similar))
 					if err != nil {
@@ -94,14 +96,23 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
 					}
 					scene.SearchEmbedding = embedding
-				} else if len(q.QualifierValues("tag")) > 0 {
+					query = q
+				} else if len(q.QualifierValues("tag")) > 0 || len(q.QualifierValues("created")) > 0 || embFilter {
 					query = q
 				}
+			} else {
+				log.Printf("search parse failed: %s", err.Error())
 			}
 
 			// Fallback
-			if scene.SearchEmbedding == nil && scene.Error == "" && query == nil {
-				embedding, err := imageSource.Clip.EmbedText(scene.Search)
+			if scene.SearchEmbedding == nil && scene.Error == "" && (query == nil || embFilter) {
+				text := scene.Search
+				if query != nil {
+					text = query.Words()
+				}
+				done := metrics.Elapsed("search embed")
+				embedding, err := imageSource.Clip.EmbedText(text)
+				done()
 				if err != nil {
 					log.Println("search embed failed")
 					scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
@@ -118,7 +129,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			})
 
 			layout.LayoutHighlights(infos, config.Layout, &scene, imageSource)
-		} else if scene.SearchEmbedding != nil {
+		} else if !embFilter && scene.SearchEmbedding != nil {
 			// Similarity order
 			infos := config.Collection.GetSimilar(imageSource, scene.SearchEmbedding, image.ListOptions{
 				Limit: config.Collection.Limit,
@@ -134,9 +145,10 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 		} else {
 			// Normal order
 			infos := config.Collection.GetInfos(imageSource, image.ListOptions{
-				OrderBy: image.ListOrder(config.Layout.Order),
-				Limit:   config.Collection.Limit,
-				Query:   query,
+				OrderBy:   image.ListOrder(config.Layout.Order),
+				Limit:     config.Collection.Limit,
+				Query:     query,
+				Embedding: scene.SearchEmbedding,
 			})
 			switch config.Layout.Type {
 			case layout.Timeline:

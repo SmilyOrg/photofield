@@ -38,9 +38,10 @@ const (
 )
 
 type ListOptions struct {
-	OrderBy ListOrder
-	Limit   int
-	Query   *search.Query
+	OrderBy   ListOrder
+	Limit     int
+	Query     *search.Query
+	Embedding clip.Embedding
 }
 
 type DirsFunc func(dirs []string)
@@ -1374,8 +1375,25 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			}
 		}
 
+		var emb []float32
+		var embInvNorm float32
+		if options.Embedding != nil {
+			emb = options.Embedding.Float32()
+			embInvNorm = options.Embedding.InvNormFloat32()
+		}
+		embThreshold := float32(0)
+		if f, err := options.Query.QualifierFloat32("t"); err == nil {
+			embThreshold = f
+		} else {
+			emb = nil
+		}
+
 		sql += `
-			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
+		if emb != nil {
+			sql += `, inv_norm, embedding`
+		}
+		sql += `
 			FROM infos
 		`
 
@@ -1385,6 +1403,12 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 					JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
 				`, i)
 			}
+		}
+
+		if emb != nil {
+			sql += `
+				LEFT JOIN clip_emb ON clip_emb.file_id = id
+			`
 		}
 
 		sql += `
@@ -1403,6 +1427,14 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		sql += `
 			)
 		`
+
+		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
+		if createdErr == nil {
+			sql += `
+			AND created_at_unix >= ?
+			AND created_at_unix <= ?
+			`
+		}
 
 		switch options.OrderBy {
 		case None:
@@ -1441,6 +1473,13 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			bindIndex++
 		}
 
+		if createdErr == nil {
+			stmt.BindInt64(bindIndex, createdFrom.Unix())
+			bindIndex++
+			stmt.BindInt64(bindIndex, createdTo.Unix())
+			bindIndex++
+		}
+
 		if options.Limit > 0 {
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
@@ -1476,6 +1515,23 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 				info.LatLng = NaNLatLng()
 			} else {
 				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
+			}
+
+			if emb != nil {
+				e, err := readEmbedding(stmt, 9, 10)
+				if err != nil {
+					log.Printf("Error reading embedding for %d: %v\n", info.Id, err)
+					continue
+				}
+				sim, err := clip.CosineSimilarityEmbeddingFloat32(e, emb, embInvNorm)
+				if err != nil {
+					log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
+					continue
+				}
+				// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
+				if sim < embThreshold {
+					continue
+				}
 			}
 
 			out <- info
