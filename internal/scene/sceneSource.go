@@ -270,6 +270,10 @@ func sceneConfigEqual(a SceneConfig, b SceneConfig) bool {
 		return false
 	}
 
+	if a.Layout.Tweaks != b.Layout.Tweaks {
+		return false
+	}
+
 	if a.Scene.Search != b.Scene.Search {
 		return false
 	}

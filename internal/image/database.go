@@ -1375,22 +1375,29 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			}
 		}
 
+		joinEmbeddings := false
 		var emb []float32
 		var embInvNorm float32
 		if options.Embedding != nil {
 			emb = options.Embedding.Float32()
 			embInvNorm = options.Embedding.InvNormFloat32()
 		}
+
 		embThreshold := float32(0)
 		if f, err := options.Query.QualifierFloat32("t"); err == nil {
 			embThreshold = f
-		} else {
-			emb = nil
+			joinEmbeddings = true
+		}
+
+		embDedup := float32(0)
+		if f, err := options.Query.QualifierFloat32("dedup"); err == nil {
+			embDedup = f
+			joinEmbeddings = true
 		}
 
 		sql += `
 			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
-		if emb != nil {
+		if joinEmbeddings {
 			sql += `, inv_norm, embedding`
 		}
 		sql += `
@@ -1405,7 +1412,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			}
 		}
 
-		if emb != nil {
+		if joinEmbeddings {
 			sql += `
 				LEFT JOIN clip_emb ON clip_emb.file_id = id
 			`
@@ -1484,6 +1491,9 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
 
+		var lastEmb []float32
+		var lastEmbInvNorm float32
+
 		for {
 			if exists, err := stmt.Step(); err != nil {
 				log.Printf("Error listing files: %s\n", err.Error())
@@ -1517,20 +1527,38 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
 			}
 
-			if emb != nil {
+			if joinEmbeddings {
 				e, err := readEmbedding(stmt, 9, 10)
 				if err != nil {
 					log.Printf("Error reading embedding for %d: %v\n", info.Id, err)
 					continue
 				}
-				sim, err := clip.CosineSimilarityEmbeddingFloat32(e, emb, embInvNorm)
-				if err != nil {
-					log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
-					continue
+				ee := e.Float32()
+				einv := e.InvNormFloat32()
+				if emb != nil {
+					sim, err := clip.CosineSimilarityFloat32Float32(emb, embInvNorm, ee, einv)
+					if err != nil {
+						log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
+						continue
+					}
+					// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
+					if sim < embThreshold {
+						continue
+					}
 				}
-				// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
-				if sim < embThreshold {
-					continue
+				if embDedup > 0 {
+					if lastEmb != nil {
+						sim, err := clip.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
+						if err != nil {
+							log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
+							continue
+						}
+						if sim >= embDedup {
+							continue
+						}
+					}
+					lastEmb = ee
+					lastEmbInvNorm = einv
 				}
 			}
 

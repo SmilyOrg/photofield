@@ -55,6 +55,7 @@ type Layout struct {
 	ImageHeight    float64
 	ImageSpacing   float64
 	LineSpacing    float64
+	Tweaks         string
 }
 
 type Section struct {

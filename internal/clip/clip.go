@@ -50,6 +50,14 @@ func CosineSimilarityEmbeddingFloat32(e Embedding, f []float32, invnorm float32)
 	return dot * invnorm * e.InvNormFloat32(), nil
 }
 
+func CosineSimilarityFloat32Float32(a []float32, ainvnorm float32, b []float32, binvnorm float32) (float32, error) {
+	dot, err := DotProductFloat32Float32(a, b)
+	if err != nil {
+		return 0, err
+	}
+	return dot * ainvnorm * binvnorm, nil
+}
+
 // Most real world inverse vector norms of embeddings fall
 // within ~500 of 11843, so it's more efficient to store
 // the inverse vector norm as an offset of this number.

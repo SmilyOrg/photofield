@@ -132,7 +132,7 @@ func cropRect(bitmap *Bitmap, bounds goimage.Rectangle) goimage.Rectangle {
 	return croprect
 }
 
-func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64) {
+func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64, hq bool) {
 	bounds := img.Bounds()
 
 	arb := float64(bounds.Dx()) / float64(bounds.Dy())
@@ -147,6 +147,8 @@ func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Co
 		if !cropsBlackbarsOnly(img, croprect) {
 			crop = false
 		}
+	} else {
+		croprect = bounds
 	}
 
 	var model canvas.Matrix
@@ -157,11 +159,25 @@ func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Co
 	}
 
 	m := c.View().Mul(model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5))
-	if crop {
-		renderImageFastCropped(rimg, img, m, croprect)
+
+	var interp draw.Interpolator
+	if hq {
+		interp = draw.CatmullRom
 	} else {
-		renderImageFast(rimg, img, m)
+		interp = draw.ApproxBiLinear
 	}
+	renderImage(rimg, img, m, croprect, interp)
+}
+
+func renderImage(rimg draw.Image, img goimage.Image, m canvas.Matrix, crop goimage.Rectangle, interpolator draw.Interpolator) {
+	bounds := img.Bounds()
+	origin := m.Dot(canvas.Point{X: 0, Y: float64(bounds.Size().Y)})
+	h := float64(rimg.Bounds().Size().Y)
+	aff3 := f64.Aff3{
+		m[0][0], -m[0][1], origin.X,
+		-m[1][0], m[1][1], h - origin.Y,
+	}
+	interpolator.Transform(rimg, aff3, img, crop, draw.Src, nil)
 }
 
 func renderImageFastCropped(rimg draw.Image, img goimage.Image, m canvas.Matrix, crop goimage.Rectangle) {

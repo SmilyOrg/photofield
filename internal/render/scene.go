@@ -15,6 +15,13 @@ import (
 	"photofield/io"
 )
 
+type QualityPreset int
+
+const (
+	QualityPresetFast QualityPreset = iota
+	QualityPresetHigh
+)
+
 type Render struct {
 	TileSize          int         `json:"tile_size"`
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
@@ -28,6 +35,7 @@ type Render struct {
 
 	DebugOverdraw   bool
 	DebugThumbnails bool
+	QualityPreset   QualityPreset
 
 	Zoom        int
 	CanvasImage draw.Image

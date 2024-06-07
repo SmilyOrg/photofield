@@ -9,6 +9,7 @@ import (
 	"photofield/internal/layout/dag"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
+	"strings"
 	"time"
 
 	"github.com/gammazero/deque"
@@ -22,12 +23,16 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 	layout.LineSpacing = 0.02 * layout.ImageHeight
 
 	sceneMargin := 10.
+	topMargin := 64.
+	if strings.Contains(layout.Tweaks, "notopmargin") {
+		topMargin = 0
+	}
 
 	scene.Bounds.W = layout.ViewportWidth
 
 	rect := render.Rect{
 		X: sceneMargin,
-		Y: sceneMargin + 64,
+		Y: sceneMargin + topMargin,
 		W: scene.Bounds.W - sceneMargin*2,
 		H: 0,
 	}
@@ -58,8 +63,9 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 	var prevLocTime time.Time
 	var prevLocation string
 	var prevAuxTime time.Time
+	nogeo := strings.Contains(layout.Tweaks, "nogeo")
 	for info := range infos {
-		if source.Geo.Available() {
+		if !nogeo && source.Geo.Available() {
 			photoTime := info.DateTime
 			lastLocCheck := prevLocTime.Sub(photoTime)
 			if lastLocCheck < 0 {
