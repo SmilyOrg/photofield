@@ -3,6 +3,7 @@ package scene
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -144,11 +145,16 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			}
 		} else {
 			// Normal order
+			var extensions []string
+			if strings.Contains(config.Layout.Tweaks, "imageonly") {
+				extensions = imageSource.Images.Extensions
+			}
 			infos := config.Collection.GetInfos(imageSource, image.ListOptions{
-				OrderBy:   image.ListOrder(config.Layout.Order),
-				Limit:     config.Collection.Limit,
-				Query:     query,
-				Embedding: scene.SearchEmbedding,
+				OrderBy:    image.ListOrder(config.Layout.Order),
+				Limit:      config.Collection.Limit,
+				Query:      query,
+				Embedding:  scene.SearchEmbedding,
+				Extensions: extensions,
 			})
 			switch config.Layout.Type {
 			case layout.Timeline:

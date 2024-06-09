@@ -38,10 +38,11 @@ const (
 )
 
 type ListOptions struct {
-	OrderBy   ListOrder
-	Limit     int
-	Query     *search.Query
-	Embedding clip.Embedding
+	OrderBy    ListOrder
+	Limit      int
+	Query      *search.Query
+	Embedding  clip.Embedding
+	Extensions []string
 }
 
 type DirsFunc func(dirs []string)
@@ -1435,6 +1436,21 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			)
 		`
 
+		if len(options.Extensions) > 0 {
+			sql += `
+			AND (
+			`
+			for i := range options.Extensions {
+				sql += `filename LIKE ? `
+				if i < len(options.Extensions)-1 {
+					sql += "OR "
+				}
+			}
+			sql += `
+			)
+			`
+		}
+
 		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
 		if createdErr == nil {
 			sql += `
@@ -1477,6 +1493,11 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		for _, ext := range options.Extensions {
+			stmt.BindText(bindIndex, "%"+ext)
 			bindIndex++
 		}
 
@@ -1530,7 +1551,6 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			if joinEmbeddings {
 				e, err := readEmbedding(stmt, 9, 10)
 				if err != nil {
-					log.Printf("Error reading embedding for %d: %v\n", info.Id, err)
 					continue
 				}
 				ee := e.Float32()
