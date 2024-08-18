@@ -140,7 +140,7 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
 });
 
 const qualityPreset = computed(() => {
-  if (tweaks.value?.indexOf("hq") != -1) return "HIGH";
+  if (tweaks.value?.indexOf("hq") > -1) return "HIGH";
   return null;
 });
 
