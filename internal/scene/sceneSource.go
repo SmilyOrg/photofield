@@ -89,7 +89,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone := metrics.Elapsed("search")
 			q, err := search.Parse(scene.Search)
 			if err == nil {
-				embFilter = len(q.QualifierValues("t")) > 0
+				embFilter = len(q.QualifierValues("t")) > 0 || len(q.QualifierValues("dedup")) > 0
 				if similar, err := q.QualifierInt("img"); err == nil {
 					embedding, err := imageSource.GetImageEmbedding(image.ImageId(similar))
 					if err != nil {
