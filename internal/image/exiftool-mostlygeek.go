@@ -90,7 +90,7 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 		}
 		name := strings.TrimSpace(nameValueSplit[0])
 		value := strings.TrimSpace(nameValueSplit[1])
-		// println(name, value)
+		// println(path, name, value)
 		switch name {
 		case "Orientation":
 			orientation = value
@@ -104,9 +104,6 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 			latitude = value
 		case "GPSLongitude":
 			longitude = value
-
-		// case "GPSDateTime":
-		// 	gpsTime, _ = parseDateTime(value)
 		default:
 			if name, ok := tag.ExifTagToName[name]; ok {
 				tags = append(tags, tag.NewExif(name, value))
@@ -114,14 +111,27 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 			if strings.Contains(name, "Date") || strings.Contains(name, "Time") {
 				// println(path, info.DateTime.IsZero(), name, value)
 				if info.DateTime.IsZero() {
-					info.DateTime, _, _, _ = parseDateTime(value)
-					println(path, "zero", info.DateTime.String())
-				} else if name != "FileModifyDate" && name != "FileCreateDate" {
-					// Prefer time with timezone if available
-					t, hasTimezone, _, _ := parseDateTime(value)
-					println(path, "nonzero", t.String(), "timezone", hasTimezone)
-					if hasTimezone && info.DateTime.Location() == time.UTC {
+					t, _, _, err := parseDateTime(value)
+					if err == nil {
 						info.DateTime = t
+					}
+				} else if name != "GPSDateTime" && name != "FileModifyDate" && name != "FileCreateDate" {
+					t, hasTimezone, _, err := parseDateTime(value)
+					if err == nil && info.DateTime.Location() == time.UTC {
+						if hasTimezone {
+							// Prefer time with timezone if available
+							info.DateTime = t
+						} else {
+							// If there are two times that are more than 10 minutes apart and
+							// the first one doesn't have a timezone, it's likely that the
+							// first one is local time and the second one is UTC, so we add
+							// the timezone to the first one.
+							d := info.DateTime.Sub(t)
+							if d.Abs() > 10*time.Minute {
+								d = d.Truncate(time.Minute)
+								info.DateTime = info.DateTime.Add(-d).In(time.FixedZone("", int(d.Seconds())))
+							}
+						}
 					}
 				}
 			} else if strings.HasSuffix(name, "Image") {

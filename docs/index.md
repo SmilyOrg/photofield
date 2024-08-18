@@ -75,6 +75,7 @@ features:
       src: /assets/features/map.jpg
     title: |
       Different views
+    link: /features/layouts
     details: |
       Collections of photos can be displayed with different layouts, like an album, a timeline, or a map.
 
@@ -82,13 +83,15 @@ features:
       src: /assets/features/slovenia.jpg
     title: |
       Reverse geolocation
+    link: /features/geolocation
     details: |
       Local, embedded reverse geolocation, negligible performance impact, no API calls needed. Supports ~50 thousand places powered by geoBoundaries.
 
   - icon:
       src: /assets/features/cat-eyes.jpg
     title: |
-      Semantic search (alpha)
+      Semantic search
+    link: /features/search
     details: |
       You can search for photo contents using words like "beach sunset", "a couple kissing", or "cat eyes". Needs to be configured as it requires running a separate AI server.
 

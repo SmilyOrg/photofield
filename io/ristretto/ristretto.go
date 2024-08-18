@@ -36,13 +36,11 @@ func (ids IdWithSize) String() string {
 	return fmt.Sprintf("%6d %4d %4d", ids.Id, ids.Size.X, ids.Size.Y)
 }
 
-func New() *Ristretto {
-	maxSizeBytes := int64(256000000)
-
+func New(sizeBytes int64) *Ristretto {
 	cache, err := drist.NewCache(&drist.Config[IdWithName, io.Result]{
-		NumCounters: 1e6,          // number of keys to track frequency of
-		MaxCost:     maxSizeBytes, // maximum cost of cache
-		BufferItems: 64,           // number of keys per Get buffer
+		NumCounters: 1e6,       // number of keys to track frequency of
+		MaxCost:     sizeBytes, // maximum cost of cache
+		BufferItems: 64,        // number of keys per Get buffer
 		Metrics:     true,
 		Cost:        cost,
 		KeyToHash:   keyToHash,
@@ -117,11 +115,20 @@ func (r *Ristretto) Set(ctx context.Context, id io.ImageId, path string, v io.Re
 	return r.cache.SetWithTTL(idn, v, 0, 10*time.Minute)
 }
 
+func printedCost(r io.Result) int64 {
+	c := cost(r)
+	if r.Image != nil {
+		fmt.Printf("cost %v %v %v\n", r.Image.Bounds().Dx(), r.Image.Bounds().Dy(), c/1000000)
+	}
+	return c
+}
+
 func cost(r io.Result) int64 {
 	img := r.Image
 	if img == nil {
 		return 1
 	}
+
 	switch img := img.(type) {
 
 	case *image.YCbCr:

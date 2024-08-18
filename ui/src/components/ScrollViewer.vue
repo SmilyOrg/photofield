@@ -17,6 +17,7 @@
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
+      :qualityPreset="qualityPreset"
       @click="onClick"
       @view="onView"
       @nav="onNav"
@@ -92,6 +93,7 @@ const props = defineProps({
   debug: Object,
   fullpage: Boolean,
   scrollbar: Object,
+  tweaks: String,
 });
 
 const emit = defineEmits({
@@ -118,6 +120,7 @@ const {
   search,
   selectTag,
   debug,
+  tweaks,
 } = toRefs(props);
 
 const viewer = ref(null);
@@ -133,6 +136,12 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
   imageHeight,
   viewport,
   search,
+  tweaks,
+});
+
+const qualityPreset = computed(() => {
+  if (tweaks.value?.indexOf("hq") > -1) return "HIGH";
+  return null;
 });
 
 watch(scene, async (newScene, oldScene) => {

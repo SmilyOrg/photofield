@@ -2,6 +2,15 @@
   --vp-c-brand-1: #dd8888;
   --vp-c-brand-2: #dd8888;
   --vp-c-brand-3: #be6868;
+  --vp-code-color: #c46363;
+  --vp-code-bg: hsl(0, 0%, 97%);
+  --vp-custom-block-tip-code-bg: hsl(237, 100%, 99%);
+}
+
+:root.dark {
+  --vp-code-color: var(--vp-c-brand-1);
+  --vp-code-bg: var(--vp-c-default-soft);
+  --vp-custom-block-tip-code-bg: var(--vp-custom-block-tip-code-bg);
 }
 
 .VPFeature article > img {

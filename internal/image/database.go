@@ -45,9 +45,11 @@ const (
 )
 
 type ListOptions struct {
-	OrderBy ListOrder
-	Limit   int
-	Query   *search.Query
+	OrderBy    ListOrder
+	Limit      int
+	Query      *search.Query
+	Embedding  clip.Embedding
+	Extensions []string
 }
 
 type DirsFunc func(dirs []string)
@@ -132,6 +134,20 @@ type TagIdRange struct {
 }
 
 type tagSet map[tag.Id]struct{}
+
+func readEmbedding(stmt *sqlite.Stmt, invnormIndex int, embeddingIndex int) (clip.Embedding, error) {
+	if stmt.ColumnType(invnormIndex) == sqlite.TypeNull || stmt.ColumnType(embeddingIndex) == sqlite.TypeNull {
+		return clip.FromRaw(nil, 0), ErrNotFound
+	}
+	invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(invnormIndex))
+	size := stmt.ColumnLen(embeddingIndex)
+	bytes := make([]byte, size)
+	read := stmt.ColumnBytes(embeddingIndex, bytes)
+	if read != size {
+		return clip.FromRaw(nil, 0), fmt.Errorf("unable to read embedding bytes, expected %d, got %d", size, read)
+	}
+	return clip.FromRaw(bytes, invnorm), nil
+}
 
 func (tags *tagSet) Add(id tag.Id) {
 	(*tags)[id] = struct{}{}
@@ -864,6 +880,10 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 
 func (source *Database) GetDir(dir string) (InfoResult, bool) {
 
+	if source == nil {
+		return InfoResult{}, false
+	}
+
 	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
@@ -1552,8 +1572,32 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 			}
 		}
 
+		joinEmbeddings := false
+		var emb []float32
+		var embInvNorm float32
+		if options.Embedding != nil {
+			emb = options.Embedding.Float32()
+			embInvNorm = options.Embedding.InvNormFloat32()
+		}
+
+		embThreshold := float32(0)
+		if f, err := options.Query.QualifierFloat32("t"); err == nil {
+			embThreshold = f
+			joinEmbeddings = true
+		}
+
+		embDedup := float32(0)
+		if f, err := options.Query.QualifierFloat32("dedup"); err == nil {
+			embDedup = f
+			joinEmbeddings = true
+		}
+
 		sql += `
-			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
+		if joinEmbeddings {
+			sql += `, inv_norm, embedding`
+		}
+		sql += `
 			FROM infos
 		`
 
@@ -1564,6 +1608,199 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 				`, i)
 			}
 		}
+
+		if joinEmbeddings {
+			sql += `
+				LEFT JOIN clip_emb ON clip_emb.file_id = id
+			`
+		}
+
+		sql += `
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE `
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+		`
+
+		if len(options.Extensions) > 0 {
+			sql += `
+			AND (
+			`
+			for i := range options.Extensions {
+				sql += `filename LIKE ? `
+				if i < len(options.Extensions)-1 {
+					sql += "OR "
+				}
+			}
+			sql += `
+			)
+			`
+		}
+
+		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
+		if createdErr == nil {
+			sql += `
+			AND created_at_unix >= ?
+			AND created_at_unix <= ?
+			`
+		}
+
+		switch options.OrderBy {
+		case None:
+		case DateAsc:
+			sql += `
+			ORDER BY created_at_unix ASC
+			`
+		case DateDesc:
+			sql += `
+			ORDER BY created_at_unix DESC
+			`
+		default:
+			panic("Unsupported listing order")
+		}
+
+		if options.Limit > 0 {
+			sql += `
+				LIMIT ?
+			`
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		bindIndex := 1
+
+		for _, t := range tags {
+			stmt.BindText(bindIndex, t)
+			bindIndex++
+		}
+
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		for _, ext := range options.Extensions {
+			stmt.BindText(bindIndex, "%"+ext)
+			bindIndex++
+		}
+
+		if createdErr == nil {
+			stmt.BindInt64(bindIndex, createdFrom.Unix())
+			bindIndex++
+			stmt.BindInt64(bindIndex, createdTo.Unix())
+			bindIndex++
+		}
+
+		if options.Limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(options.Limit))
+		}
+
+		var lastEmb []float32
+		var lastEmbInvNorm float32
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing files: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+
+			var info InfoListResult
+			info.Id = (ImageId)(stmt.ColumnInt64(0))
+
+			info.Width = stmt.ColumnInt(1)
+			info.Height = stmt.ColumnInt(2)
+			info.SizeNull = stmt.ColumnType(1) == sqlite.TypeNull || stmt.ColumnType(2) == sqlite.TypeNull
+
+			info.Orientation = Orientation(stmt.ColumnInt(3))
+			info.OrientationNull = stmt.ColumnType(3) == sqlite.TypeNull
+
+			info.Color = (uint32)(stmt.ColumnInt64(4))
+			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
+
+			unix := stmt.ColumnInt64(5)
+			timezoneOffset := stmt.ColumnInt(6)
+
+			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
+			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
+
+			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
+			if info.LatLngNull {
+				info.LatLng = NaNLatLng()
+			} else {
+				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
+			}
+
+			if joinEmbeddings {
+				e, err := readEmbedding(stmt, 9, 10)
+				if err != nil {
+					continue
+				}
+				ee := e.Float32()
+				einv := e.InvNormFloat32()
+				if emb != nil {
+					sim, err := clip.CosineSimilarityFloat32Float32(emb, embInvNorm, ee, einv)
+					if err != nil {
+						log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
+						continue
+					}
+					// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
+					if sim < embThreshold {
+						continue
+					}
+				}
+				if embDedup > 0 {
+					if lastEmb != nil {
+						sim, err := clip.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
+						if err != nil {
+							log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
+							continue
+						}
+						if sim >= embDedup {
+							continue
+						}
+					}
+					lastEmb = ee
+					lastEmbInvNorm = einv
+				}
+			}
+
+			out <- info
+		}
+
+		close(out)
+	}()
+	return out, deps
+}
+
+func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <-chan InfoEmb {
+	out := make(chan InfoEmb, 1000)
+	go func() {
+		defer metrics.Elapsed("list infos sqlite")()
+
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
+		sql := ""
+
+		sql += `
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude, inv_norm, embedding
+			FROM infos
+			LEFT JOIN clip_emb ON clip_emb.file_id = id
+		`
 
 		sql += `
 			WHERE path_prefix_id IN (
@@ -1609,11 +1846,6 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 
 		bindIndex := 1
 
-		for _, t := range tags {
-			stmt.BindText(bindIndex, t)
-			bindIndex++
-		}
-
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
 			bindIndex++
@@ -1630,31 +1862,30 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 				break
 			}
 
-			var info InfoListResult
+			var info InfoEmb
 			info.Id = (ImageId)(stmt.ColumnInt64(0))
 
 			info.Width = stmt.ColumnInt(1)
 			info.Height = stmt.ColumnInt(2)
-			info.SizeNull = stmt.ColumnType(1) == sqlite.TypeNull || stmt.ColumnType(2) == sqlite.TypeNull
-
 			info.Orientation = Orientation(stmt.ColumnInt(3))
-			info.OrientationNull = stmt.ColumnType(3) == sqlite.TypeNull
-
 			info.Color = (uint32)(stmt.ColumnInt64(4))
-			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
 
 			unix := stmt.ColumnInt64(5)
 			timezoneOffset := stmt.ColumnInt(6)
 
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
-			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
-			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
-			if info.LatLngNull {
+			if stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull {
 				info.LatLng = NaNLatLng()
 			} else {
 				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
 			}
+
+			emb, err := readEmbedding(stmt, 9, 10)
+			if err != nil {
+				log.Printf("Error reading embedding for %d: %s\n", info.Id, err.Error())
+			}
+			info.Embedding = emb
 
 			out <- info
 		}
@@ -1750,19 +1981,15 @@ func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-cha
 			}
 
 			id := (ImageId)(stmt.ColumnInt64(0))
-			invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(1))
-
-			size := stmt.ColumnLen(2)
-			bytes := make([]byte, size)
-			read := stmt.ColumnBytes(2, bytes)
-			if read != size {
-				log.Printf("Error reading embedding: buffer underrun, expected %d actual %d bytes\n", size, read)
+			emb, err := readEmbedding(stmt, 1, 2)
+			if err != nil {
+				log.Printf("Error reading embedding: %s\n", err.Error())
 				continue
 			}
 
 			out <- EmbeddingsResult{
 				Id:        id,
-				Embedding: clip.FromRaw(bytes, invnorm),
+				Embedding: emb,
 			}
 		}
 

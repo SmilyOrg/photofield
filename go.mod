@@ -10,6 +10,7 @@ require (
 	github.com/dgraph-io/ristretto v0.1.2-0.20230929213430-5239be55a219
 	github.com/docker/go-units v0.4.0
 	github.com/felixge/fgprof v0.9.1
+	github.com/gammazero/deque v0.2.1
 	github.com/go-chi/chi/v5 v5.0.4
 	github.com/go-chi/cors v1.2.0
 	github.com/go-chi/render v1.0.1
@@ -17,7 +18,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.1
 	github.com/golang/geo v0.0.0-20230421003525-6adc56603217
 	github.com/gosimple/slug v1.10.0
-	github.com/grafana/pyroscope-go v1.0.4
+	github.com/grafana/pyroscope-go v1.1.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/imdario/mergo v0.3.13
 	github.com/joho/godotenv v1.3.0
@@ -61,12 +62,13 @@ require (
 	github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gosimple/unidecode v1.0.0 // indirect
-	github.com/grafana/pyroscope-go/godeltaprof v0.1.4 // indirect
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.6 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
+	github.com/klauspost/compress v1.17.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect

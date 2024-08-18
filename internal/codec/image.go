@@ -13,8 +13,8 @@ func DecodeJpeg(reader io.ReadSeeker) (image.Image, error) {
 	return jpeg.Decode(reader)
 }
 
-func EncodeJpeg(w io.Writer, image image.Image) error {
+func EncodeJpeg(w io.Writer, image image.Image, quality int) error {
 	return jpeg.Encode(w, image, &jpeg.Options{
-		Quality: 80,
+		Quality: quality,
 	})
 }

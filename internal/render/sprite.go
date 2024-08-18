@@ -30,6 +30,26 @@ func (sprite *Sprite) PlaceFitHeight(
 	}
 }
 
+func (sprite *Sprite) PlaceFitWidth(
+	x float64,
+	y float64,
+	fitWidth float64,
+	contentWidth float64,
+	contentHeight float64,
+) {
+	scale := fitWidth / contentWidth
+	if math.IsNaN(scale) || math.IsInf(scale, 0) {
+		scale = 1
+	}
+
+	sprite.Rect = Rect{
+		X: x,
+		Y: y,
+		W: contentWidth * scale,
+		H: contentHeight * scale,
+	}
+}
+
 func (sprite *Sprite) PlaceFit(
 	x float64,
 	y float64,

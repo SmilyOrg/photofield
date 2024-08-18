@@ -30,7 +30,7 @@ func (e embedding) Byte() []byte {
 }
 
 func (e embedding) Float() []Float {
-	if e.bytes == nil {
+	if e.bytes == nil || len(e.bytes) == 0 {
 		return nil
 	}
 	p := unsafe.Pointer(&e.bytes[0])

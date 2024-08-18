@@ -81,6 +81,11 @@ type SimilarityInfo struct {
 	Similarity float32
 }
 
+type InfoEmb struct {
+	SourcedInfo
+	Embedding clip.Embedding
+}
+
 func SimilarityInfosToSourcedInfos(sinfos <-chan SimilarityInfo) <-chan SourcedInfo {
 	out := make(chan SourcedInfo)
 	go func() {
@@ -105,7 +110,7 @@ func (config *CacheConfig) MaxSizeBytes() int64 {
 }
 
 type Caches struct {
-	Image CacheConfig
+	Image CacheConfig `json:"image"`
 }
 
 type Config struct {
@@ -194,7 +199,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 		[]string{"source"},
 	)
 
-	source.imageCache = ristretto.New()
+	source.imageCache = ristretto.New(config.Caches.Image.MaxSizeBytes())
 	env := SourceEnvironment{
 		SourceTypes: config.SourceTypes,
 		FFmpegPath:  ffmpeg.FindPath(),
@@ -388,9 +393,7 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) (<-chan Sour
 	go func() {
 		defer metrics.Elapsed("list infos")()
 		for info := range infos {
-			// if info.NeedsMeta() || info.NeedsColor() {
-			// 	info.Info = source.GetInfo(info.Id)
-			// }
+			info.SourcedInfo.Info.MakeValid()
 			out <- info.SourcedInfo
 		}
 		close(out)
@@ -398,20 +401,18 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) (<-chan Sour
 	return out, deps
 }
 
-func (source *Source) ListInfosWithExistence(dirs []string, options ListOptions) <-chan SourcedInfo {
+func (source *Source) ListInfosEmb(dirs []string, options ListOptions) <-chan InfoEmb {
 	for i := range dirs {
 		dirs[i] = filepath.FromSlash(dirs[i])
 	}
-	out := make(chan SourcedInfo, 1000)
+	out := make(chan InfoEmb, 1000)
 	go func() {
-		defer metrics.Elapsed("list infos")()
+		defer metrics.Elapsed("list infos embedded")()
 
-		infos, _ := source.database.List(dirs, options)
+		infos := source.database.ListWithEmbeddings(dirs, options)
 		for info := range infos {
-			if info.NeedsMeta() || info.NeedsColor() {
-				info.Info = source.GetInfo(info.Id)
-			}
-			out <- info.SourcedInfo
+			info.SourcedInfo.Info.MakeValid()
+			out <- info
 		}
 		close(out)
 	}()
@@ -464,6 +465,10 @@ func (source *Source) IndexContents(dirs []string, maxPhotos int, force Missing)
 }
 
 func (source *Source) GetDir(dir string) Info {
+	if source == nil {
+		return Info{}
+	}
+
 	dir = filepath.FromSlash(dir)
 	result, _ := source.database.GetDir(dir)
 	return result.Info

@@ -155,6 +155,7 @@ type SceneParams struct {
 	Layout         LayoutType     `json:"layout"`
 	Search         *Search        `json:"search,omitempty"`
 	Sort           *Sort          `json:"sort,omitempty"`
+	Tweaks         *Tweaks        `json:"tweaks,omitempty"`
 	ViewportHeight ViewportHeight `json:"viewport_height"`
 	ViewportWidth  ViewportWidth  `json:"viewport_width"`
 }
@@ -216,6 +217,9 @@ type TaskType string
 // TileCoord defines model for TileCoord.
 type TileCoord int
 
+// Tweaks defines model for Tweaks.
+type Tweaks string
+
 // ViewportHeight defines model for ViewportHeight.
 type ViewportHeight float32
 
@@ -247,6 +251,7 @@ type GetScenesParams struct {
 	Layout         *LayoutType     `json:"layout,omitempty"`
 	Sort           *Sort           `json:"sort,omitempty"`
 	Search         *Search         `json:"search,omitempty"`
+	Tweaks         *Tweaks         `json:"tweaks,omitempty"`
 	Limit          *Limit          `json:"limit,omitempty"`
 }
 
@@ -282,6 +287,7 @@ type GetScenesSceneIdTilesParams struct {
 	SelectTag       *string `json:"select_tag,omitempty"`
 	DebugOverdraw   *bool   `json:"debug_overdraw,omitempty"`
 	DebugThumbnails *bool   `json:"debug_thumbnails,omitempty"`
+	QualityPreset   *string `json:"quality_preset,omitempty"`
 }
 
 // GetTagsParams defines parameters for GetTags.
@@ -642,6 +648,17 @@ func (siw *ServerInterfaceWrapper) GetScenes(w http.ResponseWriter, r *http.Requ
 	err = runtime.BindQueryParameter("form", true, false, "search", r.URL.Query(), &params.Search)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter search: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "tweaks" -------------
+	if paramValue := r.URL.Query().Get("tweaks"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "tweaks", r.URL.Query(), &params.Tweaks)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter tweaks: %s", err), http.StatusBadRequest)
 		return
 	}
 
@@ -1018,6 +1035,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, false, "debug_thumbnails", r.URL.Query(), &params.DebugThumbnails)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter debug_thumbnails: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "quality_preset" -------------
+	if paramValue := r.URL.Query().Get("quality_preset"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "quality_preset", r.URL.Query(), &params.QualityPreset)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter quality_preset: %s", err), http.StatusBadRequest)
 		return
 	}
 

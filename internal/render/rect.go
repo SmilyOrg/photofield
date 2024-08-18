@@ -76,6 +76,23 @@ func (rect Rect) FitInside(container Rect) (out Rect) {
 	return out
 }
 
+func (rect Rect) FillOutside(container Rect) (out Rect) {
+	imageRatio := rect.W / rect.H
+
+	var scale float64
+	if container.W/container.H > imageRatio {
+		scale = container.W / rect.W
+	} else {
+		scale = container.H / rect.H
+	}
+
+	out.W = rect.W * scale
+	out.H = rect.H * scale
+	out.X = container.X + (container.W-out.W)*0.5
+	out.Y = container.Y + (container.H-out.H)*0.5
+	return out
+}
+
 func (rect Rect) GetMatrix() canvas.Matrix {
 	return canvas.Identity.
 		Translate(rect.X, -rect.Y-rect.H)

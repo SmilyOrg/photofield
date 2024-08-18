@@ -45,12 +45,150 @@ func fitInside(cw float64, ch float64, w float64, h float64) (float64, float64) 
 // 	return r
 // }
 
-func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64) {
+func cropsBlackbarsOnly(img goimage.Image, crop goimage.Rectangle) bool {
 	bounds := img.Bounds()
 
-	model := bitmap.Sprite.Rect.GetMatrixFitBoundsRotate(bounds, bitmap.Orientation)
+	sum := uint64(0)
+	maxBlack := uint64(0xC00)
+
+	// Horizontal top left black bar line
+	for x := 0; x < crop.Min.X; x++ {
+		c := img.At(x, bounds.Min.Y)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("horizontal top left black bar line: %v\n", sum)
+
+	// Horizontal top right black bar line
+	for x := crop.Max.X; x < bounds.Max.X; x++ {
+		c := img.At(x, bounds.Min.Y)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("horizontal top right black bar line: %v\n", sum)
+
+	// Horizontal bottom left black bar line
+	for x := 0; x < crop.Min.X; x++ {
+		c := img.At(x, bounds.Max.Y-1)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("horizontal bottom left black bar line: %v\n", sum)
+
+	// Horizontal bottom right black bar line
+	for x := crop.Max.X; x < bounds.Max.X; x++ {
+		c := img.At(x, bounds.Max.Y-1)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("horizontal bottom right black bar line: %v\n", sum)
+
+	// Vertical top left black bar line
+	for y := 0; y < crop.Min.Y; y++ {
+		c := img.At(bounds.Min.X, y)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("vertical top left black bar line: %v\n", sum)
+
+	// Vertical top right black bar line
+	for y := crop.Max.Y; y < bounds.Max.Y; y++ {
+		c := img.At(bounds.Min.X, y)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("vertical top right black bar line: %v\n", sum)
+
+	// Vertical bottom left black bar line
+	for y := 0; y < crop.Min.Y; y++ {
+		c := img.At(bounds.Max.X-1, y)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("vertical bottom left black bar line: %v\n", sum)
+
+	// Vertical bottom right black bar line
+	for y := crop.Max.Y; y < bounds.Max.Y; y++ {
+		c := img.At(bounds.Max.X-1, y)
+		r, g, b, _ := c.RGBA()
+		sum += uint64((r + g + b)) / 3 / maxBlack
+	}
+	// fmt.Printf("vertical bottom right black bar line: %v\n", sum)
+
+	return sum < 2
+}
+
+func cropRect(bitmap *Bitmap, bounds goimage.Rectangle) goimage.Rectangle {
+	brect := Rect{W: float64(bounds.Dx()), H: float64(bounds.Dy())}
+	rect := bitmap.Sprite.Rect
+	if bitmap.Orientation.SwapsDimensions() {
+		rect.W, rect.H = rect.H, rect.W
+	}
+	cropr := rect.FitInside(brect)
+	croprect := goimage.Rectangle{
+		Min: goimage.Point{X: int(math.Round(cropr.X)), Y: int(math.Round(cropr.Y))},
+		Max: goimage.Point{X: int(math.Round(cropr.X + cropr.W)), Y: int(math.Round(cropr.Y + cropr.H))},
+	}
+	return croprect
+}
+
+func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64, hq bool) {
+	bounds := img.Bounds()
+
+	arb := float64(bounds.Dx()) / float64(bounds.Dy())
+	aro := float64(bitmap.Sprite.Rect.W) / float64(bitmap.Sprite.Rect.H)
+	ard := math.Abs(arb - aro)
+	crop := ard > 0.05
+	// cut = false
+
+	var croprect goimage.Rectangle
+	if crop {
+		croprect = cropRect(bitmap, bounds)
+		if !cropsBlackbarsOnly(img, croprect) {
+			crop = false
+		}
+	} else {
+		croprect = bounds
+	}
+
+	var model canvas.Matrix
+	if crop {
+		model = bitmap.Sprite.Rect.GetMatrixFillBoundsRotate(bounds, bitmap.Orientation)
+	} else {
+		model = bitmap.Sprite.Rect.GetMatrixFitBoundsRotate(bounds, bitmap.Orientation)
+	}
+
 	m := c.View().Mul(model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5))
-	renderImageFast(rimg, img, m)
+
+	var interp draw.Interpolator
+	if hq {
+		interp = draw.CatmullRom
+	} else {
+		interp = draw.ApproxBiLinear
+	}
+	renderImage(rimg, img, m, croprect, interp)
+}
+
+func renderImage(rimg draw.Image, img goimage.Image, m canvas.Matrix, crop goimage.Rectangle, interpolator draw.Interpolator) {
+	bounds := img.Bounds()
+	origin := m.Dot(canvas.Point{X: 0, Y: float64(bounds.Size().Y)})
+	h := float64(rimg.Bounds().Size().Y)
+	aff3 := f64.Aff3{
+		m[0][0], -m[0][1], origin.X,
+		-m[1][0], m[1][1], h - origin.Y,
+	}
+	interpolator.Transform(rimg, aff3, img, crop, draw.Src, nil)
+}
+
+func renderImageFastCropped(rimg draw.Image, img goimage.Image, m canvas.Matrix, crop goimage.Rectangle) {
+	bounds := img.Bounds()
+	origin := m.Dot(canvas.Point{X: 0, Y: float64(bounds.Size().Y)})
+	h := float64(rimg.Bounds().Size().Y)
+	aff3 := f64.Aff3{
+		m[0][0], -m[0][1], origin.X,
+		-m[1][0], m[1][1], h - origin.Y,
+	}
+	draw.ApproxBiLinear.Transform(rimg, aff3, img, crop, draw.Src, nil)
 }
 
 func renderImageFast(rimg draw.Image, img goimage.Image, m canvas.Matrix) {
@@ -71,34 +209,6 @@ func renderImageFastBounds(rimg draw.Image, img goimage.Image, m canvas.Matrix, 
 		m[0][0], -m[0][1], origin.X,
 		-m[1][0], m[1][1], h - origin.Y,
 	}
-	draw.ApproxBiLinear.Transform(rimg, aff3, img, bounds, draw.Src, nil)
-}
-
-// TODO finish implementation
-func renderImageFastCropped(rimg draw.Image, img goimage.Image, m canvas.Matrix, crop Rect, modelTopLeft canvas.Point, modelBottomRight canvas.Point) {
-	bounds := img.Bounds()
-	// bounds := goimage.Rect(0, 0, int(modelBounds.X), int(modelBounds.Y))
-	origin := m.Dot(canvas.Point{X: 0, Y: float64(bounds.Size().Y)})
-	h := float64(rimg.Bounds().Size().Y)
-	aff3 := f64.Aff3{
-		m[0][0], -m[0][1], origin.X,
-		-m[1][0], m[1][1], h - origin.Y,
-	}
-	// croptl := m.Dot(canvas.Point{crop.X, crop.Y})
-	// cropbr := m.Dot(canvas.Point{crop.X + crop.W, crop.Y + crop.H})
-	// println(bounds.String(), crop.String(), croptl.String(), cropbr.String())
-	// tx, ty := m.D
-
-	model := Rect{
-		X: modelTopLeft.X,
-		Y: modelTopLeft.Y,
-		W: modelBottomRight.X - modelTopLeft.X,
-		H: modelBottomRight.Y - modelTopLeft.Y,
-	}
-
-	println(bounds.String(), "crop", crop.String(), "model", model.String())
-	bounds = bounds.Inset(10)
-	// bounds =
 	draw.ApproxBiLinear.Transform(rimg, aff3, img, bounds, draw.Src, nil)
 }
 

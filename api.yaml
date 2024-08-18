@@ -111,6 +111,11 @@ paths:
           schema:
             $ref: "#/components/schemas/Search"
 
+        - name: tweaks
+          in: query
+          schema:
+            $ref: "#/components/schemas/Tweaks"
+
         - name: limit
           in: query
           schema:
@@ -232,6 +237,12 @@ paths:
             type: boolean
             example: false
 
+        - name: quality_preset
+          in: query
+          schema:
+            type: string
+            example: "HIGH"
+            
       responses:
         "200":
           description: OK
@@ -778,6 +789,8 @@ components:
           $ref: "#/components/schemas/ViewportWidth"
         viewport_height:
           $ref: "#/components/schemas/ViewportHeight"
+        tweaks:
+          $ref: "#/components/schemas/Tweaks"
         image_height:
           $ref: "#/components/schemas/ImageHeight"
         layout:
@@ -866,6 +879,9 @@ components:
       type: number
       minimum: 0
       example: 800
+
+    Tweaks:
+      type: string
 
     ImageWidth:
       type: number

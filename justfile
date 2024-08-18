@@ -52,6 +52,9 @@ bench collection: build
 ui:
   cd ui && npm run dev
 
+docs:
+  cd docs && npm run docs:dev
+
 watch:
   watchexec --exts go -r just run
 
@@ -79,19 +82,16 @@ grafana-export:
 pprof := "http://localhost:8080/debug/pprof"
 
 prof-cpu seconds="10":
-  mkdir -p profiles/cpu/
-  filepath=profiles/cpu/cpu-$(date +"%F-%H%M%S").pprof && \
-  curl --progress-bar -o $filepath {{pprof}}/profile?seconds={{seconds}} && \
-  go tool pprof -http=: $filepath
+  go tool pprof -http=: {{pprof}}/profile?seconds={{seconds}}
 
 prof-heap:
-  mkdir -p profiles/heap/
-  filepath=profiles/heap/heap-$(date +"%F-%H%M%S").pprof && \
-  curl --progress-bar -o $filepath {{pprof}}/heap && \
-  go tool pprof -http=: $filepath
+  go tool pprof -http=: {{pprof}}/heap
 
 prof-reload:
   go test -benchmem -benchtime 10s '-run=^$' -bench '^BenchmarkReload$' photofield
+
+monitor:
+  docker compose up prometheus grafana pyroscope
 
 test-reload:
   mkdir -p profiles/

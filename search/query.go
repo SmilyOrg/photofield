@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/alecthomas/participle/v2"
 	"github.com/alecthomas/participle/v2/lexer"
@@ -29,6 +31,9 @@ type Qualifier struct {
 
 var lex *lexer.StatefulDefinition
 var par *participle.Parser[Query]
+
+var ErrNilQuery = fmt.Errorf("nil query")
+var ErrNotFound = fmt.Errorf("not found")
 
 func init() {
 	lex = lexer.MustSimple([]lexer.SimpleRule{
@@ -75,7 +80,12 @@ func ParseDebug(str string) (*Query, error) {
 
 func (q *Query) QualifierInt(key string) (int, error) {
 	if q == nil {
-		return 0, fmt.Errorf("nil query")
+		return 0, ErrNilQuery
+	}
+
+	values := q.QualifierValues(key)
+	if len(values) == 0 {
+		return 0, ErrNotFound
 	}
 
 	if len(q.Terms) == 0 {
@@ -125,6 +135,48 @@ func (q *Query) QualifierString(key string) (string, error) {
 	return "", fmt.Errorf("no qualifier")
 }
 
+func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err error) {
+	if q == nil {
+		err = ErrNilQuery
+		return
+	}
+
+	values := q.QualifierValues(key)
+	if len(values) == 0 {
+		err = ErrNotFound
+		return
+	}
+
+	if len(values) > 1 {
+		err = fmt.Errorf("multiple qualifiers %s", key)
+		return
+	}
+
+	value := values[0]
+
+	dateRange := strings.SplitN(value, "..", 2)
+	if len(dateRange) != 2 {
+		err = fmt.Errorf("invalid date range format")
+		return
+	}
+
+	a, err = time.Parse("2006-01-02", dateRange[0])
+	if err != nil {
+		err = fmt.Errorf("failed to parse start date: %v", err)
+		return
+	}
+
+	b, err = time.Parse("2006-01-02", dateRange[1])
+	if err != nil {
+		err = fmt.Errorf("failed to parse end date: %v", err)
+		return
+	}
+
+	b = b.AddDate(0, 0, 1)
+
+	return
+}
+
 func (q *Query) QualifierValues(key string) []string {
 	if q == nil {
 		return nil
@@ -136,4 +188,20 @@ func (q *Query) QualifierValues(key string) []string {
 		}
 	}
 	return values
+}
+
+func (q *Query) Words() string {
+	if q == nil {
+		return ""
+	}
+	var words string
+	for _, term := range q.Terms {
+		if term.Word != nil {
+			words += *term.Word + " "
+		}
+	}
+	if len(words) == 0 {
+		return ""
+	}
+	return words[:len(words)-1]
 }
