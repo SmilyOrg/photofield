@@ -118,9 +118,9 @@ const {
   sort,
   imageHeight,
   search,
-  tweaks,
   selectTagId,
   debug,
+  tweaks,
 } = toRefs(props);
 
 const viewer = ref(null);

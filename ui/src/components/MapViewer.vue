@@ -79,6 +79,7 @@ const props = defineProps({
   debug: Object,
   fullpage: Boolean,
   scrollbar: Object,
+  tweaks: String,
 });
 
 const emit = defineEmits({
@@ -103,6 +104,7 @@ const {
   search,
   selectTagId,
   debug,
+  tweaks,
 } = toRefs(props);
 
 const viewer = ref(null);
@@ -124,6 +126,7 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
   imageHeight,
   viewport: staticViewport,
   search,
+  tweaks,
 });
 
 const {
