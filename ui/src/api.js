@@ -184,6 +184,7 @@ export function useScene({
   imageHeight,
   viewport,
   search,
+  tweaks,
 }) {
   
   const sceneParams = computed(() =>
@@ -197,6 +198,7 @@ export function useScene({
       viewport_width: viewport.width.value,
       viewport_height: viewport.height.value,
       search: search?.value || undefined,
+      tweaks: tweaks.value,
     }
   );
 

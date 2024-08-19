@@ -38,6 +38,7 @@
       :imageHeight="imageHeight"
       :search="search"
       :debug="debug"
+      :tweaks="tweaks"
       :fullpage="true"
       :scrollbar="scrollbar"
       :selectTagId="selectTagId"
@@ -225,6 +226,10 @@ const debug = computed(() => {
     }
   }
   return v;
+});
+
+const tweaks = computed(() => {
+  return route.query.tweaks;
 });
 
 const onRegion = async (region) => {

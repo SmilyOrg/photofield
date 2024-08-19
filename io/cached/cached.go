@@ -56,16 +56,16 @@ func (c *Cached) Exists(ctx context.Context, id io.ImageId, path string) bool {
 
 func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	r := c.Cache.GetWithName(ctx, id, c.Source.Name())
-	// fmt.Printf("%v %v\n", r.Image, r.Error)
+	// fmt.Printf("%v %v %v\n", id, c.Source.Name(), r.Error)
 	if r.Image != nil || r.Error != nil {
-		// fmt.Printf("%v cache found\n", id)
+		// fmt.Printf("%v %v cache found\n", id, c.Source.Name())
 		// println("found in cache")
 		r.FromCache = true
 		return r
 	}
 	// r = c.Source.Get(ctx, id, path)
 	r = c.load(ctx, id, path)
-	// fmt.Printf("%v cache load end\n", id)
+	// fmt.Printf("%v %v cache load end\n", id, c.Source.Name())
 	// c.Ristretto.SetWithName(ctx, id, c.Source.Name(), r)
 	// fmt.Printf("%v cache set\n", id)
 	// println("saved to cache", s)

@@ -79,6 +79,7 @@ export default {
     loading: Boolean,
     geo: Boolean,
     viewport: Object,
+    qualityPreset: String,
   },
 
   emits: [
@@ -720,6 +721,9 @@ export default {
       }
       if (this.selectTagId) {
         extra.select_tag = this.selectTagId;
+      }
+      if (this.qualityPreset) {
+        extra.quality_preset = this.qualityPreset;
       }
       return getTileUrl(
         this.scene.id,

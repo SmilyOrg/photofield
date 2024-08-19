@@ -141,11 +141,19 @@ type Sources []Source
 // var DurationCostMultiplier = 0.003
 
 // Optimized for 0.9 max width ratio + square duration
-var UnderdrawPenaltyMultiplier = 59.851585
-var SizeCostMultiplier = 0.000281
-var DurationCostMultiplier = 0.011857
+var DefaultOptions = Options{
+	UnderdrawPenaltyMultiplier: 59.851585,
+	SizeCostMultiplier:         0.000281,
+	DurationCostMultiplier:     0.011857,
+}
 
-func SizeCost(source Size, original Size, target Size) (cost float64, area int64) {
+type Options struct {
+	UnderdrawPenaltyMultiplier float64
+	SizeCostMultiplier         float64
+	DurationCostMultiplier     float64
+}
+
+func SizeCost(source Size, original Size, target Size, opts Options) (cost float64, area int64) {
 	if source.X == 0 && source.Y == 0 {
 		source = target
 	}
@@ -153,24 +161,24 @@ func SizeCost(source Size, original Size, target Size) (cost float64, area int64
 	targetArea := target.Area()
 	diff := float64(targetArea) - float64(area)
 	if targetArea > area {
-		diff *= UnderdrawPenaltyMultiplier
+		diff *= opts.UnderdrawPenaltyMultiplier
 	}
-	cost = diff * diff * SizeCostMultiplier
+	cost = diff * diff * opts.SizeCostMultiplier
 	return
 }
 
-func DurationCost(dur time.Duration) float64 {
+func DurationCost(dur time.Duration, opts Options) float64 {
 	us := float64(dur.Microseconds())
-	return us * us * DurationCostMultiplier
+	return us * us * opts.DurationCostMultiplier
 }
 
-func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
+func (sources Sources) EstimateCostWithOpts(original Size, target Size, opts Options) SourceCosts {
 	costs := make([]SourceCost, len(sources))
 	for i := range sources {
 		s := sources[i]
-		sizecost, sarea := SizeCost(s.Size(original), original, target)
+		sizecost, sarea := SizeCost(s.Size(original), original, target, opts)
 		dur := s.GetDurationEstimate(original)
-		durcost := DurationCost(dur)
+		durcost := DurationCost(dur, opts)
 		cost := sizecost + durcost
 		costs[i] = SourceCost{
 			Source:            s,
@@ -182,6 +190,10 @@ func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
 		}
 	}
 	return costs
+}
+
+func (sources Sources) EstimateCost(original Size, target Size) SourceCosts {
+	return sources.EstimateCostWithOpts(original, target, DefaultOptions)
 }
 
 func (sources Sources) Close() {

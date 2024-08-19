@@ -386,6 +386,9 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 
 	sceneConfig.Layout.ViewportWidth = float64(data.ViewportWidth)
 	sceneConfig.Layout.ViewportHeight = float64(data.ViewportHeight)
+	if data.Tweaks != nil {
+		sceneConfig.Layout.Tweaks = string(*data.Tweaks)
+	}
 	sceneConfig.Layout.ImageHeight = 0
 	if data.ImageHeight != nil {
 		sceneConfig.Layout.ImageHeight = float64(*data.ImageHeight)
@@ -437,6 +440,9 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	if params.Search != nil {
 		sceneConfig.Scene.Search = string(*params.Search)
 	}
+	if params.Tweaks != nil {
+		sceneConfig.Layout.Tweaks = string(*params.Tweaks)
+	}
 	collection := getCollectionById(string(params.CollectionId))
 	if collection == nil {
 		problem(w, r, http.StatusBadRequest, "Collection not found")
@@ -470,10 +476,7 @@ func (*Api) GetScenesId(w http.ResponseWriter, r *http.Request, id openapi.Scene
 }
 
 func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
-	for i := range collections {
-		collection := &collections[i]
-		collection.UpdateStatus(imageSource)
-	}
+	// Explicitly do not update collection status to avoid long delays
 	items := collections
 	if items == nil {
 		items = make([]collection.Collection, 0)
@@ -742,6 +745,14 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	if params.DebugThumbnails != nil {
 		rn.DebugThumbnails = *params.DebugThumbnails
 	}
+	if params.QualityPreset != nil {
+		switch *params.QualityPreset {
+		case "HIGH":
+			rn.QualityPreset = render.QualityPresetHigh
+		default:
+			rn.QualityPreset = render.QualityPresetFast
+		}
+	}
 
 	zoom := params.Zoom
 	x := int(params.X)
@@ -786,7 +797,11 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		return
 	}
 	w.Header().Add("Content-Type", "image/jpeg")
-	codec.EncodeJpeg(w, img)
+	quality := 80
+	if rn.QualityPreset == render.QualityPresetHigh {
+		quality = 100
+	}
+	codec.EncodeJpeg(w, img, quality)
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {

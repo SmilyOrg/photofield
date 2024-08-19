@@ -38,9 +38,11 @@ const (
 )
 
 type ListOptions struct {
-	OrderBy ListOrder
-	Limit   int
-	Query   *search.Query
+	OrderBy    ListOrder
+	Limit      int
+	Query      *search.Query
+	Embedding  clip.Embedding
+	Extensions []string
 }
 
 type DirsFunc func(dirs []string)
@@ -1374,8 +1376,32 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			}
 		}
 
+		joinEmbeddings := false
+		var emb []float32
+		var embInvNorm float32
+		if options.Embedding != nil {
+			emb = options.Embedding.Float32()
+			embInvNorm = options.Embedding.InvNormFloat32()
+		}
+
+		embThreshold := float32(0)
+		if f, err := options.Query.QualifierFloat32("t"); err == nil {
+			embThreshold = f
+			joinEmbeddings = true
+		}
+
+		embDedup := float32(0)
+		if f, err := options.Query.QualifierFloat32("dedup"); err == nil {
+			embDedup = f
+			joinEmbeddings = true
+		}
+
 		sql += `
-			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude
+			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
+		if joinEmbeddings {
+			sql += `, inv_norm, embedding`
+		}
+		sql += `
 			FROM infos
 		`
 
@@ -1385,6 +1411,12 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 					JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
 				`, i)
 			}
+		}
+
+		if joinEmbeddings {
+			sql += `
+				LEFT JOIN clip_emb ON clip_emb.file_id = id
+			`
 		}
 
 		sql += `
@@ -1403,6 +1435,29 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 		sql += `
 			)
 		`
+
+		if len(options.Extensions) > 0 {
+			sql += `
+			AND (
+			`
+			for i := range options.Extensions {
+				sql += `filename LIKE ? `
+				if i < len(options.Extensions)-1 {
+					sql += "OR "
+				}
+			}
+			sql += `
+			)
+			`
+		}
+
+		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
+		if createdErr == nil {
+			sql += `
+			AND created_at_unix >= ?
+			AND created_at_unix <= ?
+			`
+		}
 
 		switch options.OrderBy {
 		case None:
@@ -1441,9 +1496,24 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 			bindIndex++
 		}
 
+		for _, ext := range options.Extensions {
+			stmt.BindText(bindIndex, "%"+ext)
+			bindIndex++
+		}
+
+		if createdErr == nil {
+			stmt.BindInt64(bindIndex, createdFrom.Unix())
+			bindIndex++
+			stmt.BindInt64(bindIndex, createdTo.Unix())
+			bindIndex++
+		}
+
 		if options.Limit > 0 {
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
+
+		var lastEmb []float32
+		var lastEmbInvNorm float32
 
 		for {
 			if exists, err := stmt.Step(); err != nil {
@@ -1476,6 +1546,40 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 				info.LatLng = NaNLatLng()
 			} else {
 				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
+			}
+
+			if joinEmbeddings {
+				e, err := readEmbedding(stmt, 9, 10)
+				if err != nil {
+					continue
+				}
+				ee := e.Float32()
+				einv := e.InvNormFloat32()
+				if emb != nil {
+					sim, err := clip.CosineSimilarityFloat32Float32(emb, embInvNorm, ee, einv)
+					if err != nil {
+						log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
+						continue
+					}
+					// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
+					if sim < embThreshold {
+						continue
+					}
+				}
+				if embDedup > 0 {
+					if lastEmb != nil {
+						sim, err := clip.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
+						if err != nil {
+							log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
+							continue
+						}
+						if sim >= embDedup {
+							continue
+						}
+					}
+					lastEmb = ee
+					lastEmbInvNorm = einv
+				}
 			}
 
 			out <- info

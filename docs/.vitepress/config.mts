@@ -31,6 +31,16 @@ export default defineConfig({
         ]
       },
       {
+        text: 'Features',
+        link: '/features',
+        items: [
+          { text: 'Layouts', link: '/features/layouts' },
+          { text: 'Search', link: '/features/search' },
+          { text: 'Tags', link: '/features/tags' },
+          { text: 'Reverse Geolocation', link: '/features/geolocation' },
+        ]
+      },
+      {
         text: 'Usage',
         link: '/usage',
         items: [

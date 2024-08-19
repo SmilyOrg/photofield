@@ -3,6 +3,7 @@ package render
 import (
 	"image/color"
 	"math"
+	"runtime"
 	"sync"
 	"time"
 
@@ -12,6 +13,13 @@ import (
 	"photofield/internal/clip"
 	"photofield/internal/image"
 	"photofield/io"
+)
+
+type QualityPreset int
+
+const (
+	QualityPresetFast QualityPreset = iota
+	QualityPresetHigh
 )
 
 type Render struct {
@@ -27,6 +35,7 @@ type Render struct {
 
 	DebugOverdraw   bool
 	DebugThumbnails bool
+	QualityPreset   QualityPreset
 
 	Zoom        int
 	CanvasImage draw.Image
@@ -135,7 +144,7 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	// 	photo.Draw(config, scene, c, scales, source)
 	// }
 
-	concurrent := 10
+	concurrent := runtime.NumCPU()
 	photoCount := len(scene.Photos)
 	if photoCount < concurrent {
 		concurrent = photoCount
@@ -214,7 +223,7 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []image.ImageId) {
 }
 
 func (scene *Scene) GetVisiblePhotoRefs(view Rect, maxCount int) <-chan PhotoRef {
-	out := make(chan PhotoRef)
+	out := make(chan PhotoRef, 10)
 	go func() {
 		count := 0
 		if maxCount == 0 {

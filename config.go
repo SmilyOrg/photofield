@@ -125,32 +125,44 @@ func loadConfig(dataDir string) (*AppConfig, error) {
 	}
 
 	// Expand collections
-	expanded := make([]collection.Collection, 0, len(appConfig.Collections))
+	collections := make([]collection.Collection, 0, len(appConfig.Collections))
 	expandedDirs := make(map[string]bool) // Track deduplicated dirs
 	for _, collection := range appConfig.Collections {
 		if collection.ExpandSubdirs {
 			for _, dir := range collection.Dirs {
 				expandedDirs[dir] = true
 			}
-			expanded = append(expanded, collection.Expand()...)
+			collections = append(collections, collection.Expand()...)
 		} else {
-			expanded = append(expanded, collection)
+			collections = append(collections, collection)
 		}
 	}
-	appConfig.Collections = expanded
 	appConfig.ExpandedPaths = make([]string, 0, len(expandedDirs))
 	for dir := range expandedDirs {
 		appConfig.ExpandedPaths = append(appConfig.ExpandedPaths, dir)
 	}
 
-	for i := range appConfig.Collections {
-		collection := &appConfig.Collections[i]
+	for i := range collections {
+		collection := &collections[i]
 		collection.GenerateId()
 		collection.Layout = strings.ToUpper(collection.Layout)
 		if collection.Limit > 0 && collection.IndexLimit == 0 {
 			collection.IndexLimit = collection.Limit
 		}
 	}
+
+	// Override earlier collection with the same ID
+	collectionsMap := make(map[string]int)
+	for i := 0; i < len(collections); i++ {
+		if idx, exists := collectionsMap[collections[i].Id]; exists {
+			collections[idx] = collections[i]
+			collections = append(collections[:i], collections[i+1:]...)
+			i--
+			continue
+		}
+		collectionsMap[collections[i].Id] = i
+	}
+	appConfig.Collections = collections
 
 	appConfig.Media.AI = appConfig.AI
 	appConfig.Media.DataDir = dataDir

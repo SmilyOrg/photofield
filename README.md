@@ -11,11 +11,13 @@
     Experimental <em>fast</em> photo viewer.
     <br />
     <br />
-    <a href="https://demo.photofield.dev">Demo</a>
-    ·
-    <a href="https://github.com/SmilyOrg/photofield/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/SmilyOrg/photofield/issues">Request Feature</a>
+    <a href="https://demo.photofield.dev"><img alt="live demo" src="https://img.shields.io/badge/live-demo-blue"></a>
+    <a href="https://photofield.dev"><img alt="docs" src="https://img.shields.io/badge/online-docs-yellow"></a>
+    <a href="https://github.com/SmilyOrg/photofield/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/SmilyOrg/photofield"></a>
+    <a href="https://github.com/SmilyOrg/photofield/releases"><img alt="Version" src="https://ghcr-badge.egpl.dev/SmilyOrg/photofield/latest_tag?color=%2344cc11&ignore=latest&label=version&trim="></a>
+    <a href="https://github.com/SmilyOrg/photofield/pkgs/container/photofield"><img alt="Image Size" src="https://ghcr-badge.egpl.dev/SmilyOrg/photofield/size?color=%2344cc11&tag=latest&label=image+size&trim="></a>
+    <a href="https://github.com/SmilyOrg/photofield/actions"><img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/SmilyOrg/photofield/.github%2Fworkflows%2Frelease.yml"></a>
+    <a href="https://discord.gg/qjMxfCMVqM" target="_blank"><img alt="Discord" src="https://img.shields.io/discord/1210642013997764619?logo=discord&logoColor=white"></a>
   </p>
 </p>
 
@@ -79,61 +81,19 @@ form of feedback to not lose track.
 * **Different layouts**. Collections of photos can be displayed with different
 layouts.
 ![layout examples](docs/assets/layouts.png)
-  * **Album:** chronological photos grouped by event
-  * **Timeline:** reverse-chronological timeline similar to Google Photos
-  * **Wall:** a square collage of all the photos, because zooming is fun!
-  * **Map:** all the photos on a map? Sure!
-  * [More future ideas?](https://github.com/SmilyOrg/photofield/issues/1)
-* **Semantic search using [photofield-ai] (alpha)**. If you set up an AI server
-  and configure it in the `ai` section of the [configuration], you should be
-  able to search for photo contents using words like "beach sunset", "a couple
-  kissing", or "cat eyes".
-  ![semantic search for "cat eyes"](docs/assets/semantic-search.jpg)
-* **Tagging (alpha)**. You can tag photos with arbitrary tags. Currently tags
-  are only stored in the database and not in the photos themselves. You need to
-  enable them in the `tags` section of the [configuration] and restart the
-  server. This forms a foundation for many other features, see below (checked -
-  implemented).
-  * [x] **Persistent photo selection**. You can Ctrl+Click or Ctrl+Drag to
-    select photos. This creates a new randomly generated "selection" tag that is
-    persistent and shareable. It also means you can select tens of thousands of
-    photos without losing your progress. These tags are currently never cleaned
-    up and you can't do anything with it yet, so it's not useful yet, but it's
-    a start.
-  * [x] **Custom tags**. You canadd your own tags to photos, e.g. `#family` or
-    `#vacation`. Batch tagging not supported yet, but should be relatively easy
-    to add considering the selections (above) are already tags.
-  * [x] **EXIF tags**. Tags are automatically added from the EXIF data, e.g.
-    `exif:make:sony` or `exif:model:sm-g950f`. You need to enable this in the
-    `exif` section of the [configuration]. Only `make` and `model` are currently
-    supported (hardcoded).
-  * [x] **Filter by tags**. You can filter by a tag by searching for `tag:TAG`.
-    For example, you can search for `tag:fav` to only show favorited photos, or
-    `tag:hello tag:world` to only show photos with both `hello` and `world`
-    tags. This is an early version of filtering and should be more user-friendly
-    in the future.
-  * [ ] **Location tags**. Photos could be automatically tagged with the
-    location, e.g. `city:berlin` or `country:germany`. See #59.
-  * [ ] **Face recognition**. Photos could be automatically tagged with the
-    person's name. This would be a great way to search for photos of a specific
-    person.
- * **Reverse geolocation**. Local, embedded reverse geolocation via [tinygpkg].
-   Does not need any API calls, has negligible performance impact, and supports
-   ~50 thousand places. Currently only supported for photos with GPS coordinates
-   in the EXIF data and the Timeline view.
-
-* **Flexible media/thumbnail system**. Do you have hundreds of gigabytes of existing
-  thumbnails from an existing system? Me too! Let's reuse those. Don't have any?
-  No worries, they will be generated automatically to speed up display. Here are
-  the currently supported thumbnail sources:
-  * Bespoke SQLite thumbnail database - `photofield.thumbs.db`.
-  * Synology Moments / Photo Station auto-generated thumbnails in `@eaDir`.
-  * Embedded JPEG thumbnails - `ThumbnailImage` Exif tag.
-  * Native Go [image](https://pkg.go.dev/image) package.
-  * FFmpeg on-the-fly conversion - thumbnails and full sized variants.
-  * Configurable via the `sources` section of the [Configuration].
-  * Please [open an issue] for other systems, bonus points for an idea on how to
-    integrate!
+* **Semantic search using [photofield-ai] (alpha)**. If enabled, you can search
+  for photo contents using words like "beach sunset", "a couple kissing", or
+  "cat eyes". ![semantic search for "cat eyes"](docs/assets/semantic-search.jpg)
+* **Tagging (alpha)**. You can tag and search photos with arbitrary tags. If
+  enabled, tags are stored in the cache database and can be used to filter
+  photos.
+* **Reverse geolocation**. Local, embedded reverse geolocation of ~50 thousand
+  places via [tinygpkg] with neglibile overhead supported in the Timeline and
+  Flex layouts.
+* **Flexible media/thumbnail system**. There are many different ways for images
+  and thumbnails to be generated and stored. Uses FFmpeg for on-the-fly
+  conversion, SQLite for caching, existing embedded JPEG thumbnails, Synology
+  Moments / Photo Station thumbnails, and more.
 * **Single file binary**. Thanks to [Go] and [GoReleaser], all the dependencies
 are packed into a [single binary file](#binaries) for most major OSes.
 * **Read-only file system based collections**. Photofield never changes your
@@ -164,6 +124,8 @@ first load a page in a specific window size and configuration, which can take
 some time with a slow CPU and cold HDD cache.
 * **No permalinks**. Deep linking to images works, but it's currently not stable
 over time as IDs can change. 
+
+See the [documentation] for more information.
 
 ### Built With
 
@@ -269,53 +231,6 @@ collections:
       - /photo
 ```
 
-
-
-## Usage
-
-This section will cover some obvious uses, but also some possibly unintuitive UI
-quirks that exist in the current version. 
-
-### App Bar
-![App bar explanation](docs/assets/app-bar.png)
-
-### Photo Viewer
-
-* Click to zoom to a photo
-  * `Escape` or pinch out to get back to the list of photos
-* Zoom in/out directly with `Ctrl/Cmd`+`Wheel`
-* Pinch-to-zoom on touch devices
-* Press/hold `Arrow Left` or `Arrow Right` to quickly switch between photos
-* Right-click or long-tap as usual to open a custom context menu allowing you to
-  copy or download original photos or thumbnails.
-  
-  ![context menu](docs/assets/context-menu.png)
-  
-  _You can open/copy/copy link the original or access any existing thumbnails
-  that already exist for it with the bottom list of thumbnails by pixel width._
-
-
-
-## Maintenance
-
-Over time the cache database can grow in size due to version upgrades and so on.
-To shrink the database to its minimum size, you can _vacuum_ it. Multiple vacuums in a row have no effect as the vacuum itself rewrites the database from
-the ground up.
-
-While the vacuum is in progress, it will take twice the database size and may
-take several minutes if you have lots of photos and a low-power system.
-
-As an example it took around 5 minutes to vacuum a 260 MiB database containing around 500k photos on a DS418play. The size after vacuuming was 61 MiB as all the
-leftover data from database upgrades was cleaned up.
-
-```sh
-# CLI
-./photofield -vacuum
-
-# Docker
-docker exec -it photofield ./photofield -vacuum
-```
-
 ## Development Setup
 
 ### Prerequisites
@@ -390,6 +305,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 * [readme.so](https://readme.so/)
 
 [Configuration]: #configuration
+[documentation]: https://photofield.dev
 
 [open an issue]: https://github.com/SmilyOrg/photofield/issues
 [Getting Started]: #getting-started

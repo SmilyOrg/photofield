@@ -109,7 +109,7 @@ func (config *CacheConfig) MaxSizeBytes() int64 {
 }
 
 type Caches struct {
-	Image CacheConfig
+	Image CacheConfig `json:"image"`
 }
 
 type Config struct {
@@ -198,7 +198,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 		[]string{"source"},
 	)
 
-	source.imageCache = ristretto.New()
+	source.imageCache = ristretto.New(config.Caches.Image.MaxSizeBytes())
 	env := SourceEnvironment{
 		SourceTypes: config.SourceTypes,
 		FFmpegPath:  ffmpeg.FindPath(),
@@ -393,9 +393,7 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) <-chan Sourc
 
 		infos := source.database.List(dirs, options)
 		for info := range infos {
-			// if info.NeedsMeta() || info.NeedsColor() {
-			// 	info.Info = source.GetInfo(info.Id)
-			// }
+			info.SourcedInfo.Info.MakeValid()
 			out <- info.SourcedInfo
 		}
 		close(out)
@@ -413,27 +411,8 @@ func (source *Source) ListInfosEmb(dirs []string, options ListOptions) <-chan In
 
 		infos := source.database.ListWithEmbeddings(dirs, options)
 		for info := range infos {
+			info.SourcedInfo.Info.MakeValid()
 			out <- info
-		}
-		close(out)
-	}()
-	return out
-}
-
-func (source *Source) ListInfosWithExistence(dirs []string, options ListOptions) <-chan SourcedInfo {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
-	out := make(chan SourcedInfo, 1000)
-	go func() {
-		defer metrics.Elapsed("list infos")()
-
-		infos := source.database.List(dirs, options)
-		for info := range infos {
-			if info.NeedsMeta() || info.NeedsColor() {
-				info.Info = source.GetInfo(info.Id)
-			}
-			out <- info.SourcedInfo
 		}
 		close(out)
 	}()

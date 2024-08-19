@@ -15,6 +15,10 @@ collections:
   #     - /second/dir
   #     - C:/third/windows/dir
   #     - ./relative/dir
+  # 
+  # Later collections override earlier ones with the same name / id
+  # so that you can have expanded collections and override settings
+  # of specific collections.
 
 # Default layout of all collections
 layout:
@@ -108,7 +112,7 @@ media:
       # Size of the image cache used while rendering images
       # A larger cache might make display/rendering faster, while a smaller
       # cache will conserve memory.
-      max_size: 256Mi
+      max_size: 1024Mi
     
   # File extensions to index on the file system
   extensions: [

@@ -89,7 +89,17 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	if config.Sources != nil {
 		srcs = config.Sources
 	}
-	sources := srcs.EstimateCost(io.Size(size), io.Size(rsize))
+
+	hq := false
+	if config.QualityPreset == QualityPresetHigh {
+		hq = true
+	}
+	costOpts := io.DefaultOptions
+	if hq {
+		costOpts.UnderdrawPenaltyMultiplier = 1000
+		costOpts.DurationCostMultiplier = 0
+	}
+	sources := srcs.EstimateCostWithOpts(io.Size(size), io.Size(rsize), costOpts)
 	sources.Sort()
 
 	var errs []error
@@ -137,7 +147,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			scale = 0.8
 		}
 
-		bitmap.DrawImage(config.CanvasImage, img, c, scale)
+		bitmap.DrawImage(config.CanvasImage, img, c, scale, hq)
 		drawn = true
 
 		if source.IsSupportedVideo(path) {
