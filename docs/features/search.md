@@ -5,11 +5,12 @@ and efficiently. The search feature supports various types of queries, including
 tag-based searches, semantic searches, and more.
 
 ::: tip
-Search requires [photofield-ai] to be configured and enabled in the `ai`
-section of the [configuration].
+Features marked with <Badge type="tip" text="AI" /> require capabilities
+provided by [photofield-ai]. You can configure it in the `ai` section of the
+[configuration].
 :::
 
-## Semantic Search
+## Semantic Search <Badge type="tip" text="AI" />
 
 Semantic search allows you to search for photo contents using descriptive words
 like "beach sunset", "a couple kissing", or "cat eyes".
@@ -65,14 +66,12 @@ parameter. The date range should be specified in the format
 |-------|-------------|
 | `created:2023-01-01..2023-12-31` | Find photos taken in the year 2023. |
 
-## Deduplication
+## Deduplication <Badge type="tip" text="AI" />
 
 You can use the `dedup` parameter to filter out duplicate successive photos. The
 value should be a threshold between 0 and 1 representing the similarity between
 photos. For example, `dedup:0.9` will filter out photos that are 90% similar to
 each other.
-
-<!-- ### Example Query -->
 
 | Query | Description |
 |-------|-------------|

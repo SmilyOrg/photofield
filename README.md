@@ -81,7 +81,7 @@ form of feedback to not lose track.
 * **Different layouts**. Collections of photos can be displayed with different
 layouts.
 ![layout examples](docs/assets/layouts.png)
-* **Semantic search using [photofield-ai] (alpha)**. If enabled, you can search
+* **Semantic search using [photofield-ai]**. If enabled, you can search
   for photo contents using words like "beach sunset", "a couple kissing", or
   "cat eyes". ![semantic search for "cat eyes"](docs/assets/semantic-search.jpg)
 * **Tagging (alpha)**. You can tag and search photos with arbitrary tags. If

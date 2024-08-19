@@ -651,7 +651,7 @@ func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 	capabilities := openapi.Capabilities{}
 	if imageSource != nil {
-		capabilities.Search.Supported = imageSource.AI.Available()
+		capabilities.Search.Supported = true
 	}
 	capabilities.Tags.Supported = tagsEnabled
 	capabilities.Docs.Supported = docsurl != ""
