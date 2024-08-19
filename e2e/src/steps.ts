@@ -19,7 +19,16 @@ Given('the config {string}', async ({ app }, p: string) => {
   await fs.copyFile(configPath, app.path("configuration.yaml"));
 });
 
+When('the user adds the config {string}', async ({ app }, p: string) => {
+  const configPath = path.resolve(__dirname, "..", "configs", p);
+  await fs.copyFile(configPath, app.path("configuration.yaml"));
+});
+
 async function addFiles(dataTable: DataTable, app: App) {
+  if (!app.cwd) {
+    await app.useTempDir();
+    console.log("CWD:", app.cwd);
+  }
   for (const row of dataTable.rows()) {
     const [src, dst] = row;
     const srcPath = path.resolve(__dirname, "..", src);
@@ -46,6 +55,11 @@ Given('a running app', async ({ app }) => {
   await expect(async () => {
     expect(app.stderr).toContain("app running");
   }).toPass();
+});
+
+Given('no running app', async ({ app }) => {
+  app.disableAutostart = true;
+  await app.stop();
 });
 
 When('the API goes down', async ({ app }) => {
@@ -78,7 +92,14 @@ When('waits a second', async ({ page }) => {
   await page.waitForTimeout(1000);
 });
 
-When('the user opens the home page', async ({ app }) => {
+When('(the user )opens the home page', async ({ app }) => {
+  if (!app.proc && !app.disableAutostart) {
+    await app.run();
+    await expect(async () => {
+      expect(app.stderr).toContain("app running");
+    }
+    ).toPass();
+  }
   await app.goto("/");
 });
 
@@ -126,6 +147,7 @@ Then('the file {string} does not exist', async ({ app }, filePath: string) => {
     await fs.stat(app.path(filePath));
     throw new Error("File exists");
   } catch (error) {
+    console.log("Error:", error);
     expect(error.code).toBe('ENOENT');
   }
 });

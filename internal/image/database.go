@@ -852,6 +852,10 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 
 func (source *Database) GetDir(dir string) (InfoResult, bool) {
 
+	if source == nil {
+		return InfoResult{}, false
+	}
+
 	conn := source.pool.Get(nil)
 	defer source.pool.Put(conn)
 
