@@ -49,9 +49,9 @@
           ></i>
         </span>
       </template>
-      <template #selection="{ values, search, isOpen }">
+      <template v-if="message" #selection="{ values, search, isOpen }">
         <span class="multiselect__single" v-show="values.length > 0 && !isOpen">
-          Select tags
+          {{ message }}
         </span>
       </template>
     </VueMultiselect>
@@ -67,6 +67,7 @@ import qs from "qs";
 const props = defineProps({
   tags: Array,
   readonly: Boolean,
+  message: String,
 });
 
 const emit = defineEmits([

@@ -4,12 +4,11 @@
     <tags
       class="add-tag"
       :tags="preview"
+      :message="title"
       @add="addTag"
       @remove="removeTag"
     ></tags>
 
-    {{ title }}
-    
     <table>
       <thead>
         <tr>
@@ -134,7 +133,7 @@ const title = computed(() => {
     return "Tags";
   }
   if (!selection.value) return "Tags";
-  return `The selection of ${fileCount.value} files is also tagged with the following tags`;
+  return `Select tags for ${fileCount.value} selected file${fileCount.value == 1 ? "" : "s"}`;
 });
 
 watchEffect(() => {
