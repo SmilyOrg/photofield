@@ -168,6 +168,8 @@ const layout = computed(() => {
   return route.query.layout || collection.value?.layout || undefined;
 })
 
+watch(currentScene, scene => emit("scene", scene));
+
 const selectTagId = computed(() => {
   return route.query.select_tag || undefined;
 })

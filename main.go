@@ -902,7 +902,7 @@ func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTa
 	}
 
 	tags := make([]tag.Tag, 0)
-	for t := range imageSource.ListTags(q, 10) {
+	for t := range imageSource.ListTags(q, 100) {
 		tags = append(tags, t)
 	}
 

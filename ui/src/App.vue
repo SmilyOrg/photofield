@@ -12,19 +12,22 @@
         >
           Selection
           &nbsp;
-          <a
-            :href="'/tags/' + query.select_tag"
+          <router-link
+            :to="{ query: selectSearch }"
           >
             <ui-icon class="inline">
-              edit
+              filter
             </ui-icon>
-          </a>
+          </router-link>
         </span>
         <span
           v-else-if="collection"
           @mousedown="collectionExpandedPending = true"
           @click="toggleFocus()"
         >
+          <span v-if="selected">
+            {{ currentScene?.file_count }} file{{ currentScene?.file_count > 1 ? 's' : '' }} of
+          </span>
           {{ collection.name }}
           <ui-icon class="inline">
             {{ collectionExpanded ? 'expand_less' : 'expand_more' }}
@@ -36,7 +39,7 @@
       <template #nav-icon>
         <!-- <img src="/favicon-32x32.png" /> -->
         <ui-icon-button @click="goBack()" class="inline">
-          {{ collection ? selecting ? 'close' : 'arrow_back' : 'home' }}
+          {{ collection ? selecting || selected ? 'close' : 'arrow_back' : 'home' }}
         </ui-icon-button>
       </template>
 
@@ -61,12 +64,38 @@
 
         <search-input
           v-if="showSearch"
+          :hide="selected"
           :loading="query.search && scrollScene?.loading"
-          :modelValue="query.search"
+          :modelValue="selected && !searchActive ? '' : query.search"
           :error="scrollScene?.error"
           @active="searchActive = $event"
-          @update:modelValue="setQuery({ search: $event })"
+          @update:modelValue="onSearch"
         ></search-input>
+
+        <ui-icon-button
+          v-if="collection"
+          :class="{ toolbarItemClass }"
+          @click="showTagEditor = !showTagEditor"
+        >
+          tag
+        </ui-icon-button>
+
+        <ui-dialog
+          class="tag-dialog"
+          v-model="showTagEditor"
+          fullscreen
+          maskClosable
+        >
+          <ui-dialog-title>Tags</ui-dialog-title>
+          <ui-dialog-content>
+            <tag-editor :tagId="query.select_tag" />
+            <ui-dialog-actions>
+              <ui-button @click="showTagEditor = false">
+                Close
+              </ui-button>
+            </ui-dialog-actions>
+          </ui-dialog-content>
+        </ui-dialog>
 
         <div class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
           <span class="empty" v-if="!tasks?.length">
@@ -120,6 +149,7 @@
         :fullpage="true"
         :scrollbar="scrollbar"
         @load="onLoad"
+        @scene="v => currentScene = v"
         @scenes="v => scenes = v"
         @immersive="onImmersive"
         @tasks="tasks => viewerTasks = tasks"
@@ -140,6 +170,7 @@ import SearchInput from './components/SearchInput.vue'
 import DisplaySettings from './components/DisplaySettings.vue'
 import TaskList from './components/TaskList.vue';
 import CollectionPanel from './components/CollectionPanel.vue';
+import TagEditor from './components/TagEditor.vue';
 import { useEventBus } from '@vueuse/core';
 
 export default {
@@ -150,6 +181,7 @@ export default {
     DisplaySettings,
     TaskList,
     CollectionPanel,
+    TagEditor,
 },
   
   props: [
@@ -161,6 +193,7 @@ export default {
       settingsExpanded: false,
       tasksExpanded: false,
       collectionExpanded: false,
+      showTagEditor: false,
       collectionExpandedPending: false,
       load: {
         image: 0,
@@ -170,6 +203,7 @@ export default {
       collectionMenuOpen: false,
       scrollbar: null,
       scenes: [],
+      currentScene: null,
       viewerTasks: null,
       searchActive: false,
     }
@@ -180,9 +214,27 @@ export default {
     const route = useRoute();
     const query = computed(() => route.query);
     const selecting = computed(() => !!query.value.select_tag);
+    const selected = computed(() => {
+      const tag = query.value?.search?.split(" ", 2)[0];
+      return tag?.startsWith("tag:sys:select:") ? tag : null;
+    });
+    const selectSearch = computed(() => {
+      return {
+        ...query.value,
+        select_tag: undefined,
+        search: `tag:${query.value.select_tag}`,
+      }
+    });
 
     const goBack = () => {
-      if (selecting.value) {
+      if (selected.value) {
+        router.push({
+          query: {
+            ...query.value,
+            search: undefined,
+          }
+        });
+      } else if (selecting.value) {
         router.replace({
           query: {
             ...query.value,
@@ -238,6 +290,8 @@ export default {
       query,
       setQuery,
       selecting,
+      selected,
+      selectSearch,
       remoteTasks,
       remoteTasksUpdateUntilDone,
       indexTasks,
@@ -338,7 +392,16 @@ export default {
           visibility: immersive ? "hidden" : "auto",
         },
       })
-    }
+    },
+    onSearch(query) {
+      if (this.selected) {
+        if (!this.searchActive && query == "") {
+          this.setQuery({ search: this.selected });
+          return;
+        }
+      }
+      this.setQuery({ search: query });
+    },
   }
 }
 </script>
@@ -431,9 +494,13 @@ export default {
 
 .top-bar {
   background-color: white;
-  --mdc-theme-on-primary: rgba(0,0,0,.87);
   vertical-align: baseline;
   transition: transform 0.2s;
+  --mdc-theme-on-primary: rgba(0,0,0,.87);
+}
+
+.top-bar :deep(.mdc-button--raised) {
+  --mdc-theme-on-primary: #fff;
 }
 
 .top-bar.immersive {
@@ -460,6 +527,10 @@ export default {
   --mdc-theme-primary: white; 
 }
 
+.tag-dialog :deep(.mdc-dialog__surface) {
+  max-width: 800px !important;
+}
+
 button {
   --mdc-theme-primary: black;
 }
@@ -471,6 +542,7 @@ button {
 
 .files {
   font-size: 0.8em;
+  vertical-align: bottom;
   margin-left: 12px;
   color: var(--mdc-theme-text-hint-on-background);
 }

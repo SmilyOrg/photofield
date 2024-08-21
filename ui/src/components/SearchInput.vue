@@ -43,7 +43,7 @@ import { watchDebounced } from '@vueuse/core'
 
 export default {
   emits: ["active"],
-  props: ["modelValue", "loading", "error"],
+  props: ["modelValue", "loading", "error", "hide"],
   setup(props, { emit }) {
     const modelValue = toRef(props, "modelValue");
 

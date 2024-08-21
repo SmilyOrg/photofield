@@ -198,7 +198,7 @@ export function useScene({
       viewport_width: viewport.width.value,
       viewport_height: viewport.height.value,
       search: search?.value || undefined,
-      tweaks: tweaks.value,
+      tweaks: tweaks?.value,
       limit: 1,
     }
   );

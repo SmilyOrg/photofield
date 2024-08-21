@@ -15,6 +15,7 @@ type Tag struct {
 	Id        Id        `json:"id"`
 	Name      string    `json:"name"`
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	FileCount int       `json:"file_count"`
 }
 
 func (t Tag) ETag() string {
@@ -27,6 +28,7 @@ type ExternalTag struct {
 	Id        string `json:"id"`
 	Name      string `json:"name"`
 	UpdatedAt string `json:"updated_at,omitempty"`
+	FileCount int    `json:"file_count"`
 	ETag      string `json:"etag,omitempty"`
 }
 
@@ -39,6 +41,7 @@ func (t Tag) MarshalJSON() ([]byte, error) {
 		Id:        t.Name,
 		Name:      t.Name,
 		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
+		FileCount: t.FileCount,
 		ETag:      t.ETag(),
 	})
 }

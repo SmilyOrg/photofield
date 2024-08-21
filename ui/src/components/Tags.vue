@@ -49,6 +49,11 @@
           ></i>
         </span>
       </template>
+      <template #selection="{ values, search, isOpen }">
+        <span class="multiselect__single" v-show="values.length > 0 && !isOpen">
+          Select tags
+        </span>
+      </template>
     </VueMultiselect>
   </div>
 </template>

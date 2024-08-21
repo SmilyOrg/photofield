@@ -1387,24 +1387,24 @@ func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
+		// SUM(1 + a.len) is the total number of files in the tag
 		sql := `
-		SELECT id, name, updated_at_ms
-		FROM tag
-		WHERE id IN (
-			WITH sel AS (
-				SELECT file_id, len
-				FROM infos_tag
-				WHERE tag_id = ?
-			)
-			SELECT DISTINCT tag_id
-			FROM infos_tag AS a
-			JOIN sel ON a.file_id <= (sel.file_id+sel.len) AND (a.file_id + a.len) >= sel.file_id
+		WITH sel AS (
+			SELECT file_id, len
+			FROM infos_tag
+			WHERE tag_id = ?
 		)
+		SELECT tag_id, tag.name, tag.updated_at_ms, SUM(1 + min(sel.file_id + sel.len, a.file_id + a.len) - max(sel.file_id, a.file_id))
+		FROM infos_tag AS a
+		JOIN sel ON a.file_id <= (sel.file_id+sel.len) AND (a.file_id + a.len) >= sel.file_id
+		JOIN tag ON tag.id = a.tag_id
+		WHERE true
 		`
 
 		sql += defaultTagConditions
 
 		sql += `
+		GROUP BY a.tag_id
 		ORDER BY name ASC
 		LIMIT ?;`
 
@@ -1424,6 +1424,7 @@ func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 				Id:        tag.Id(stmt.ColumnInt(0)),
 				Name:      stmt.ColumnText(1),
 				UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
+				FileCount: stmt.ColumnInt(3),
 			}
 		}
 		close(out)
@@ -1892,7 +1893,7 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 
 		close(out)
 	}()
-	return out, deps
+	return out
 }
 
 func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
