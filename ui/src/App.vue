@@ -73,7 +73,7 @@
         ></search-input>
 
         <ui-icon-button
-          v-if="collection"
+          v-if="collection && capabilities?.tags?.supported && selecting"
           :class="{ toolbarItemClass }"
           @click="showTagEditor = !showTagEditor"
         >
