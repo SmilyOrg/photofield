@@ -1268,14 +1268,11 @@ func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
 }
 
 func (source *Database) ListImageTagRanges(id ImageId) <-chan TagIdRange {
-	conn := source.pool.Get(context.TODO())
-	defer source.pool.Put(conn)
-	return source.listImageTagRangesWithConn(conn, id)
-}
-
-func (source *Database) listImageTagRangesWithConn(conn *sqlite.Conn, id ImageId) <-chan TagIdRange {
 	out := make(chan TagIdRange, 100)
 	go func() {
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
 		stmt := conn.Prep(`
 		SELECT tag_id, file_id, len
 		FROM infos_tag
