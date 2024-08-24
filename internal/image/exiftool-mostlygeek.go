@@ -109,6 +109,7 @@ func (decoder *ExifToolMostlyGeekLoader) DecodeInfo(path string, info *Info) ([]
 				tags = append(tags, tag.NewExif(name, value))
 			}
 			if strings.Contains(name, "Date") || strings.Contains(name, "Time") {
+				// println(path, info.DateTime.IsZero(), name, value)
 				if info.DateTime.IsZero() {
 					t, _, _, err := parseDateTime(value)
 					if err == nil {

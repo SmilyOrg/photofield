@@ -88,35 +88,51 @@ func (q *Query) QualifierInt(key string) (int, error) {
 		return 0, ErrNotFound
 	}
 
-	if len(values) > 1 {
-		return 0, fmt.Errorf("multiple qualifiers %s", key)
+	if len(q.Terms) == 0 {
+		return 0, fmt.Errorf("empty query")
 	}
 
-	return strconv.Atoi(q.Terms[0].Qualifier.Value)
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			return strconv.Atoi(term.Qualifier.Value)
+		}
+	}
+	return 0, fmt.Errorf("no qualifier")
 }
 
 func (q *Query) QualifierFloat32(key string) (float32, error) {
 	if q == nil {
-		return 0, ErrNilQuery
+		return 0, fmt.Errorf("nil query")
 	}
 
-	values := q.QualifierValues(key)
-	if len(values) == 0 {
-		return 0, ErrNotFound
+	if len(q.Terms) == 0 {
+		return 0, fmt.Errorf("empty query")
 	}
 
-	if len(values) > 1 {
-		return 0, fmt.Errorf("multiple qualifiers %s", key)
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			f, err := strconv.ParseFloat(term.Qualifier.Value, 32)
+			return float32(f), err
+		}
+	}
+	return 0, fmt.Errorf("no qualifier")
+}
+
+func (q *Query) QualifierString(key string) (string, error) {
+	if q == nil {
+		return "", fmt.Errorf("nil query")
 	}
 
-	value := values[0]
-
-	f, err := strconv.ParseFloat(value, 32)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse float32: %v", err)
+	if len(q.Terms) == 0 {
+		return "", fmt.Errorf("empty query")
 	}
 
-	return float32(f), nil
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			return term.Qualifier.Value, nil
+		}
+	}
+	return "", fmt.Errorf("no qualifier")
 }
 
 func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err error) {

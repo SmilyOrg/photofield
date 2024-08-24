@@ -18,8 +18,8 @@
       :imageHeight="imageHeight"
       :search="search"
       :debug="debug"
-      :selectTagId="selectTagId"
-      @selectTagId="onSelectTagId"
+      :selectTag="selectTagId && selectTag"
+      @selectTag="onSelectTag"
       @region="onRegion"
       @scene="mapScene = $event"
       @search="onSearch"
@@ -41,8 +41,8 @@
       :tweaks="tweaks"
       :fullpage="true"
       :scrollbar="scrollbar"
-      :selectTagId="selectTagId"
-      @selectTagId="onSelectTagId"
+      :selectTag="selectTagId && selectTag"
+      @selectTag="onSelectTag"
       @region="onRegion"
       @elementView="lastView = $event"
       @scene="scrollScene = $event"
@@ -168,9 +168,18 @@ const layout = computed(() => {
   return route.query.layout || collection.value?.layout || undefined;
 })
 
+watch(currentScene, scene => emit("scene", scene));
+
 const selectTagId = computed(() => {
   return route.query.select_tag || undefined;
 })
+
+const {
+  data: selectTag,
+  mutate: selectTagMutate,
+} = useApi(
+  () => selectTagId.value && `/tags/${selectTagId.value}`
+);
 
 const pageTitle = computed(() => {
   if (!collection.value) {
@@ -183,13 +192,14 @@ const pageTitle = computed(() => {
   return `#${id} - ${collection.value.name} - Photos`;
 });
 
-const onSelectTagId = (id) => {
-  router.replace({
+const onSelectTag = async (tag) => {
+  await router.replace({
     query: {
       ...route.query,
-      select_tag: id,
+      select_tag: tag.id,
     }
   });
+  await selectTagMutate(() => tag);
 }
 
 const sort = computed(() => {

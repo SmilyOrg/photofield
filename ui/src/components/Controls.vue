@@ -102,7 +102,7 @@ const exit = () => {
 }
 
 const toggleFavorite = async () => {
-  const tagId = favoriteTag?.id || "fav:r0";
+  const tagId = favoriteTag?.id || "fav";
   if (!fileId.value) {
     return;
   }
@@ -113,22 +113,22 @@ const toggleFavorite = async () => {
   await updateRegion();
 }
 
-const addTag = async (tagId) => {
-  if (!fileId.value || !tagId) {
+const addTag = async (tag) => {
+  if (!fileId.value || !tag?.id) {
     return;
   }
-  await postTagFiles(tagId, {
+  await postTagFiles(tag.id, {
     op: "ADD",
     file_id: fileId.value,
   });
   await updateRegion();
 }
 
-const removeTag = async (tagId) => {
-  if (!fileId.value || !tagId) {
+const removeTag = async (tag) => {
+  if (!fileId.value || !tag?.id) {
     return;
   }
-  await postTagFiles(tagId, {
+  await postTagFiles(tag.id, {
     op: "SUBTRACT",
     file_id: fileId.value,
   });

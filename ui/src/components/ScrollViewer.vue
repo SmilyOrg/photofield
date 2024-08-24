@@ -7,7 +7,7 @@
       :style="{ transform: `translate(0, ${scrollY}px)` }"
       :scene="scene"
       :view="view"
-      :selectTagId="selectTagId"
+      :selectTag="selectTag"
       :debug="debug"
       :tileSize="512"
       :interactive="interactive"
@@ -89,7 +89,7 @@ const props = defineProps({
   sort: String,
   imageHeight: Number,
   search: String,
-  selectTagId: String,
+  selectTag: Object,
   debug: Object,
   fullpage: Boolean,
   scrollbar: Object,
@@ -103,7 +103,7 @@ const emit = defineEmits({
   scene: null,
   reindex: null,
   region: null,
-  selectTagId: null,
+  selectTag: null,
   search: null,
   elementView: null,
   viewer: null,
@@ -118,7 +118,7 @@ const {
   sort,
   imageHeight,
   search,
-  selectTagId,
+  selectTag,
   debug,
   tweaks,
 } = toRefs(props);
@@ -234,8 +234,8 @@ const centerToBounds = async (bounds) => {
 }
 
 const onEscape = async () => {
-  if (selectTagId.value) {
-    emit("selectTagId", null);
+  if (selectTag.value) {
+    emit("selectTag", null);
     return;
   }
   zoomOut();
@@ -284,7 +284,7 @@ const {
   selectBounds
 } = useTags({
   supported: tagsSupported,
-  selectTagId,
+  selectTag,
   collectionId,
   scene,
 });
@@ -292,14 +292,14 @@ const {
 const onClick = async (event) => {
   if (!event) return false;
   if (region.value) return false;
-  if (tagsSupported.value && (selectTagId.value || event.originalEvent.ctrlKey)) {
-    const id = await selectBounds("INVERT", {
+  if (tagsSupported.value && (selectTag.value || event.originalEvent.ctrlKey)) {
+    const tag = await selectBounds("INVERT", {
       x: event.x,
       y: event.y,
       w: 0,
       h: 0,
     });
-    emit("selectTagId", id);
+    emit("selectTag", tag);
     return false;
   }
   const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
@@ -369,8 +369,8 @@ const onNav = async (event) => {
 
 const onBoxSelect = async (bounds, shift) => {
   const op = shift ? "SUBTRACT" : "ADD";
-  const id = await selectBounds(op, bounds);
-  emit("selectTagId", id);
+  const tag = await selectBounds(op, bounds);
+  emit("selectTag", tag);
 }
 
 const onLoadEnd = (event) => {

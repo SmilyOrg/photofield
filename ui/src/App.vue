@@ -2,34 +2,44 @@
   <div class="app">
     <ui-top-app-bar
       class="top-bar"
-      :class="{ immersive, search: searchActive }"
+      :class="{ immersive, search: showSearch && searchActive }"
       :fixed="true"
       contentSelector="#content"
     >
       <span class="title">
-        <span v-if="!collection">Photos</span>
         <span
-          v-else-if="!selecting"
-          ref="title"
+          v-if="selecting"
+        >
+          Selection
+          &nbsp;
+          <router-link
+            :to="{ query: selectSearch }"
+          >
+            <ui-icon class="inline">
+              filter
+            </ui-icon>
+          </router-link>
+        </span>
+        <span
+          v-else-if="collection"
           @mousedown="collectionExpandedPending = true"
           @click="toggleFocus()"
         >
+          <span v-if="selected">
+            {{ currentScene?.file_count }} file{{ currentScene?.file_count > 1 ? 's' : '' }} of
+          </span>
           {{ collection.name }}
           <ui-icon class="inline">
             {{ collectionExpanded ? 'expand_less' : 'expand_more' }}
           </ui-icon>
         </span>
-        <span
-          v-else
-        >
-          Selection
-        </span>
+        <span v-else>{{ title }}</span>
       </span>
 
       <template #nav-icon>
         <!-- <img src="/favicon-32x32.png" /> -->
         <ui-icon-button @click="goBack()" class="inline">
-          {{ collection ? selecting ? 'close' : 'arrow_back' : 'home' }}
+          {{ collection ? selecting || selected ? 'close' : 'arrow_back' : 'home' }}
         </ui-icon-button>
       </template>
 
@@ -53,13 +63,39 @@
         </collection-panel>
 
         <search-input
-          v-if="capabilities?.search.supported && collection"
+          v-if="showSearch"
+          :hide="selected"
           :loading="query.search && scrollScene?.loading"
-          :modelValue="query.search"
+          :modelValue="selected && !searchActive ? '' : query.search"
           :error="scrollScene?.error"
           @active="searchActive = $event"
-          @update:modelValue="setQuery({ search: $event })"
+          @update:modelValue="onSearch"
         ></search-input>
+
+        <ui-icon-button
+          v-if="collection && capabilities?.tags?.supported && selecting"
+          :class="{ toolbarItemClass }"
+          @click="showTagEditor = !showTagEditor"
+        >
+          tag
+        </ui-icon-button>
+
+        <ui-dialog
+          class="tag-dialog"
+          v-model="showTagEditor"
+          fullscreen
+          maskClosable
+        >
+          <ui-dialog-title>Tags</ui-dialog-title>
+          <ui-dialog-content>
+            <tag-editor :tagId="query.select_tag" />
+            <ui-dialog-actions>
+              <ui-button @click="showTagEditor = false">
+                Close
+              </ui-button>
+            </ui-dialog-actions>
+          </ui-dialog-content>
+        </ui-dialog>
 
         <div class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
           <span class="empty" v-if="!tasks?.length">
@@ -110,15 +146,15 @@
     </ui-top-app-bar>
     <div id="content">
       <router-view
-        class="viewer"
-        ref="viewer"
         :fullpage="true"
         :scrollbar="scrollbar"
         @load="onLoad"
+        @scene="v => currentScene = v"
         @scenes="v => scenes = v"
         @immersive="onImmersive"
         @tasks="tasks => viewerTasks = tasks"
         @reindex="() => reindex()"
+        @title="pageTitle = $event"
       >
       </router-view>
     </div>
@@ -127,13 +163,14 @@
 
 <script>
 import { createTask, useApi, useTasks } from './api';
-import { computed, toRef } from 'vue';
+import { computed, ref, toRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ExpandButton from './components/ExpandButton.vue'
 import SearchInput from './components/SearchInput.vue'
 import DisplaySettings from './components/DisplaySettings.vue'
 import TaskList from './components/TaskList.vue';
 import CollectionPanel from './components/CollectionPanel.vue';
+import TagEditor from './components/TagEditor.vue';
 import { useEventBus } from '@vueuse/core';
 
 export default {
@@ -144,6 +181,7 @@ export default {
     DisplaySettings,
     TaskList,
     CollectionPanel,
+    TagEditor,
 },
   
   props: [
@@ -155,6 +193,7 @@ export default {
       settingsExpanded: false,
       tasksExpanded: false,
       collectionExpanded: false,
+      showTagEditor: false,
       collectionExpandedPending: false,
       load: {
         image: 0,
@@ -164,6 +203,7 @@ export default {
       collectionMenuOpen: false,
       scrollbar: null,
       scenes: [],
+      currentScene: null,
       viewerTasks: null,
       searchActive: false,
     }
@@ -174,10 +214,28 @@ export default {
     const route = useRoute();
     const query = computed(() => route.query);
     const selecting = computed(() => !!query.value.select_tag);
+    const selected = computed(() => {
+      const tag = query.value?.search?.split(" ", 2)[0];
+      return tag?.startsWith("tag:sys:select:") ? tag : null;
+    });
+    const selectSearch = computed(() => {
+      return {
+        ...query.value,
+        select_tag: undefined,
+        search: `tag:${query.value.select_tag}`,
+      }
+    });
 
     const goBack = () => {
-      if (selecting.value) {
-        router.replace({
+      if (selected.value) {
+        router.push({
+          query: {
+            ...query.value,
+            search: undefined,
+          }
+        });
+      } else if (selecting.value) {
+        router.push({
           query: {
             ...query.value,
             select_tag: undefined,
@@ -221,11 +279,19 @@ export default {
 
     const recreateEvent = useEventBus("recreate-scene");
 
+    const pageTitle = ref("");
+
+    const title = computed(() => {
+      return pageTitle.value || "Photos";
+    });
+
     return {
       goBack,
       query,
       setQuery,
       selecting,
+      selected,
+      selectSearch,
       remoteTasks,
       remoteTasksUpdateUntilDone,
       indexTasks,
@@ -235,6 +301,8 @@ export default {
       collections,
       capabilities,
       recreateEvent,
+      pageTitle,
+      title,
     }
   },
   async mounted() {
@@ -283,6 +351,9 @@ export default {
     scrollScene() {
       return this.scenes?.find(scene => scene.name == "Scroll");
     },
+    showSearch() {
+      return this.capabilities?.search.supported && this.collection && !this.selecting;
+    }
   },
   methods: {
     toggleFocus() {
@@ -321,7 +392,16 @@ export default {
           visibility: immersive ? "hidden" : "auto",
         },
       })
-    }
+    },
+    onSearch(query) {
+      if (this.selected) {
+        if (!this.searchActive && query == "") {
+          this.setQuery({ search: this.selected });
+          return;
+        }
+      }
+      this.setQuery({ search: query });
+    },
   }
 }
 </script>
@@ -414,9 +494,13 @@ export default {
 
 .top-bar {
   background-color: white;
-  --mdc-theme-on-primary: rgba(0,0,0,.87);
   vertical-align: baseline;
   transition: transform 0.2s;
+  --mdc-theme-on-primary: rgba(0,0,0,.87);
+}
+
+.top-bar :deep(.mdc-button--raised) {
+  --mdc-theme-on-primary: #fff;
 }
 
 .top-bar.immersive {
@@ -443,6 +527,10 @@ export default {
   --mdc-theme-primary: white; 
 }
 
+.tag-dialog :deep(.mdc-dialog__surface) {
+  max-width: 800px !important;
+}
+
 button {
   --mdc-theme-primary: black;
 }
@@ -454,6 +542,7 @@ button {
 
 .files {
   font-size: 0.8em;
+  vertical-align: bottom;
   margin-left: 12px;
   color: var(--mdc-theme-text-hint-on-background);
 }
@@ -496,10 +585,6 @@ button {
 
 .task-progress {
   --mdc-theme-primary: var(--mdc-theme-on-primary);
-}
-
-.viewer {
-  height: calc(100vh - 64px);
 }
 
 </style>

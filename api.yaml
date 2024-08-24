@@ -116,6 +116,11 @@ paths:
           schema:
             $ref: "#/components/schemas/Tweaks"
 
+        - name: limit
+          in: query
+          schema:
+            $ref: "#/components/schemas/Limit"
+
       responses:
         "200":
           description: List of scenes created for the specified collection
@@ -327,8 +332,7 @@ paths:
         - name: limit
           in: query
           schema:
-            type: integer
-            example: 3
+            $ref: "#/components/schemas/Limit"
     
       responses:
         "200":
@@ -427,9 +431,12 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Tag"
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    $ref: "#/components/schemas/Tags"
     post:
       description: Add tag
       tags: ["Tags"]
@@ -442,6 +449,20 @@ paths:
       responses:
         "201":
           description: Tag created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+
+  /tags/{id}:
+    get:
+      description: Get a specific tag
+      tags: ["Tags"]
+      parameters:
+        - $ref: "#/components/parameters/TagIdPathParam"
+      responses:
+        "200":
+          description: Tag retrieved successfully
           content:
             application/json:
               schema:
@@ -462,6 +483,29 @@ paths:
       responses:
         "200":
           description: Tag operation successfully completed on the files.
+
+  /tags/{id}/files-tags:
+    get:
+      description: Get all tags of files with the specified tag
+      tags: ["Tags"]
+      parameters:
+        - $ref: "#/components/parameters/TagIdPathParam"
+      responses:
+        "200":
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    $ref: "#/components/schemas/Tags"
+                  files_count:
+                    type: integer
+                    minimum: 0
+                    example: 13
 
   /tasks:
     post:
@@ -781,6 +825,8 @@ components:
           $ref: "#/components/schemas/Bounds"
         file_id:
           $ref: "#/components/schemas/FileId"
+        tag_id:
+          $ref: "#/components/schemas/TagId"
 
     Tags:
       type: array
@@ -791,6 +837,8 @@ components:
       type: object
       properties:
         id:
+          type: string
+        name:
           type: string
 
           
@@ -855,7 +903,7 @@ components:
 
     TagId:
       type: string
-      example: 0
+      example: fav
 
     TileCoord:
       type: integer
@@ -892,6 +940,10 @@ components:
 
     Sort:
       type: string
+
+    Limit:
+      type: integer
+      example: 3
 
     LayoutType:
       type: string

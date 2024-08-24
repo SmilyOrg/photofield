@@ -192,13 +192,14 @@ export function useScene({
     viewport?.height?.value &&
     {
       layout: layout.value,
-      sort: sort.value,
+      sort: sort?.value || undefined,
       image_height: imageHeight?.value || undefined,
       collection_id: collectionId.value,
       viewport_width: viewport.width.value,
       viewport_height: viewport.height.value,
       search: search?.value || undefined,
-      tweaks: tweaks.value,
+      tweaks: tweaks?.value,
+      limit: 1,
     }
   );
 

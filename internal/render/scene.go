@@ -266,12 +266,12 @@ type BitmapAtZoom struct {
 	ZoomDist float64
 }
 
-func (scene *Scene) GetRegions(bounds Rect, limit *int) []Region {
+func (scene *Scene) GetRegions(bounds Rect, limit int) []Region {
 	query := RegionConfig{
 		Limit: 100,
 	}
-	if limit != nil {
-		query.Limit = *limit
+	if limit > 0 {
+		query.Limit = limit
 	}
 	if scene.RegionSource == nil {
 		return []Region{}
@@ -283,12 +283,12 @@ func (scene *Scene) GetRegions(bounds Rect, limit *int) []Region {
 	)
 }
 
-func (scene *Scene) GetRegionsByImageId(id image.ImageId, limit *int) []Region {
+func (scene *Scene) GetRegionsByImageId(id image.ImageId, limit int) []Region {
 	query := RegionConfig{
 		Limit: 100,
 	}
-	if limit != nil {
-		query.Limit = *limit
+	if limit > 0 {
+		query.Limit = limit
 	}
 	if scene.RegionSource == nil {
 		return []Region{}

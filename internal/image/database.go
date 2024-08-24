@@ -3,7 +3,6 @@ package image
 import (
 	"context"
 	"embed"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -28,6 +27,14 @@ import (
 )
 
 var dateFormat = "2006-01-02 15:04:05.999999 -07:00"
+
+func fromUnixMs(unixms int64) time.Time {
+	return time.Unix(0, unixms*int64(time.Millisecond))
+}
+
+func toUnixMs(t time.Time) int64 {
+	return t.UnixMilli()
+}
 
 type ListOrder int32
 
@@ -183,6 +190,7 @@ func (source *Database) Close() {
 	}
 	source.dirUpdateFuncs = nil
 	source.pool.Close()
+	source.pool = nil
 	close(source.pending)
 }
 
@@ -318,15 +326,119 @@ func (source *Database) writePendingInfosSqlite() {
 		VALUES (?, ?);`)
 	defer upsertIndex.Finalize()
 
-	upsertTag := conn.Prep(`
-		INSERT OR IGNORE INTO tag(name, revision)
-		VALUES (?, 1);`)
-	defer upsertTag.Finalize()
+	insertTag := conn.Prep(`
+		INSERT INTO tag(name, updated_at_ms)
+		VALUES (?, ?)
+		RETURNING id;`)
+	defer insertTag.Finalize()
+
+	addTagVersion := conn.Prep(`
+		INSERT INTO tag(name, updated_at_ms)
+		SELECT name, ? as updated_at_ms
+		FROM tag
+		WHERE id == ?
+		RETURNING id;`)
+	defer addTagVersion.Finalize()
+
+	deactivateTags := conn.Prep(`
+		UPDATE tag
+		SET active = false
+		WHERE name IN (
+			SELECT name
+			FROM tag
+			WHERE id == :id
+		)
+		AND id != :id;`)
+	defer deactivateTags.Finalize()
+
+	// Prune old tags using the following rules:
+	// - Keep the last 10 tags
+	// - Keep the last tag per minute for the last 10 minutes
+	// - Keep the last tag per hour for the last 8 hours
+	// - Keep the last tag per day for the last 7 days
+	// - Keep the last tag per month for the last 6 months
+	deleteOldTags := conn.Prep(`
+		WITH n AS (SELECT name FROM tag WHERE id = ?)
+		DELETE FROM tag
+		WHERE name IN n
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m-%d %H:%M', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-10 minutes')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m-%d %H', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-8 hours')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m-%d', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-7 days')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-6 months')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM tag
+			WHERE name IN n
+			ORDER BY updated_at_ms DESC
+			LIMIT 10
+		);`)
+	defer deleteOldTags.Finalize()
+
+	cleanUpTagRanges := conn.Prep(`
+		DELETE FROM infos_tag
+		WHERE tag_id NOT IN (
+			SELECT id
+			FROM tag
+		);`)
+	defer cleanUpTagRanges.Finalize()
 
 	getTagId := conn.Prep(`	
 		SELECT id
 		FROM tag
-		WHERE name = ?;`)
+		WHERE name = ?
+		AND active = true;`)
 	defer getTagId.Finalize()
 
 	deleteTagRange := conn.Prep(`
@@ -344,12 +456,11 @@ func (source *Database) writePendingInfosSqlite() {
 		VALUES (?, ?, ?);`)
 	defer insertTagRange.Finalize()
 
-	incrementTagRevision := conn.Prep(`
+	updateTag := conn.Prep(`
 		UPDATE tag
-		SET revision = revision + 1
-		WHERE id == ?
-		RETURNING revision;`)
-	defer incrementTagRevision.Finalize()
+		SET updated_at_ms = ?
+		WHERE id == ?;`)
+	defer updateTag.Finalize()
 
 	lastOptimize := time.Time{}
 	inTransaction := false
@@ -363,6 +474,32 @@ func (source *Database) writePendingInfosSqlite() {
 
 	commitTicker := &time.Ticker{}
 	commitInterval := 200 * time.Millisecond
+
+	commit := func() {
+		if !inTransaction {
+			return
+		}
+		err := sqlitex.Execute(conn, "COMMIT;", nil)
+		if err != nil {
+			panic(err)
+		}
+		source.transactionMutex.Unlock()
+		inTransaction = false
+	}
+
+	commitRestart := func() {
+		if !inTransaction {
+			return
+		}
+		err := sqlitex.Execute(conn, "COMMIT;", nil)
+		if err != nil {
+			panic(err)
+		}
+		err = sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	for {
 		select {
@@ -411,14 +548,7 @@ func (source *Database) writePendingInfosSqlite() {
 		case imageInfo, ok := <-source.pending:
 			if !ok {
 				log.Println("database closing")
-				if inTransaction {
-					err := sqlitex.Execute(conn, "COMMIT;", nil)
-					if err != nil {
-						panic(err)
-					}
-					source.transactionMutex.Unlock()
-					inTransaction = false
-				}
+				commit()
 				return
 			}
 
@@ -593,13 +723,28 @@ func (source *Database) writePendingInfosSqlite() {
 
 			case AddTag:
 				tagName := imageInfo.Path
-				upsertTag.BindText(1, tagName)
-				_, err := upsertTag.Step()
+
+				getTagId.BindText(1, tagName)
+				ok, err := getTagId.Step()
 				if err != nil {
-					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
+					log.Printf("Unable to get id for add tag %s: %s\n", tagName, err.Error())
 					continue
 				}
-				err = upsertTag.Reset()
+				err = getTagId.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				if !ok {
+					insertTag.BindText(1, tagName)
+					insertTag.BindInt64(2, toUnixMs(time.Now()))
+					_, err := insertTag.Step()
+					if err != nil {
+						log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
+						continue
+					}
+				}
+				err = insertTag.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -607,32 +752,42 @@ func (source *Database) writePendingInfosSqlite() {
 
 			case AddTagId:
 				tagName := imageInfo.Path
-				upsertTag.BindText(1, tagName)
-				_, err := upsertTag.Step()
-				if err != nil {
-					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
-					continue
-				}
-				err = upsertTag.Reset()
-				if err != nil {
-					panic(err)
-				}
 
 				// Get tag id
 				getTagId.BindText(1, tagName)
 				ok, err := getTagId.Step()
 				if err != nil {
-					log.Printf("Unable to get tag id for %s: %s\n", tagName, err.Error())
+					log.Printf("Unable to get tag for add tag id %s: %s\n", tagName, err.Error())
 					continue
 				}
-				if !ok {
-					log.Printf("Unable to get tag id for %s, returned false\n", tagName)
-					continue
+
+				var tagId tag.Id
+				if ok {
+					tagId = tag.Id(getTagId.ColumnInt64(0))
 				}
-				tagId := tag.Id(getTagId.ColumnInt64(0))
 				err = getTagId.Reset()
 				if err != nil {
 					panic(err)
+				}
+
+				if !ok {
+					insertTag.BindText(1, tagName)
+					insertTag.BindInt64(2, toUnixMs(time.Now()))
+					_, err := insertTag.Step()
+					if err != nil {
+						log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
+						continue
+					}
+					tagId = tag.Id(insertTag.ColumnInt64(0))
+					err = insertTag.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				if tagId == 0 {
+					log.Printf("Unable to get tag id for %s: id is 0\n", tagName)
+					continue
 				}
 
 				// Add tag range
@@ -669,14 +824,55 @@ func (source *Database) writePendingInfosSqlite() {
 					panic("Unknown tag id diff type")
 				}
 
-				// Delete all tag ranges
-				deleteTagRanges.BindInt64(1, int64(tagId))
-				_, err := deleteTagRanges.Step()
+				updatedAt := time.Now()
+				addTagVersion.BindInt64(1, toUnixMs(updatedAt))
+				addTagVersion.BindInt64(2, int64(tagId))
+				ret, err := addTagVersion.Step()
 				if err != nil {
-					log.Printf("Unable to delete tag ranges %d: %s\n", tagId, err.Error())
+					log.Printf("Unable to add tag version %d: %s\n", tagId, err.Error())
 					continue
 				}
-				err = deleteTagRanges.Reset()
+				if !ret {
+					log.Printf("Unable to add tag version %d, returned false\n", tagId)
+					continue
+				}
+				tagId = tag.Id(addTagVersion.ColumnInt64(0))
+				err = addTagVersion.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Delete old tags
+				deleteOldTags.BindInt64(1, int64(tagId))
+				_, err = deleteOldTags.Step()
+				if err != nil {
+					log.Printf("Unable to delete old tags %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = deleteOldTags.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Deactivate old tags
+				deactivateTags.BindInt64(1, int64(tagId))
+				_, err = deactivateTags.Step()
+				if err != nil {
+					log.Printf("Unable to deactivate tags %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = deactivateTags.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Delete old tag ranges
+				_, err = cleanUpTagRanges.Step()
+				if err != nil {
+					log.Printf("Unable to clean up tag ranges %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = cleanUpTagRanges.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -699,23 +895,9 @@ func (source *Database) writePendingInfosSqlite() {
 					}
 				}
 
-				// Increment tag revision
-				incrementTagRevision.BindInt64(1, int64(tagId))
-				ok, err := incrementTagRevision.Step()
-				if err != nil {
-					log.Printf("Unable to increment tag revision %d: %s\n", tagId, err.Error())
-					continue
-				}
-				if !ok {
-					panic("Unable to increment tag revision, returned false")
-				}
-				rev := incrementTagRevision.ColumnInt(0)
-				err = incrementTagRevision.Reset()
-				if err != nil {
-					panic(err)
-				}
+				commitRestart()
 
-				imageInfo.Done <- rev
+				imageInfo.Done <- updatedAt
 				close(imageInfo.Done)
 			}
 		}
@@ -724,7 +906,7 @@ func (source *Database) writePendingInfosSqlite() {
 }
 
 func (source *Database) GetPathFromId(id ImageId) (string, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -791,7 +973,7 @@ func (source *Database) GetBatch(ids []ImageId) <-chan InfoListResult {
 	out := make(chan InfoListResult, 1000)
 	go func() {
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -858,7 +1040,7 @@ func (source *Database) GetDir(dir string) (InfoResult, bool) {
 		return InfoResult{}, false
 	}
 
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -883,7 +1065,7 @@ func (source *Database) GetDir(dir string) (InfoResult, bool) {
 
 func (source *Database) GetDirsCount(dirs []string) (int, bool) {
 
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	sql := `
@@ -992,10 +1174,7 @@ func (source *Database) AddTag(name string) (<-chan struct{}, error) {
 	return done, nil
 }
 
-func (source *Database) AddTagIds(id tag.Id, ids Ids) (int, error) {
-	if ids.Len() == 0 {
-		return source.GetTagRevision(id)
-	}
+func (source *Database) AddTagIds(id tag.Id, ids Ids) time.Time {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -1003,19 +1182,10 @@ func (source *Database) AddTagIds(id tag.Id, ids Ids) (int, error) {
 		Type: AddTagIds,
 		Done: done,
 	}
-	rev := (<-done).(int)
-	if rev == 0 {
-		return source.GetTagRevision(id)
-	} else {
-		source.WaitForCommit()
-		return rev, nil
-	}
+	return (<-done).(time.Time)
 }
 
-func (source *Database) RemoveTagIds(id tag.Id, ids Ids) (int, error) {
-	if ids.Len() == 0 {
-		return source.GetTagRevision(id)
-	}
+func (source *Database) RemoveTagIds(id tag.Id, ids Ids) time.Time {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -1023,19 +1193,10 @@ func (source *Database) RemoveTagIds(id tag.Id, ids Ids) (int, error) {
 		Type: RemoveTagIds,
 		Done: done,
 	}
-	rev := (<-done).(int)
-	if rev == 0 {
-		return source.GetTagRevision(id)
-	} else {
-		source.WaitForCommit()
-		return rev, nil
-	}
+	return (<-done).(time.Time)
 }
 
-func (source *Database) InvertTagIds(id tag.Id, ids Ids) (int, error) {
-	if ids.Len() == 0 {
-		return source.GetTagRevision(id)
-	}
+func (source *Database) InvertTagIds(id tag.Id, ids Ids) time.Time {
 	done := make(chan any)
 	source.pending <- &InfoWrite{
 		Id:   int64(id),
@@ -1043,17 +1204,11 @@ func (source *Database) InvertTagIds(id tag.Id, ids Ids) (int, error) {
 		Type: InvertTagIds,
 		Done: done,
 	}
-	rev := (<-done).(int)
-	if rev == 0 {
-		return source.GetTagRevision(id)
-	} else {
-		source.WaitForCommit()
-		return rev, nil
-	}
+	return (<-done).(time.Time)
 }
 
 func (source *Database) GetTagImageIds(id tag.Id) Ids {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 	return source.getTagImageIdsWithConn(conn, id)
 }
@@ -1085,7 +1240,7 @@ func (source *Database) getTagImageIdsWithConn(conn *sqlite.Conn, id tag.Id) Ids
 func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
 	out := make(chan IdRange, 100)
 	go func() {
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		stmt := conn.Prep(`
@@ -1113,14 +1268,11 @@ func (source *Database) ListTagRanges(id tag.Id) <-chan IdRange {
 }
 
 func (source *Database) ListImageTagRanges(id ImageId) <-chan TagIdRange {
-	conn := source.pool.Get(nil)
-	defer source.pool.Put(conn)
-	return source.listImageTagRangesWithConn(conn, id)
-}
-
-func (source *Database) listImageTagRangesWithConn(conn *sqlite.Conn, id ImageId) <-chan TagIdRange {
 	out := make(chan TagIdRange, 100)
 	go func() {
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
 		stmt := conn.Prep(`
 		SELECT tag_id, file_id, len
 		FROM infos_tag
@@ -1148,14 +1300,40 @@ func (source *Database) listImageTagRangesWithConn(conn *sqlite.Conn, id ImageId
 	return out
 }
 
-func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
-	conn := source.pool.Get(nil)
+func (source *Database) GetTag(id tag.Id) (tag.Tag, bool) {
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-	SELECT id, revision
+	SELECT name, updated_at_ms
 	FROM tag
-	WHERE name = ?;`)
+	WHERE id = ?
+	AND active = true;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return tag.Tag{}, false
+	}
+
+	return tag.Tag{
+		Id:        id,
+		Name:      stmt.ColumnText(0),
+		UpdatedAt: fromUnixMs(stmt.ColumnInt64(1)),
+	}, true
+}
+
+func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT id, updated_at_ms
+	FROM tag
+	WHERE name = ?
+	AND active = true;`)
 	defer stmt.Reset()
 
 	stmt.BindText(1, name)
@@ -1166,20 +1344,21 @@ func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
 	}
 
 	return tag.Tag{
-		Id:       tag.Id(stmt.ColumnInt(0)),
-		Name:     name,
-		Revision: stmt.ColumnInt(1),
+		Id:        tag.Id(stmt.ColumnInt(0)),
+		Name:      name,
+		UpdatedAt: fromUnixMs(stmt.ColumnInt64(1)),
 	}, true
 }
 
 func (source *Database) GetTagId(name string) (tag.Id, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
 	SELECT id
 	FROM tag
-	WHERE name = ?;`)
+	WHERE name = ?
+	AND active = true;`)
 	defer stmt.Reset()
 
 	stmt.BindText(1, name)
@@ -1192,8 +1371,28 @@ func (source *Database) GetTagId(name string) (tag.Id, bool) {
 	return tag.Id(stmt.ColumnInt(0)), true
 }
 
+func (source *Database) GetTagFilesCount(id tag.Id) (int, bool) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+	SELECT SUM(len+1)
+	FROM infos_tag
+	WHERE tag_id = ?`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+
+	exists, _ := stmt.Step()
+	if !exists {
+		return 0, false
+	}
+
+	return stmt.ColumnInt(0), true
+}
+
 func (source *Database) GetTagName(id tag.Id) (string, bool) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1212,38 +1411,19 @@ func (source *Database) GetTagName(id tag.Id) (string, bool) {
 	return stmt.ColumnText(0), true
 }
 
-func (source *Database) GetTagRevision(id tag.Id) (int, error) {
-	conn := source.pool.Get(nil)
-	defer source.pool.Put(conn)
-
-	stmt := conn.Prep(`
-	SELECT revision
-	FROM tag
-	WHERE id = ?;`)
-	defer stmt.Reset()
-
-	stmt.BindInt64(1, int64(id))
-
-	exists, _ := stmt.Step()
-	if !exists {
-		return 0, errors.New("tag not found")
-	}
-
-	return stmt.ColumnInt(0), nil
-}
-
 const defaultTagConditions string = `
 	AND name NOT LIKE 'sys:%'
+	AND active = true
 `
 
 func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 	out := make(chan tag.Tag, 100)
 	go func() {
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
-		SELECT id, name, revision
+		SELECT id, name, updated_at_ms
 		FROM infos_tag
 		JOIN tag ON infos_tag.tag_id = tag.id
 		WHERE :file_id >= file_id AND :file_id <= file_id + len
@@ -1266,9 +1446,9 @@ func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 				break
 			}
 			out <- tag.Tag{
-				Id:       tag.Id(stmt.ColumnInt(0)),
-				Name:     stmt.ColumnText(1),
-				Revision: stmt.ColumnInt(2),
+				Id:        tag.Id(stmt.ColumnInt(0)),
+				Name:      stmt.ColumnText(1),
+				UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
 			}
 		}
 		close(out)
@@ -1279,18 +1459,14 @@ func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
 func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 	out := make(chan tag.Tag, 100)
 	go func() {
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
-		SELECT id, name, revision
+		SELECT id, name, updated_at_ms
 		FROM tag
 		WHERE name LIKE ?
-		`
-
-		sql += defaultTagConditions
-
-		sql += `
+		` + defaultTagConditions + `
 		ORDER BY name ASC
 		LIMIT ?;`
 
@@ -1307,9 +1483,60 @@ func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 				break
 			}
 			out <- tag.Tag{
-				Id:       tag.Id(stmt.ColumnInt(0)),
-				Name:     stmt.ColumnText(1),
-				Revision: stmt.ColumnInt(2),
+				Id:        tag.Id(stmt.ColumnInt(0)),
+				Name:      stmt.ColumnText(1),
+				UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
+			}
+		}
+		close(out)
+	}()
+	return out
+}
+
+func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
+	out := make(chan tag.Tag, 100)
+	go func() {
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
+		// SUM(1 + a.len) is the total number of files in the tag
+		sql := `
+		WITH sel AS (
+			SELECT file_id, len
+			FROM infos_tag
+			WHERE tag_id = ?
+		)
+		SELECT tag_id, tag.name, tag.updated_at_ms, SUM(1 + min(sel.file_id + sel.len, a.file_id + a.len) - max(sel.file_id, a.file_id))
+		FROM infos_tag AS a
+		JOIN sel ON a.file_id <= (sel.file_id+sel.len) AND (a.file_id + a.len) >= sel.file_id
+		JOIN tag ON tag.id = a.tag_id
+		WHERE true
+		`
+
+		sql += defaultTagConditions
+
+		sql += `
+		GROUP BY a.tag_id
+		ORDER BY name ASC
+		LIMIT ?;`
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		stmt.BindInt64(1, int64(id))
+		stmt.BindInt64(2, int64(limit))
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing tags: %s\n", err.Error())
+			} else if !exists {
+				break
+			}
+			out <- tag.Tag{
+				Id:        tag.Id(stmt.ColumnInt(0)),
+				Name:      stmt.ColumnText(1),
+				UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
+				FileCount: stmt.ColumnInt(3),
 			}
 		}
 		close(out)
@@ -1343,17 +1570,127 @@ func (source *Database) SetIndexed(dir string) {
 	}, Index)
 }
 
-func (source *Database) List(dirs []string, options ListOptions) <-chan InfoListResult {
+type Dependency struct {
+	db        *Database
+	tagNames  []string
+	updatedAt time.Time
+}
+type Dependencies []Dependency
+
+func (d *Dependency) UpdatedAt() time.Time {
+	sameSecond := d.updatedAt.Truncate(time.Second) == time.Now().Truncate(time.Second)
+	if sameSecond {
+		return d.updatedAt
+	}
+	d.db.UpdateStaleness(d)
+	return d.updatedAt
+}
+
+func (source *Database) UpdateStaleness(dep *Dependency) {
+	if len(dep.tagNames) > 0 {
+		updatedAt, ok := source.GetLatestTagUpdateTime(dep.tagNames)
+		if !ok {
+			return
+		}
+		dep.updatedAt = updatedAt
+	}
+}
+
+func (source *Database) GetLatestTagUpdateTime(tagNames []string) (time.Time, bool) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `
+	SELECT MAX(updated_at_ms)
+	FROM tag
+	WHERE name IN (`
+	length := len(tagNames)
+	if length > 1 {
+		sql += strings.Repeat("?, ", length-1)
+	}
+	sql += `?)
+	AND active = true;`
+
+	stmt := conn.Prep(sql)
+	defer stmt.Reset()
+
+	for i, name := range tagNames {
+		stmt.BindText(1+i, name)
+	}
+	exists, err := stmt.Step()
+	if err != nil {
+		log.Printf("Error listing tags: %s\n", err.Error())
+	}
+	if !exists {
+		return time.Time{}, false
+	}
+	return fromUnixMs(stmt.ColumnInt64(0)), true
+}
+
+func (source *Database) GetTagsByName(tagNames []string) []tag.Tag {
+	if len(tagNames) == 0 {
+		return nil
+	}
+	if source.pool == nil {
+		return nil
+	}
+
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `
+	SELECT id, name, updated_at_ms
+	FROM tag
+	WHERE name IN (`
+	length := len(tagNames)
+	if length > 1 {
+		sql += strings.Repeat("?, ", length-1)
+	}
+	sql += `?)
+	AND active = true;`
+
+	stmt := conn.Prep(sql)
+	defer stmt.Reset()
+
+	for i, name := range tagNames {
+		stmt.BindText(1+i, name)
+	}
+
+	tags := make([]tag.Tag, 0, length)
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error listing tags: %s\n", err.Error())
+		} else if !exists {
+			break
+		}
+		tags = append(tags, tag.Tag{
+			Id:        tag.Id(stmt.ColumnInt(0)),
+			Name:      stmt.ColumnText(1),
+			UpdatedAt: fromUnixMs(stmt.ColumnInt64(2)),
+		})
+	}
+	return tags
+}
+
+func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoListResult, Dependencies) {
 	out := make(chan InfoListResult, 1000)
+
+	tags := options.Query.QualifierValues("tag")
+	deps := Dependencies{
+		Dependency{
+			db:       source,
+			tagNames: tags,
+		},
+	}
+
 	go func() {
 		defer metrics.Elapsed("list infos sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := ""
 
-		tags := options.Query.QualifierValues("tag")
 		if len(tags) > 0 {
 			sql += `
 			WITH
@@ -1369,7 +1706,9 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 					WHERE tag_id IN (
 						SELECT id
 						FROM tag
-						WHERE name = ?
+						WHERE active = true
+						AND name = ?
+						LIMIT 1
 					)
 				)
 				`
@@ -1486,8 +1825,8 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		bindIndex := 1
 
-		for _, tag := range tags {
-			stmt.BindText(bindIndex, tag)
+		for _, t := range tags {
+			stmt.BindText(bindIndex, t)
 			bindIndex++
 		}
 
@@ -1587,7 +1926,7 @@ func (source *Database) List(dirs []string, options ListOptions) <-chan InfoList
 
 		close(out)
 	}()
-	return out
+	return out, deps
 }
 
 func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <-chan InfoEmb {
@@ -1700,7 +2039,7 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 }
 
 func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
-	conn := source.pool.Get(nil)
+	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
@@ -1734,7 +2073,7 @@ func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-cha
 	go func() {
 		defer metrics.Elapsed("list embeddings sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1807,7 +2146,7 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 	go func() {
 		defer metrics.Elapsed("list paths sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1869,7 +2208,7 @@ func (source *Database) ListIdPaths(dirs []string, limit int) <-chan IdPath {
 	go func() {
 		defer metrics.Elapsed("list id paths sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -1935,7 +2274,7 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 	go func() {
 		defer metrics.Elapsed("list ids sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `
@@ -2011,7 +2350,7 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 	go func() {
 		defer metrics.Elapsed("list missing sqlite")()
 
-		conn := source.pool.Get(nil)
+		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
 		sql := `

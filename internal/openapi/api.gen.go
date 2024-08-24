@@ -102,6 +102,9 @@ type ImageHeight float32
 // LayoutType defines model for LayoutType.
 type LayoutType string
 
+// Limit defines model for Limit.
+type Limit int
+
 // Operation defines model for Operation.
 type Operation string
 
@@ -165,7 +168,8 @@ type Sort string
 
 // Tag defines model for Tag.
 type Tag struct {
-	Id *string `json:"id,omitempty"`
+	Id   *string `json:"id,omitempty"`
+	Name *string `json:"name,omitempty"`
 }
 
 // Perform the specified tag operation for the specified files.
@@ -175,10 +179,14 @@ type TagFilesPost struct {
 	FileId  *FileId   `json:"file_id,omitempty"`
 	Op      Operation `json:"op"`
 	SceneId *SceneId  `json:"scene_id,omitempty"`
+	TagId   *TagId    `json:"tag_id,omitempty"`
 }
 
 // TagId defines model for TagId.
 type TagId string
+
+// Tags defines model for Tags.
+type Tags []Tag
 
 // Create a new tag based on the provided parameters.
 type TagsPost struct {
@@ -244,6 +252,7 @@ type GetScenesParams struct {
 	Sort           *Sort           `json:"sort,omitempty"`
 	Search         *Search         `json:"search,omitempty"`
 	Tweaks         *Tweaks         `json:"tweaks,omitempty"`
+	Limit          *Limit          `json:"limit,omitempty"`
 }
 
 // PostScenesJSONBody defines parameters for PostScenes.
@@ -261,7 +270,7 @@ type GetScenesSceneIdRegionsParams struct {
 	Y      *float32 `json:"y,omitempty"`
 	W      *float32 `json:"w,omitempty"`
 	H      *float32 `json:"h,omitempty"`
-	Limit  *int     `json:"limit,omitempty"`
+	Limit  *Limit   `json:"limit,omitempty"`
 }
 
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
@@ -368,8 +377,14 @@ type ServerInterface interface {
 	// (POST /tags)
 	PostTags(w http.ResponseWriter, r *http.Request)
 
+	// (GET /tags/{id})
+	GetTagsId(w http.ResponseWriter, r *http.Request, id TagIdPathParam)
+
 	// (POST /tags/{id}/files)
 	PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id TagIdPathParam)
+
+	// (GET /tags/{id}/files-tags)
+	GetTagsIdFilesTags(w http.ResponseWriter, r *http.Request, id TagIdPathParam)
 
 	// (GET /tasks)
 	GetTasks(w http.ResponseWriter, r *http.Request, params GetTasksParams)
@@ -644,6 +659,17 @@ func (siw *ServerInterfaceWrapper) GetScenes(w http.ResponseWriter, r *http.Requ
 	err = runtime.BindQueryParameter("form", true, false, "tweaks", r.URL.Query(), &params.Tweaks)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter tweaks: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+	if paramValue := r.URL.Query().Get("limit"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter limit: %s", err), http.StatusBadRequest)
 		return
 	}
 
@@ -1080,6 +1106,32 @@ func (siw *ServerInterfaceWrapper) PostTags(w http.ResponseWriter, r *http.Reque
 	handler(w, r.WithContext(ctx))
 }
 
+// GetTagsId operation middleware
+func (siw *ServerInterfaceWrapper) GetTagsId(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id TagIdPathParam
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTagsId(w, r, id)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
 // PostTagsIdFiles operation middleware
 func (siw *ServerInterfaceWrapper) PostTagsIdFiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1097,6 +1149,32 @@ func (siw *ServerInterfaceWrapper) PostTagsIdFiles(w http.ResponseWriter, r *htt
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostTagsIdFiles(w, r, id)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// GetTagsIdFilesTags operation middleware
+func (siw *ServerInterfaceWrapper) GetTagsIdFilesTags(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id TagIdPathParam
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTagsIdFilesTags(w, r, id)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1246,7 +1324,13 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/tags", wrapper.PostTags)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tags/{id}", wrapper.GetTagsId)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tags/{id}/files", wrapper.PostTagsIdFiles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tags/{id}/files-tags", wrapper.GetTagsIdFilesTags)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tasks", wrapper.GetTasks)

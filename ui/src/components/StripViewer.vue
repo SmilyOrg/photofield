@@ -157,7 +157,7 @@ const onSearch = async (term) => {
 const fileId = computed(() => region.value?.data?.id);
 
 const favorite = async (tag) => {
-  const tagId = tag?.id || "fav:r0";
+  const tagId = tag?.id || "fav";
   if (!fileId.value) {
     return;
   }

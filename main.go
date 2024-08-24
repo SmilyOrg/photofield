@@ -457,6 +457,10 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 		return a.CreatedAt.After(b.CreatedAt)
 	})
 
+	if params.Limit != nil && int(*params.Limit) < len(scenes) {
+		scenes = scenes[:int(*params.Limit)]
+	}
+
 	respond(w, r, http.StatusOK, struct {
 		Items []*render.Scene `json:"items"`
 	}{
@@ -476,7 +480,10 @@ func (*Api) GetScenesId(w http.ResponseWriter, r *http.Request, id openapi.Scene
 }
 
 func (*Api) GetCollections(w http.ResponseWriter, r *http.Request) {
-	// Explicitly do not update collection status to avoid long delays
+	for i := range collections {
+		collection := &collections[i]
+		collection.UpdateIndexedAt(imageSource)
+	}
 	items := collections
 	if items == nil {
 		items = make([]collection.Collection, 0)
@@ -492,7 +499,8 @@ func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.
 
 	for _, collection := range collections {
 		if collection.Id == string(id) {
-			collection.UpdateStatus(imageSource)
+			collection.UpdateIndexedAt(imageSource)
+			collection.UpdateIndexedCount(imageSource)
 			respond(w, r, http.StatusOK, collection)
 			return
 		}
@@ -726,17 +734,12 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	}
 
 	if params.SelectTag != nil {
-		t, err := tag.FromNameRev(string(*params.SelectTag))
-		if err != nil {
-			problem(w, r, http.StatusBadRequest, "Invalid tag id")
-			return
-		}
-		id, ok := imageSource.GetTagId(t.Name)
+		t, ok := imageSource.GetTagByName(string(*params.SelectTag))
 		if !ok {
 			problem(w, r, http.StatusBadRequest, "Unknown tag")
 			return
 		}
-		rn.Selected = imageSource.GetTagImageIds(id)
+		rn.Selected = imageSource.GetTagImageIds(t.Id)
 	}
 
 	if params.DebugOverdraw != nil {
@@ -840,12 +843,17 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 
 	var regions []render.Region
 
+	limit := 0
+	if params.Limit != nil {
+		limit = int(*params.Limit)
+	}
+
 	if params.FileId != nil {
 		if params.X != nil || params.Y != nil || params.W != nil || params.H != nil {
 			problem(w, r, http.StatusBadRequest, "file_id and bounds are mutually exclusive")
 			return
 		}
-		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), params.Limit)
+		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), limit)
 	} else {
 		if params.X == nil || params.Y == nil || params.W == nil || params.H == nil {
 			problem(w, r, http.StatusBadRequest, "bounds or file_id required")
@@ -859,7 +867,7 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 			H: float64(*params.H),
 		}
 
-		regions = scene.GetRegions(bounds, params.Limit)
+		regions = scene.GetRegions(bounds, limit)
 	}
 
 	respond(w, r, http.StatusOK, struct {
@@ -894,7 +902,7 @@ func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTa
 	}
 
 	tags := make([]tag.Tag, 0)
-	for t := range imageSource.ListTags(q, 10) {
+	for t := range imageSource.ListTags(q, 100) {
 		tags = append(tags, t)
 	}
 
@@ -903,6 +911,16 @@ func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTa
 	}{
 		Items: tags,
 	})
+}
+
+func (*Api) GetTagsId(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
+	tag, exists := imageSource.GetTagByName(string(id))
+	if !exists {
+		problem(w, r, http.StatusNotFound, "Tag not found")
+		return
+	}
+	w.Header().Add("ETag", tag.ETag())
+	respond(w, r, http.StatusOK, tag)
 }
 
 func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
@@ -930,7 +948,7 @@ func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
 	}
 	imageSource.AddTag(t.Name)
 
-	tag, exists := imageSource.GetTag(t.Name)
+	tag, exists := imageSource.GetTagByName(t.Name)
 	if !exists {
 		problem(w, r, http.StatusInternalServerError, err.Error())
 		return
@@ -939,7 +957,7 @@ func (*Api) PostTags(w http.ResponseWriter, r *http.Request) {
 	respond(w, r, http.StatusCreated, struct {
 		Id openapi.TagId `json:"id"`
 	}{
-		Id: openapi.TagId(tag.NameRev()),
+		Id: openapi.TagId(tag.Name),
 	})
 }
 
@@ -951,13 +969,13 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		return
 	}
 
-	t, err := imageSource.GetOrCreateTagFromNameRev(string(id))
+	t, err := imageSource.GetOrCreateTagFromName(string(id))
 	if err != nil {
 		problem(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ids := make(chan image.ImageId, 100)
+	ids := image.NewIds()
 	if data.SceneId != nil && data.Bounds != nil {
 		scene := sceneSource.GetSceneById(string(*data.SceneId), imageSource)
 		if scene == nil {
@@ -972,43 +990,67 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 			H: float64(data.Bounds.H),
 		}
 
-		go func() {
-			defer close(ids)
-			photos := scene.GetVisiblePhotos(bounds)
-			for p := range photos {
-				ids <- image.ImageId(p.Id)
-			}
-		}()
+		photos := scene.GetVisiblePhotos(bounds)
+		for p := range photos {
+			ids.AddInt(int(p.Id))
+		}
 	} else if data.FileId != nil {
-		go func() {
-			defer close(ids)
-			ids <- image.ImageId(*data.FileId)
-		}()
+		ids.AddInt(int(*data.FileId))
+	} else if data.TagId != nil {
+		srct, err := imageSource.GetOrCreateTagFromName(string(*data.TagId))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+		ids = imageSource.GetTagImageIds(srct.Id)
 	} else {
 		problem(w, r, http.StatusBadRequest, "Either scene_id+bounds or file_id required")
 		return
 	}
 
-	var rev int
-	switch data.Op {
-	case "ADD":
-		rev, err = imageSource.AddTagIds(t.Id, ids)
-	case "SUBTRACT":
-		rev, err = imageSource.RemoveTagIds(t.Id, ids)
-	case "INVERT":
-		rev, err = imageSource.InvertTagIds(t.Id, ids)
-	default:
-		problem(w, r, http.StatusBadRequest, "Invalid op")
-		return
-	}
-	t.Revision = rev
-
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, err.Error())
-		return
+	if ids.Len() > 0 {
+		switch data.Op {
+		case "ADD":
+			t.UpdatedAt = imageSource.AddTagIds(t.Id, ids)
+		case "SUBTRACT":
+			t.UpdatedAt = imageSource.RemoveTagIds(t.Id, ids)
+		case "INVERT":
+			t.UpdatedAt = imageSource.InvertTagIds(t.Id, ids)
+		default:
+			problem(w, r, http.StatusBadRequest, "Invalid op")
+			return
+		}
 	}
 
 	respond(w, r, http.StatusOK, t)
+}
+
+func (*Api) GetTagsIdFilesTags(w http.ResponseWriter, r *http.Request, id openapi.TagIdPathParam) {
+
+	t, ok := imageSource.GetTagByName(string(id))
+	if !ok {
+		problem(w, r, http.StatusNotFound, "Tag not found")
+		return
+	}
+
+	count, ok := imageSource.GetTagFilesCount(t.Id)
+	if !ok {
+		problem(w, r, http.StatusInternalServerError, "Failed to count tag ids")
+		return
+	}
+
+	tags := make([]tag.Tag, 0)
+	for t := range imageSource.ListTagsOfTag(t.Id, 10) {
+		tags = append(tags, t)
+	}
+
+	respond(w, r, http.StatusOK, struct {
+		Items []tag.Tag `json:"items"`
+		Count int       `json:"file_count"`
+	}{
+		Items: tags,
+		Count: count,
+	})
 }
 
 func (*Api) GetFilesId(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam) {
@@ -1266,7 +1308,8 @@ func applyConfig(appConfig *AppConfig) {
 	log.Printf("%v collections", len(collections))
 	for i := range collections {
 		collection := &collections[i]
-		collection.UpdateStatus(imageSource)
+		collection.UpdateIndexedAt(imageSource)
+		collection.UpdateIndexedCount(imageSource)
 		indexedAgo := "N/A"
 		if collection.IndexedAt != nil {
 			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
@@ -1381,6 +1424,12 @@ func main() {
 	watchConfig(dataDir, func(appConfig *AppConfig) {
 		applyConfig(appConfig)
 	})
+
+	// config, err := loadConfig(dataDir)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// applyConfig(config)
 
 	if *vacuumFlag {
 		err := imageSource.Vacuum()

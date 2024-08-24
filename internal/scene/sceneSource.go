@@ -144,18 +144,33 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
 			}
 		} else {
-			// Normal order
-			var extensions []string
-			if strings.Contains(config.Layout.Tweaks, "imageonly") {
-				extensions = imageSource.Images.Extensions
+			var infos <-chan image.SourcedInfo
+			filter, _ := query.QualifierString("filter")
+			if filter == "knn" {
+				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
+					OrderBy: image.ListOrder(config.Layout.Order),
+					Limit:   config.Collection.Limit,
+					Query:   query,
+				})
+			} else {
+				// Normal order
+				var deps image.Dependencies
+				// Normal order
+				var extensions []string
+				if strings.Contains(config.Layout.Tweaks, "imageonly") {
+					extensions = imageSource.Images.Extensions
+				}
+				infos, deps = config.Collection.GetInfos(imageSource, image.ListOptions{
+					OrderBy:    image.ListOrder(config.Layout.Order),
+					Limit:      config.Collection.Limit,
+					Query:      query,
+					Embedding:  scene.SearchEmbedding,
+					Extensions: extensions,
+				})
+				for _, dep := range deps {
+					scene.Dependencies = append(scene.Dependencies, render.Dependency(&dep))
+				}
 			}
-			infos := config.Collection.GetInfos(imageSource, image.ListOptions{
-				OrderBy:    image.ListOrder(config.Layout.Order),
-				Limit:      config.Collection.Limit,
-				Query:      query,
-				Embedding:  scene.SearchEmbedding,
-				Extensions: extensions,
-			})
 			switch config.Layout.Type {
 			case layout.Timeline:
 				layout.LayoutTimeline(infos, config.Layout, &scene, imageSource)

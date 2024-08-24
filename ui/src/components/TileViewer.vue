@@ -74,7 +74,7 @@ export default {
     crossNav: Boolean,
     focus: Boolean,
     backgroundColor: String,
-    selectTagId: String,
+    selectTag: Object,
     debug: Object,
     loading: Boolean,
     geo: Boolean,
@@ -186,7 +186,7 @@ export default {
       }
     },
 
-    selectTagId() {
+    selectTag() {
       this.reload();
     },
 
@@ -473,7 +473,7 @@ export default {
         });
         const extent = this.viewExtent;
         this.v = new View({
-          center: [extent[2]/2, extent[3]],
+          center: [extent[2]/4, extent[3]],
           projection: this.projection,
           zoom: 0,
           minZoom: 0,
@@ -719,8 +719,9 @@ export default {
       const extra = {
         ...this.debug,
       }
-      if (this.selectTagId) {
-        extra.select_tag = this.selectTagId;
+      if (this.selectTag) {
+        extra.select_tag = this.selectTag.id;
+        extra.select_tag_etag = this.selectTag.etag;
       }
       if (this.qualityPreset) {
         extra.quality_preset = this.qualityPreset;

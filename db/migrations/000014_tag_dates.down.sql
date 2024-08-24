@@ -1,0 +1,2 @@
+ALTER TABLE tag DROP COLUMN updated_at_ms;
+ALTER TABLE tag ADD COLUMN revision INTEGER;

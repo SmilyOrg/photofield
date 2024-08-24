@@ -1,7 +1,20 @@
 <template>
   <div class="tags">
+    <div
+      v-if="readonly"
+      class="multiselect__tags mtags"
+    >
+      <span
+        v-for="tag in tags"
+        :key="tag.id"
+        class="multiselect__tag mtag"
+      >
+        {{ tag.name }}
+      </span>
+    </div>
     <VueMultiselect
-      v-model="tags"
+      v-else
+      :modelValue="tags"
       :options="options"
       :multiple="true"
       :taggable="true"
@@ -20,7 +33,28 @@
       @tag="add"
       @select="select"
       @remove="remove"
-    ></VueMultiselect>
+    >
+      <template v-slot:noResult>
+        <span>No Matches found.</span>
+      </template>
+      <template v-slot:tag="{ option, remove }">
+        <span class="multiselect__tag" :key="option.id">
+          <router-link v-if="option.route" :to="option.route" v-text="option.name"></router-link>
+          <span v-else v-text="option.name"></span>
+          <i
+            tabindex="1"
+            @keypress.enter.prevent="remove(option)"
+            @mousedown.prevent="remove(option)"
+            class="multiselect__tag-icon"
+          ></i>
+        </span>
+      </template>
+      <template v-if="message" #selection="{ values, search, isOpen }">
+        <span class="multiselect__single" v-show="values.length > 0 && !isOpen">
+          {{ message }}
+        </span>
+      </template>
+    </VueMultiselect>
   </div>
 </template>
 
@@ -32,6 +66,8 @@ import qs from "qs";
 
 const props = defineProps({
   tags: Array,
+  readonly: Boolean,
+  message: String,
 });
 
 const emit = defineEmits([
@@ -46,7 +82,6 @@ const {
 const options = ref([])
 const loading = ref(false);
 
-
 const onSearch = async (query) => {
   loading.value = true;
   const tags = await get(`/tags?${qs.stringify({ q: query })}`);
@@ -55,16 +90,34 @@ const onSearch = async (query) => {
 }
 
 const add = (newTag) => {
-  const tagId = newTag + ":r0";
-  emit("add", tagId);
+  emit("add", {
+    id: newTag,
+    name: newTag,
+  });
 }
 
 const select = (tag) => {
-  emit("add", tag.id);
+  emit("add", tag);
 }
 
 const remove = (tag) => {
-  emit("remove", tag.id);
+  emit("remove", tag);
 }
 
 </script>
+
+<style scoped>
+.mtags {
+  min-height: 32px;
+  padding: 8px 0 0 8px;
+}
+.mtag {
+  padding-right: 10px;
+}
+
+.multiselect__tag a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+</style>

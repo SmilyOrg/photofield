@@ -81,7 +81,7 @@ func (collection *Collection) Expand() []Collection {
 	return collections
 }
 
-func (collection *Collection) UpdateStatus(source *image.Source) {
+func (collection *Collection) UpdateIndexedAt(source *image.Source) {
 	var earliestIndex *time.Time
 	for _, dir := range collection.Dirs {
 		info := source.GetDir(dir)
@@ -90,10 +90,13 @@ func (collection *Collection) UpdateStatus(source *image.Source) {
 		}
 	}
 	collection.IndexedAt = earliestIndex
+}
+
+func (collection *Collection) UpdateIndexedCount(source *image.Source) {
 	collection.IndexedCount = source.GetDirsCount(collection.Dirs)
 }
 
-func (collection *Collection) GetInfos(source *image.Source, options image.ListOptions) <-chan image.SourcedInfo {
+func (collection *Collection) GetInfos(source *image.Source, options image.ListOptions) (<-chan image.SourcedInfo, image.Dependencies) {
 	return source.ListInfos(collection.Dirs, options)
 }
 
