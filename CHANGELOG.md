@@ -11,7 +11,7 @@ version zero.
 
 ### Added
 
-- None
+- Enable search even if AI is not enabled
 
 ### Changed
 
