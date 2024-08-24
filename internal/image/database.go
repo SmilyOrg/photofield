@@ -326,15 +326,119 @@ func (source *Database) writePendingInfosSqlite() {
 		VALUES (?, ?);`)
 	defer upsertIndex.Finalize()
 
-	upsertTag := conn.Prep(`
-		INSERT OR IGNORE INTO tag(name, updated_at_ms)
-		VALUES (?, ?);`)
-	defer upsertTag.Finalize()
+	insertTag := conn.Prep(`
+		INSERT INTO tag(name, updated_at_ms)
+		VALUES (?, ?)
+		RETURNING id;`)
+	defer insertTag.Finalize()
+
+	addTagVersion := conn.Prep(`
+		INSERT INTO tag(name, updated_at_ms)
+		SELECT name, ? as updated_at_ms
+		FROM tag
+		WHERE id == ?
+		RETURNING id;`)
+	defer addTagVersion.Finalize()
+
+	deactivateTags := conn.Prep(`
+		UPDATE tag
+		SET active = false
+		WHERE name IN (
+			SELECT name
+			FROM tag
+			WHERE id == :id
+		)
+		AND id != :id;`)
+	defer deactivateTags.Finalize()
+
+	// Prune old tags using the following rules:
+	// - Keep the last 10 tags
+	// - Keep the last tag per minute for the last 10 minutes
+	// - Keep the last tag per hour for the last 8 hours
+	// - Keep the last tag per day for the last 7 days
+	// - Keep the last tag per month for the last 6 months
+	deleteOldTags := conn.Prep(`
+		WITH n AS (SELECT name FROM tag WHERE id = ?)
+		DELETE FROM tag
+		WHERE name IN n
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m-%d %H:%M', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-10 minutes')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m-%d %H', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-8 hours')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m-%d', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-7 days')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM (
+				SELECT id, updated_at_ms,
+					ROW_NUMBER() OVER (
+						PARTITION BY strftime('%Y-%m', datetime(updated_at_ms / 1000, 'unixepoch', 'localtime'))
+						ORDER BY updated_at_ms DESC
+					) AS rn
+				FROM tag
+				WHERE name IN n
+					AND updated_at_ms >= strftime('%s', 'now', '-6 months')
+			) t
+			WHERE rn <= 1
+		)
+		AND id NOT IN (
+			SELECT id
+			FROM tag
+			WHERE name IN n
+			ORDER BY updated_at_ms DESC
+			LIMIT 10
+		);`)
+	defer deleteOldTags.Finalize()
+
+	cleanUpTagRanges := conn.Prep(`
+		DELETE FROM infos_tag
+		WHERE tag_id NOT IN (
+			SELECT id
+			FROM tag
+		);`)
+	defer cleanUpTagRanges.Finalize()
 
 	getTagId := conn.Prep(`	
 		SELECT id
 		FROM tag
-		WHERE name = ?;`)
+		WHERE name = ?
+		AND active = true;`)
 	defer getTagId.Finalize()
 
 	deleteTagRange := conn.Prep(`
@@ -619,14 +723,28 @@ func (source *Database) writePendingInfosSqlite() {
 
 			case AddTag:
 				tagName := imageInfo.Path
-				upsertTag.BindText(1, tagName)
-				upsertTag.BindInt64(2, toUnixMs(time.Now()))
-				_, err := upsertTag.Step()
+
+				getTagId.BindText(1, tagName)
+				ok, err := getTagId.Step()
 				if err != nil {
-					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
+					log.Printf("Unable to get id for add tag %s: %s\n", tagName, err.Error())
 					continue
 				}
-				err = upsertTag.Reset()
+				err = getTagId.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				if !ok {
+					insertTag.BindText(1, tagName)
+					insertTag.BindInt64(2, toUnixMs(time.Now()))
+					_, err := insertTag.Step()
+					if err != nil {
+						log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
+						continue
+					}
+				}
+				err = insertTag.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -634,32 +752,42 @@ func (source *Database) writePendingInfosSqlite() {
 
 			case AddTagId:
 				tagName := imageInfo.Path
-				upsertTag.BindText(1, tagName)
-				_, err := upsertTag.Step()
-				if err != nil {
-					log.Printf("Unable upsert tag %s: %s\n", tagName, err.Error())
-					continue
-				}
-				err = upsertTag.Reset()
-				if err != nil {
-					panic(err)
-				}
 
 				// Get tag id
 				getTagId.BindText(1, tagName)
 				ok, err := getTagId.Step()
 				if err != nil {
-					log.Printf("Unable to get tag id for %s: %s\n", tagName, err.Error())
+					log.Printf("Unable to get tag for add tag id %s: %s\n", tagName, err.Error())
 					continue
 				}
-				if !ok {
-					log.Printf("Unable to get tag id for %s, returned false\n", tagName)
-					continue
+
+				var tagId tag.Id
+				if ok {
+					tagId = tag.Id(getTagId.ColumnInt64(0))
 				}
-				tagId := tag.Id(getTagId.ColumnInt64(0))
 				err = getTagId.Reset()
 				if err != nil {
 					panic(err)
+				}
+
+				if !ok {
+					insertTag.BindText(1, tagName)
+					insertTag.BindInt64(2, toUnixMs(time.Now()))
+					_, err := insertTag.Step()
+					if err != nil {
+						log.Printf("Unable to insert tag %s: %s\n", tagName, err.Error())
+						continue
+					}
+					tagId = tag.Id(insertTag.ColumnInt64(0))
+					err = insertTag.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				if tagId == 0 {
+					log.Printf("Unable to get tag id for %s: id is 0\n", tagName)
+					continue
 				}
 
 				// Add tag range
@@ -696,14 +824,55 @@ func (source *Database) writePendingInfosSqlite() {
 					panic("Unknown tag id diff type")
 				}
 
-				// Delete all tag ranges
-				deleteTagRanges.BindInt64(1, int64(tagId))
-				_, err := deleteTagRanges.Step()
+				updatedAt := time.Now()
+				addTagVersion.BindInt64(1, toUnixMs(updatedAt))
+				addTagVersion.BindInt64(2, int64(tagId))
+				ret, err := addTagVersion.Step()
 				if err != nil {
-					log.Printf("Unable to delete tag ranges %d: %s\n", tagId, err.Error())
+					log.Printf("Unable to add tag version %d: %s\n", tagId, err.Error())
 					continue
 				}
-				err = deleteTagRanges.Reset()
+				if !ret {
+					log.Printf("Unable to add tag version %d, returned false\n", tagId)
+					continue
+				}
+				tagId = tag.Id(addTagVersion.ColumnInt64(0))
+				err = addTagVersion.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Delete old tags
+				deleteOldTags.BindInt64(1, int64(tagId))
+				_, err = deleteOldTags.Step()
+				if err != nil {
+					log.Printf("Unable to delete old tags %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = deleteOldTags.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Deactivate old tags
+				deactivateTags.BindInt64(1, int64(tagId))
+				_, err = deactivateTags.Step()
+				if err != nil {
+					log.Printf("Unable to deactivate tags %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = deactivateTags.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Delete old tag ranges
+				_, err = cleanUpTagRanges.Step()
+				if err != nil {
+					log.Printf("Unable to clean up tag ranges %d: %s\n", tagId, err.Error())
+					continue
+				}
+				err = cleanUpTagRanges.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -724,19 +893,6 @@ func (source *Database) writePendingInfosSqlite() {
 					if err != nil {
 						panic(err)
 					}
-				}
-
-				updatedAt := time.Now()
-				updateTag.BindInt64(1, toUnixMs(updatedAt))
-				updateTag.BindInt64(2, int64(tagId))
-				_, err = updateTag.Step()
-				if err != nil {
-					log.Printf("Unable to update tag date %d: %s\n", tagId, err.Error())
-					continue
-				}
-				err = updateTag.Reset()
-				if err != nil {
-					panic(err)
 				}
 
 				commitRestart()
@@ -1154,7 +1310,8 @@ func (source *Database) GetTag(id tag.Id) (tag.Tag, bool) {
 	stmt := conn.Prep(`
 	SELECT name, updated_at_ms
 	FROM tag
-	WHERE id = ?;`)
+	WHERE id = ?
+	AND active = true;`)
 	defer stmt.Reset()
 
 	stmt.BindInt64(1, int64(id))
@@ -1178,7 +1335,8 @@ func (source *Database) GetTagByName(name string) (tag.Tag, bool) {
 	stmt := conn.Prep(`
 	SELECT id, updated_at_ms
 	FROM tag
-	WHERE name = ?;`)
+	WHERE name = ?
+	AND active = true;`)
 	defer stmt.Reset()
 
 	stmt.BindText(1, name)
@@ -1202,7 +1360,8 @@ func (source *Database) GetTagId(name string) (tag.Id, bool) {
 	stmt := conn.Prep(`
 	SELECT id
 	FROM tag
-	WHERE name = ?;`)
+	WHERE name = ?
+	AND active = true;`)
 	defer stmt.Reset()
 
 	stmt.BindText(1, name)
@@ -1213,47 +1372,6 @@ func (source *Database) GetTagId(name string) (tag.Id, bool) {
 	}
 
 	return tag.Id(stmt.ColumnInt(0)), true
-}
-
-func (source *Database) GetTagIds(names []string) ([]tag.Id, bool) {
-	conn := source.pool.Get(context.TODO())
-	defer source.pool.Put(conn)
-
-	sql := `
-	SELECT id
-	FROM tag
-	WHERE name IN (`
-
-	if len(names) == 0 {
-		return nil, true
-	}
-
-	length := len(names)
-	if length > 1 {
-		sql += strings.Repeat("?, ", length-1)
-	}
-	sql += `?);`
-
-	stmt := conn.Prep(sql)
-	defer stmt.Reset()
-
-	for i, name := range names {
-		stmt.BindText(1+i, name)
-	}
-
-	ids := make([]tag.Id, 0, length)
-	for {
-		if exists, err := stmt.Step(); err != nil {
-			log.Printf("Error listing tags: %s\n", err.Error())
-		} else if !exists {
-			break
-		}
-		ids = append(ids, tag.Id(stmt.ColumnInt(0)))
-	}
-	if len(ids) != length {
-		return nil, false
-	}
-	return ids, true
 }
 
 func (source *Database) GetTagFilesCount(id tag.Id) (int, bool) {
@@ -1298,6 +1416,7 @@ func (source *Database) GetTagName(id tag.Id) (string, bool) {
 
 const defaultTagConditions string = `
 	AND name NOT LIKE 'sys:%'
+	AND active = true
 `
 
 func (source *Database) ListImageTags(id ImageId) <-chan tag.Tag {
@@ -1350,11 +1469,7 @@ func (source *Database) ListTags(q string, limit int) <-chan tag.Tag {
 		SELECT id, name, updated_at_ms
 		FROM tag
 		WHERE name LIKE ?
-		`
-
-		sql += defaultTagConditions
-
-		sql += `
+		` + defaultTagConditions + `
 		ORDER BY name ASC
 		LIMIT ?;`
 
@@ -1476,15 +1591,43 @@ func (d *Dependency) UpdatedAt() time.Time {
 
 func (source *Database) UpdateStaleness(dep *Dependency) {
 	if len(dep.tagNames) > 0 {
-		tags := source.GetTagsByName(dep.tagNames)
-		updatedAt := time.Time{}
-		for _, t := range tags {
-			if t.UpdatedAt.After(updatedAt) {
-				updatedAt = t.UpdatedAt
-			}
+		updatedAt, ok := source.GetLatestTagUpdateTime(dep.tagNames)
+		if !ok {
+			return
 		}
 		dep.updatedAt = updatedAt
 	}
+}
+
+func (source *Database) GetLatestTagUpdateTime(tagNames []string) (time.Time, bool) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `
+	SELECT MAX(updated_at_ms)
+	FROM tag
+	WHERE name IN (`
+	length := len(tagNames)
+	if length > 1 {
+		sql += strings.Repeat("?, ", length-1)
+	}
+	sql += `?)
+	AND active = true;`
+
+	stmt := conn.Prep(sql)
+	defer stmt.Reset()
+
+	for i, name := range tagNames {
+		stmt.BindText(1+i, name)
+	}
+	exists, err := stmt.Step()
+	if err != nil {
+		log.Printf("Error listing tags: %s\n", err.Error())
+	}
+	if !exists {
+		return time.Time{}, false
+	}
+	return fromUnixMs(stmt.ColumnInt64(0)), true
 }
 
 func (source *Database) GetTagsByName(tagNames []string) []tag.Tag {
@@ -1502,12 +1645,12 @@ func (source *Database) GetTagsByName(tagNames []string) []tag.Tag {
 	SELECT id, name, updated_at_ms
 	FROM tag
 	WHERE name IN (`
-
 	length := len(tagNames)
 	if length > 1 {
 		sql += strings.Repeat("?, ", length-1)
 	}
-	sql += `?);`
+	sql += `?)
+	AND active = true;`
 
 	stmt := conn.Prep(sql)
 	defer stmt.Reset()
@@ -1566,7 +1709,9 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 					WHERE tag_id IN (
 						SELECT id
 						FROM tag
-						WHERE name = ?
+						WHERE active = true
+						AND name = ?
+						LIMIT 1
 					)
 				)
 				`

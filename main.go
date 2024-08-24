@@ -1008,16 +1008,18 @@ func (*Api) PostTagsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.T
 		return
 	}
 
-	switch data.Op {
-	case "ADD":
-		t.UpdatedAt = imageSource.AddTagIds(t.Id, ids)
-	case "SUBTRACT":
-		t.UpdatedAt = imageSource.RemoveTagIds(t.Id, ids)
-	case "INVERT":
-		t.UpdatedAt = imageSource.InvertTagIds(t.Id, ids)
-	default:
-		problem(w, r, http.StatusBadRequest, "Invalid op")
-		return
+	if ids.Len() > 0 {
+		switch data.Op {
+		case "ADD":
+			t.UpdatedAt = imageSource.AddTagIds(t.Id, ids)
+		case "SUBTRACT":
+			t.UpdatedAt = imageSource.RemoveTagIds(t.Id, ids)
+		case "INVERT":
+			t.UpdatedAt = imageSource.InvertTagIds(t.Id, ids)
+		default:
+			problem(w, r, http.StatusBadRequest, "Invalid op")
+			return
+		}
 	}
 
 	respond(w, r, http.StatusOK, t)

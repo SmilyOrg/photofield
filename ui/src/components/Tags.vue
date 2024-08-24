@@ -14,7 +14,7 @@
     </div>
     <VueMultiselect
       v-else
-      v-model="tags"
+      :modelValue="tags"
       :options="options"
       :multiple="true"
       :taggable="true"

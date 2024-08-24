@@ -235,7 +235,7 @@ export default {
           }
         });
       } else if (selecting.value) {
-        router.replace({
+        router.push({
           query: {
             ...query.value,
             select_tag: undefined,
