@@ -187,17 +187,18 @@ func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
 	i := 0
 	ty := -1.
 	var t time.Time
+	var photo Photo
 	for y := 0; y < height; y++ {
 		for ; ty <= float64(y) && i < len(scene.Photos); i++ {
-			photo := scene.Photos[i]
-			info := photo.GetInfo(source)
-			t = info.DateTime
+			photo = scene.Photos[i]
 			py := (photo.Sprite.Rect.Y + photo.Sprite.Rect.H) * scale
 			// TODO: figure out why sometimes py can be NaN
 			if !math.IsNaN(py) {
 				ty = py
 			}
 		}
+		info := photo.GetInfo(source)
+		t = info.DateTime
 		timestamps[y] = uint32(t.Unix())
 	}
 
