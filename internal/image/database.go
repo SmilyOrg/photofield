@@ -1672,8 +1672,8 @@ func (source *Database) GetTagsByName(tagNames []string) []tag.Tag {
 	return tags
 }
 
-func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoListResult, Dependencies) {
-	out := make(chan InfoListResult, 1000)
+func (source *Database) List(dirs []string, options ListOptions) (<-chan SourcedInfo, Dependencies) {
+	out := make(chan SourcedInfo, 1000)
 
 	tags := options.Query.QualifierValues("tag")
 	deps := Dependencies{
@@ -1685,9 +1685,6 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 
 	go func() {
 		defer metrics.Elapsed("list infos sqlite")()
-
-		conn := source.pool.Get(context.TODO())
-		defer source.pool.Put(conn)
 
 		sql := ""
 
@@ -1736,67 +1733,76 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 		}
 
 		sql += `
-			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
-		if joinEmbeddings {
-			sql += `, inv_norm, embedding`
-		}
-		sql += `
-			FROM infos
+			SELECT * FROM (
 		`
-
-		if len(tags) > 0 {
-			for i := range tags {
-				sql += fmt.Sprintf(`
-					JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
-				`, i)
-			}
-		}
-
-		if joinEmbeddings {
-			sql += `
-				LEFT JOIN clip_emb ON clip_emb.file_id = id
-			`
-		}
-
-		sql += `
-			WHERE path_prefix_id IN (
-				SELECT id
-				FROM prefix
-				WHERE `
-
-		for i := range dirs {
-			sql += `str LIKE ? `
-			if i < len(dirs)-1 {
-				sql += "OR "
-			}
-		}
-
-		sql += `
-			)
-		`
-
-		if len(options.Extensions) > 0 {
-			sql += `
-			AND (
-			`
-			for i := range options.Extensions {
-				sql += `filename LIKE ? `
-				if i < len(options.Extensions)-1 {
-					sql += "OR "
-				}
-			}
-			sql += `
-			)
-			`
-		}
 
 		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
-		if createdErr == nil {
+		prefixIds := source.GetPrefixIds(dirs)
+		for prefixIdx, _ := range prefixIds {
+
 			sql += `
-			AND created_at_unix >= ?
-			AND created_at_unix <= ?
+				SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
+			if joinEmbeddings {
+				sql += `, inv_norm, embedding`
+			}
+			sql += `
+				FROM infos
 			`
+
+			if len(tags) > 0 {
+				for i := range tags {
+					sql += fmt.Sprintf(`
+						JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
+					`, i)
+				}
+			}
+
+			if joinEmbeddings {
+				sql += `
+					LEFT JOIN clip_emb ON clip_emb.file_id = id
+				`
+			}
+
+			sql += `
+				WHERE true
+			`
+
+			if len(options.Extensions) > 0 {
+				sql += `
+					AND (
+					`
+				for i := range options.Extensions {
+					sql += fmt.Sprintf(
+						`filename LIKE :ext%[1]d `,
+						i,
+					)
+					if i < len(options.Extensions)-1 {
+						sql += "OR "
+					}
+				}
+				sql += `
+					)`
+			}
+			if createdErr == nil {
+				sql += `
+					AND created_at_unix >= :created_from
+					AND created_at_unix <= :created_to
+				`
+			}
+
+			sql += `
+				AND path_prefix_id = ?
+			`
+
+			if prefixIdx < len(prefixIds)-1 {
+				sql += `
+				UNION ALL
+				`
+			}
 		}
+
+		sql += `
+			)`
 
 		switch options.OrderBy {
 		case None:
@@ -1820,6 +1826,11 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 
 		sql += ";"
 
+		// println(sql)
+
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
 		stmt := conn.Prep(sql)
 		defer stmt.Reset()
 
@@ -1827,11 +1838,6 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 
 		for _, t := range tags {
 			stmt.BindText(bindIndex, t)
-			bindIndex++
-		}
-
-		for _, dir := range dirs {
-			stmt.BindText(bindIndex, dir+"%")
 			bindIndex++
 		}
 
@@ -1844,6 +1850,11 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 			stmt.BindInt64(bindIndex, createdFrom.Unix())
 			bindIndex++
 			stmt.BindInt64(bindIndex, createdTo.Unix())
+			bindIndex++
+		}
+
+		for _, prefixId := range prefixIds {
+			stmt.BindInt64(bindIndex, (int64)(prefixId))
 			bindIndex++
 		}
 
@@ -1861,27 +1872,20 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 				break
 			}
 
-			var info InfoListResult
+			var info SourcedInfo
 			info.Id = (ImageId)(stmt.ColumnInt64(0))
 
 			info.Width = stmt.ColumnInt(1)
 			info.Height = stmt.ColumnInt(2)
-			info.SizeNull = stmt.ColumnType(1) == sqlite.TypeNull || stmt.ColumnType(2) == sqlite.TypeNull
-
 			info.Orientation = Orientation(stmt.ColumnInt(3))
-			info.OrientationNull = stmt.ColumnType(3) == sqlite.TypeNull
-
 			info.Color = (uint32)(stmt.ColumnInt64(4))
-			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
 
 			unix := stmt.ColumnInt64(5)
 			timezoneOffset := stmt.ColumnInt(6)
-
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
-			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
-			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
-			if info.LatLngNull {
+			latlngNull := stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
+			if latlngNull {
 				info.LatLng = NaNLatLng()
 			} else {
 				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
@@ -2200,6 +2204,50 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 
 		close(out)
 	}()
+	return out
+}
+
+func (source *Database) GetPrefixIds(dirs []string) []int64 {
+
+	out := make([]int64, 0)
+
+	defer metrics.Elapsed("get prefix ids")()
+
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `
+			SELECT id
+			FROM prefix
+			WHERE
+		`
+
+	for i := range dirs {
+		sql += `str LIKE ? `
+		if i < len(dirs)-1 {
+			sql += "OR "
+		}
+	}
+
+	sql += ";"
+
+	stmt := conn.Prep(sql)
+	bindIndex := 1
+	defer stmt.Reset()
+
+	for _, dir := range dirs {
+		stmt.BindText(bindIndex, dir+"%")
+		bindIndex++
+	}
+
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error getting prefixes: %s\n", err.Error())
+		} else if !exists {
+			break
+		}
+		out = append(out, stmt.ColumnInt64(0))
+	}
 	return out
 }
 

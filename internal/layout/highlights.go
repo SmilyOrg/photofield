@@ -322,8 +322,6 @@ func LayoutHighlightsBasic(infos <-chan image.InfoEmb, layout Layout, scene *ren
 		Interval: 1 * time.Second,
 	}
 
-	row := make([]SectionPhoto, 0)
-
 	x := 0.
 	y := 0.
 
@@ -338,17 +336,12 @@ func LayoutHighlightsBasic(infos <-chan image.InfoEmb, layout Layout, scene *ren
 	var prevInvNorm float32
 
 	scene.Photos = scene.Photos[:0]
+	rowIndex := 0
 	index := 0
 	for info := range infos {
-		photo := SectionPhoto{
-			Photo: render.Photo{
-				Id:     info.Id,
-				Sprite: render.Sprite{},
-			},
-			Size: image.Size{
-				X: info.Width,
-				Y: info.Height,
-			},
+		photo := render.Photo{
+			Id:     info.Id,
+			Sprite: render.Sprite{},
 		}
 		// section.infos = append(section.infos, info.SourcedInfo)
 
@@ -380,47 +373,39 @@ func LayoutHighlightsBasic(infos <-chan image.InfoEmb, layout Layout, scene *ren
 		if x+imageWidth > rect.W {
 
 			x = 0
-			for i := range row {
-				photo := &row[i]
-				photo.Photo.Sprite.PlaceFitHeight(
+			for i := rowIndex; i < len(scene.Photos); i++ {
+				photo := &scene.Photos[i]
+				photo.Sprite.PlaceFitHeight(
 					rect.X+x,
 					rect.Y+y,
 					layout.ImageHeight,
-					float64(photo.Size.X),
-					float64(photo.Size.Y),
+					float64(info.Width),
+					float64(info.Height),
 				)
 				x += photo.Sprite.Rect.W + layout.ImageSpacing
 			}
 			x -= layout.ImageSpacing
-
-			scale := layoutFitRow(row, rect, layout.ImageSpacing)
-
-			for _, p := range row {
-				scene.Photos = append(scene.Photos, p.Photo)
-			}
-			row = nil
+			scale := layoutFitRow(scene.Photos[rowIndex:], rect, layout.ImageSpacing)
+			rowIndex = len(scene.Photos)
 			x = 0
 			y += layout.ImageHeight*scale + layout.LineSpacing
 		}
 
-		photo.Photo.Sprite.PlaceFitWidth(
+		photo.Sprite.PlaceFitWidth(
 			rect.X+x,
 			rect.Y+y,
 			imageWidth,
-			float64(photo.Size.X),
-			float64(photo.Size.Y),
+			float64(info.Width),
+			float64(info.Height),
 		)
 
-		row = append(row, photo)
+		scene.Photos = append(scene.Photos, photo)
 
 		x += imageWidth + layout.ImageSpacing
 
 		layoutCounter.Set(index)
 		index++
 		scene.FileCount = index
-	}
-	for _, p := range row {
-		scene.Photos = append(scene.Photos, p.Photo)
 	}
 	x = 0
 	y += layout.ImageHeight + layout.LineSpacing

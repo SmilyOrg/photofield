@@ -1309,12 +1309,18 @@ func applyConfig(appConfig *AppConfig) {
 	for i := range collections {
 		collection := &collections[i]
 		collection.UpdateIndexedAt(imageSource)
-		collection.UpdateIndexedCount(imageSource)
+		if !appConfig.Media.SkipCollectionCounts {
+			collection.UpdateIndexedCount(imageSource)
+		}
 		indexedAgo := "N/A"
 		if collection.IndexedAt != nil {
 			indexedAgo = durafmt.Parse(time.Since(*collection.IndexedAt)).LimitFirstN(1).String()
 		}
-		log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+		if appConfig.Media.SkipCollectionCounts {
+			log.Printf("  %v indexed %v ago", collection.Name, indexedAgo)
+		} else {
+			log.Printf("  %v - %v files indexed %v ago", collection.Name, collection.IndexedCount, indexedAgo)
+		}
 	}
 }
 
@@ -1347,7 +1353,6 @@ func main() {
 	benchCollectionId := flag.String("bench.collection", "vacation-photos", "id of the collection to benchmark")
 	benchSeed := flag.Int64("bench.seed", 123, "seed for random number generator")
 	benchSample := flag.Int("bench.sample", 10000, "number of images from the collection to use as a sample")
-	flag.Parse()
 
 	flag.Parse()
 
