@@ -190,6 +190,7 @@ export function useScene({
   const sceneParams = computed(() =>
     viewport?.width?.value &&
     viewport?.height?.value &&
+    collectionId?.value &&
     {
       layout: layout.value,
       sort: sort?.value || undefined,
