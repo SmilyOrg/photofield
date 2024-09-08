@@ -39,7 +39,7 @@ const {
 const fileCount = computed(() => {
   if (collection.value) {
     for (const task of tasks.value) {
-      if (task.type != "INDEX") continue;
+      if (task.type != "INDEX_FILES") continue;
       if (task.collection_id != collection.value.id) continue;
       return task.done.toLocaleString();
     }

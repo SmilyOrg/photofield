@@ -282,8 +282,8 @@ func getCollectionById(id string) *collection.Collection {
 	return nil
 }
 
-func newFileIndexTask(collection *collection.Collection) Task {
-	return Task{
+func newFileIndexTask(collection *collection.Collection) *Task {
+	return &Task{
 		Type:         string(openapi.TaskTypeINDEXFILES),
 		Id:           fmt.Sprintf("index-files-%v", collection.Id),
 		Name:         fmt.Sprintf("Indexing files %v", collection.Name),
@@ -547,9 +547,9 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 		return
 	}
 
-	tasks := make([]Task, 0)
+	tasks := make([]*Task, 0)
 	globalTasks.Range(func(key, value interface{}) bool {
-		t := value.(Task)
+		t := value.(*Task)
 
 		add := true
 		if params.Type != nil && t.Type != string(*params.Type) {
@@ -572,6 +572,7 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 				add = false
 			}
 		}
+
 		if add {
 			tasks = append(tasks, t)
 		}
@@ -585,7 +586,7 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 	})
 
 	respond(w, r, http.StatusOK, struct {
-		Items []Task `json:"items"`
+		Items []*Task `json:"items"`
 	}{
 		Items: tasks,
 	})
@@ -619,7 +620,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			Metadata: true,
 		})
 		stored, _ := globalTasks.Load("index-metadata")
-		task := stored.(Task)
+		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTS:
@@ -628,7 +629,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			Embedding: true,
 		})
 		stored, _ := globalTasks.Load("index-contents")
-		task := stored.(Task)
+		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTSCOLOR:
@@ -636,7 +637,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			Color: true,
 		})
 		stored, _ := globalTasks.Load("index-contents")
-		task := stored.(Task)
+		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTSAI:
@@ -644,7 +645,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			Embedding: true,
 		})
 		stored, _ := globalTasks.Load("index-contents")
-		task := stored.(Task)
+		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
 
 	default:
@@ -1110,10 +1111,10 @@ type TileRequestConfig struct {
 	LogStats    bool `json:"log_stats"`
 }
 
-func indexCollection(collection *collection.Collection) (task Task, existing bool) {
+func indexCollection(collection *collection.Collection) (task *Task, existing bool) {
 	task = newFileIndexTask(collection)
 	stored, existing := globalTasks.LoadOrStore(task.Id, task)
-	task = stored.(Task)
+	task = stored.(*Task)
 	if existing {
 		return
 	}
@@ -1457,7 +1458,7 @@ func main() {
 		return
 	}
 
-	metadataTask := Task{
+	metadataTask := &Task{
 		Type:  string(openapi.TaskTypeINDEXMETADATA),
 		Id:    "index-metadata",
 		Name:  "Indexing metadata",
@@ -1465,7 +1466,7 @@ func main() {
 	}
 	globalTasks.Store(metadataTask.Id, metadataTask)
 
-	contentsTask := Task{
+	contentsTask := &Task{
 		Type:  string(openapi.TaskTypeINDEXCONTENTS),
 		Id:    "index-contents",
 		Name:  "Indexing contents",
