@@ -120,6 +120,7 @@ type Config struct {
 
 	ExifToolCount        int  `json:"exif_tool_count"`
 	SkipLoadInfo         bool `json:"skip_load_info"`
+	SkipCollectionCounts bool `json:"skip_collection_counts"`
 	ConcurrentMetaLoads  int  `json:"concurrent_meta_loads"`
 	ConcurrentColorLoads int  `json:"concurrent_color_loads"`
 	ConcurrentAILoads    int  `json:"concurrent_ai_loads"`
@@ -320,30 +321,18 @@ func (source *Source) IsSupportedVideo(path string) bool {
 }
 
 func (source *Source) ListImages(dirs []string, maxPhotos int) <-chan string {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	return source.database.ListPaths(dirs, maxPhotos)
 }
 
 func (source *Source) ListImageIds(dirs []string, maxPhotos int) <-chan ImageId {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	return source.database.ListIds(dirs, maxPhotos, false)
 }
 
 func (source *Source) ListMissingEmbeddingIds(dirs []string, maxPhotos int) <-chan ImageId {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	return source.database.ListIds(dirs, maxPhotos, true)
 }
 
 func (source *Source) ListMissingMetadata(dirs []string, maxPhotos int, force Missing) <-chan MissingInfo {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	opts := Missing{
 		Metadata: true,
 	}
@@ -362,9 +351,6 @@ func (source *Source) ListMissingMetadata(dirs []string, maxPhotos int, force Mi
 }
 
 func (source *Source) ListMissingContents(dirs []string, maxPhotos int, force Missing) <-chan MissingInfo {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	opts := Missing{
 		Color:     true,
 		Embedding: source.AI.Available(),
@@ -385,26 +371,11 @@ func (source *Source) ListMissingContents(dirs []string, maxPhotos int, force Mi
 }
 
 func (source *Source) ListInfos(dirs []string, options ListOptions) (<-chan SourcedInfo, Dependencies) {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
-	out := make(chan SourcedInfo, 1000)
-	infos, deps := source.database.List(dirs, options)
-	go func() {
-		defer metrics.Elapsed("list infos")()
-		for info := range infos {
-			info.SourcedInfo.Info.MakeValid()
-			out <- info.SourcedInfo
-		}
-		close(out)
-	}()
-	return out, deps
+	defer metrics.Elapsed("list infos")()
+	return source.database.List(dirs, options)
 }
 
 func (source *Source) ListInfosEmb(dirs []string, options ListOptions) <-chan InfoEmb {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	out := make(chan InfoEmb, 1000)
 	go func() {
 		defer metrics.Elapsed("list infos embedded")()
@@ -439,7 +410,6 @@ func (source *Source) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
 }
 
 func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
-	dir = filepath.FromSlash(dir)
 	indexed := make(map[string]struct{})
 	for path := range walkFiles(dir, source.ListExtensions, max) {
 		source.database.Write(path, Info{}, AppendPath)
@@ -469,15 +439,11 @@ func (source *Source) GetDir(dir string) Info {
 		return Info{}
 	}
 
-	dir = filepath.FromSlash(dir)
 	result, _ := source.database.GetDir(dir)
 	return result.Info
 }
 
 func (source *Source) GetDirsCount(dirs []string) int {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	count, _ := source.database.GetDirsCount(dirs)
 	return count
 }

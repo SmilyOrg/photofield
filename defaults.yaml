@@ -106,6 +106,10 @@ media:
 
   # Set to true to not extract any metadata or colors from photos
   skip_load_info: false
+
+  # Skip printing the file count of collections at startup
+  # This can speed up startup time for large collections
+  skip_collection_counts: false
   
   caches:
     image:

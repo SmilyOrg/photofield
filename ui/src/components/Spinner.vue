@@ -2,7 +2,7 @@
   <div class="spinner" :class="{ hidden: !loading || !visible, removed: !visible }">
     <div class="label">
       <template v-if="loading && total == 0">Loading</template>
-      <template v-else-if="loading">{{ interpolatedTotal && Math.round(interpolatedTotal).toLocaleString() }} {{unit}}</template>
+      <template v-else-if="loading">{{ (interpolatedTotal && Math.round(interpolatedTotal).toLocaleString()) || 0 }} {{unit || 'files'}}</template>
       <template v-else>{{ total && total.toLocaleString() }} files</template>
     </div>
     <svg :viewBox="`0 0 ${width} ${height}`" xmlns="http://www.w3.org/2000/svg">

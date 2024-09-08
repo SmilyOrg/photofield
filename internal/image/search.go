@@ -4,7 +4,6 @@ import (
 	"container/heap"
 	"log"
 	"math"
-	"path/filepath"
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
 	"photofield/rangetree"
@@ -61,9 +60,6 @@ func (w similarityBatchWorker) close() {
 }
 
 func (source *Source) ListSimilar(dirs []string, embedding clip.Embedding, options ListOptions) <-chan SimilarityInfo {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	out := make(chan SimilarityInfo, 1000)
 	go func() {
 		defer metrics.Elapsed("list similar")()
@@ -242,9 +238,6 @@ func (source *Source) classifyEmbedding(timgs []taggedImage, emb clip.Embedding,
 }
 
 func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan SourcedInfo {
-	for i := range dirs {
-		dirs[i] = filepath.FromSlash(dirs[i])
-	}
 	out := make(chan SourcedInfo, 1000)
 	go func() {
 		defer metrics.Elapsed("list knn")()

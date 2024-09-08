@@ -12,10 +12,12 @@ version zero.
 ### Added
 
 - Enable search even if AI is not enabled
+- Add `skip_collection_counts` config option for faster startup in some cases
 
 ### Changed
 
-- None
+- Optimized loading very large collections (100K .. 10M+ files)
+- Fixed unit in loading spinner
 
 ### Removed
 

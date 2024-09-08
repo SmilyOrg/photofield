@@ -37,38 +37,28 @@ func LayoutSearch(infos <-chan image.SimilarityInfo, layout Layout, scene *rende
 	}
 
 	scene.Photos = scene.Photos[:0]
-
+	rowIndex := 0
 	index := 0
 	lastLogTime := time.Now()
 	mostSimilar := float32(0)
 	imageHeight := layout.ImageHeight
 
-	row := make([]SectionPhoto, 0)
 	for info := range infos {
-		photo := SectionPhoto{
-			Photo: render.Photo{
-				Id:     info.Id,
-				Sprite: render.Sprite{},
-			},
-			Size: image.Size{
-				X: info.Width,
-				Y: info.Height,
-			},
+		photo := render.Photo{
+			Id:     info.Id,
+			Sprite: render.Sprite{},
 		}
 
 		if index == 0 {
 			mostSimilar = info.Similarity
 		}
 
-		aspectRatio := float64(photo.Size.X) / float64(photo.Size.Y)
+		aspectRatio := float64(info.Width) / float64(info.Height)
 		imageWidth := float64(imageHeight) * aspectRatio
 
 		if rect.X+imageWidth > rect.W {
-			scale := layoutFitRow(row, rect, layout.ImageSpacing)
-			for _, p := range row {
-				scene.Photos = append(scene.Photos, p.Photo)
-			}
-			row = nil
+			scale := layoutFitRow(scene.Photos[rowIndex:], rect, layout.ImageSpacing)
+			rowIndex = len(scene.Photos)
 			rect.X = sceneMargin
 			rect.Y += imageHeight*scale + layout.LineSpacing
 
@@ -78,15 +68,15 @@ func LayoutSearch(infos <-chan image.SimilarityInfo, layout Layout, scene *rende
 			imageWidth = float64(imageHeight) * aspectRatio
 		}
 
-		photo.Photo.Sprite.PlaceFitHeight(
+		photo.Sprite.PlaceFitHeight(
 			rect.X,
 			rect.Y,
 			imageHeight,
-			float64(photo.Size.X),
-			float64(photo.Size.Y),
+			float64(info.Width),
+			float64(info.Height),
 		)
 
-		row = append(row, photo)
+		scene.Photos = append(scene.Photos, photo)
 
 		rect.X += imageWidth + layout.ImageSpacing
 
@@ -99,9 +89,6 @@ func LayoutSearch(infos <-chan image.SimilarityInfo, layout Layout, scene *rende
 		layoutCounter.Set(index)
 		index++
 		scene.FileCount = index
-	}
-	for _, p := range row {
-		scene.Photos = append(scene.Photos, p.Photo)
 	}
 	layoutDone()
 

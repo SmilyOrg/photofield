@@ -249,15 +249,15 @@ func (regionSource PhotoRegionSource) GetRegionById(id int, scene *render.Scene,
 	return regionSource.getRegionFromPhoto(id, &photo, scene, regionConfig)
 }
 
-func layoutFitRow(row []SectionPhoto, bounds render.Rect, imageSpacing float64) float64 {
+func layoutFitRow(row []render.Photo, bounds render.Rect, imageSpacing float64) float64 {
 	count := len(row)
 	if count == 0 {
 		return 1.
 	}
 	firstPhoto := row[0]
-	firstRect := firstPhoto.Photo.Sprite.Rect
+	firstRect := firstPhoto.Sprite.Rect
 	lastPhoto := row[count-1]
-	lastRect := lastPhoto.Photo.Sprite.Rect
+	lastRect := lastPhoto.Sprite.Rect
 	totalSpacing := float64(count-1) * imageSpacing
 
 	rowWidth := lastRect.X + lastRect.W
@@ -265,14 +265,10 @@ func layoutFitRow(row []SectionPhoto, bounds render.Rect, imageSpacing float64) 
 	x := firstRect.X
 	for i := range row {
 		photo := &row[i]
-		rect := photo.Photo.Sprite.Rect
-		photo.Photo.Sprite.Rect = render.Rect{
-			X: x,
-			Y: rect.Y,
-			W: rect.W * scale,
-			H: rect.H * scale,
-		}
-		x += photo.Photo.Sprite.Rect.W + imageSpacing
+		photo.Sprite.Rect.X = x
+		photo.Sprite.Rect.W *= scale
+		photo.Sprite.Rect.H *= scale
+		x += photo.Sprite.Rect.W + imageSpacing
 	}
 
 	// fmt.Printf("fit row width %5.2f / %5.2f -> %5.2f  scale %.2f\n", rowWidth, bounds.W, lastPhoto.Photo.Original.Sprite.Rect.X+lastPhoto.Photo.Original.Sprite.Rect.W, scale)
@@ -287,44 +283,34 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 	lastLogTime := time.Now()
 	i := 0
 
-	row := make([]SectionPhoto, 0)
+	rowIdx := len(scene.Photos)
 
 	for _, info := range section.infos {
-		photo := SectionPhoto{
-			Photo: render.Photo{
-				Id:     info.Id,
-				Sprite: render.Sprite{},
-			},
-			Size: image.Size{
-				X: info.Width,
-				Y: info.Height,
-			},
+		photo := render.Photo{
+			Id: info.Id,
 		}
 
-		aspectRatio := float64(photo.Size.X) / float64(photo.Size.Y)
+		aspectRatio := float64(info.Width) / float64(info.Height)
 		imageWidth := float64(config.ImageHeight) * aspectRatio
 
 		if x+imageWidth > bounds.W {
-			scale := layoutFitRow(row, bounds, config.ImageSpacing)
-			for _, p := range row {
-				scene.Photos = append(scene.Photos, p.Photo)
-			}
-			row = nil
+			scale := layoutFitRow(scene.Photos[rowIdx:], bounds, config.ImageSpacing)
+			rowIdx = len(scene.Photos)
 			x = 0
 			y += config.ImageHeight*scale + config.LineSpacing
 		}
 
-		photo.Photo.Sprite.PlaceFitHeight(
+		photo.Sprite.PlaceFitHeight(
 			bounds.X+x,
 			bounds.Y+y,
 			config.ImageHeight,
-			float64(photo.Size.X),
-			float64(photo.Size.Y),
+			float64(info.Width),
+			float64(info.Height),
 		)
 
 		// println(photo.GetPath(source), photo.Sprite.Rect.String(), bounds.X, bounds.Y, x, y, config.ImageHeight, photo.Size.X, photo.Size.Y)
 
-		row = append(row, photo)
+		scene.Photos = append(scene.Photos, photo)
 
 		x += imageWidth + config.ImageSpacing
 
@@ -334,9 +320,6 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 			log.Printf("layout section %d\n", i)
 		}
 		i++
-	}
-	for _, p := range row {
-		scene.Photos = append(scene.Photos, p.Photo)
 	}
 	x = 0
 	y += config.ImageHeight + config.LineSpacing

@@ -1,6 +1,7 @@
 package image
 
 import (
+	"container/heap"
 	"context"
 	"embed"
 	"fmt"
@@ -50,6 +51,7 @@ type ListOptions struct {
 	Query      *search.Query
 	Embedding  clip.Embedding
 	Extensions []string
+	Batch      int
 }
 
 type DirsFunc func(dirs []string)
@@ -72,6 +74,7 @@ func (s *stringSet) Slice() []string {
 
 type Database struct {
 	path             string
+	poolSize         int
 	pool             *sqlitex.Pool
 	pending          chan *InfoWrite
 	transactionMutex sync.RWMutex
@@ -171,9 +174,10 @@ func NewDatabase(path string, migrations embed.FS) *Database {
 
 	source := Database{}
 	source.path = path
+	source.poolSize = 100
 	source.migrate(migrations)
 
-	source.pool, err = sqlitex.Open(source.path, 0, 10)
+	source.pool, err = sqlitex.Open(source.path, 0, source.poolSize)
 	if err != nil {
 		panic(err)
 	}
@@ -1672,8 +1676,101 @@ func (source *Database) GetTagsByName(tagNames []string) []tag.Tag {
 	return tags
 }
 
-func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoListResult, Dependencies) {
-	out := make(chan InfoListResult, 1000)
+// A struct to hold the current value from a channel and the channel's index.
+type SourcedInfoQueueItem struct {
+	SourcedInfo
+	index int
+}
+
+type DateAscQueue []SourcedInfoQueueItem
+
+func (pq DateAscQueue) Len() int { return len(pq) }
+func (pq DateAscQueue) Less(i, j int) bool {
+	return pq[i].DateTime.Before(pq[j].DateTime)
+}
+func (pq DateAscQueue) Swap(i, j int) { pq[i], pq[j] = pq[j], pq[i] }
+
+func (pq *DateAscQueue) Push(x interface{}) {
+	item := x.(SourcedInfoQueueItem)
+	*pq = append(*pq, item)
+}
+
+func (pq *DateAscQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	*pq = old[0 : n-1]
+	return item
+}
+
+type DateDescQueue []SourcedInfoQueueItem
+
+func (pq DateDescQueue) Len() int { return len(pq) }
+func (pq DateDescQueue) Less(i, j int) bool {
+	return pq[i].DateTime.After(pq[j].DateTime)
+}
+func (pq DateDescQueue) Swap(i, j int) { pq[i], pq[j] = pq[j], pq[i] }
+
+func (pq *DateDescQueue) Push(x interface{}) {
+	item := x.(SourcedInfoQueueItem)
+	*pq = append(*pq, item)
+}
+
+func (pq *DateDescQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	*pq = old[0 : n-1]
+	return item
+}
+
+// Merging sorted channels into a globally sorted channel using a priority queue.
+func mergeSortedChannels(channels []<-chan SourcedInfo, order ListOrder, out chan<- SourcedInfo) error {
+	s := make([]SourcedInfoQueueItem, 0)
+	var q heap.Interface
+	switch order {
+	case DateAsc:
+		q = (*DateAscQueue)(&s)
+	case DateDesc:
+		q = (*DateDescQueue)(&s)
+	default:
+		return fmt.Errorf("unsupported listing order")
+	}
+
+	heap.Init(q)
+
+	// Read the first element from each channel and add it to the heap
+	for i, ch := range channels {
+		if val, ok := <-ch; ok {
+			heap.Push(q, SourcedInfoQueueItem{
+				SourcedInfo: val,
+				index:       i,
+			})
+		}
+	}
+
+	counts := make([]int, len(channels))
+
+	// Process the heap and output globally sorted elements
+	for q.Len() > 0 {
+		smallest := heap.Pop(q).(SourcedInfoQueueItem)
+		counts[smallest.index]++
+		out <- smallest.SourcedInfo
+
+		// Fetch the next value from the channel from which the smallest value came
+		if val, ok := <-channels[smallest.index]; ok {
+			heap.Push(q, SourcedInfoQueueItem{
+				SourcedInfo: val,
+				index:       smallest.index,
+			})
+		}
+	}
+
+	return nil
+}
+
+func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions) (<-chan SourcedInfo, Dependencies) {
+	out := make(chan SourcedInfo, 1000)
 
 	tags := options.Query.QualifierValues("tag")
 	deps := Dependencies{
@@ -1684,10 +1781,9 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 	}
 
 	go func() {
-		defer metrics.Elapsed("list infos sqlite")()
-
-		conn := source.pool.Get(context.TODO())
-		defer source.pool.Put(conn)
+		if options.Batch == 0 {
+			defer metrics.Elapsed("list infos sqlite")()
+		}
 
 		sql := ""
 
@@ -1736,67 +1832,75 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 		}
 
 		sql += `
-			SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
-		if joinEmbeddings {
-			sql += `, inv_norm, embedding`
-		}
-		sql += `
-			FROM infos
+			SELECT * FROM (
 		`
-
-		if len(tags) > 0 {
-			for i := range tags {
-				sql += fmt.Sprintf(`
-					JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
-				`, i)
-			}
-		}
-
-		if joinEmbeddings {
-			sql += `
-				LEFT JOIN clip_emb ON clip_emb.file_id = id
-			`
-		}
-
-		sql += `
-			WHERE path_prefix_id IN (
-				SELECT id
-				FROM prefix
-				WHERE `
-
-		for i := range dirs {
-			sql += `str LIKE ? `
-			if i < len(dirs)-1 {
-				sql += "OR "
-			}
-		}
-
-		sql += `
-			)
-		`
-
-		if len(options.Extensions) > 0 {
-			sql += `
-			AND (
-			`
-			for i := range options.Extensions {
-				sql += `filename LIKE ? `
-				if i < len(options.Extensions)-1 {
-					sql += "OR "
-				}
-			}
-			sql += `
-			)
-			`
-		}
 
 		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
-		if createdErr == nil {
+		for prefixIdx := range prefixIds {
+
 			sql += `
-			AND created_at_unix >= ?
-			AND created_at_unix <= ?
+				SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
+			if joinEmbeddings {
+				sql += `, inv_norm, embedding`
+			}
+			sql += `
+				FROM infos
 			`
+
+			if len(tags) > 0 {
+				for i := range tags {
+					sql += fmt.Sprintf(`
+						JOIN tag%[1]d ON id BETWEEN tag%[1]d.file_id AND tag%[1]d.file_id+tag%[1]d.len
+					`, i)
+				}
+			}
+
+			if joinEmbeddings {
+				sql += `
+					LEFT JOIN clip_emb ON clip_emb.file_id = id
+				`
+			}
+
+			sql += `
+				WHERE true
+			`
+
+			if len(options.Extensions) > 0 {
+				sql += `
+					AND (
+					`
+				for i := range options.Extensions {
+					sql += fmt.Sprintf(
+						`filename LIKE :ext%[1]d `,
+						i,
+					)
+					if i < len(options.Extensions)-1 {
+						sql += "OR "
+					}
+				}
+				sql += `
+					)`
+			}
+			if createdErr == nil {
+				sql += `
+					AND created_at_unix >= :created_from
+					AND created_at_unix <= :created_to
+				`
+			}
+
+			sql += `
+				AND path_prefix_id = ?
+			`
+
+			if prefixIdx < len(prefixIds)-1 {
+				sql += `
+				UNION ALL
+				`
+			}
 		}
+
+		sql += `
+			)`
 
 		switch options.OrderBy {
 		case None:
@@ -1820,6 +1924,11 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 
 		sql += ";"
 
+		// println(sql)
+
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
 		stmt := conn.Prep(sql)
 		defer stmt.Reset()
 
@@ -1827,11 +1936,6 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 
 		for _, t := range tags {
 			stmt.BindText(bindIndex, t)
-			bindIndex++
-		}
-
-		for _, dir := range dirs {
-			stmt.BindText(bindIndex, dir+"%")
 			bindIndex++
 		}
 
@@ -1844,6 +1948,11 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 			stmt.BindInt64(bindIndex, createdFrom.Unix())
 			bindIndex++
 			stmt.BindInt64(bindIndex, createdTo.Unix())
+			bindIndex++
+		}
+
+		for _, prefixId := range prefixIds {
+			stmt.BindInt64(bindIndex, (int64)(prefixId))
 			bindIndex++
 		}
 
@@ -1861,27 +1970,20 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 				break
 			}
 
-			var info InfoListResult
+			var info SourcedInfo
 			info.Id = (ImageId)(stmt.ColumnInt64(0))
 
 			info.Width = stmt.ColumnInt(1)
 			info.Height = stmt.ColumnInt(2)
-			info.SizeNull = stmt.ColumnType(1) == sqlite.TypeNull || stmt.ColumnType(2) == sqlite.TypeNull
-
 			info.Orientation = Orientation(stmt.ColumnInt(3))
-			info.OrientationNull = stmt.ColumnType(3) == sqlite.TypeNull
-
 			info.Color = (uint32)(stmt.ColumnInt64(4))
-			info.ColorNull = stmt.ColumnType(4) == sqlite.TypeNull
 
 			unix := stmt.ColumnInt64(5)
 			timezoneOffset := stmt.ColumnInt(6)
-
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
-			info.DateTimeNull = stmt.ColumnType(5) == sqlite.TypeNull
 
-			info.LatLngNull = stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
-			if info.LatLngNull {
+			latlngNull := stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
+			if latlngNull {
 				info.LatLng = NaNLatLng()
 			} else {
 				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
@@ -1924,6 +2026,59 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan InfoLis
 			out <- info
 		}
 
+		close(out)
+	}()
+	return out, deps
+}
+
+func (source *Database) List(dirs []string, options ListOptions) (<-chan SourcedInfo, Dependencies) {
+
+	dirsDone := metrics.Elapsed("list infos get dirs")
+	prefixIds := source.GetPrefixIds(dirs)
+	dirsDone()
+
+	// SQLite max compound select limit is 500
+	batchSize := 500
+	concurrent := (len(prefixIds) + batchSize - 1) / batchSize
+
+	if concurrent <= 1 {
+		log.Printf("list infos dirs %d\n", len(prefixIds))
+		options.Batch = 0
+		return source.listWithPrefixIds(prefixIds, options)
+	}
+	log.Printf("list infos dirs %d batches %d\n", len(prefixIds), concurrent)
+	out := make(chan SourcedInfo, 1000)
+	tags := options.Query.QualifierValues("tag")
+	deps := Dependencies{
+		Dependency{
+			db:       source,
+			tagNames: tags,
+		},
+	}
+	if concurrent > source.poolSize {
+		maxDirs := source.poolSize * batchSize
+		log.Printf("Unable to list photos, too many dirs: %d, max dirs: %d (batch size %d * pool size %d), concurrent: %d\n", len(prefixIds), maxDirs, batchSize, source.poolSize, concurrent)
+		close(out)
+		return out, deps
+	}
+	go func() {
+		defer metrics.Elapsed("list infos sqlite")()
+		var channels []<-chan SourcedInfo
+		for i := 0; i < concurrent; i++ {
+			start := i * batchSize
+			end := start + batchSize
+			if end > len(prefixIds) {
+				end = len(prefixIds)
+			}
+			opts := options
+			opts.Batch = 1 + i
+			ch, _ := source.listWithPrefixIds(prefixIds[start:end], opts)
+			channels = append(channels, ch)
+		}
+		err := mergeSortedChannels(channels, options.OrderBy, out)
+		if err != nil {
+			log.Printf("Error merging sorted channels: %s\n", err.Error())
+		}
 		close(out)
 	}()
 	return out, deps
@@ -2200,6 +2355,50 @@ func (source *Database) ListPaths(dirs []string, limit int) <-chan string {
 
 		close(out)
 	}()
+	return out
+}
+
+func (source *Database) GetPrefixIds(dirs []string) []int64 {
+
+	out := make([]int64, 0)
+
+	defer metrics.Elapsed("get prefix ids")()
+
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `
+			SELECT id
+			FROM prefix
+			WHERE
+		`
+
+	for i := range dirs {
+		sql += `str LIKE ? `
+		if i < len(dirs)-1 {
+			sql += "OR "
+		}
+	}
+
+	sql += ";"
+
+	stmt := conn.Prep(sql)
+	bindIndex := 1
+	defer stmt.Reset()
+
+	for _, dir := range dirs {
+		stmt.BindText(bindIndex, dir+"%")
+		bindIndex++
+	}
+
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error getting prefixes: %s\n", err.Error())
+		} else if !exists {
+			break
+		}
+		out = append(out, stmt.ColumnInt64(0))
+	}
 	return out
 }
 

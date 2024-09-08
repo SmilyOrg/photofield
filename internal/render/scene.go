@@ -133,6 +133,24 @@ func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *R
 	counts <- count
 }
 
+// Workaround for "determinant of affine transformation matrix is zero"
+// error when inverting the matrix using m.Inv() for very large canvases.
+func invertMatrix(m canvas.Matrix) canvas.Matrix {
+	det := m.Det()
+	if det == 0.0 {
+		panic("matrix is not invertible: determinant is zero")
+	}
+	return canvas.Matrix{{
+		m[1][1] / det,
+		-m[0][1] / det,
+		-(m[1][1]*m[0][2] - m[0][1]*m[1][2]) / det,
+	}, {
+		-m[1][0] / det,
+		m[0][0] / det,
+		-(-m[1][0]*m[0][2] + m[0][0]*m[1][2]) / det,
+	}}
+}
+
 func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, source *image.Source) {
 	for i := range scene.Solids {
 		solid := &scene.Solids[i]
@@ -153,7 +171,8 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	// startTime := time.Now()
 
 	tileRect := Rect{X: 0, Y: 0, W: (float64)(config.TileSize), H: (float64)(config.TileSize)}
-	tileToCanvas := c.View().Inv()
+
+	tileToCanvas := invertMatrix(c.View())
 	tileCanvasRect := tileRect.Transform(tileToCanvas)
 	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
 

@@ -13,7 +13,6 @@ import (
 	"photofield/internal/layout"
 	"photofield/internal/render"
 	"photofield/tag"
-	"strings"
 
 	"github.com/goccy/go-yaml"
 	"github.com/imdario/mergo"
@@ -144,11 +143,7 @@ func loadConfig(dataDir string) (*AppConfig, error) {
 
 	for i := range collections {
 		collection := &collections[i]
-		collection.GenerateId()
-		collection.Layout = strings.ToUpper(collection.Layout)
-		if collection.Limit > 0 && collection.IndexLimit == 0 {
-			collection.IndexLimit = collection.Limit
-		}
+		collection.MakeValid()
 	}
 
 	// Override earlier collection with the same ID

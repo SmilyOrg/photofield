@@ -7,6 +7,7 @@ import (
 	"photofield/internal/clip"
 	"photofield/internal/image"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gosimple/slug"
@@ -26,8 +27,20 @@ type Collection struct {
 	InvalidatedAt *time.Time `json:"-"`
 }
 
-func (collection *Collection) GenerateId() {
+func (collection *Collection) MakeValid() {
 	collection.Id = slug.Make(collection.Name)
+	collection.Layout = strings.ToUpper(collection.Layout)
+	if collection.Limit > 0 && collection.IndexLimit == 0 {
+		collection.IndexLimit = collection.Limit
+	}
+	for i := range collection.Dirs {
+		dir := collection.Dirs[i]
+		dir = filepath.FromSlash(dir)
+		if !strings.HasSuffix(dir, string(filepath.Separator)) {
+			dir += string(filepath.Separator)
+		}
+		collection.Dirs[i] = dir
+	}
 }
 
 func (collection *Collection) UpdatedAt() time.Time {
@@ -65,6 +78,7 @@ func (collection *Collection) Expand() []Collection {
 				Limit:      collection.Limit,
 				IndexLimit: collection.IndexLimit,
 			}
+			child.MakeValid()
 			collections = append(collections, child)
 		}
 	}
