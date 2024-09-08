@@ -31,7 +31,7 @@
         scene?.load_count !== undefined ?
           scene?.load_count : scene?.file_count
       "
-      :unit="scene?.load_unit || 'files'"
+      :unit="scene?.load_unit"
       :speed="loadSpeed"
       :divider="10000"
       :loading="scene?.loading"

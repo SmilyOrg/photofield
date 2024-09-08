@@ -17,6 +17,7 @@ version zero.
 ### Changed
 
 - Optimized loading very large collections (100K .. 10M+ files)
+- Fixed unit in loading spinner
 
 ### Removed
 
