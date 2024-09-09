@@ -11,19 +11,26 @@ version zero.
 
 ### Added
 
-- Enable search even if AI is not enabled
 - Add `skip_collection_counts` config option for faster startup in some cases
+- Batch edit tags by selecting multiple photos with Ctrl/Cmd and clicking "#"
+- Loading very large collections (100K .. 10M+ files) now works
 
 ### Changed
 
-- Optimized loading very large collections (100K .. 10M+ files)
+- Optimized initial loading of large collections
+- Finally fixed "determinant of affine transformation matrix is zero" error
 - Fixed unit in loading spinner
+- Fixed the file counter not being updated while rescan was underway
+- Search or other scenes using tags auto-update when tags are added or removed
+- Search is now enabled even if AI is not enabled (e.g. for tag search)
+- Fixed a bug where collections with dirs that are a prefix of other dirs would
+  in some cases erroneously also list files in these other dirs (e.g. /vacation
+  would include /vacation2 or /vacation-eu)
 
-### Removed
+### Breaking changes
 
-- None
-
-
+- There is a hard limit of 50000 source directories per loaded view for now.
+  Please let me know if you encounter this limit as it can be increased.
 
 ## [v0.15.2] - 2024-08-19 - Timezone, auto-crop, filters, tweaks
 

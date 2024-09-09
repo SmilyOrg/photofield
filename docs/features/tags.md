@@ -20,7 +20,22 @@ tags:
 
 ## Tagging Photos
 
-If tags are enabled, the fullscreen photo view adds a # (hash) button for toggling the tag selection dropdown. It also adds a 🤍 (heart) button that toggles the `fav` tag to serve as simple "liking" functionality.
+If tags are enabled, the following features are shown.
+
+1. The photo view # (hash) button allows for editing tags.
+2. The photo view 🤍 (heart) button toggles the `fav` tag to serve as simple
+   "liking" functionality.
+3. On the collection view, if you [select](#selection) photos, you can add tags
+   to all selected photos at once using the # (hash) button in the toolbar.
+
+## Selection
+
+You can select photos by holding `Ctrl / Cmd` and clicking on a photo or
+dragging to select.
+
+:::info
+Selections are stored as temporary tags that can be used for filtering or other operations.
+:::
 
 ## Search
 
