@@ -14,6 +14,10 @@ export default defineConfig({
 
     logo: "/favicon-32x32.png",
 
+    search: {
+      provider: 'local',
+    },
+
     editLink: {
       pattern: 'https://github.com/smilyorg/photofield/edit/main/docs/:path'
     },
