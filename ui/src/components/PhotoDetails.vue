@@ -16,6 +16,7 @@
     </div>
     <dl class="contents" v-if="photo">
       <tags
+        v-if="tagsSupported"
         :region="region"
         :tags="region?.data?.tags"
         :loading="loading"
@@ -74,6 +75,7 @@ import { useRegion } from '../use';
 import DetailItem from './DetailItem.vue';
 import Map from './Map.vue';
 import Tags from './Tags.vue';
+import { useApi } from '../api';
 
 const props = defineProps({
   scene: Object,
@@ -88,6 +90,9 @@ const {
   scene,
   regionId,
 } = toRefs(props);
+
+const { data: capabilities } = useApi(() => "/capabilities");
+const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 
 const background = ref(null);
 const container = ref(null);
