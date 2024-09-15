@@ -25,7 +25,7 @@ import Projection from 'ol/proj/Projection';
 import { easeIn, easeOut, linear } from 'ol/easing';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
-import {MAC} from 'ol/src/has.js';
+import {MAC} from 'ol/has';
 import Kinetic from 'ol/Kinetic';
 import { get as getProjection } from 'ol/proj';
 import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
@@ -132,6 +132,15 @@ export default {
       if (newGeo != oldGeo) {
         this.reset();
       }
+    },
+
+    viewport: {
+      handler(viewport) {
+        if (!viewport) return;
+        if (!this.geo) return;
+        this.reset();
+      },
+      deep: true,
     },
 
     tileSize() {
@@ -515,6 +524,7 @@ export default {
       } else if (this.view) {
         this.setView(this.view);
       }
+      this.initZoom = this.focusZoom;
 
       this.setKinetic(this.kinetic);
       this.$emit("viewer", this.map);
@@ -648,6 +658,12 @@ export default {
         });
         return;
       }
+      if (event.y > 0) {
+        this.$emit("nav", {
+          zoom: 1,
+        });
+        return;
+      }
       if (event.interrupted) {
         this.navOnZoom(event);
         return;
@@ -661,6 +677,9 @@ export default {
     navOnZoom() {
       const ratio = this.focusZoom;
       if (Math.abs(1 - ratio) < 1e-4) {
+        return;
+      }
+      if (Math.abs(this.initZoom - this.focusZoom) < 1e-4) {
         return;
       }
       if (ratio < 0.8) {

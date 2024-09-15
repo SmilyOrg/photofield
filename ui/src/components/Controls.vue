@@ -9,6 +9,14 @@
     <div class="toolbar">
       <!-- <ui-icon light class="icon" size="32" @click="$event => download()">download</ui-icon> -->
       <ui-icon
+        light
+        class="icon"
+        size="32"
+        @click="emit('info')"
+      >
+        info_outline
+      </ui-icon>
+      <ui-icon
         v-if="tagsSupported"
         light
         class="icon"
@@ -76,6 +84,7 @@ const fileId = computed(() => region.value?.data?.id);
 const emit = defineEmits([
   "navigate",
   "exit",
+  "info",
 ]);
 
 const { idle } = useIdle(5000, {

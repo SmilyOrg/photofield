@@ -21,7 +21,7 @@
       tag-position="bottom"
       track-by="name"
       label="name"
-      :loading="loading"
+      :loading="loading || searching"
       :close-on-select="false"
       :clear-on-select="false"
       placeholder="Add tags"
@@ -68,6 +68,7 @@ const props = defineProps({
   tags: Array,
   readonly: Boolean,
   message: String,
+  loading: Boolean,
 });
 
 const emit = defineEmits([
@@ -80,12 +81,12 @@ const {
 } = toRefs(props);
 
 const options = ref([])
-const loading = ref(false);
+const searching = ref(false);
 
 const onSearch = async (query) => {
-  loading.value = true;
+  searching.value = true;
   const tags = await get(`/tags?${qs.stringify({ q: query })}`);
-  loading.value = false;
+  searching.value = false;
   options.value = tags?.items;
 }
 

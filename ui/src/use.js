@@ -141,6 +141,7 @@ export function useRegion({ scene, id }) {
 
   return {
     region,
+    loading: isValidating,
     mutate,
   };
 }

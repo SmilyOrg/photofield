@@ -90,8 +90,8 @@ type DocsCapability struct {
 	Url string `json:"url"`
 }
 
-// File defines model for File.
-type File string
+// FileBinary defines model for FileBinary.
+type FileBinary string
 
 // FileId defines model for FileId.
 type FileId int
@@ -168,8 +168,11 @@ type Sort string
 
 // Tag defines model for Tag.
 type Tag struct {
-	Id   *string `json:"id,omitempty"`
-	Name *string `json:"name,omitempty"`
+	// ETag for optimistic concurrency control
+	Etag      *string    `json:"etag,omitempty"`
+	Id        *string    `json:"id,omitempty"`
+	Name      *string    `json:"name,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 // Perform the specified tag operation for the specified files.

@@ -589,13 +589,13 @@ components:
       content:
         "image/*":
           schema:
-            $ref: "#/components/schemas/File"
+            $ref: "#/components/schemas/FileBinary"
     FileNotFound:
       description: Raw binary file (image or video)
       content:
         "image/*":
           schema:
-            $ref: "#/components/schemas/File"
+            $ref: "#/components/schemas/FileBinary"
 
   parameters:
     SearchParam:
@@ -771,9 +771,65 @@ components:
     RegionData:
       type: object
 
-    File:
+    FileBinary:
       type: string
       format: binary
+
+    File:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/FileId"
+        path:
+          type: string
+          example: "photos/vacation/IMG_1234.JPG"
+        filename:
+          type: string
+          example: "IMG_1234.JPG"
+        extension:
+          type: string
+          example: ".JPG"
+        video:
+          type: boolean
+          example: false
+        width:
+          type: integer
+          example: 5472
+        height:
+          type: integer
+          example: 3648
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T19:12:08-03:59"
+        thumbnails:
+          type: array
+          items:
+            $ref: "#/components/schemas/Thumbnail"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+
+    Thumbnail:
+      type: object
+      required:
+        - name
+        - display_name
+        - width
+        - height
+        - filename
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        filename:
+          type: string
 
     SceneParams:
       type: object
@@ -840,6 +896,12 @@ components:
           type: string
         name:
           type: string
+        updated_at:
+          type: string
+          format: date-time
+        etag:
+          type: string
+          description: ETag for optimistic concurrency control
 
           
     TaskType:
