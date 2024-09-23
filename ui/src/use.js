@@ -34,6 +34,8 @@ export function useScrollbar(scrollbar, sleep) {
     if (!scrollbar.value) return;
     
     const scroll = scrollbar.value.scroll();
+    if (scroll.max.y === 0) return;
+
     let r = scroll.ratio.y;
 
     if (lastScrollPixels.value !== null) {
@@ -65,6 +67,7 @@ export function useScrollbar(scrollbar, sleep) {
 
   const onContentSizeChanged = () => {
     scrollToRatio(ratio.value);
+    onScroll();
   }
 
   watchEffect(() => {
@@ -261,8 +264,8 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
 export function useViewport(element) {
   const viewport = useElementSize(element);
   return {
-    width: refDebounced(viewport.width, 200),
-    height: refDebounced(viewport.height, 200),
+    width: refDebounced(viewport.width, 2000),
+    height: refDebounced(viewport.height, 2000),
   }
 }
 

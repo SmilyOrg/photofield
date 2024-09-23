@@ -72,9 +72,9 @@
 
 <script setup>
 import ContextMenu from '@overcoder/vue-context-menu';
-import { useEventBus } from '@vueuse/core';
+import { useEventBus, watchDebounced } from '@vueuse/core';
 import { computed, nextTick, ref, toRefs, watch } from 'vue';
-import { getRegion, getRegions, useScene, useApi } from '../api';
+import { getRegion, getRegions, useScene, useApi, getRegionClosestTo } from '../api';
 import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline, useTags } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
@@ -85,6 +85,7 @@ const props = defineProps({
   interactive: Boolean,
   collectionId: String,
   regionId: String,
+  focusFileId: String,
   layout: String,
   sort: String,
   imageHeight: Number,
@@ -108,11 +109,13 @@ const emit = defineEmits({
   elementView: null,
   viewer: null,
   swipeUp: null,
+  focusFileId: null,
 })
 
 const {
   interactive,
   regionId,
+  focusFileId,
   collectionId,
   scrollbar,
   layout,
@@ -129,6 +132,10 @@ const viewport = useViewport(viewer);
 
 const lastView = ref(null);
 const lastNonNativeView = ref(null);
+let lastLoadedScene = null;
+let lastFocusFileId = null;
+
+const focusScreenRatioY = 0.33;
 
 const { scene, recreate: recreateScene, loadSpeed } = useScene({
   layout,
@@ -145,11 +152,31 @@ const qualityPreset = computed(() => {
   return null;
 });
 
-watch(scene, async (newScene, oldScene) => {
-  if (newScene?.search != oldScene?.search) {
+watch(scene, async (newScene) => {
+  if (!newScene || newScene.loading) return;
+  if (newScene?.id == lastLoadedScene?.id && newScene?.loading == lastLoadedScene?.loading) {
+    return;
+  }
+  if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
+    console.log("Scroll to top", newScene?.search, lastLoadedScene?.search);
+    emit("focusFileId", null);
     scrollToPixels(0);
   }
+  lastLoadedScene = newScene;
   emit("scene", newScene);
+});
+
+const {
+  items: focusRegions,
+} = useApi(() =>
+  scene.value && focusFileId.value && focusFileId.value != lastFocusFileId &&
+  `/scenes/${scene.value?.id}/regions?file_id=${focusFileId.value}`
+);
+
+const focusRegion = computed(() => {
+  if (!focusFileId.value) return null;
+  if (focusFileId.value == lastFocusFileId) return null;
+  return focusRegions.value?.[0];
 });
 
 useEventBus("recreate-scene").on(scene => {
@@ -190,13 +217,15 @@ const {
 } = useContextMenu(contextMenu, viewer, scene);
 
 const canvas = computed(() => {
-  if (!viewport.width.value || !viewport.height.value) {
+  if (
+    !viewport.width.value ||
+    !viewport.height.value ||
+    !scene.value?.bounds?.w ||
+    !scene.value?.bounds?.h
+  ) {
     return { width: 1, height: 1 }
   }
-  const aspectRatio =
-    scene.value?.bounds?.h ?
-    scene.value.bounds.w / scene.value.bounds.h :
-    1;
+  const aspectRatio = scene.value.bounds.w / scene.value.bounds.h;
   return {
     width: viewport.width.value,
     height: viewport.width.value / aspectRatio,
@@ -260,18 +289,43 @@ const {
   y: scrollY,
   yPerSec: scrollSpeed,
   ratio: scrollRatio,
+  max: scrollMax,
   scrollToPixels,
 } = useScrollbar(scrollbar, scrollSleep);
 
+watchDebounced(scrollY, async (sy) => {
+  if (!scene.value) return;
+  if (!view.value || !view.value.w || !view.value.h) return;
+  if (sy < 500) {
+    if (!lastFocusFileId) return;
+    lastFocusFileId = null;
+    emit("focusFileId", null);
+    return;
+  }
+  const { x, y, w, h } = view.value;
+  const center = await getRegionClosestTo(
+    scene.value.id,
+    x, y, w, h,
+    x, y + h * focusScreenRatioY,
+  );
+  const fileId = center?.data?.id;
+  if (!fileId) return;
+  lastFocusFileId = fileId;
+  emit("focusFileId", fileId);
+}, { debounce: 1000 });
+
 const { date: scrollDate } = useTimeline({ scene, viewport, scrollRatio });
+
+const maxScrollY = computed(() => {
+  return Math.max(1, canvas.value.height - viewport.height.value);
+});
 
 const view = computed(() => {
   if (region.value) {
     return region.value.bounds;
   }
 
-  const maxScrollY = Math.max(1, canvas.value.height - viewport.height.value);
-  const sy = Math.min(scrollY.value, maxScrollY - 1);
+  const sy = Math.min(scrollY.value, maxScrollY.value - 1);
 
   return {
     x: 0,
@@ -279,6 +333,14 @@ const view = computed(() => {
     w: viewport.width.value,
     h: viewport.height.value,
   }
+});
+
+watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
+  if (!focusRegion) return;
+  if (canvas.height <= 1) return;
+  if (regionId.value) return;
+  const bounds = focusRegion.bounds;
+  scrollToPixels(bounds.y + bounds.h * 0.5 - viewport.height.value * focusScreenRatioY);
 });
 
 const {

@@ -105,6 +105,26 @@ export async function getCenterRegion(sceneId, x, y, w, h) {
   return minRegion;
 }
 
+export async function getRegionClosestTo(sceneId, x, y, w, h, rx, ry) {
+  const regions = await getRegions(sceneId, x, y, w, h);
+  if (!regions) return null;
+  let minDistSq = Infinity;
+  let minRegion = null;
+  for (let i = 0; i < regions.length; i++) {
+    const region = regions[i];
+    const rcx = region.bounds.x + region.bounds.w*0.5;
+    const rcy = region.bounds.y + region.bounds.h*0.5;
+    const dx = rcx - rx;
+    const dy = rcy - ry;
+    const distSq = dx*dx + dy*dy;
+    if (distSq < minDistSq) {
+      minDistSq = distSq;
+      minRegion = region;
+    }
+  }
+  return minRegion;
+}
+
 export async function getCollections() {
   return get(`/collections`);
 }
