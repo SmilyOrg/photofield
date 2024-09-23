@@ -77,7 +77,6 @@ const props = defineProps({
   search: String,
   selectTag: Object,
   debug: Object,
-  fullpage: Boolean,
   scrollbar: Object,
   tweaks: String,
 });
@@ -92,6 +91,7 @@ const emit = defineEmits({
   selectTag: null,
   search: null,
   viewer: null,
+  swipeUp: null,
 })
 
 const {
@@ -271,6 +271,10 @@ const onNav = async (event) => {
     await exit();
     return;
   }
+  if (event.zoom > 0) {
+    emit("swipeUp");
+    return;
+  }
   zoomOut();
 }
 
@@ -326,7 +330,7 @@ defineExpose({
 
 .map .viewer {
   position: absolute;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   /* Fix for mobile browsers */
   height: calc(var(--vh, 1vh) * 100);

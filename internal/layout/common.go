@@ -91,17 +91,24 @@ type RegionTag struct {
 }
 
 type PhotoRegionData struct {
-	Id         int               `json:"id"`
-	Path       string            `json:"path"`
-	Filename   string            `json:"filename"`
-	Extension  string            `json:"extension"`
-	Video      bool              `json:"video"`
-	Width      int               `json:"width"`
-	Height     int               `json:"height"`
-	CreatedAt  string            `json:"created_at"`
-	Thumbnails []RegionThumbnail `json:"thumbnails"`
-	Tags       []tag.Tag         `json:"tags"`
+	Id         int                `json:"id"`
+	Path       string             `json:"path"`
+	Filename   string             `json:"filename"`
+	Extension  string             `json:"extension"`
+	Video      bool               `json:"video"`
+	Width      int                `json:"width"`
+	Height     int                `json:"height"`
+	CreatedAt  string             `json:"created_at"`
+	Thumbnails []RegionThumbnail  `json:"thumbnails"`
+	Tags       []tag.Tag          `json:"tags"`
+	Location   string             `json:"location,omitempty"` // reverse geocoded location
+	LatLng     *PhotoRegionLatLng `json:"latlng,omitempty"`
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
+}
+
+type PhotoRegionLatLng struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
 }
 
 func longestLine(s string) int {
@@ -121,6 +128,16 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 
 	originalPath := photo.GetPath(source)
 	info := source.GetInfo(photo.Id)
+
+	location := ""
+	var latlng *PhotoRegionLatLng
+	if image.IsValidLatLng(info.LatLng) {
+		latlng = &PhotoRegionLatLng{
+			Lat: info.LatLng.Lat.Degrees(),
+			Lng: info.LatLng.Lng.Degrees(),
+		}
+		location, _ = source.Geo.ReverseGeocode(context.TODO(), info.LatLng)
+	}
 
 	originalSize := io.Size{
 		X: info.Width,
@@ -185,6 +202,8 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 			CreatedAt:  info.DateTime.Format(time.RFC3339),
 			Thumbnails: thumbnails,
 			Tags:       tags,
+			Location:   location,
+			LatLng:     latlng,
 		},
 	}
 }

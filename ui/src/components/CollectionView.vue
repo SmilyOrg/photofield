@@ -1,5 +1,9 @@
 <template>
-  <div class="collection">
+  <div
+    class="collection"
+    ref="container"
+    :class="{ showDetails }"
+  >
     <page-title :title="pageTitle"></page-title>
 
     <response-loader
@@ -8,6 +12,7 @@
     ></response-loader>
 
     <map-viewer
+      class="viewer"
       v-if="layout == 'MAP'"
       ref="mapViewer"
       :interactive="interactive"
@@ -24,10 +29,12 @@
       @scene="mapScene = $event"
       @search="onSearch"
       @viewer="mapTileViewer = $event"
+      @swipeUp="onSwipeUp"
     >
     </map-viewer>
 
     <scroll-viewer
+      class="viewer"
       v-if="layout != 'MAP'"
       ref="scrollViewer"
       :interactive="interactive"
@@ -48,6 +55,7 @@
       @scene="scrollScene = $event"
       @search="onSearch"
       @viewer="scrollTileViewer = $event"
+      @swipeUp="onSwipeUp"
     >
     </scroll-viewer>
     
@@ -58,7 +66,7 @@
       :regionId="regionId"
       :scene="currentScene"
       @interactive="interactive = $event"
-      ></overlays>
+    ></overlays>
 
     <controls
       class="controls"
@@ -67,13 +75,24 @@
       :regionId="regionId"
       @navigate="navigate($event)"
       @exit="exit()"
+      @info="showDetails = !showDetails"
     ></controls>
+
+    <transition>
+      <photo-details
+        v-if="enableDetails"
+        class="details"
+        :regionId="regionId"
+        :scene="currentScene"
+        @close="showDetails = false"
+      ></photo-details>
+    </transition>
 
   </div>
 </template>
 
 <script setup>
-import { computed, ref, toRefs, watch } from 'vue';
+import { computed, nextTick, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ResponseLoader from './ResponseLoader.vue';
@@ -82,8 +101,10 @@ import ScrollViewer from './ScrollViewer.vue';
 import MapViewer from './MapViewer.vue';
 import PageTitle from './PageTitle.vue';
 import Overlays from './Overlays.vue';
+import PhotoDetails from './PhotoDetails.vue';
 
 import { useApi } from '../api';
+import { refDebounced, useElementSize, usePointerSwipe, watchDebounced } from '@vueuse/core';
 
 const props = defineProps([
   "collectionId",
@@ -113,6 +134,19 @@ const scrollViewer = ref(null);
 const scrollTileViewer = ref(null);
 const mapTileViewer = ref(null);
 const interactive = ref(true);
+const enableDetails = ref(false);
+const showDetails = ref(false);
+const container = ref(null);
+
+watch(showDetails, (show) => {
+  if (show) enableDetails.value = true;
+});
+
+watchDebounced(showDetails, (show) => {
+  if (!show) enableDetails.value = false;
+}, 200);
+
+const containerWidth = refDebounced(useElementSize(container).width, 200);
 
 const currentViewer = computed(() => {
   if (layout.value === 'MAP') {
@@ -141,6 +175,11 @@ const navigate = computed(() => {
 const exit = () => {
   (scrollViewer.value || mapViewer.value)?.exit();
   lastView.value = null;
+}
+
+const onSwipeUp = () => {
+  if (containerWidth.value > 700) return;
+  showDetails.value = true;
 }
 
 const scrollScene = ref(null);
@@ -263,10 +302,63 @@ const onRegion = async (region) => {
 
 <style scoped>
 
+.collection {
+  --details-width: 360px;
+}
+
 .controls {
   position: fixed;
   top: 0;
   left: 0;
+}
+
+.controls, .viewer {
+  transition: transform 0.2s;
+  transform: translateY(0);
+}
+
+.showDetails .controls, .showDetails .viewer {
+  max-width: calc(100vw - var(--details-width));
+}
+
+.details {
+  display: block;
+  position: fixed;
+  top: 0;
+  right: 0;
+  /* right: calc(-1 * var(--details-width)); */
+  width: var(--details-width);
+  min-height: 100vh;
+  max-width: 100%;
+  overflow-y: auto;
+  transition: right 0.2s, top 0.2s;
+}
+
+.details.v-enter-from, .details.v-leave-to {
+  right: calc(-1 * var(--details-width));
+}
+
+@media (max-width: 700px) {
+
+  .controls, .viewer {
+    transition: transform 0.2s;
+    transform: translateY(0);
+  }
+
+  .showDetails .controls, .showDetails .viewer {
+    max-width: 100vw;
+    transform: translateY(-100vh);
+  }
+
+  .details {
+    left: 0;
+    width: 100%;
+    min-height: 100vh;
+  }
+
+  .details.v-enter-from, .details.v-leave-to {
+    top: 100vh;
+  }
 }
 
 </style>

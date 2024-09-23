@@ -46,6 +46,7 @@
       <template #toolbar="{ toolbarItemClass }">
 
         <collection-panel
+          v-if="!immersive"
           class="collection-panel"
           :class="{ hidden: !collectionExpanded }"
           ref="collectionPanel"
