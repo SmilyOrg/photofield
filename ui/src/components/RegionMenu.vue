@@ -36,6 +36,7 @@
         <ui-nav-item
           v-if="albumUrl"
           :href="albumUrl"
+          target="_blank"
           @click="$emit('close')"
         >
           Open Image in Album
