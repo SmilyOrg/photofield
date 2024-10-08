@@ -329,6 +329,15 @@ paths:
             type: number
             example: 200
 
+        - name: closest
+          in: query
+          description: |
+            If true, return the closest region to the specified `x` and `y` coordinates.
+            The `w` and `h` parameters are ignored in this case.
+          schema:
+            type: boolean
+            example: false
+
         - name: limit
           in: query
           schema:

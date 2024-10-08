@@ -305,7 +305,6 @@ watchDebounced(scrollY, async (sy) => {
   const { x, y, w, h } = view.value;
   const center = await getRegionClosestTo(
     scene.value.id,
-    x, y, w, h,
     x, y + h * focusScreenRatioY,
   );
   const fileId = center?.data?.id;
