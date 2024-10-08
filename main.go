@@ -284,7 +284,7 @@ func getCollectionById(id string) *collection.Collection {
 
 func newFileIndexTask(collection *collection.Collection) *Task {
 	return &Task{
-		Type:         string(openapi.TaskTypeINDEXFILES),
+		Type:         string(openapi.INDEXFILES),
 		Id:           fmt.Sprintf("index-files-%v", collection.Id),
 		Name:         fmt.Sprintf("Indexing files %v", collection.Name),
 		CollectionId: collection.Id,
@@ -607,7 +607,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 
 	switch data.Type {
 
-	case openapi.TaskTypeINDEXFILES:
+	case openapi.INDEXFILES:
 		task, existing := indexCollection(collection)
 		if existing {
 			respond(w, r, http.StatusConflict, task)
@@ -615,7 +615,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			respond(w, r, http.StatusAccepted, task)
 		}
 
-	case openapi.TaskTypeINDEXMETADATA:
+	case openapi.INDEXMETADATA:
 		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{
 			Metadata: true,
 		})
@@ -623,7 +623,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
 
-	case openapi.TaskTypeINDEXCONTENTS:
+	case openapi.INDEXCONTENTS:
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Color:     true,
 			Embedding: true,
@@ -632,7 +632,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
 
-	case openapi.TaskTypeINDEXCONTENTSCOLOR:
+	case openapi.INDEXCONTENTSCOLOR:
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Color: true,
 		})
@@ -640,7 +640,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
 
-	case openapi.TaskTypeINDEXCONTENTSAI:
+	case openapi.INDEXCONTENTSAI:
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Embedding: true,
 		})
@@ -1459,7 +1459,7 @@ func main() {
 	}
 
 	metadataTask := &Task{
-		Type:  string(openapi.TaskTypeINDEXMETADATA),
+		Type:  string(openapi.INDEXMETADATA),
 		Id:    "index-metadata",
 		Name:  "Indexing metadata",
 		Queue: "index_metadata",
@@ -1467,7 +1467,7 @@ func main() {
 	globalTasks.Store(metadataTask.Id, metadataTask)
 
 	contentsTask := &Task{
-		Type:  string(openapi.TaskTypeINDEXCONTENTS),
+		Type:  string(openapi.INDEXCONTENTS),
 		Id:    "index-contents",
 		Name:  "Indexing contents",
 		Queue: "index_contents",

@@ -2,16 +2,19 @@ module photofield
 
 go 1.21
 
+replace github.com/tdewolff/parse/v2 => github.com/tdewolff/parse/v2 v2.4.3-0.20200304214440-0950ae333624 // indirect
+
+replace github.com/tdewolff/minify/v2 => github.com/tdewolff/minify/v2 v2.7.3-0.20200304184511-5dbe71a82675 // indirect
+
 require (
 	github.com/EdlinOrg/prominentcolor v1.0.0
-	github.com/alecthomas/assert/v2 v2.2.2
-	github.com/alecthomas/participle/v2 v2.0.0
-	github.com/deepmap/oapi-codegen v1.8.2
+	github.com/alecthomas/assert/v2 v2.3.0
+	github.com/alecthomas/participle/v2 v2.1.1
 	github.com/dgraph-io/ristretto v0.1.2-0.20230929213430-5239be55a219
 	github.com/docker/go-units v0.4.0
 	github.com/felixge/fgprof v0.9.1
 	github.com/gammazero/deque v0.2.1
-	github.com/go-chi/chi/v5 v5.0.4
+	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.0
 	github.com/go-chi/render v1.0.1
 	github.com/goccy/go-yaml v1.7.17
@@ -27,6 +30,7 @@ require (
 	github.com/lpar/gzipped v1.1.0
 	github.com/matoous/go-nanoid/v2 v2.0.0
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
+	github.com/oapi-codegen/runtime v1.1.1
 	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9
 	github.com/peterstace/simplefeatures v0.44.0
 	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
@@ -49,12 +53,13 @@ require (
 	github.com/ByteArena/poly2tri-go v0.0.0-20170716161910-d102ad91854f // indirect
 	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
 	github.com/alecthomas/repr v0.2.0 // indirect
+	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.0.0 // indirect
-	github.com/cespare/xxhash/v2 v2.1.1 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fatih/color v1.9.0 // indirect
+	github.com/fatih/color v1.15.0 // indirect
 	github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f // indirect
@@ -70,7 +75,7 @@ require (
 	github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5 // indirect
 	github.com/klauspost/compress v1.17.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
-	github.com/mattn/go-colorable v0.1.9 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
@@ -80,15 +85,15 @@ require (
 	github.com/prometheus/common v0.26.0 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/tdewolff/minify/v2 v2.7.1-0.20200112204046-70870d25a935 // indirect
-	github.com/tdewolff/parse/v2 v2.4.2 // indirect
+	github.com/tdewolff/minify/v2 v2.12.9 // indirect
+	github.com/tdewolff/parse/v2 v2.6.8 // indirect
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
-	google.golang.org/protobuf v1.26.0 // indirect
+	google.golang.org/protobuf v1.31.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
