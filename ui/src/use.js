@@ -264,8 +264,8 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
 export function useViewport(element) {
   const viewport = useElementSize(element);
   return {
-    width: refDebounced(viewport.width, 2000),
-    height: refDebounced(viewport.height, 2000),
+    width: refDebounced(viewport.width, 500),
+    height: refDebounced(viewport.height, 500),
   }
 }
 
