@@ -1780,6 +1780,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		},
 	}
 
+	if len(prefixIds) == 0 {
+		close(out)
+		return out, deps
+	}
+
 	go func() {
 		if options.Batch == 0 {
 			defer metrics.Elapsed("list infos sqlite")()

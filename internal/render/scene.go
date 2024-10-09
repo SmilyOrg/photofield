@@ -74,6 +74,7 @@ type RegionSource interface {
 	GetRegionsFromImageId(image.ImageId, *Scene, RegionConfig) []Region
 	GetRegionChanFromBounds(Rect, *Scene, RegionConfig) <-chan Region
 	GetRegionById(int, *Scene, RegionConfig) Region
+	GetRegionClosestTo(Point, *Scene, RegionConfig) (region Region, ok bool)
 }
 
 type SceneId = string
@@ -267,6 +268,28 @@ func (scene *Scene) GetVisiblePhotoRefs(view Rect, maxCount int) <-chan PhotoRef
 	return out
 }
 
+func (s *Scene) GetClosestPhotoRef(p Point) (ref PhotoRef, ok bool) {
+	minIndex := -1
+	minDistSq := math.MaxFloat64
+	for i := range s.Photos {
+		photo := &s.Photos[i]
+		dx := photo.Sprite.Rect.X - p.X
+		dy := photo.Sprite.Rect.Y - p.Y
+		distSq := dx*dx + dy*dy
+		if distSq < minDistSq {
+			minDistSq = distSq
+			minIndex = i
+		}
+	}
+	if minIndex == -1 {
+		return PhotoRef{}, false
+	}
+	return PhotoRef{
+		Index: minIndex,
+		Photo: &s.Photos[minIndex],
+	}, true
+}
+
 func (scene *Scene) GetVisiblePhotos(view Rect) <-chan Photo {
 	out := make(chan Photo, 100)
 	go func() {
@@ -314,6 +337,10 @@ func (scene *Scene) GetRegionsByImageId(id image.ImageId, limit int) []Region {
 		return []Region{}
 	}
 	return scene.RegionSource.GetRegionsFromImageId(id, scene, query)
+}
+
+func (scene *Scene) GetRegionClosestTo(p Point) (region Region, ok bool) {
+	return scene.RegionSource.GetRegionClosestTo(p, scene, RegionConfig{})
 }
 
 func (scene *Scene) GetRegionChan(bounds Rect) <-chan Region {

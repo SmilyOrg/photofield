@@ -40,6 +40,7 @@
       :interactive="interactive"
       :collectionId="collection && collectionId"
       :regionId="regionId"
+      :focusFileId="focusFileId"
       :layout="layout"
       :sort="sort"
       :imageHeight="imageHeight"
@@ -50,6 +51,7 @@
       :scrollbar="scrollbar"
       :selectTag="selectTagId && selectTag"
       @selectTag="onSelectTag"
+      @focusFileId="onFocusFileId"
       @region="onRegion"
       @elementView="lastView = $event"
       @scene="scrollScene = $event"
@@ -213,6 +215,19 @@ const selectTagId = computed(() => {
   return route.query.select_tag || undefined;
 })
 
+const focusFileId = computed(() => {
+  return route.query.f || undefined;
+})
+
+async function onFocusFileId(id) {
+  await router.replace({
+    query: {
+      ...route.query,
+      f: id || undefined,
+    }
+  });
+}
+
 const {
   data: selectTag,
   mutate: selectTagMutate,
@@ -313,8 +328,8 @@ const onRegion = async (region) => {
 }
 
 .controls, .viewer {
-  transition: transform 0.2s;
-  transform: translateY(0);
+  transition: top 0.2s;
+  top: 0;
 }
 
 .showDetails .controls, .showDetails .viewer {
@@ -341,13 +356,13 @@ const onRegion = async (region) => {
 @media (max-width: 700px) {
 
   .controls, .viewer {
-    transition: transform 0.2s;
-    transform: translateY(0);
+    transition: top 0.2s;
+    top: 0;
   }
 
   .showDetails .controls, .showDetails .viewer {
     max-width: 100vw;
-    transform: translateY(-100vh);
+    top: -100vh;
   }
 
   .details {

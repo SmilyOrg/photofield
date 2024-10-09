@@ -268,6 +268,14 @@ func (regionSource PhotoRegionSource) GetRegionById(id int, scene *render.Scene,
 	return regionSource.getRegionFromPhoto(id, &photo, scene, regionConfig)
 }
 
+func (regionSource PhotoRegionSource) GetRegionClosestTo(p render.Point, scene *render.Scene, regionConfig render.RegionConfig) (region render.Region, ok bool) {
+	photo, ok := scene.GetClosestPhotoRef(p)
+	if !ok {
+		return render.Region{}, false
+	}
+	return regionSource.getRegionFromPhoto(1+photo.Index, photo.Photo, scene, regionConfig), true
+}
+
 func layoutFitRow(row []render.Photo, bounds render.Rect, imageSpacing float64) float64 {
 	count := len(row)
 	if count == 0 {

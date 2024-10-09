@@ -173,7 +173,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 	}
 
 	if !drawn {
-		if len(errs) > 0 {
+		if config.DebugThumbnails && len(errs) > 0 {
 			log.Printf("Unable to draw photo %v: %v", photo.Id, errs)
 		}
 
