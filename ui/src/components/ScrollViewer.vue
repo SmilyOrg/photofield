@@ -158,7 +158,6 @@ watch(scene, async (newScene) => {
     return;
   }
   if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
-    console.log("Scroll to top", newScene?.search, lastLoadedScene?.search);
     emit("focusFileId", null);
     scrollToPixels(0);
   }
