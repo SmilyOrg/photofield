@@ -1,8 +1,10 @@
 FROM alpine:latest
 RUN apk add --no-cache exiftool ffmpeg
 
+ARG binary=photofield
+
 WORKDIR /app
-COPY photofield ./
+COPY $binary ./photofield
 
 RUN mkdir ./data && touch ./data/configuration.yaml
 

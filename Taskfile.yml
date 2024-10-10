@@ -1,0 +1,146 @@
+version: '3'
+
+vars:
+  BINARY_NAME: photofield
+  DOCKER_REPO: ghcr.io/smilyorg/photofield
+  OSARCH:
+    - linux/amd64
+    - linux/arm64
+    - darwin/amd64
+    - windows/amd64
+  VERSION:
+    sh: git describe --tags --match "v*" --abbrev=0 --always --dirty
+
+tasks:
+  release:local:
+    cmds:
+      - task: tidy
+      - task: generate
+      - task: build:deps
+      - task: package:archives
+      - task: package:checksums
+
+  tidy:
+    cmds:
+      - go mod tidy
+  
+
+  generate:
+    cmds:
+      - go generate -x
+  
+
+  build:deps:
+    deps:
+      - build:docs
+      - build:ui
+
+  build:docs:
+    dir: docs
+    cmds:
+      - npm install
+      - npm run docs:build
+
+  build:ui:
+    dir: ui
+    cmds:
+      - npm install
+      - npm run build -- --clearScreen=false -l warn
+
+  build:binaries:
+    deps:
+      - for:
+          var: OSARCH
+        task: build:binary
+        vars:
+          GOOS: "{{(.ITEM | split \"/\")._0}}"
+          GOARCH: "{{(.ITEM | split \"/\")._1}}"
+          OUTPUT:
+            sh: |
+              OS="{{(.ITEM | split "/")._0}}"
+              ARCH="{{(.ITEM | split "/")._1}}"
+              OUTPUT="dist/bin/{{.BINARY_NAME}}_{{.VERSION}}_${OS}_${ARCH}"
+              if [ "$OS" = "windows" ]; then
+                OUTPUT="${OUTPUT}.exe"
+              fi
+              echo $OUTPUT
+    silent: true
+
+  build:binary:
+    requires:
+      vars:
+        - GOOS
+        - GOARCH
+        - OUTPUT
+    generates:
+      - "{{.OUTPUT}}"
+    cmds:
+      - |
+        set -eou pipefail
+        echo "build {{.OUTPUT}}"
+        VERSION={{.VERSION}}
+        COMMIT=$(git rev-parse HEAD)
+        DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILT_BY=$(whoami)
+        GOOS={{.GOOS}} GOARCH={{.GOARCH}} CGO_ENABLED=0 go build \
+          -ldflags "-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE -X main.builtBy=$BUILT_BY" \
+          -tags embedui,embeddocs,embedgeo \
+          -o "{{.OUTPUT}}"
+    silent: true
+
+  package:archives:
+    deps:
+      - for:
+          var: OSARCH
+        task: package:archive
+        vars:
+          GOOS:
+            sh: "echo {{.ITEM}} | cut -d'/' -f1"
+          GOARCH:
+            sh: "echo {{.ITEM}} | cut -d'/' -f2"
+
+  package:archive:
+    requires:
+      vars:
+        - GOOS
+        - GOARCH
+    vars:
+      INPUT:
+        sh: |
+          OUTPUT="dist/bin/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}"
+          if [ "$OS" = "windows" ]; then
+            OUTPUT="${OUTPUT}.exe"
+          fi
+          echo $OUTPUT
+      OUTPUT:
+        sh: echo "dist/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}.zip"
+    deps:
+      - task: build:binary
+        vars:
+          GOOS: "{{.GOOS}}"
+          GOARCH: "{{.GOARCH}}"
+          OUTPUT: "{{.INPUT}}"
+    cmds:
+      - go run ./cmd/zip "{{.OUTPUT}}" "{{.INPUT}}"
+
+  package:checksums:
+    dir: dist
+    cmds:
+      - go run ../cmd/sha256 *.zip > checksums.txt
+
+  package:docker:all:
+    cmds:
+      - docker buildx create --use
+      - docker buildx build --pull --platform linux/amd64 -t {{.DOCKER_REPO}}:latest-amd64 -f Dockerfile-goreleaser .
+      - docker buildx build --pull --platform linux/arm64 -t {{.DOCKER_REPO}}:latest-arm64 -f Dockerfile-goreleaser .
+      - docker push {{.DOCKER_REPO}}:latest-amd64
+      - docker push {{.DOCKER_REPO}}:latest-arm64
+      - docker manifest create {{.DOCKER_REPO}}:latest 
+          --amend {{.DOCKER_REPO}}:latest-amd64 
+          --amend {{.DOCKER_REPO}}:latest-arm64
+      - docker manifest push {{.DOCKER_REPO}}:latest
+  
+  package:docker:
+    dir: dist/bin
+    cmds:
+      - docker buildx build --platform linux/amd64 --build-arg binary=photofield_v0.16.0-dirty_linux_amd64 -t {{.DOCKER_REPO}}:{{.VERSION}}-amd64 -f ../../Dockerfile-goreleaser .
