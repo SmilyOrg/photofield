@@ -7,7 +7,32 @@ and this project theoretically adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html), but it's still at major
 version zero.
 
-## [Unreleased]
+## [v0.17.0] - 2024-10-12 - Photo details and open in album
+
+### Added
+
+- **Photo details view** with a few basic details, like date, tags (if enabled), 
+  photo name & dimensions, and location.
+- **Open Image in Album** context menu entry. This is useful to open an image in
+  album/time-based context from e.g. a search or map view.
+
+### Changed
+
+- **Scroll persistence**: the scrollable views (album, timeline, highlights,
+  flex) now persist the scroll position via a file-based anchor in the URL (`f`
+  parameter). Refreshing or sharing the URL within a long album should therefore
+  retain the viewed position. This supports the "Open Image in Album" feature by
+  scrolling it into view on page load.
+
+## Fixed
+
+* **Scroll reset**: There is some functionality that scrolls the view to the top
+  when you change the search query, so that you aren't looking at the new
+  results half-way down the page. This scroll reset seemed to be happening a
+  little too often at weird times, so the fix hopefully only makes it reset the
+  scroll exactly for this scenario and no other.
+
+## [v0.16.0] - 2024-09-09 - Batch edit tags and faster collections
 
 ### Added
 
