@@ -3,13 +3,33 @@ version: '3'
 vars:
   BINARY_NAME: photofield
   DOCKER_REPO: ghcr.io/smilyorg/photofield
-  OSARCH:
-    - linux/amd64
-    - linux/arm64
+  BUILD_OS_ARCH:
+    # - android/arm64
     - darwin/amd64
+    - darwin/arm64
+    - freebsd/386
+    - freebsd/amd64
+    - freebsd/arm
+    - freebsd/arm64
+    - linux/386
+    - linux/amd64
+    - linux/arm
+    - linux/arm64
+    - linux/loong64
+    - linux/ppc64le
+    - linux/riscv64
+    - linux/s390x
+    - netbsd/amd64
+    - openbsd/amd64
+    - openbsd/arm64
+    - windows/386
     - windows/amd64
+    - windows/arm64
+  DOCKER_ARCH:
+    - amd64
+    - arm64
   VERSION:
-    sh: git describe --tags --match "v*" --abbrev=0 --always --dirty
+    sh: git describe --tags --match "v*" --always --dirty
 
 tasks:
   release:local:
@@ -19,6 +39,7 @@ tasks:
       - task: build:deps
       - task: package:archives
       - task: package:checksums
+      - task: package:docker:all
 
   tidy:
     cmds:
@@ -47,10 +68,10 @@ tasks:
       - npm install
       - npm run build -- --clearScreen=false -l warn
 
-  build:binaries:
+  build:binary:all:
     deps:
       - for:
-          var: OSARCH
+          var: BUILD_OS_ARCH
         task: build:binary
         vars:
           GOOS: "{{(.ITEM | split \"/\")._0}}"
@@ -85,19 +106,23 @@ tasks:
         GOOS={{.GOOS}} GOARCH={{.GOARCH}} CGO_ENABLED=0 go build \
           -ldflags "-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE -X main.builtBy=$BUILT_BY" \
           -tags embedui,embeddocs,embedgeo \
-          -o "{{.OUTPUT}}"
+          -o "{{.OUTPUT}}" \
+          || echo "build failed for {{.OUTPUT}}"
     silent: true
 
-  package:archives:
+  package:archive:all:
     deps:
       - for:
-          var: OSARCH
+          var: BUILD_OS_ARCH
         task: package:archive
         vars:
           GOOS:
             sh: "echo {{.ITEM}} | cut -d'/' -f1"
           GOARCH:
             sh: "echo {{.ITEM}} | cut -d'/' -f2"
+
+  package:archive:dir:
+    dir: dist/archives
 
   package:archive:
     requires:
@@ -107,14 +132,19 @@ tasks:
     vars:
       INPUT:
         sh: |
-          OUTPUT="dist/bin/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}"
+          OUTPUT="dist/binaries/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}"
           if [ "$OS" = "windows" ]; then
             OUTPUT="${OUTPUT}.exe"
           fi
           echo $OUTPUT
       OUTPUT:
-        sh: echo "dist/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}.zip"
+        sh: echo "dist/archives/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}.zip"
+    sources:
+      - "{{.INPUT}}"
+    generates:
+      - "{{.OUTPUT}}"
     deps:
+      - task: package:archive:dir
       - task: build:binary
         vars:
           GOOS: "{{.GOOS}}"
@@ -124,23 +154,73 @@ tasks:
       - go run ./cmd/zip "{{.OUTPUT}}" "{{.INPUT}}"
 
   package:checksums:
-    dir: dist
+    dir: dist/archives
     cmds:
-      - go run ../cmd/sha256 *.zip > checksums.txt
+      - go run ../../cmd/sha256 *.zip > checksums.txt
+
+  # package:docker:all:
+  #   cmds:
+  #     - docker buildx create --use
+  #     - docker buildx build --pull --platform linux/amd64 -t {{.DOCKER_REPO}}:latest-amd64 -f Dockerfile-goreleaser .
+  #     - docker buildx build --pull --platform linux/arm64 -t {{.DOCKER_REPO}}:latest-arm64 -f Dockerfile-goreleaser .
+  #     - docker push {{.DOCKER_REPO}}:latest-amd64
+  #     - docker push {{.DOCKER_REPO}}:latest-arm64
+  #     - docker manifest create {{.DOCKER_REPO}}:latest 
+  #         --amend {{.DOCKER_REPO}}:latest-amd64 
+  #         --amend {{.DOCKER_REPO}}:latest-arm64
+  #     - docker manifest push {{.DOCKER_REPO}}:latest
 
   package:docker:all:
+    deps:
+      - for:
+          var: DOCKER_ARCH
+          as: ARCH
+        task: package:docker
+        vars:
+          ARCH: "{{.ARCH}}"
+          BINARY: "{{.BINARY_NAME}}_{{.VERSION}}_linux_{{.ARCH}}"
+    vars:
+      AMENDS: >
+        {{$root := .}}{{range .DOCKER_ARCH}}
+        --amend {{$root.DOCKER_REPO}}:{{$root.VERSION}}-{{.}}
+        {{end}}
+      ARCH_IMAGES: >
+        {{$root := .}}{{range .DOCKER_ARCH}}
+        {{$root.DOCKER_REPO}}:{{$root.VERSION}}-{{.}}
+        {{end}}
+      IMAGE: "{{.DOCKER_REPO}}:{{.VERSION}}"
     cmds:
-      - docker buildx create --use
-      - docker buildx build --pull --platform linux/amd64 -t {{.DOCKER_REPO}}:latest-amd64 -f Dockerfile-goreleaser .
-      - docker buildx build --pull --platform linux/arm64 -t {{.DOCKER_REPO}}:latest-arm64 -f Dockerfile-goreleaser .
-      - docker push {{.DOCKER_REPO}}:latest-amd64
-      - docker push {{.DOCKER_REPO}}:latest-arm64
-      - docker manifest create {{.DOCKER_REPO}}:latest 
-          --amend {{.DOCKER_REPO}}:latest-amd64 
-          --amend {{.DOCKER_REPO}}:latest-arm64
-      - docker manifest push {{.DOCKER_REPO}}:latest
-  
+      - docker manifest create {{.IMAGE}} {{.ARCH_IMAGES}}
+      # - docker push {{.DOCKER_REPO}}:latest-amd64
+      # - docker push {{.DOCKER_REPO}}:latest-arm64
+      # - docker manifest create {{.DOCKER_REPO}}:latest 
+      #     --amend {{.DOCKER_REPO}}:latest-amd64 
+      #     --amend {{.DOCKER_REPO}}:latest-arm64
+      # - docker manifest push {{.DOCKER_REPO}}:latest
+
   package:docker:
-    dir: dist/bin
+    dir: dist/binaries
+    requires:
+      vars:
+        - ARCH
+        - BINARY
+    vars:
+      IMAGE: "{{.DOCKER_REPO}}:{{.VERSION}}-{{.ARCH}}"
+    # sources:
+    #   - dist/binaries/{{.BINARY}}
+    #   - Dockerfile-goreleaser
     cmds:
-      - docker buildx build --platform linux/amd64 --build-arg binary=photofield_v0.16.0-dirty_linux_amd64 -t {{.DOCKER_REPO}}:{{.VERSION}}-amd64 -f ../../Dockerfile-goreleaser .
+      # - docker buildx build --platform linux/{{.ARCH}} --build-arg binary={{.BINARY}} -t {{.IMAGE}} -f ../../Dockerfile-goreleaser .
+      - docker build --platform=linux/{{.ARCH}} --build-arg binary={{.BINARY}} -t {{.IMAGE}} --progress=plain -f ../../Dockerfile-goreleaser .
+
+  package:docker:multi:
+    dir: dist/binaries
+    vars:
+      ARCH_IMAGES: >
+        {{$root := .}}{{range .DOCKER_ARCH}}
+        {{$root.DOCKER_REPO}}:{{$root.VERSION}}-{{.}}
+        {{end}}
+      ARCHS: "{{range $index, $arch := .DOCKER_ARCH}}{{if $index}},{{end}}linux/{{$arch}}{{end}}"
+      IMAGE: "{{.DOCKER_REPO}}:{{.VERSION}}"
+    cmds:
+      - docker build --pull --platform {{.ARCHS}} --build-arg VERSION={{.VERSION}} -t {{.IMAGE}} -f ../../Dockerfile-multi .
