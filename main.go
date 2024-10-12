@@ -855,6 +855,27 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 			return
 		}
 		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), limit)
+	} else if params.Closest != nil && *params.Closest {
+		if params.X == nil || params.Y == nil {
+			problem(w, r, http.StatusBadRequest, "x and y required")
+			return
+		}
+		if params.Limit == nil || *params.Limit != 1 {
+			problem(w, r, http.StatusBadRequest, "limit must be set to 1")
+			return
+		}
+
+		p := render.Point{
+			X: float64(*params.X),
+			Y: float64(*params.Y),
+		}
+
+		region, ok := scene.GetRegionClosestTo(p)
+		if !ok {
+			regions = []render.Region{}
+		} else {
+			regions = []render.Region{region}
+		}
 	} else {
 		if params.X == nil || params.Y == nil || params.W == nil || params.H == nil {
 			problem(w, r, http.StatusBadRequest, "bounds or file_id required")

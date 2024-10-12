@@ -273,7 +273,11 @@ type GetScenesSceneIdRegionsParams struct {
 	Y      *float32 `json:"y,omitempty"`
 	W      *float32 `json:"w,omitempty"`
 	H      *float32 `json:"h,omitempty"`
-	Limit  *Limit   `json:"limit,omitempty"`
+
+	// If true, return the closest region to the specified `x` and `y` coordinates.
+	// The `w` and `h` parameters are ignored in this case.
+	Closest *bool  `json:"closest,omitempty"`
+	Limit   *Limit `json:"limit,omitempty"`
 }
 
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
@@ -841,6 +845,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdRegions(w http.ResponseWriter
 	err = runtime.BindQueryParameter("form", true, false, "h", r.URL.Query(), &params.H)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter h: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "closest" -------------
+	if paramValue := r.URL.Query().Get("closest"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "closest", r.URL.Query(), &params.Closest)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter closest: %s", err), http.StatusBadRequest)
 		return
 	}
 

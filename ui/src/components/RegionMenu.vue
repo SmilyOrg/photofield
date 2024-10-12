@@ -33,6 +33,14 @@
         >
           Open Image in New Tab
         </ui-nav-item>
+        <ui-nav-item
+          v-if="albumUrl"
+          :href="albumUrl"
+          target="_blank"
+          @click="$emit('close')"
+        >
+          Open Image in Album
+        </ui-nav-item>
         <ui-item @click="copyImage()">
           Copy Image
         </ui-item>
@@ -69,8 +77,9 @@ import copyImg from 'copy-image-clipboard';
 import TileViewer from './TileViewer.vue';
 import ExpandButton from './ExpandButton.vue';
 import { getFileUrl, getThumbnailUrl } from '../api';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useViewport } from '../use';
+import { useRoute } from 'vue-router';
 
 export default {
   props: ["region", "scene", "flipX", "flipY", "tileSize"],
@@ -82,12 +91,24 @@ export default {
       expanded: false,
     }
   },
-  setup() {
+  setup(props) {
     const viewer = ref(null);
     const viewport = useViewport(viewer);
+    const route = useRoute();
+    const albumUrl = computed(() => {
+      const fileId = props.region?.data?.id;
+      if (!fileId) return null;
+      const url = new URL(route.fullPath, window.location.origin);
+      url.searchParams.set("f", fileId);
+      url.searchParams.set("layout", "ALBUM");
+      url.searchParams.delete("search");
+      url.pathname = url.pathname.replace(/(.*\/collections\/[^/]+)\/.*$/, "$1");
+      return url.toString();
+    });
     return {
       viewer,
       viewport,
+      albumUrl,
     }
   },
   computed: {

@@ -79,6 +79,13 @@ export async function getRegionsWithFileId(sceneId, id) {
   return response.items;
 }
 
+export async function getRegionClosestTo(sceneId, x, y) {
+  if (!sceneId) return null;
+  const response = await get(`/scenes/${sceneId}/regions?x=${x}&y=${y}&closest=true&limit=1`);
+  if (!response.items?.length) return null;
+  return response.items[0];
+}
+
 export async function getRegion(sceneId, id) {
   return get(`/scenes/${sceneId}/regions/${id}`);
 }
