@@ -4,7 +4,7 @@
     <tile-viewer
       class="viewer"
       ref="viewer"
-      :style="{ transform: `translate(0, ${scrollY}px)` }"
+      :style="{ transform: `translate(0, ${nativeScrollY}px)` }"
       :scene="scene"
       :view="view"
       :selectTag="selectTag"
@@ -29,6 +29,43 @@
       @viewer="emit('viewer', $event)"
     ></tile-viewer>
 
+    <!-- <div
+      class="viewer"
+      ref="viewer"
+    ></div> -->
+    <!-- <pre
+      :style="{
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        height: '0',
+        overflow: 'visible',
+      }"
+    >
+      <template v-for="i in 100">
+        <div
+          v-if="i % 1 === 0"
+          :style="{
+            position: 'absolute',
+            top: `${i*100}px`,
+            left: 0,
+            width: i % 10 === 0 ? '200px' : '50px',
+            height: '1px',
+            backgroundColor: 'black',
+          }"
+        ></div>
+        <div
+          v-if="i % 1 === 0"
+          :style="{
+            position: 'absolute',
+            top: `${i*100 - 25}px`,
+            left: '225px',
+            fontSize: i % 10 === 0 ? '40px' : '20px',
+          }"
+        >{{ i*100 }}</div>
+      </template>
+    </pre> -->
+
     <Spinner
       class="spinner"
       :total="scene?.file_count"
@@ -44,14 +81,38 @@
     ></DateStrip>
 
     <div
+      class="virtual-canvas"
+      :style="{ height: nativeScrollHeight + 'px' }">
+    </div>
+      
+    <!-- <div
       class="scroller"
       ref="scroller"
-    >
-      <div
+    > -->
+      <!-- <div
         class="virtual-canvas"
-        :style="{ height: canvas.height + 'px' }">
-      </div>
-    </div>
+        :style="{ height: nativeScrollHeight + 'px' }">
+      </div> -->
+      <!-- :style="{ height: canvas.height + 'px' }"> -->
+    <!-- </div> -->
+
+    <!-- <RectDebug
+      v-if="viewport.width"
+      :style="{ position: 'fixed', top: '0', left: '50%', zIndex: 1000, transform: 'translate(-50%, 0)' }"
+      :rectangles="debugRects"
+      :width="canvas.width"
+      :height="canvas.height"
+      :drawWidth="40"
+      :drawHeight="600"
+    ></RectDebug> -->
+
+    <Scrollbar
+      class="scrollbar"
+      :y="scrollY"
+      :max="scrollMax"
+      :scene="scene"
+      @change="scrollToPixels"
+    ></Scrollbar>
 
     <ContextMenu
       class="context-menu"
@@ -72,14 +133,16 @@
 
 <script setup>
 import ContextMenu from '@overcoder/vue-context-menu';
-import { useEventBus, watchDebounced } from '@vueuse/core';
-import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { useEventBus, useScroll, useWindowScroll, useWindowSize, watchDebounced } from '@vueuse/core';
+import { computed, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { getRegion, getRegions, useScene, useApi, getRegionClosestTo } from '../api';
-import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline, useTags } from '../use.js';
+import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline, useTags, useTimelineDate } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
+import RectDebug from './RectDebug.vue';
+import Scrollbar from './Scrollbar.vue';
 
 const props = defineProps({
   interactive: Boolean,
@@ -134,6 +197,27 @@ const lastView = ref(null);
 const lastNonNativeView = ref(null);
 let lastLoadedScene = null;
 let lastFocusFileId = null;
+
+const windowSize = useWindowSize();
+
+// const nativeScrollHeight = ref(10000);
+// const nativeScrollHeight = ref(1000000);
+const nativeScrollHeight = computed(() => {
+  // return Math.min(1000000, canvas.value.height - windowSize.height.value);
+  // return Math.min(1000000, scene.value?.bounds.h - windowSize.height.value);
+  // return Math.min(1000000, scene.value?.bounds.h - viewport.height.value);
+  return Math.min(100000, scene.value?.bounds.h - viewport.height.value);
+  // return Math.min(10000, canvas.value.height);
+});
+// const nativeScrollMax = computed(() => {
+//   // return Math.min(1000000, canvas.value.height - viewport.height.value);
+// });
+// const nativeScrollHeight = computed(() => {
+//   return canvas.value.height;
+// });
+// const scrollOffset = ref(0);
+let scrollOffset = 0;
+const scrollY = ref(0);
 
 const focusScreenRatioY = 0.33;
 
@@ -244,14 +328,14 @@ const nativeScroll = computed(() => {
   return true;
 });
 
-watch(nativeScroll, async (newValue, oldValue) => {
-  if (newValue == oldValue) {
-    return;
-  }
-  if (newValue) {
-    await centerToBounds(lastNonNativeView.value);
-  }
-});
+// watch(nativeScroll, async (newValue, oldValue) => {
+//   if (newValue == oldValue) {
+//     return;
+//   }
+//   if (newValue) {
+//     await centerToBounds(lastNonNativeView.value);
+//   }
+// });
 
 
 const centerToBounds = async (bounds) => {
@@ -284,35 +368,218 @@ const scrollSleep = computed(() => {
   return !nativeScroll.value || lastZoom.value > 1.0001;
 });
 
-const {
-  y: scrollY,
-  yPerSec: scrollSpeed,
-  ratio: scrollRatio,
-  max: scrollMax,
-  scrollToPixels,
-} = useScrollbar(scrollbar, scrollSleep);
+// const {
+//   y: scrollY,
+//   yPerSec: scrollSpeed,
+//   ratio: scrollRatio,
+//   max: scrollMax,
+//   scrollToPixels,
+// } = useScrollbar(scrollbar, scrollSleep);
 
-watchDebounced(scrollY, async (sy) => {
-  if (!scene.value) return;
-  if (!view.value || !view.value.w || !view.value.h) return;
-  if (sy < 500) {
-    if (!lastFocusFileId) return;
-    lastFocusFileId = null;
-    emit("focusFileId", null);
+// const nativeScrollY = computed(() => {
+//   return window.scrollY;
+// });
+
+const nativeScrollY = ref(window.scrollY);
+// const nativeScrollMax = ref(window.scrollMaxY);
+function nativeScrollTo(y) {
+  window.scrollTo(0, y);
+  nativeScrollY.value = y;
+}
+
+function scrollToPixels(y) {
+  const nativeHeight = nativeScrollHeight.value;
+  const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
+  const nativeScrollTarget = nativeHeight * 0.5;
+  const ty = y - nativeScrollTarget;
+  if (ty < 0) {
+    scrollOffset = 0;
+    nativeScrollTo(y);
+  } else if (ty > maxOffset) {
+    scrollOffset = maxOffset;
+    nativeScrollTo(y - maxOffset);
+  } else {
+    scrollOffset = ty;
+    if (nativeScrollY.value != nativeScrollTarget) {
+      nativeScrollTo(nativeScrollTarget);
+    }
+  }
+  scrollY.value = nativeScrollY.value + scrollOffset;
+  // console.log("scrollToPixels", Math.round(y), "nativeScrollY", Math.round(nativeScrollY.value), "scrollOffset", Math.round(scrollOffset), "scrollY", Math.round(scrollY.value));
+}
+
+function updateScrollFromNative(y) {
+  const actionDistanceRatio = 0.1;
+  const nativeHeight = nativeScrollHeight.value;
+  const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
+  const actionDist = nativeHeight * actionDistanceRatio;
+  const nativeScrollTarget = nativeHeight * 0.5;
+  const diff = nativeScrollTarget - nativeScrollY.value;
+  const ty = y - nativeScrollTarget;
+  if (ty < 0) {
+    scrollOffset = 0;
+  } else if (ty > maxOffset) {
+    scrollOffset = maxOffset;
+  } else if (Math.abs(diff) > actionDist) {
+    scrollOffset = ty;
+    nativeScrollTo(nativeScrollTarget);
+  }
+  scrollY.value = nativeScrollY.value + scrollOffset;
+}
+
+function onWindowScroll() {
+  nativeScrollY.value = window.scrollY;
+}
+// function onWindowResize() {
+//   nativeScrollMax.value = window.scrollMaxY;
+// }
+onMounted(() => {
+  window.addEventListener("scroll", onWindowScroll);
+  document.documentElement.classList.add("hide-scrollbar");
+  // window.addEventListener("resize", onWindowResize);
+});
+onUnmounted(() => {
+  window.removeEventListener("scroll", onWindowScroll);
+  document.documentElement.classList.remove("hide-scrollbar");
+  // window.removeEventListener("resize", onWindowResize);
+});
+
+const scrollSpeed = ref(0);
+// const scrollFrameDiff = ref(0);
+
+const scrollMax = computed(() => {
+  return canvas.value.height - viewport.height.value;
+});
+
+const scrollRatio = computed(() => {
+  return scrollY.value / scrollMax.value;
+});
+
+watch(scrollRatio, (ratio) => {
+  // console.log("scrollY", scrollY.value, "scrollMax", scrollMax.value, "nativeScrollY", nativeScrollY.value, "nativeScrollHeight", nativeScrollHeight.value, "scrollOffset", scrollOffset, "canvas", canvas.value.height, "viewport", viewport.height.value, "scrollRatio", ratio);
+  // console.log("scrollMax", scrollMax.value, "nativeScrollHeight", nativeScrollHeight.value, "canvas", canvas.value.height, "viewport", viewport.height.value, "window", window.scrollMaxY);
+  // console.log("viewport", viewport.height.value, "window", window.scrollMaxY, "scene", scene.value?.bounds.h);
+});
+
+
+let lastScrollTime = 0;
+let scrollSpeedResetTimer = null;
+watch(scrollY, (y, oldy) => {
+  const now = Date.now();
+  const dt = now - lastScrollTime;
+  lastScrollTime = now;
+  // scrollFrameDiff.value = y - oldy;
+  // requestAnimationFrame(resetScrollFrameDiff);
+  if (dt == 0 || dt > 200) {
     return;
   }
-  const { x, y, w, h } = view.value;
-  const center = await getRegionClosestTo(
-    scene.value.id,
-    x, y + h * focusScreenRatioY,
-  );
-  const fileId = center?.data?.id;
-  if (!fileId) return;
-  lastFocusFileId = fileId;
-  emit("focusFileId", fileId);
-}, { debounce: 1000 });
+  scrollSpeed.value = Math.abs(y - oldy) * 1000 / dt;
+  clearTimeout(scrollSpeedResetTimer);
+  scrollSpeedResetTimer = setTimeout(resetScrollSpeed, 100);
+  // console.log("scrollSpeed", scrollSpeed.value);
+  // if (lastScrollTime) {
 
-const { date: scrollDate } = useTimeline({ scene, viewport, scrollRatio });
+  // }
+});
+
+function resetScrollSpeed() {
+  scrollSpeed.value = 0;
+}
+
+function resetScrollFrameDiff() {
+  requestAnimationFrame(resetScrollFrameDiff2);
+}
+
+function resetScrollFrameDiff2() {
+  scrollFrameDiff.value = 0;
+}
+
+watch(nativeScrollY, () => {
+  if (!nativeScroll.value) return;
+  if (!canvas.value.height) return;
+  if (!viewport.height.value) return;
+
+  // const nativeHeight = nativeScrollHeight.value;
+  // const nsy = nativeScrollY.value;
+  // const max = scrollMax.value - nativeHeight + viewport.height.value;
+  // const actionDistanceRatio = 0.2;
+
+
+  // console.log("nativeScrollY", nativeScrollY.value);
+
+  // const actionDistanceRatio = 0;
+  
+  // const half = scrollMax.value * 0.5;
+  // console.log("canvas", Math.round(canvas.value.height), "viewport", Math.round(viewport.height.value), "scrollMax", Math.round(scrollMax.value), "nativeScrollHeight", Math.round(nativeScrollHeight.value), "nativeScrollY", Math.round(nativeScrollY.value), "scrollOffset", Math.round(scrollOffset.value), "scrollY", Math.round(scrollY.value), "sy", Math.round(sy));
+
+  // const nativeScrollTarget = nativeHeight * 0.5;
+  // let cy = scrollOffset + nsy - nativeScrollTarget;
+  // if (cy < 0) {
+  //   cy = 0;
+  // } else if (cy > max) {
+  //   cy = max;
+  // } else {
+  //   scrollToPixels(half);
+  // }
+  // scrollOffset.value = cy;
+
+  // const nativeScrollTarget = nativeHeight * 0.5;
+  // const actionDist = nativeHeight * actionDistanceRatio;
+  // const diff = nativeScrollTarget - nsy;
+  // let ty = scrollOffset + nsy - nativeScrollTarget;
+  // let ty = scrollOffset + nativeScrollY.value;
+  updateScrollFromNative(scrollOffset + nativeScrollY.value);
+  // if (ty < 0) {
+  //   scrollOffset = 0;
+  //   ty = 0;
+  // } else if (ty > max) {
+  //   scrollOffset = max;
+  //   ty = max;
+  // } else if (Math.abs(diff) > actionDist) {
+  //   scrollOffset = ty;
+  //   nativeScrollTo(nativeScrollTarget);
+  //   // scrollToPixels(nativeScrollTarget);
+  // }
+  // console.log("nativeScrollY", nsy, "scrollOffset", scrollOffset, "ty", ty);
+
+  // if (Math.abs(diff) > actionDist) {
+  //   scrollOffset -= diff;
+  //   nativeScrollTo(nativeScrollTarget);
+  // }
+  
+  // let cy = scrollOffset.value + nativeScrollY.value - half;
+  // if (cy < 0) {
+  //   cy = 0;
+  // } else if (cy > max) {
+  //   cy = max;
+  // } else {
+  //   scrollToPixels(half);
+  // }
+  // scrollOffset.value = cy;
+});
+
+
+// watchDebounced(scrollY, async (sy) => {
+//   if (!scene.value) return;
+//   if (!view.value || !view.value.w || !view.value.h) return;
+//   if (sy < 500) {
+//     if (!lastFocusFileId) return;
+//     lastFocusFileId = null;
+//     emit("focusFileId", null);
+//     return;
+//   }
+//   const { x, y, w, h } = view.value;
+//   const center = await getRegionClosestTo(
+//     scene.value.id,
+//     x, y + h * focusScreenRatioY,
+//   );
+//   const fileId = center?.data?.id;
+//   if (!fileId) return;
+//   lastFocusFileId = fileId;
+//   emit("focusFileId", fileId);
+// }, { debounce: 1000 });
+
+const { date: scrollDate } = useTimelineDate({ scene, viewport, scrollRatio });
 
 const maxScrollY = computed(() => {
   return Math.max(1, canvas.value.height - viewport.height.value);
@@ -323,7 +590,8 @@ const view = computed(() => {
     return region.value.bounds;
   }
 
-  const sy = Math.min(scrollY.value, maxScrollY.value - 1);
+  // const sy = Math.min(scrollY.value, maxScrollY.value - 1);
+  const sy = scrollY.value;
 
   return {
     x: 0,
@@ -333,13 +601,13 @@ const view = computed(() => {
   }
 });
 
-watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
-  if (!focusRegion) return;
-  if (canvas.height <= 1) return;
-  if (regionId.value) return;
-  const bounds = focusRegion.bounds;
-  scrollToPixels(bounds.y + bounds.h * 0.5 - viewport.height.value * focusScreenRatioY);
-});
+// watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
+//   if (!focusRegion) return;
+//   if (canvas.height <= 1) return;
+//   if (regionId.value) return;
+//   const bounds = focusRegion.bounds;
+//   scrollToPixels(bounds.y + bounds.h * 0.5 - viewport.height.value * focusScreenRatioY);
+// });
 
 const {
   selectBounds
@@ -487,13 +755,60 @@ const drawViewToCanvas = (view, target) => {
   return true;
 }
 
-const getScrollY = () => {
-  return scrollY.value;
-}
+// const getScrollY = () => {
+//   return scrollY.value;
+// }
+
+const debugRects = computed(() => {
+  return [
+    {
+      x: 0,
+      y: 0,
+      w: canvas.value.width,
+      h: canvas.value.height,
+      color: "#f0f0f0",
+    },
+    // {
+    //   x: 0,
+    //   y: scrollY.value,
+    //   w: viewport.width.value,
+    //   h: viewport.height.value,
+    //   color: "green",
+    // },
+    {
+      x: 0,
+      y: scrollY.value,
+      w: viewport.width.value,
+      h: viewport.height.value,
+      color: "blue",
+    },
+  ];
+});
+
+// watch(scrollY, () => {
+//   console.log("nativeScrollY", nativeScrollY.value, "scrollOffset", scrollOffset.value, "scrollY", scrollY.value);
+// });
+
+// function centerNativeScroll() {
+//   const half = scrollMax.value * 0.5;
+//   const max = canvas.value.height - scrollMax.value - viewport.height.value;
+//   console.log("centerNativeScroll", half, max);
+//   let cy = scrollOffset.value + nativeScrollY.value - half;
+//   if (cy < 0) {
+//     cy = 0;
+//   } else if (cy > max) {
+//     cy = max;
+//   } else {
+//     scrollToPixels(half);
+//   }
+//   scrollOffset.value = cy;
+// }
+
+let centerScrollInterval;
 
 defineExpose({
   getRegionView,
-  getScrollY,
+  // getScrollY,
   drawViewToCanvas,
   centerToBounds,
   getScreenView,
@@ -502,6 +817,9 @@ defineExpose({
 })
 
 </script>
+
+<style>
+</style>
 
 <style scoped>
 
@@ -528,6 +846,13 @@ defineExpose({
   position: fixed;
   margin-top: 0;
   transform: translate(0, 0) !important;
+}
+
+.scrollbar {
+  position: fixed;
+  right: 0;
+  top: 64px;
+  height: calc(100vh - 64px);
 }
 
 .controls {

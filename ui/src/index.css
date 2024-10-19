@@ -10,6 +10,16 @@ html {
   min-width: 0 !important;
 }
 
+html.hide-scrollbar {
+  overflow-y: scroll;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+}
+html.hide-scrollbar::-webkit-scrollbar { /* WebKit */
+  width: 0;
+  height: 0;
+}
+
 /* 
 html {
   scrollbar-width: none;

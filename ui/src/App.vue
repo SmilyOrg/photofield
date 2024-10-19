@@ -307,12 +307,12 @@ export default {
     }
   },
   async mounted() {
-    this.scrollbar = OverlayScrollbars(document.querySelectorAll('body'), {
-      className: "os-theme-minimal-dark",
-      scrollbars: {
-        clickScrolling: true,
-      },
-    });
+    // this.scrollbar = OverlayScrollbars(document.querySelectorAll('body'), {
+    //   className: "os-theme-minimal-dark",
+    //   scrollbars: {
+    //     clickScrolling: true,
+    //   },
+    // });
   },
   computed: {
     tasks() {

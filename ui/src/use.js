@@ -376,7 +376,7 @@ export function useContextMenu(menu, viewer, scene) {
   }
 }
 
-export function useTimeline({ scene, viewport, scrollRatio }) {
+export function useTimelineDate({ scene, viewport, scrollRatio }) {
   
   const {
     data: datesBuffer,
@@ -404,7 +404,7 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
         )
       );
     const timestamp = timestamps.value[index];
-    console.log(scrollRatio.value, index, timestamps.value.length, timestamp);
+    // console.log(scrollRatio.value, index, timestamps.value.length, timestamp);
     const now = new Date();
     const offset = now.getTimezoneOffset()*60;
     return new Date((timestamp + offset) * 1000);
@@ -412,6 +412,30 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
 
   return {
     date,
+  }
+}
+
+export function useTimeline({ scene, height }) {
+
+  // console.log("useTimeline", scene, height);
+  
+  const {
+    data: datesBuffer,
+  } = useBufferApi(() => 
+    scene?.value?.id &&
+    !scene?.value?.loading &&
+    height.value &&
+    `/scenes/${scene.value.id}/dates?${qs.stringify({
+      height: Math.round(height.value),
+    })}`
+  )
+
+  const timestamps = computed(() => {
+    return new Uint32Array(datesBuffer.value);
+  });
+
+  return {
+    timestamps,
   }
 }
 
