@@ -397,12 +397,17 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
     if (!timestamps.value || timestamps.value.length < 1) return;
     const index =
       Math.min(timestamps.value.length - 1,
-      Math.max(0,
-      Math.floor(
-        scrollRatio.value * (timestamps.value.length - 1)
-      )));
+        Math.max(0,
+          Math.round(
+            scrollRatio.value * (timestamps.value.length - 1)
+          )
+        )
+      );
     const timestamp = timestamps.value[index];
-    return new Date(timestamp * 1000);
+    console.log(scrollRatio.value, index, timestamps.value.length, timestamp);
+    const now = new Date();
+    const offset = now.getTimezoneOffset()*60;
+    return new Date((timestamp + offset) * 1000);
   })
 
   return {
