@@ -107,6 +107,7 @@
     ></RectDebug> -->
 
     <Scrollbar
+      v-if="!region"
       class="scrollbar"
       :y="scrollY"
       :max="scrollMax"

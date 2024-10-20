@@ -5,6 +5,7 @@
       'scene-change': isRecentSceneChange,
       dragging: isDragging,
       scrolling: isScrolling,
+      hovering: isHovering,
       precise: preciseAnchor !== null,
       finger: dragPointerType === 'touch' && thumbXOffset !== '0px',
     }"
@@ -13,18 +14,16 @@
     @pointerenter="startHover"
     @pointerleave="stopHover"
   >
-    <!-- {{ isRecentSceneChange }} -->
     <div
       class="track"
     >
-      <!-- <img :src="minimapTileUrl" draggable="false" /> -->
     </div>
     <div
       class="markers"
     >
       <span
         v-for="marker in marker.items"
-        :key="marker.label"
+        :key="marker.t"
         class="marker"
         :style="{ top: marker.y + 'px' }"
       >
@@ -36,6 +35,7 @@
       ref="thumb"
       :style="{ top: thumbTopPx + 'px' }"
     >
+      <div class="tick"></div>
       <span class="marker">
         {{ thumbLabel }}
       </span>
@@ -45,14 +45,14 @@
       class="thumb"
       :style="{ top: thumbScrollPx + 'px', opacity: 0.3 }"
     >
+      <div class="tick"></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, computed, toRefs, onUnmounted } from 'vue';
+import { ref, computed, toRefs, onUnmounted } from 'vue';
 import { defineProps } from 'vue';
-import { getTileUrl } from '../api';
 import { useTimeline } from '../use';
 import { useElementSize, watchDebounced } from '@vueuse/core';
 import dateFormat from 'date-fns/format';
@@ -88,21 +88,10 @@ const isScrolling = ref(false);
 const isRecentSceneChange = ref(false);
 const isHovering = ref(false);
 const preciseAnchor = ref(null);
-// const preciseSpeed = ref(1);
 const preciseDeadzone = 20;
 const precisePixelThreshold = 200;
 const preciseDelay = 1500;
 const hoverY = ref(0);
-
-const active = computed(() => {
-  return isDragging.value || isHovering.value;
-})
-
-// const containerSize = computed(() => {
-//   if (!container.value) return { width: 0, height: 0 };
-//   const rect = container.value.getBoundingClientRect();
-//   return { width: rect.width, height: rect.height };
-// });
 
 const containerSize = useElementSize(container);
 
@@ -136,7 +125,6 @@ function timezoneOffsetNow() {
 
 const marker = computed(() => {
   if (!timestamps.value) return { level: 0, markers: [] };
-  const markers = [];
 
   const offset = timezoneOffsetNow();
   const date = new Date();
@@ -152,37 +140,38 @@ const marker = computed(() => {
   const days = [];
 
   const minDist = 20;
+  const maxDist = 100;
+  const maxY = ts.length - minDist;
 
-  for (let i = 0; i < ts.length - minDist; i++) {
+  for (let i = 0; i < maxY; i++) {
     const t = ts[i];
     date.setTime(t * 1000 + offset);
     const yr = date.getFullYear();
     const mo = date.getMonth();
     const dy = date.getDate();
 
-    // console.log(i, yr, mo, dy);
-
     if (yr !== year && level >= 1) {
       if (year !== -1 && level > 1) {
         level = 1;
       }
-      // const dist = years.length == 0 ? Infinity : Math.abs(years[years.length - 1].y - i);
       const minY = years.length > 0 ? years[years.length - 1].y + minDist : 0;
-      // console.log(i, minY, years.length > 0 ? years[years.length - 1].y : 0);
-      years.push({ y: Math.max(minY, i), label: `${yr}` });
+      if (minY > maxY) continue;
+      if (minY - i < maxDist) years.push({ y: Math.max(minY, i), t, label: `${yr}` });
       year = yr;
     }
     if (mo !== month && level >= 2) {
       if (month !== -1 && level > 2) {
         level = 2;
       }
-      const dist = months.length == 0 ? Infinity : Math.abs(months[months.length - 1].y - i);
-      if (dist > minDist) months.push({ y: i, label: dateFormat(date, "MMM yyyy") });
+      const minY = months.length > 0 ? months[months.length - 1].y + minDist : 0;
+      if (minY > maxY) continue;
+      if (minY - i < maxDist) months.push({ y: Math.max(minY, i), t, label: dateFormat(date, "MMM yyyy") });
       month = mo;
     }
     if (dy !== day && level >= 3) {
-      const dist = days.length == 0 ? Infinity : Math.abs(days[days.length - 1].y - i);
-      if (dist > minDist) days.push({ y: i, label: dateFormat(date, "d MMM") });
+      const minY = days.length > 0 ? days[days.length - 1].y + minDist : 0;
+      if (minY > maxY) continue;
+      if (minY - i < maxDist) days.push({ y: Math.max(minY, i), t, label: dateFormat(date, "d MMM") });
       day = dy;
     }
   }
@@ -198,15 +187,11 @@ const marker = computed(() => {
   return { level, items: [] };
 });
 
-// watch(markers, (newValue) => {
-//   console.log(newValue);
-// });
-
-
+const thumbTickHeight = 4;
 const thumbScrollPx = computed(() => {
-  if (!containerSize.height.value || !thumb.value) return 0;
+  if (!containerSize.height.value) return 0;
   const ratio = y.value / max.value;
-  const thumbMax = containerSize.height.value - thumb.value.offsetHeight;
+  const thumbMax = containerSize.height.value - thumbTickHeight;
   return ratio * thumbMax;
 });
 
@@ -225,7 +210,6 @@ const thumbLabel = computed(() => {
       y.value / max.value;
   const index = Math.max(0, Math.min(timestamps.value.length - 1, Math.round(ratio * timestamps.value.length)));
   const t = timestamps.value[index];
-  // console.log("timestamp", t, timestamps.value.length, index);
   const date = new Date(t * 1000 + offset);
   let level = marker.value.level;
   const precise = preciseAnchor.value !== null;
@@ -242,34 +226,6 @@ const thumbLabel = computed(() => {
   }
   return "";
 });
-
-const resolution = 6;
-
-// const minimapTileSize = computed(() => {
-//   if (!containerSize.height.value) return null;
-//   return Math.round(containerSize.height.value * resolution);
-// });
-
-// const minimapTileUrl = computed(() => {
-//   if (!scene.value?.id) return null;
-//   return getTileUrl(
-//     scene.value.id,
-//     0, 0, 0,
-//     minimapTileSize.value,
-//     null,
-//     // { transparency_mask: true }
-//   );
-// });
-
-// const minimapWidth = computed(() => {
-//   const bounds = scene.value?.bounds;
-//   if (!bounds) return 0;
-//   return bounds.w / bounds.h * containerSize.value.height;
-// });
-
-// const minimapStretch = computed(() => {
-//   return minimapTileSize.value / resolution / minimapWidth.value * 100 + "%";
-// });
 
 const startDrag = (event) => {
   isDragging.value = true;
@@ -308,14 +264,12 @@ let precisionTimeout = null;
 
 const enablePrecision = () => {
   preciseAnchor.value = lastEventY;
-  // preciseSpeed.value = 1;
 };
 
 const disablePrecision = () => {
   preciseAnchor.value = null;
   clearTimeout(precisionTimeout);
   precisionTimeout = null;
-  // preciseSpeed.value = 1;
 };
 
 let preciseTentativeAnchor = 0;
@@ -326,26 +280,18 @@ const thumbXOffset = ref("0px");
 const handleDrag = (event) => {
   if (!isDragging.value) return;
   const containerRect = container.value.getBoundingClientRect();
-  // let newTop = event.clientY - containerRect.top;
-  // newTop = Math.max(0, Math.min(newTop, containerRect.height - thumb.value.offsetHeight));
   const y = event.clientY - containerRect.top;
   const h = containerRect.height;
   dragPointerType.value = event.pointerType;
   
-  // const xDiff = event.clientX - containerRect.left;
-  // const xDiff = event.clientX - containerRect.left * 0.5;
   let newRatio = 0;
   
   const xDiff = event.clientX - containerRect.left;
   if (event.clientX < containerRect.left * 0.5) {
     thumbXOffset.value = "0px";
   } else {
-    // thumbXOffset.value = (-xDiff + 70) + "px";
     const tabStop = 100;
-    // const tabStop = 1;
-    // thumbXOffset.value = (10 + Math.round((-xDiff + 50)/tabStop)*tabStop) + "px";
     thumbXOffset.value = ((Math.round((-xDiff + 50)/tabStop) + 0.5)*tabStop) + "px";
-    // thumbXOffset.value = (-xDiff + 80) + "px";
   }
 
   if (preciseAnchor.value === null) {
@@ -360,46 +306,18 @@ const handleDrag = (event) => {
         precisionTimeout = setTimeout(enablePrecision, preciseDelay);
       }
     }
-    // disablePrecision();
-    // precisionTimeout = setTimeout(enablePrecision.bind(null, y), 1000);
   } else {
     const yDiff = y - preciseAnchor.value;
-    // const speed = 1 / (1 - xDiff * 0.03);
     const speed = 0.1;
-    // preciseSpeed.value = speed;
     newRatio = (preciseAnchor.value + yDiff * speed) / h;
-    // console.log("preciseAnchor", preciseAnchor.value, "yDiff", yDiff, "speed", speed);
   }
 
   lastEventY = y;
-
-
-  // if (xDiff < 0) {
-  //   if (preciseAnchor.value === null) {
-  //     preciseAnchor.value = y;
-  //   }
-  //   const yDiff = y - preciseAnchor.value;
-  //   const speed = 1 / (1 - xDiff * 0.03);
-  //   preciseSpeed.value = speed;
-  //   console.log("xDiff", xDiff, "yDiff", yDiff, "speed", speed);
-  //   newRatio = (preciseAnchor.value + yDiff * speed) / h;
-  // } else {
-  //   preciseAnchor.value = null;
-  //   newRatio = y / h;
-  // }
-  
-  
-  // console.log(newRatio);
 
   newRatio = Math.max(0, Math.min(1, newRatio));
 
   const newY = newRatio * max.value;
   emit('change', newY);
-
-  // event.stopPropagation();
-  // event.stopImmediatePropagation();
-  // console.log(newY);
-  // thumb.value.style.top = `${newTop}px`;
 };
 
 const handleHover = (event) => {
@@ -414,12 +332,6 @@ onUnmounted(() => {
   stopHover();
 });
 
-// watch(() => props.y, (newY) => {
-//   const containerRect = container.value.getBoundingClientRect();
-//   let newTop = (newY / props.max) * containerRect.height;
-//   newTop = Math.max(0, Math.min(newTop, containerRect.height - thumb.value.offsetHeight));
-//   thumb.value.style.top = `${newTop}px`;
-// });
 </script>
 
 <style scoped>
@@ -434,18 +346,22 @@ onUnmounted(() => {
   right: 0;
   width: 20px;
   height: 100%;
-  /* background-color: #dddddd; */
 }
 
-/* .track img { */
-  /* clip-path: xywh(0, 0, v-bind(minimapWidth), 100%); */
-  /* width: v-bind(minimapStretch); */
-  /* pixelart style */
-  /* image-rendering: pixelated; */
-  /* faded to white */
-  /* filter: contrast(0.5) brightness(1.5); */
-  /* width: 3000px; */
-/* } */
+@media (max-width: 700px) {
+  .scrollbar {
+    pointer-events: none;
+  }
+
+  .thumb {
+    opacity: 0;
+  }
+
+  .scrollbar.scrolling .thumb, .scrollbar.dragging .thumb {
+    opacity: 1;
+    pointer-events: visible;
+  }
+}
 
 .scrollbar {
   --thumb-width: 18px;
@@ -466,9 +382,21 @@ onUnmounted(() => {
 
 .thumb {
   position: absolute;
+  --thumb-hitbox: 60px;
+  margin-top: calc(var(--thumb-hitbox) / -2);
+  right: 0;
+  width: var(--thumb-hitbox);
+  height: var(--thumb-hitbox);
+  transition: opacity 0.4s;
+}
+
+.thumb .tick {
+  position: absolute;
+  --tick-height: 2px;
+  top: calc(50% - var(--tick-height) / 2);
   right: 0;
   width: var(--thumb-width);
-  height: 2px;
+  height: var(--tick-height);
   background-color: #6782ff;
   border: 2px solid white;
   border-right: none;
@@ -478,14 +406,12 @@ onUnmounted(() => {
 .thumb .marker {
   opacity: 0;
   transition: opacity 3s cubic-bezier(0.895, 0.03, 0.685, 0.22), right 0.4s, bottom 0.4s;
-  /* transition: opacity 1s; */
 }
 
 
-.scrollbar:hover .thumb .marker, .scrollbar.dragging .thumb .marker {
+.scrollbar.hovering .thumb .marker, .scrollbar.dragging .thumb .marker {
   opacity: 1;
   transition: right 1s, bottom 0.4s;
-  /* transition: none; */
 }
 
 .markers {
@@ -493,7 +419,7 @@ onUnmounted(() => {
   transition: opacity 0.5s;
 }
 
-.scrollbar:hover .markers, .scrollbar.scrolling .markers, .scrollbar.dragging .markers, .scrollbar.scene-change .markers {
+.scrollbar.hovering .markers, .scrollbar.scrolling .markers, .scrollbar.dragging .markers, .scrollbar.scene-change .markers {
   opacity: 1;
 }
 
@@ -511,22 +437,12 @@ onUnmounted(() => {
 }
 
 .thumb .marker {
-  bottom: 4px;
+  bottom: calc(50%);
   border-bottom-left-radius: 0;
 }
 
-/* .scrollbar.dragging .thumb {
-  width: 40px;
-}
-
-.scrollbar.precise .thumb {
-  width: 60px;
-} */
-
 .scrollbar.finger .thumb .marker {
-  /* bottom: 40px; */
-  bottom: -0.6em;
-  /* right: calc(var(--thumb-width) + 4px); */
+  bottom: calc(50% - 0.6em);
   right: calc(var(--thumb-width) + v-bind(thumbXOffset) + 4px);
   border-radius: 5px;
 }
