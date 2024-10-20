@@ -431,9 +431,11 @@ function updateScrollFromNative(y) {
 function onWindowScroll() {
   nativeScrollY.value = window.scrollY;
 }
-// function onWindowResize() {
-//   nativeScrollMax.value = window.scrollMaxY;
-// }
+
+watch(regionId, (value) => {
+  document.documentElement.classList.toggle("no-scroll", !!value);
+}, { immediate: true });
+
 onMounted(() => {
   window.addEventListener("scroll", onWindowScroll);
   document.documentElement.classList.add("hide-scrollbar");
@@ -442,7 +444,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("scroll", onWindowScroll);
   document.documentElement.classList.remove("hide-scrollbar");
-  // window.removeEventListener("resize", onWindowResize);
+  document.documentElement.classList.remove("no-scroll");
 });
 
 const scrollSpeed = ref(0);

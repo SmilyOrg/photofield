@@ -170,6 +170,13 @@ const geoview = computed(() => {
   max-height: 100%;
   overflow-y: auto;
   box-sizing: border-box;
+  position: relative;
+}
+
+.swipeable, .swipeable * {
+  overscroll-behavior: none;
+  overscroll-behavior-block: none;
+  overscroll-behavior-inline: none;
 }
 
 .background {

@@ -94,7 +94,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ResponseLoader from './ResponseLoader.vue';
@@ -106,7 +106,7 @@ import Overlays from './Overlays.vue';
 import PhotoDetails from './PhotoDetails.vue';
 
 import { useApi } from '../api';
-import { refDebounced, useElementSize, usePointerSwipe, watchDebounced } from '@vueuse/core';
+import { refDebounced, useElementSize, watchDebounced } from '@vueuse/core';
 
 const props = defineProps([
   "collectionId",

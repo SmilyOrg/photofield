@@ -16,8 +16,13 @@ html.hide-scrollbar {
   -ms-overflow-style: none;  /* Internet Explorer 10+ */
 }
 html.hide-scrollbar::-webkit-scrollbar { /* WebKit */
+  display: none;
   width: 0;
   height: 0;
+}
+
+html.no-scroll {
+  overflow: hidden;
 }
 
 /* 
