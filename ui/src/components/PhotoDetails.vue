@@ -1,6 +1,6 @@
 <template>
   <div class="photo-details" ref="container">
-    <div class="background" ref="background"></div>
+    <div class="background swipeable" ref="background"></div>
     <div class="bar swipeable">
       <ui-icon-button
         icon="close"
