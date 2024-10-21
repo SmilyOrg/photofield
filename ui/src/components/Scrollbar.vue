@@ -208,6 +208,7 @@ const thumbLabel = computed(() => {
     isHovering.value && !isDragging.value ?
       hoverY.value / containerSize.height.value :
       y.value / max.value;
+  if (isNaN(ratio)) return "";
   const index = Math.max(0, Math.min(timestamps.value.length - 1, Math.round(ratio * timestamps.value.length)));
   const t = timestamps.value[index];
   const date = new Date(t * 1000 + offset);

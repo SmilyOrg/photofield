@@ -306,14 +306,6 @@ export default {
       title,
     }
   },
-  async mounted() {
-    // this.scrollbar = OverlayScrollbars(document.querySelectorAll('body'), {
-    //   className: "os-theme-minimal-dark",
-    //   scrollbars: {
-    //     clickScrolling: true,
-    //   },
-    // });
-  },
   computed: {
     tasks() {
       const tasks = [];

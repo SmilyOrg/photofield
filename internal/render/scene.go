@@ -207,14 +207,11 @@ func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
 	i := 0
 	ty := -1.
 	t := uint32(0)
-	// var tt time.Time
 	var photo Photo
 	for y := 0; y < height; y++ {
 		frac := (float64(y) + 0.5) / float64(height)
 		for ; ty <= float64(y)+frac && i < len(scene.Photos); i++ {
 			photo = scene.Photos[i]
-
-			// fmt.Printf("y: %d, ty: %f, i: %d, date: %s\n", y, ty, i, photo.GetInfo(source).DateTime.String())
 			py := (photo.Sprite.Rect.Y + photo.Sprite.Rect.H) * scale
 			// TODO: figure out why sometimes py can be NaN
 			if !math.IsNaN(py) {
@@ -225,15 +222,9 @@ func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
 		if !info.DateTime.IsZero() {
 			_, timezoneOffsetSeconds := info.DateTime.Zone()
 			t = uint32(info.DateTime.Unix() + int64(timezoneOffsetSeconds))
-			// tt = info.DateTime
 		}
-		// fmt.Printf("y: %4d, ty: %4.0f, i: %4d, date: %s\n", y, ty, i, tt.String())
 		timestamps[y] = t
 	}
-
-	// for y := 0; y < height; y++ {
-	// 	fmt.Printf("timestamps[%d]: %s\n", y, time.Unix(int64(timestamps[y]), 0).String())
-	// }
 
 	return timestamps
 }

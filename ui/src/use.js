@@ -323,19 +323,31 @@ export function useViewDelta(viewHistory, viewport, now) {
 
 export function useContextMenu(menu, viewer, scene) {
   
-  const openEvent = ref(false);
+  const openEvent = ref(null);
   const flip = ref({ x: false, y: false });
 
   const open = (event) => {
-    menu.value?.open(event);
     openEvent.value = event;
   }
 
   const close = () => {
     if (!openEvent.value) return;
     openEvent.value = null;
-    menu.value.close();
   }
+
+  watch([openEvent, menu], async ([event]) => {
+    if (!event) return;
+    const el = menu?.value?.$el;
+    if (!el) return;
+    const menuWidth = el.offsetWidth;
+    const menuHeight = el.offsetHeight;
+    let x = (event.clientX + menuWidth > window.innerWidth) ? event.clientX - menuWidth : event.clientX;
+    let y = (event.clientY + menuHeight > window.innerHeight) ? event.clientY - menuHeight : event.clientY;
+    if (x < 0) x = 0;
+    if (y < 64) y = 64;
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+  });
 
   const eventBounds = computed(() => {
     const event = openEvent.value;
@@ -351,74 +363,24 @@ export function useContextMenu(menu, viewer, scene) {
 
   const regions = useRegionsInBounds({ scene, bounds: eventBounds });
   const region = computed(() => {
+    if (!openEvent.value) return null;
     return regions.value && regions.value.length >= 1 && regions.value[0];
   })
 
   const onContextMenu = (event) => {
-    if (!menu.value) return;
     open(event);
-    const menuWidth = 250;
-    const menuHeight = 300;
-    const right = event.x + menuWidth;
-    const bottom = event.y + menuHeight;
-    flip.value = {
-      x: right > window.innerWidth,
-      y: bottom > window.innerHeight,
-    }
   }
   
   return {
     onContextMenu,
-    flip,
+    // flip,
     openEvent,
     close,
     region,
   }
 }
 
-export function useTimelineDate({ scene, viewport, scrollRatio }) {
-  
-  const {
-    data: datesBuffer,
-  } = useBufferApi(() => 
-    scene?.value?.id &&
-    !scene?.value?.loading &&
-    viewport?.height.value &&
-    `/scenes/${scene.value.id}/dates?${qs.stringify({
-      height: Math.round(viewport.height.value),
-    })}`
-  )
-
-  const timestamps = computed(() => {
-    return new Uint32Array(datesBuffer.value);
-  });
-
-  const date = computed(() => {
-    if (!timestamps.value || timestamps.value.length < 1) return;
-    const index =
-      Math.min(timestamps.value.length - 1,
-        Math.max(0,
-          Math.round(
-            scrollRatio.value * (timestamps.value.length - 1)
-          )
-        )
-      );
-    const timestamp = timestamps.value[index];
-    // console.log(scrollRatio.value, index, timestamps.value.length, timestamp);
-    const now = new Date();
-    const offset = now.getTimezoneOffset()*60;
-    return new Date((timestamp + offset) * 1000);
-  })
-
-  return {
-    date,
-  }
-}
-
 export function useTimeline({ scene, height }) {
-
-  // console.log("useTimeline", scene, height);
-  
   const {
     data: datesBuffer,
   } = useBufferApi(() => 
@@ -436,6 +398,33 @@ export function useTimeline({ scene, height }) {
 
   return {
     timestamps,
+  }
+}
+
+export function useTimelineDate({ scene, viewport, scrollRatio }) {
+  
+  const { timestamps } = useTimeline({ scene, height: viewport.height });
+
+  const date = computed(() => {
+    if (!timestamps.value || timestamps.value.length < 1) return null;
+    const index =
+      Math.min(timestamps.value.length - 1,
+        Math.max(0,
+          Math.round(
+            scrollRatio.value * (timestamps.value.length - 1)
+          )
+        )
+      );
+    const timestamp = timestamps.value[index];
+    const now = new Date();
+    const offset = now.getTimezoneOffset()*60;
+    const d = new Date((timestamp + offset) * 1000);
+    if (isNaN(Number(d))) return null;
+    return d;
+  })
+
+  return {
+    date,
   }
 }
 
