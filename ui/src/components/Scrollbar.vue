@@ -2,7 +2,7 @@
   <div
     class="scrollbar"
     :class="{
-      'scene-change': isRecentSceneChange,
+      changed: isRecentChange,
       dragging: isDragging,
       scrolling: isScrolling,
       hovering: isHovering,
@@ -51,9 +51,8 @@
 </template>
 
 <script setup>
-import { ref, computed, toRefs, onUnmounted } from 'vue';
+import { ref, computed, toRefs, onUnmounted, watch } from 'vue';
 import { defineProps } from 'vue';
-import { useTimeline } from '../use';
 import { useElementSize, watchDebounced } from '@vueuse/core';
 import dateFormat from 'date-fns/format';
 
@@ -66,15 +65,15 @@ const props = defineProps({
     type: Number,
     required: true
   },
-  scene: {
-    type: Object,
+  timestamps: {
+    type: Uint32Array,
   },
 });
 
 const {
   y,
   max,
-  scene,
+  timestamps,
 } = toRefs(props);
 
 const emit = defineEmits({
@@ -85,38 +84,34 @@ const container = ref(null);
 const thumb = ref(null);
 const isDragging = ref(false);
 const isScrolling = ref(false);
-const isRecentSceneChange = ref(false);
+const isRecentChange = ref(false);
 const isHovering = ref(false);
 const preciseAnchor = ref(null);
 const preciseDeadzone = 20;
 const precisePixelThreshold = 200;
 const preciseDelay = 1500;
 const hoverY = ref(0);
+const dragPointerType = ref("");
+const thumbXOffset = ref("0px");
+
+let preciseTentativeAnchor = 0;
+let lastEventY = 0;
 
 const containerSize = useElementSize(container);
 
-const { timestamps } = useTimeline({
-  scene,
-  height: containerSize.height,
+watch(y, () => {
+  isScrolling.value = true
 });
-
 watchDebounced(y, () => {
-  isScrolling.value = false;
-}, {
-  debounce: 2000,
-  onTrigger() {
-    isScrolling.value = true;
-  }
-});
+  isScrolling.value = false
+}, { debounce: 2000 });
 
-watchDebounced(scene, () => {
-  isRecentSceneChange.value = false;
-}, {
-  debounce: 2000,
-  onTrigger() {
-    isRecentSceneChange.value = true;
-  }
+watch(timestamps, () => {
+  isRecentChange.value = true
 });
+watchDebounced(timestamps, () => {
+  isRecentChange.value = false
+}, { debounce: 2000 });
 
 function timezoneOffsetNow() {
   const date = new Date();
@@ -212,6 +207,7 @@ const thumbLabel = computed(() => {
   const index = Math.max(0, Math.min(timestamps.value.length - 1, Math.round(ratio * timestamps.value.length)));
   const t = timestamps.value[index];
   const date = new Date(t * 1000 + offset);
+  if (isNaN(Number(date))) return "";
   let level = marker.value.level;
   const precise = preciseAnchor.value !== null;
   if (precise) level++;
@@ -272,11 +268,6 @@ const disablePrecision = () => {
   clearTimeout(precisionTimeout);
   precisionTimeout = null;
 };
-
-let preciseTentativeAnchor = 0;
-let lastEventY = 0;
-const dragPointerType = ref("");
-const thumbXOffset = ref("0px");
 
 const handleDrag = (event) => {
   if (!isDragging.value) return;
@@ -420,7 +411,7 @@ onUnmounted(() => {
   transition: opacity 0.5s;
 }
 
-.scrollbar.hovering .markers, .scrollbar.scrolling .markers, .scrollbar.dragging .markers, .scrollbar.scene-change .markers {
+.scrollbar.hovering .markers, .scrollbar.scrolling .markers, .scrollbar.dragging .markers, .scrollbar.changed .markers {
   opacity: 1;
 }
 

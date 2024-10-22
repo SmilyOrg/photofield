@@ -53,7 +53,7 @@
       class="scrollbar"
       :y="scrollY"
       :max="scrollMax"
-      :scene="scene"
+      :timestamps="timestamps"
       @change="scrollToPixels"
     ></Scrollbar>
 
@@ -74,7 +74,7 @@
 import { useEventBus, watchDebounced } from '@vueuse/core';
 import { computed, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { getRegion, getRegions, useScene, useApi, getRegionClosestTo } from '../api';
-import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimelineDate } from '../use.js';
+import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimestamps, useTimestampsDate } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
@@ -117,7 +117,6 @@ const {
   regionId,
   focusFileId,
   collectionId,
-  scrollbar,
   layout,
   sort,
   imageHeight,
@@ -136,7 +135,10 @@ let lastLoadedScene = null;
 let lastFocusFileId = null;
 
 const nativeScrollHeight = computed(() => {
-  return Math.min(100000, scene.value?.bounds.h - viewport.height.value);
+  if (!scene.value?.bounds?.h || !viewport.height.value) {
+    return 0;
+  }
+  return Math.min(100000, scene.value.bounds.h - viewport.height.value);
 });
 
 let scrollOffset = 0;
@@ -165,7 +167,7 @@ watch(scene, async (newScene) => {
     return;
   }
   if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
-    emit("focusFileId", null);
+    updateFocusFile(null);
     scrollToPixels(0);
   }
   lastLoadedScene = newScene;
@@ -175,13 +177,12 @@ watch(scene, async (newScene) => {
 const {
   items: focusRegions,
 } = useApi(() =>
-  scene.value && focusFileId.value && focusFileId.value != lastFocusFileId &&
+  scene.value && !scene.value.loading && focusFileId.value &&
   `/scenes/${scene.value?.id}/regions?file_id=${focusFileId.value}`
 );
 
 const focusRegion = computed(() => {
   if (!focusFileId.value) return null;
-  if (focusFileId.value == lastFocusFileId) return null;
   return focusRegions.value?.[0];
 });
 
@@ -251,14 +252,6 @@ const nativeScroll = computed(() => {
   return true;
 });
 
-watch(nativeScroll, async (newValue, oldValue) => {
-  if (newValue == oldValue) {
-    return;
-  }
-  if (newValue) {
-    await centerToBounds(lastNonNativeView.value);
-  }
-});
 
 
 const centerToBounds = async (bounds) => {
@@ -300,6 +293,9 @@ function nativeScrollTo(y) {
 
 function scrollToPixels(y) {
   const nativeHeight = nativeScrollHeight.value;
+  if (nativeHeight <= 0) {
+    return;
+  }
   const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
   const nativeScrollTarget = nativeHeight * 0.5;
   const ty = y - nativeScrollTarget;
@@ -321,6 +317,9 @@ function scrollToPixels(y) {
 function updateScrollFromNative(y) {
   const actionDistanceRatio = 0.1;
   const nativeHeight = nativeScrollHeight.value;
+  if (nativeHeight <= 0) {
+    return;
+  }
   const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
   const actionDist = nativeHeight * actionDistanceRatio;
   const nativeScrollTarget = nativeHeight * 0.5;
@@ -395,8 +394,7 @@ watchDebounced(scrollY, async (sy) => {
   if (!view.value || !view.value.w || !view.value.h) return;
   if (sy < 500) {
     if (!lastFocusFileId) return;
-    lastFocusFileId = null;
-    emit("focusFileId", null);
+    updateFocusFile(null);
     return;
   }
   const { x, y, w, h } = view.value;
@@ -407,14 +405,17 @@ watchDebounced(scrollY, async (sy) => {
   const fileId = center?.data?.id;
   if (!fileId) return;
   lastFocusFileId = fileId;
-  emit("focusFileId", fileId);
+  updateFocusFile(fileId);
 }, { debounce: 1000 });
 
-const { date: scrollDate } = useTimelineDate({ scene, viewport, scrollRatio });
+function updateFocusFile(id) {
+  if (id == focusFileId.value) return;
+  lastFocusFileId = id;
+  emit("focusFileId", id);
+}
 
-const maxScrollY = computed(() => {
-  return Math.max(1, canvas.value.height - viewport.height.value);
-});
+const timestamps = useTimestamps({ scene, height: viewport.height });
+const scrollDate = useTimestampsDate({ timestamps, ratio: scrollRatio });
 
 const view = computed(() => {
   if (region.value) {
@@ -431,8 +432,12 @@ const view = computed(() => {
 
 watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
   if (!focusRegion) return;
-  if (canvas.height <= 1) return;
+  if (canvas.value.height <= 1) return;
   if (regionId.value) return;
+  if (focusRegion.data.id == lastFocusFileId) {
+    lastFocusFileId = null;
+    return;
+  }
   const bounds = focusRegion.bounds;
   scrollToPixels(bounds.y + bounds.h * 0.5 - viewport.height.value * focusScreenRatioY);
 });

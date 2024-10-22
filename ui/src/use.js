@@ -380,7 +380,7 @@ export function useContextMenu(menu, viewer, scene) {
   }
 }
 
-export function useTimeline({ scene, height }) {
+export function useTimestamps({ scene, height }) {
   const {
     data: datesBuffer,
   } = useBufferApi(() => 
@@ -396,22 +396,17 @@ export function useTimeline({ scene, height }) {
     return new Uint32Array(datesBuffer.value);
   });
 
-  return {
-    timestamps,
-  }
+  return timestamps;
 }
 
-export function useTimelineDate({ scene, viewport, scrollRatio }) {
-  
-  const { timestamps } = useTimeline({ scene, height: viewport.height });
-
-  const date = computed(() => {
+export function useTimestampsDate({ timestamps, ratio }) {
+  return computed(() => {
     if (!timestamps.value || timestamps.value.length < 1) return null;
     const index =
       Math.min(timestamps.value.length - 1,
         Math.max(0,
           Math.round(
-            scrollRatio.value * (timestamps.value.length - 1)
+            ratio.value * (timestamps.value.length - 1)
           )
         )
       );
@@ -422,10 +417,6 @@ export function useTimelineDate({ scene, viewport, scrollRatio }) {
     if (isNaN(Number(d))) return null;
     return d;
   })
-
-  return {
-    date,
-  }
 }
 
 export function useTags({ supported, selectTag, collectionId, scene }) {
