@@ -234,6 +234,7 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
           regionId: index,
         },
         query: route.query,
+        hash: route.hash,
       });
     },
   });

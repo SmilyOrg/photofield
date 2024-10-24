@@ -77,16 +77,16 @@
       :regionId="regionId"
       @navigate="navigate($event)"
       @exit="exit()"
-      @info="showDetails = !showDetails"
+      @info="setDetails(!showDetails)"
     ></controls>
 
     <transition>
       <photo-details
-        v-if="enableDetails"
+        v-if="showDetails"
         class="details"
         :regionId="regionId"
         :scene="currentScene"
-        @close="showDetails = false"
+        @close="setDetails(false)"
       ></photo-details>
     </transition>
 
@@ -127,7 +127,6 @@ const {
   collectionId,
   regionId,
 } = toRefs(props);
-
 watch(regionId, (newRegionId) => {
   emit("immersive", newRegionId !== undefined);
 }, { immediate: true });
@@ -136,17 +135,26 @@ const scrollViewer = ref(null);
 const scrollTileViewer = ref(null);
 const mapTileViewer = ref(null);
 const interactive = ref(true);
-const enableDetails = ref(false);
-const showDetails = ref(false);
 const container = ref(null);
 
-watch(showDetails, (show) => {
-  if (show) enableDetails.value = true;
+const route = useRoute();
+const router = useRouter();
+
+const showDetails = computed(() => {
+  return route.hash == "#details";
 });
 
-watchDebounced(showDetails, (show) => {
-  if (!show) enableDetails.value = false;
-}, 200);
+const setDetails = (show) => {
+  if (show) {
+    router.push({
+      hash: "#details"
+    });
+  } else {
+    router.replace({
+      hash: ""
+    });
+  }
+}
 
 const containerWidth = refDebounced(useElementSize(container).width, 200);
 
@@ -167,9 +175,6 @@ const currentScene = computed(() => {
 const mapViewer = ref(null);
 const lastView = ref(null);
 
-const route = useRoute();
-const router = useRouter();
-
 const navigate = computed(() => {
   return (scrollViewer.value || mapViewer.value)?.navigate;
 });
@@ -181,7 +186,7 @@ const exit = () => {
 
 const onSwipeUp = () => {
   if (containerWidth.value > 700) return;
-  showDetails.value = true;
+  setDetails(true);
 }
 
 const scrollScene = ref(null);
@@ -305,6 +310,7 @@ const onRegion = async (region) => {
       regionId: region?.id,
     },
     query: route.query,
+    hash: route.hash,
   };
   if (regionId.value) {
     router.replace(r);
