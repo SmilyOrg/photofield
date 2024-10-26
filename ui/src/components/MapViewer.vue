@@ -20,7 +20,7 @@
       @nav="onNav"
       @view="onView"
       @contextmenu.prevent="onContextMenu"
-      @click="onClick"
+      @click.capture="onClick"
       @box-select="onBoxSelect"
       @viewer="emit('viewer', $event)"
     ></tile-viewer>
@@ -37,26 +37,21 @@
       :loading="scene?.loading"
     ></Spinner>
 
-    <ContextMenu
+    <RegionMenu
+      v-if="contextRegion"
       class="context-menu"
       ref="contextMenu"
-    >
-      <RegionMenu
-        :scene="scene"
-        :region="contextRegion"
-        :flipX="contextFlip.x"
-        :flipY="contextFlip.y"
-        :tileSize="512"
-        @close="closeContextMenu()"
-        @search="emit('search', $event)"
-      ></RegionMenu>
-    </ContextMenu>
+      :scene="scene"
+      :region="contextRegion"
+      :tileSize="512"
+      @close="closeContextMenu()"
+      @search="emit('search', $event)"
+    ></RegionMenu>
   </div>
 </template>
 
 <script setup>
 import { debounce } from 'throttle-debounce';
-import ContextMenu from '@overcoder/vue-context-menu';
 import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getRegions, useApi, useScene } from '../api';
@@ -158,7 +153,7 @@ const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 const contextMenu = ref(null);
 const {
   onContextMenu,
-  flip: contextFlip,
+  openEvent: contextEvent,
   close: closeContextMenu,
   region: contextRegion,
 } = useContextMenu(contextMenu, viewer, scene);
@@ -288,19 +283,25 @@ const {
 });
 
 const onClick = async (event) => {
+  if (contextEvent.value) {
+    closeContextMenu();
+    return;
+  }
   if (!event) return false;
   if (region.value) return false;
-  if (tagsSupported.value && (selectTag.value || event.originalEvent.ctrlKey)) {
+  const pos = viewer.value?.elementToViewportCoordinates(event);
+  if (!pos) return false;
+  if (tagsSupported.value && (selectTag.value || event.ctrlKey)) {
     const tag = await selectBounds("INVERT", {
-      x: event.x,
-      y: event.y,
+      x: pos.x,
+      y: pos.y,
       w: 0,
       h: 0,
     });
     emit("selectTag", tag);
     return false;
   }
-  const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
+  const regions = await getRegions(scene.value?.id, pos.x, pos.y, 0, 0);
   if (regions && regions.length > 0) {
     const region = regions[0];
     emit("region", region);
@@ -345,7 +346,6 @@ defineExpose({
 
 .context-menu {
   position: fixed;
-  width: fit-content;
 }
 
 .spinner {

@@ -191,7 +191,6 @@ export default {
 
   data() {
     return {
-      settingsExpanded: false,
       tasksExpanded: false,
       collectionExpanded: false,
       showTagEditor: false,
@@ -210,6 +209,7 @@ export default {
     }
   },
   setup(props) {
+    const settingsExpanded = ref(false);
     const collectionId = toRef(props, "collectionId");
     const router = useRouter();
     const route = useRoute();
@@ -250,6 +250,7 @@ export default {
     }
 
     const setQuery = (patch) => {
+      settingsExpanded.value = false;
       const query = Object.assign({}, route.query);
       Object.assign(query, patch);
       for (const key in patch) {
@@ -304,15 +305,8 @@ export default {
       recreateEvent,
       pageTitle,
       title,
+      settingsExpanded,
     }
-  },
-  async mounted() {
-    this.scrollbar = OverlayScrollbars(document.querySelectorAll('body'), {
-      className: "os-theme-minimal-dark",
-      scrollbars: {
-        clickScrolling: true,
-      },
-    });
   },
   computed: {
     tasks() {

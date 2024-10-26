@@ -1,7 +1,0 @@
-.os-theme-minimal-dark > .os-scrollbar > .os-scrollbar-track > .os-scrollbar-handle:before {
-  right: 2px;
-}
-
-.os-theme-minimal-dark > .os-scrollbar-vertical > .os-scrollbar-track > .os-scrollbar-handle {
-  min-height: 32px;
-}

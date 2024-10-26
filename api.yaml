@@ -281,7 +281,11 @@ paths:
               schema:
                 type: string
                 format: binary
-                description: List of `height` uint32-encoded Unix timestamps of photos in the layout
+                description: |
+                  List of `height` uint32-encoded "local" timestamps of photos
+                  in the layout. This is similar to a Unix timestamp, except
+                  that it is offset by the local time zone of the photo.
+
 
   /scenes/{scene_id}/regions:
     get:

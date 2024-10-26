@@ -1,6 +1,6 @@
 <template>
   <div class="photo-details" ref="container">
-    <div class="background" ref="background"></div>
+    <div class="background swipeable" ref="background"></div>
     <div class="bar swipeable">
       <ui-icon-button
         icon="close"
@@ -170,6 +170,13 @@ const geoview = computed(() => {
   max-height: 100%;
   overflow-y: auto;
   box-sizing: border-box;
+  position: relative;
+}
+
+.swipeable, .swipeable * {
+  overscroll-behavior: none;
+  overscroll-behavior-block: none;
+  overscroll-behavior-inline: none;
 }
 
 .background {
