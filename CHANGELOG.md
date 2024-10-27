@@ -7,7 +7,42 @@ and this project theoretically adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html), but it's still at major
 version zero.
 
-## [Unreleased]
+## [v0.17.0] - 2024-10-27 - Photo details, dark mode, scrollbar, open in album
+
+### New
+
+- **Photo details view** with a few basic details, like date, tags (if enabled), 
+  photo name & dimensions, and location.
+- **Dark mode**: By default, it uses the system preference, but it's possible to
+  switch in the display settings.
+- **Custom scrollbar**: Inspired by other galleries, it shows years/months/days
+  and has better support for longer galleries with "precision mode".
+- **Open Image in Album** context menu entry. This is useful to open an image in
+  album/time-based context from e.g. a search or map view.
+
+### Changed
+
+- **Scroll persistence**: The scrollable layouts (album, timeline, highlights,
+  flex) now persist the scroll position via a file-based anchor in the URL (`f`
+  parameter). Refreshing or sharing the URL within a long album should therefore
+  retain the viewed position. This supports the "Open Image in Album" feature by
+  scrolling it into view on page load.
+- **Settings menu**: The settings (cog wheel) now close on selection.
+- **PWA installation**: Installing the website as a Progressive Web App (PWA)
+  should look nicer now.
+
+### Fixed
+
+- **Search improvements**: Addressed issues with the search bar and input
+  behavior to ensure smoother scrolling and more predictable focus handling.
+- **Scene reload**: Do not reload the scene on height change for album/timeline
+  as it doesn't affect the display.
+
+[v0.17.0]: https://github.com/SmilyOrg/photofield/compare/v0.16.0...v0.17.0
+
+
+
+## [v0.16.0] - 2024-09-09 - Batch edit tags and faster collections
 
 ### Added
 
@@ -31,6 +66,10 @@ version zero.
 
 - There is a hard limit of 50000 source directories per loaded view for now.
   Please let me know if you encounter this limit as it can be increased.
+
+[v0.16.0]: https://github.com/SmilyOrg/photofield/compare/v0.15.1...v0.16.0
+
+
 
 ## [v0.15.2] - 2024-08-19 - Timezone, auto-crop, filters, tweaks
 
