@@ -160,7 +160,6 @@ export default {
 
 .region {
   position: absolute;
-  background: white;
   box-shadow: #ffffff54 0 0 17px 15px;
 }
 
@@ -175,10 +174,6 @@ export default {
   padding: 10px 6px;
   text-decoration: none;
   color: var(--mdc-theme-text-primary-on-background);
-}
-
-.thumbnail:hover {
-  background: rgb(241, 241, 241);
 }
 
 .filename {

@@ -2,10 +2,6 @@ html, body {
   margin: 0;
 }
 
-html {
-  overflow-y: scroll;
-}
-
 .plyr {
   min-width: 0 !important;
 }

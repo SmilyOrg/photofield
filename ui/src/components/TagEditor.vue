@@ -9,7 +9,7 @@
       @remove="removeTag"
     ></tags>
 
-    <table>
+    <table v-if="workingCopy?.length > 0">
       <thead>
         <tr>
           <th>Name</th>
@@ -216,20 +216,21 @@ const removeTag2 = async (tag) => {
   display: flex;
   flex-direction: column;
   gap: 1em;
+  min-height: 300px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  /* transition: background-color 0.2s; */
 }
 
 .add-tag {
   position: sticky;
   top: 10px;
   margin-bottom: 10px;
-  background-color: white;
   z-index: 10;
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
 }
 
 td {
@@ -261,11 +262,11 @@ li {
 }
 
 .to-remove {
-  background-color: #ffd7d7; /* Set the background color for rows to be deleted */
+  background-color: rgba(255, 0, 0, 0.2);
 }
 
 .to-add {
-  background-color: #d7ffd7; /* Set the background color for rows to be added */
+  background-color: rgba(0, 255, 100, 0.2);
 }
 
 .min-width {

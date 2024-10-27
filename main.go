@@ -702,6 +702,19 @@ func GetTilesRequestPriority(params openapi.GetScenesSceneIdTilesParams) int8 {
 	return 100
 }
 
+func decodeColor(s string) (color.RGBA, error) {
+	c, err := hex.DecodeString(strings.TrimPrefix(s, "#"))
+	if err != nil {
+		return color.RGBA{}, err
+	}
+	return color.RGBA{
+		A: 0xFF,
+		R: c[0],
+		G: c[1],
+		B: c[2],
+	}, nil
+}
+
 func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
 	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
 	if scene == nil {
@@ -761,20 +774,27 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	zoom := params.Zoom
 	x := int(params.X)
 	y := int(params.Y)
-	rn.BackgroundColor = color.White
+
+	rn.BackgroundColor = color.RGBA{0xFF, 0xFF, 0xFF, 0xFF}
 	if params.BackgroundColor != nil {
-		c, err := hex.DecodeString(strings.TrimPrefix(*params.BackgroundColor, "#"))
+		var err error
+		rn.BackgroundColor, err = decodeColor(string(*params.BackgroundColor))
 		if err != nil {
 			problem(w, r, http.StatusBadRequest, "Invalid background color")
 			return
 		}
-		rn.BackgroundColor = color.RGBA{
-			A: 0xFF,
-			R: c[0],
-			G: c[1],
-			B: c[2],
+	}
+
+	rn.Color = color.RGBA{0x00, 0x00, 0x00, 0xFF}
+	if params.Color != nil {
+		var err error
+		rn.Color, err = decodeColor(string(*params.Color))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, "Invalid background color")
+			return
 		}
 	}
+
 	if params.TransparencyMask != nil {
 		rn.TransparencyMask = *params.TransparencyMask
 	}
@@ -1440,9 +1460,9 @@ func main() {
 
 	defaultSceneConfig.Scene.Fonts = render.Fonts{
 		Main:   *fontFamily,
-		Header: fontFamily.Face(14.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
-		Hour:   fontFamily.Face(24.0, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
-		Debug:  fontFamily.Face(34.0, canvas.Black, canvas.FontRegular, canvas.FontNormal),
+		Header: fontFamily.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal),
+		Hour:   fontFamily.Face(24, canvas.Lightgray, canvas.FontRegular, canvas.FontNormal),
+		Debug:  fontFamily.Face(34, canvas.Black, canvas.FontRegular, canvas.FontNormal),
 	}
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 

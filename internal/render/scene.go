@@ -26,6 +26,7 @@ type Render struct {
 	TileSize          int         `json:"tile_size"`
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
 	BackgroundColor   color.Color `json:"background_color"`
+	Color             color.Color `json:"color"`
 	TransparencyMask  bool        `json:"transparency_mask"`
 	LogDraws          bool
 

@@ -81,6 +81,9 @@ type Collection struct {
 // CollectionId defines model for CollectionId.
 type CollectionId string
 
+// Color defines model for Color.
+type Color string
+
 // DocsCapability defines model for DocsCapability.
 type DocsCapability struct {
 	// Embedded struct due to allOf(#/components/schemas/Capability)
@@ -283,7 +286,8 @@ type GetScenesSceneIdRegionsParams struct {
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
 type GetScenesSceneIdTilesParams struct {
 	TileSize         int       `json:"tile_size"`
-	BackgroundColor  *string   `json:"background_color,omitempty"`
+	Color            *Color    `json:"color,omitempty"`
+	BackgroundColor  *Color    `json:"background_color,omitempty"`
 	TransparencyMask *bool     `json:"transparency_mask,omitempty"`
 	Zoom             int       `json:"zoom"`
 	X                TileCoord `json:"x"`
@@ -945,6 +949,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, true, "tile_size", r.URL.Query(), &params.TileSize)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter tile_size: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "color" -------------
+	if paramValue := r.URL.Query().Get("color"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "color", r.URL.Query(), &params.Color)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter color: %s", err), http.StatusBadRequest)
 		return
 	}
 

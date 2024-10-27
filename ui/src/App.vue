@@ -98,14 +98,14 @@
           </ui-dialog-content>
         </ui-dialog>
 
-        <div class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
-          <span class="empty" v-if="!tasks?.length">
+        <ui-card class="tasks" :class="{ hidden: !tasksExpanded, toolbarItemClass }">
+          <div class="empty" v-if="!tasks?.length">
             No background tasks running.
-          </span>
+          </div>
           <task-list
             :tasks="tasks"
           ></task-list>
-        </div>
+        </ui-card>
         <div class="settings" :class="{ hidden: !collection || !settingsExpanded, toolbarItemClass }">
           <display-settings
             :query="query"
@@ -120,6 +120,10 @@
           @click="settingsExpanded = !settingsExpanded"
         >
         </ui-icon-button>
+        <color-mode-switch
+          v-else
+          :class="{ toolbarItemClass }"
+        ></color-mode-switch>
         <a
           v-if="!collection && capabilities?.docs?.supported"
           :href="capabilities?.docs?.url"
@@ -164,7 +168,7 @@
 
 <script>
 import { createTask, useApi, useTasks } from './api';
-import { computed, ref, toRef } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ExpandButton from './components/ExpandButton.vue'
 import SearchInput from './components/SearchInput.vue'
@@ -172,6 +176,7 @@ import DisplaySettings from './components/DisplaySettings.vue'
 import TaskList from './components/TaskList.vue';
 import CollectionPanel from './components/CollectionPanel.vue';
 import TagEditor from './components/TagEditor.vue';
+import ColorModeSwitch from './components/ColorModeSwitch.vue';
 import { useEventBus } from '@vueuse/core';
 
 export default {
@@ -183,7 +188,8 @@ export default {
     TaskList,
     CollectionPanel,
     TagEditor,
-},
+    ColorModeSwitch,
+  },
   
   props: [
     "collectionId",
@@ -401,7 +407,111 @@ export default {
 }
 </script>
 
+<style>
+html.light {
+  --mdc-theme-primary: #6782ff;
+  --mdc-theme-surface: #f5f5f5;
+}
+html.dark {
+  --mdc-theme-background: #222;
+  --mdc-theme-on-background: white;
+  --mdc-theme-text-primary-on-background: #fff;
+
+  --mdc-theme-primary: #6782ff;
+  --mdc-theme-secondary: #018786;
+  --mdc-theme-surface: #333;
+  --mdc-theme-error: #b00020;
+  --mdc-theme-on-primary: #fff;
+  --mdc-theme-on-secondary: #fff;
+  --mdc-theme-on-surface: #fff;
+  --mdc-theme-on-error: #fff;
+  --mdc-theme-text-primary-on-background: rgba(100%,100%,100%,.87);
+  --mdc-theme-text-secondary-on-background: rgba(100%,100%,100%,.54);
+  --mdc-theme-text-hint-on-background: rgba(100%,100%,100%,.38);
+  --mdc-theme-text-disabled-on-background: rgba(100%,100%,100%,.38);
+  --mdc-theme-text-icon-on-background: rgba(100%,100%,100%,.38);
+  --mdc-theme-text-primary-on-light: rgba(100%,100%,100%,.87);
+  --mdc-theme-text-secondary-on-light: rgba(100%,100%,100%,.54);
+  --mdc-theme-text-hint-on-light: rgba(100%,100%,100%,.38);
+  --mdc-theme-text-disabled-on-light: rgba(100%,100%,100%,.38);
+  --mdc-theme-text-icon-on-light: rgba(100%,100%,100%,.38);
+  --mdc-theme-text-primary-on-dark: hsla(0,0%,100%,.87);
+  --mdc-theme-text-secondary-on-dark: hsla(0,0%,100%,.7);
+  --mdc-theme-text-hint-on-dark: hsla(0,0%,100%,.5);
+  --mdc-theme-text-disabled-on-dark: hsla(0,0%,100%,.5);
+  --mdc-theme-text-icon-on-dark: hsla(0,0%,100%,.5);
+
+  --mdc-ripple-color: #fff;
+
+  color: var(--mdc-theme-text-primary-on-background);
+  background-color: var(--mdc-theme-background);
+}
+
+html a:active {
+  color: var(--mdc-theme-primary);
+}
+
+html.dark a {
+  color: var(--mdc-theme-text-primary-on-background);
+}
+html.dark a:visited {
+  color: var(--mdc-theme-text-secondary-on-background);
+}
+
+html.dark .mdc-skeleton--active .mdc-skeleton-avatar, html.dark .mdc-skeleton--active .mdc-skeleton-paragraph > li, html.dark .mdc-skeleton--active .mdc-skeleton-title {
+  background-image: linear-gradient(90deg,#333 25%,#2c2c2c 37%,#333 63%);
+}
+
+html .multiselect__tags, html .multiselect__tags input, html .multiselect__content-wrapper, html .multiselect__input, html .multiselect__single {
+  color: var(--mdc-theme-on-surface);
+  border-color: var(--mdc-theme-surface);
+  background-color: var(--mdc-theme-surface);
+}
+
+html .multiselect__input::placeholder {
+  color: var(--mdc-theme-text-hint-on-surface);
+}
+
+html .multiselect__spinner {
+  background-color: var(--mdc-theme-surface);
+}
+
+</style>
+
 <style scoped>
+
+.top-bar :deep(.mdc-select--filled:not(.mdc-select--disabled) .mdc-select__anchor) {
+  background-color: var(--mdc-theme-surface);
+  color: var(--mdc-theme-on-surface);
+}
+
+.top-bar :deep(.mdc-select:not(.mdc-select--disabled) .mdc-floating-label) {
+  color: var(--mdc-theme-text-secondary-on-background);
+}
+
+.top-bar :deep(.mdc-select--filled:not(.mdc-select--disabled) .mdc-select__selected-text) {
+  color: var(--mdc-theme-text-primary-on-background);
+}
+
+.top-bar :deep(.mdc-dialog .mdc-dialog__title), .top-bar :deep(.mdc-dialog .mdc-dialog__content) {
+  color: var(--mdc-theme-text-primary-on-background);
+}
+
+.top-bar :deep(.mdc-checkbox .mdc-checkbox__native-control:enabled:not(:checked):not(:indeterminate):not([data-indeterminate="true"]) ~ .mdc-checkbox__background) {
+  border-color: var(--mdc-theme-primary-on-background);
+}
+
+.top-bar :deep(.mdc-linear-progress__bar-inner) {
+  border-color: var(--mdc-theme-text-primary-on-background);
+}
+
+.top-bar :deep(.mdc-text-field input) {
+  color: var(--mdc-theme-text-primary-on-background);
+}
+
+.top-bar :deep(.mdc-text-field input::placeholder) {
+  color: var(--mdc-theme-text-secondary-on-background);
+}
 
 .favicon {
   border: 1px solid #e5e5e5;
@@ -466,9 +576,12 @@ export default {
   top: 55px;
   right: 10px;
   z-index: 10;
-  background: var(--mdc-theme-background);
   border-radius: 10px;
-  padding: 0 10px;
+  padding: 0px;
+}
+
+.tasks .empty {
+  padding: 16px 16px 0 16px;
 }
 
 .tasks.hidden {
@@ -488,14 +601,10 @@ export default {
 }
 
 .top-bar {
-  background-color: white;
+  background-color: var(--mdc-theme-background);
+  color: var(--mdc-theme-text-primary-on-background);
   vertical-align: baseline;
   transition: transform 0.2s;
-  --mdc-theme-on-primary: rgba(0,0,0,.87);
-}
-
-.top-bar :deep(.mdc-button--raised) {
-  --mdc-theme-on-primary: #fff;
 }
 
 .top-bar.immersive {
@@ -518,18 +627,9 @@ export default {
   overflow: hidden;
 }
 
-.top-bar :deep(.mdc-select) {
-  --mdc-theme-primary: white; 
-}
-
 .tag-dialog :deep(.mdc-dialog__surface) {
   max-width: 800px !important;
 }
-
-button {
-  --mdc-theme-primary: black;
-}
-
 
 .title {
   cursor: pointer;
