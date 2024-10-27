@@ -14,9 +14,12 @@ import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 
 import "vue-multiselect/dist/vue-multiselect.css";
+import { createHead } from '@unhead/vue';
 
 const app = createApp(Root);
 
+const head = createHead()
+app.use(head)
 app.use(BalmUI);
 app.use(BalmUIPlus);
 

@@ -177,7 +177,8 @@ import TaskList from './components/TaskList.vue';
 import CollectionPanel from './components/CollectionPanel.vue';
 import TagEditor from './components/TagEditor.vue';
 import ColorModeSwitch from './components/ColorModeSwitch.vue';
-import { useEventBus } from '@vueuse/core';
+import { useColorMode, useEventBus } from '@vueuse/core';
+import { useHead } from '@unhead/vue';
 
 export default {
   name: 'App',
@@ -291,6 +292,16 @@ export default {
 
     const title = computed(() => {
       return pageTitle.value || "Photos";
+    });
+
+    const colorMode = useColorMode();
+    const themeColor = computed(() => {
+      return colorMode.value == "dark" ? "#222" : "#fff";
+    });
+    useHead({
+      meta: [
+        { name: "theme-color", content: themeColor },
+      ],
     });
 
     return {
