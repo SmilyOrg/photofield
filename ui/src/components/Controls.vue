@@ -7,7 +7,6 @@
       <ui-icon light class="icon" size="32">arrow_back</ui-icon>
     </div>
     <div class="toolbar">
-      <!-- <ui-icon light class="icon" size="32" @click="$event => download()">download</ui-icon> -->
       <ui-icon
         light
         class="icon"
@@ -30,7 +29,7 @@
         light
         class="icon"
         size="32"
-        @click="toggleFavorite()"
+        @click="invertTag('fav')"
       >
         {{ favoriteTag ? "favorite" : "favorite_outline" }}
       </ui-icon>
@@ -38,28 +37,19 @@
     <Tags
       v-if="showTags"
       class="tags"
-      :region="region"
-      :tags="region?.data?.tags"
+      :tags="tags"
       @add="addTag($event)"
       @remove="removeTag($event)"
     ></Tags>
-    <!-- <Downloads class="downloads" :region="region"></Downloads> -->
-    <!-- <div class="nav left" @click="left()">
-      <ui-icon light class="icon" size="48">chevron_left</ui-icon>
-    </div>
-    <div class="nav right" @click="right()">
-      <ui-icon light class="icon" size="48">chevron_right</ui-icon>
-    </div> -->
   </div>
 </template>
 
 <script setup>
 import { onKeyStroke, useIdle } from '@vueuse/core';
-import Downloads from './Downloads.vue';
 import Tags from './Tags.vue';
 import { computed, ref, toRefs } from 'vue';
-import { postTagFiles, useApi } from '../api';
-import { useRegion } from '../use';
+import { useApi } from '../api';
+import { useRegion, useRegionTags } from '../use';
 
 const props = defineProps({
   scene: Object,
@@ -76,10 +66,15 @@ const {
   mutate: updateRegion,
 } = useRegion({ scene, id: regionId })
 
+const {
+  tags,
+  add: addTag,
+  remove: removeTag,
+  invert: invertTag,
+} = useRegionTags({ region, updateRegion });
+
 const { data: capabilities } = useApi(() => "/capabilities");
 const tagsSupported = computed(() => capabilities.value?.tags?.supported);
-
-const fileId = computed(() => region.value?.data?.id);
 
 const emit = defineEmits([
   "navigate",
@@ -95,7 +90,7 @@ const { idle } = useIdle(5000, {
 const showTags = ref(false);
 
 const favoriteTag = computed(() => {
-  return region.value?.data?.tags?.find(tag => tag.name == "fav");
+  return tags.value?.find(tag => tag.name == "fav");
 })
 
 const left = () => {
@@ -108,40 +103,6 @@ const right = () => {
 
 const exit = () => {
   emit("exit");
-}
-
-const toggleFavorite = async () => {
-  const tagId = favoriteTag?.id || "fav";
-  if (!fileId.value) {
-    return;
-  }
-  await postTagFiles(tagId, {
-    op: "INVERT",
-    file_id: fileId.value,
-  });
-  await updateRegion();
-}
-
-const addTag = async (tag) => {
-  if (!fileId.value || !tag?.id) {
-    return;
-  }
-  await postTagFiles(tag.id, {
-    op: "ADD",
-    file_id: fileId.value,
-  });
-  await updateRegion();
-}
-
-const removeTag = async (tag) => {
-  if (!fileId.value || !tag?.id) {
-    return;
-  }
-  await postTagFiles(tag.id, {
-    op: "SUBTRACT",
-    file_id: fileId.value,
-  });
-  await updateRegion();
 }
 
 onKeyStroke(["ArrowLeft"], left);

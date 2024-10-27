@@ -27,7 +27,6 @@ type AlbumEvent struct {
 func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene *render.Scene, source *image.Source) render.Rect {
 
 	if event.FirstOnDay {
-		font := scene.Fonts.Main.Face(70, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 		dateFormat := "Monday, Jan 2"
 		if event.First {
 			dateFormat = "Monday, Jan 2, 2006"
@@ -39,7 +38,7 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 				W: rect.W,
 				H: 40,
 			},
-			&font,
+			&scene.Fonts.Header,
 			event.StartTime.Format(dateFormat),
 		)
 		text.VAlign = canvas.Bottom

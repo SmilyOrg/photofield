@@ -1,5 +1,5 @@
 <template>
-  <div class="collection-panel">
+  <ui-card class="collection-panel">
     <collection-settings
       :collection="collection"
       :scenes="scenes"
@@ -28,7 +28,7 @@
           <router-link
             v-for="c in collections"
             :key="c.id"
-            class="no-decoration"
+            class="link"
             :to="'/collections/' + c.id"
             @click="emit('close')"
           >
@@ -40,7 +40,7 @@
           </router-link>
       </ui-list>
     </div>
-  </div>
+  </ui-card>
 </template>
 
 <script setup>
@@ -76,8 +76,9 @@ const expand = ref(false);
   flex-direction: column;
 }
 
-.no-decoration {
+.link {
   text-decoration: none;
+  color: var(--mdc-theme-text-primary-on-background);
 }
 
 .tight {

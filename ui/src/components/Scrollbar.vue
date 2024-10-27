@@ -389,8 +389,8 @@ onUnmounted(() => {
   right: 0;
   width: var(--thumb-width);
   height: var(--tick-height);
-  background-color: #6782ff;
-  border: 2px solid white;
+  background-color: var(--mdc-theme-primary);
+  border: 2px solid var(--mdc-theme-background);
   border-right: none;
   transition: width 0.1s;
 }
@@ -422,8 +422,8 @@ onUnmounted(() => {
   text-wrap: nowrap;
   padding: 2px 6px 2px 6px;
   font-size: 0.8em;
-  color: #666;
-  background-color: rgba(255, 255, 255, 1);
+  color: var(--mdc-theme-text-secondary-on-background);
+  background-color: var(--mdc-theme-background);
   border-radius: 5px 0 0 5px;
   transition: top 0.4s;
 }

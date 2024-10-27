@@ -442,3 +442,30 @@ export function useTags({ supported, selectTag, collectionId, scene }) {
     selectBounds
   };
 };
+
+export function useRegionTags({ region, updateRegion }) {
+  const tags = computed(() => {
+    return region.value?.data?.tags || [];
+  });
+
+  const fileId = computed(() => region.value?.data?.id);
+
+  const op = async (tag, op) => {
+    const id = tag?.id || tag || null;
+    if (!fileId.value || !id) {
+      return;
+    }
+    await postTagFiles(id, {
+      op,
+      file_id: fileId.value,
+    });
+    if (updateRegion) await updateRegion();
+  }
+
+  return {
+    tags,
+    add: tag => op(tag, "ADD"),
+    remove: tag => op(tag, "SUBTRACT"),
+    invert: tag => op(tag, "INVERT"),
+  };
+}

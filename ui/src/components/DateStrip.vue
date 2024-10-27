@@ -27,7 +27,8 @@ export default {
 <style scoped>
 
 .date-strip {
-  background: white;
+  background: var(--mdc-theme-background);
+  color: var(--mdc-theme-text-primary-on-background);
   padding: 10px;
   text-align: center;
 }
@@ -42,14 +43,14 @@ export default {
 
 .year, .weekday {
   font-size: 0.9em;
-  color: #666;
+  color: var(--mdc-theme-text-secondary-on-background);
 }
 
 .time {
   font-size: 1em;
   margin-top: 12px;
   letter-spacing: 1px;
-  color: #666;
+  color: var(--mdc-theme-text-secondary-on-background);
 }
 
 </style>

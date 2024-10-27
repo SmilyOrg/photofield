@@ -8,9 +8,10 @@
   },
   "dependencies": {
     "@fontsource/roboto": "^4.5.7",
+    "@unhead/vue": "^1.11.10",
     "@vitejs/plugin-vue": "^1.10.2",
-    "@vueuse/core": "^9.3.0",
-    "@vueuse/router": "^9.3.0",
+    "@vueuse/core": "^11.1.0",
+    "@vueuse/router": "^11.1.0",
     "balm-ui": "^10.9.0",
     "copy-image-clipboard": "^1.0.1",
     "date-fns": "^2.28.0",

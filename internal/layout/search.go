@@ -53,7 +53,7 @@ func LayoutSearch(infos <-chan image.SimilarityInfo, layout Layout, scene *rende
 			mostSimilar = info.Similarity
 		}
 
-		aspectRatio := float64(info.Width) / float64(info.Height)
+		aspectRatio := info.AspectRatio()
 		imageWidth := float64(imageHeight) * aspectRatio
 
 		if rect.X+imageWidth > rect.W {

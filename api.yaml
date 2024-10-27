@@ -179,11 +179,15 @@ paths:
             minimum: 1
             example: 256
             
+        - name: color
+          in: query
+          schema:
+            $ref: "#/components/schemas/Color"
+            
         - name: background_color
           in: query
           schema:
-            type: string
-            example: "#000000"
+            $ref: "#/components/schemas/Color"
             
         - name: transparency_mask
           in: query
@@ -944,6 +948,10 @@ components:
     SceneId:
       type: string
       example: Tqcqtc6h69
+    
+    Color:
+      type: string
+      example: "#ff0000"
 
     ViewportWidth:
       type: number

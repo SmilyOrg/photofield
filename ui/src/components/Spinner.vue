@@ -227,7 +227,8 @@ export default {
 <style scoped>
 
 .spinner {
-  background: white;
+  color: var(--mdc-theme-text-primary-on-background);
+  background: var(--mdc-theme-background);
   box-sizing: border-box;
   padding: 12px;
   border-radius: 5px;
