@@ -450,6 +450,13 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	}
 	sceneConfig.Collection = collection
 
+	// Disregard viewport height for album and timeline layouts
+	// as they are invariant to it
+	switch sceneConfig.Layout.Type {
+	case layout.Album, layout.Timeline:
+		sceneConfig.Layout.ViewportHeight = 0
+	}
+
 	scenes := sceneSource.GetScenesWithConfig(sceneConfig)
 	sort.Slice(scenes, func(i, j int) bool {
 		a := scenes[i]
