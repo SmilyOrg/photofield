@@ -136,7 +136,7 @@ func LayoutHighlights(infos <-chan image.InfoEmb, layout Layout, scene *render.S
 		photo := HighlightPhoto{
 			Photo: dag.Photo{
 				Id:          info.Id,
-				AspectRatio: float32(info.Width) / float32(info.Height),
+				AspectRatio: float32(info.AspectRatio()),
 			},
 			Height: float32(simHeight),
 		}

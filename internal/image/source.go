@@ -376,18 +376,8 @@ func (source *Source) ListInfos(dirs []string, options ListOptions) (<-chan Sour
 }
 
 func (source *Source) ListInfosEmb(dirs []string, options ListOptions) <-chan InfoEmb {
-	out := make(chan InfoEmb, 1000)
-	go func() {
-		defer metrics.Elapsed("list infos embedded")()
-
-		infos := source.database.ListWithEmbeddings(dirs, options)
-		for info := range infos {
-			info.SourcedInfo.Info.MakeValid()
-			out <- info
-		}
-		close(out)
-	}()
-	return out
+	defer metrics.Elapsed("list infos embedded")()
+	return source.database.ListWithEmbeddings(dirs, options)
 }
 
 // Prefer using ImageId over this unless you absolutely need the path
