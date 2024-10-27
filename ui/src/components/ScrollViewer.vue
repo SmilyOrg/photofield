@@ -4,7 +4,7 @@
     <tile-viewer
       class="viewer"
       ref="viewer"
-      :style="{ transform: `translate(0, ${scrollY}px)` }"
+      :style="{ transform: `translate(0, ${nativeScrollY}px)` }"
       :scene="scene"
       :view="view"
       :selectTag="selectTag"
@@ -18,12 +18,12 @@
       :crossNav="!!region"
       :viewport="viewport"
       :qualityPreset="qualityPreset"
-      @click="onClick"
+      @click.capture="onClick"
       @view="onView"
       @nav="onNav"
       @wheel="onWheel"
-      @load-end="onLoadEnd"
       @contextmenu.prevent="onContextMenu"
+      @load-end="onLoadEnd"
       @keydown.esc="onEscape"
       @box-select="onBoxSelect"
       @viewer="emit('viewer', $event)"
@@ -44,42 +44,42 @@
     ></DateStrip>
 
     <div
-      class="scroller"
-      ref="scroller"
-    >
-      <div
-        class="virtual-canvas"
-        :style="{ height: canvas.height + 'px' }">
-      </div>
+      class="virtual-canvas"
+      :style="{ height: nativeScrollHeight + 'px' }">
     </div>
+    
+    <Scrollbar
+      v-if="!region"
+      class="scrollbar"
+      :y="scrollY"
+      :max="scrollMax"
+      :timestamps="timestamps"
+      @change="scrollToPixels"
+    ></Scrollbar>
 
-    <ContextMenu
+    <RegionMenu
+      v-if="contextRegion"
       class="context-menu"
       ref="contextMenu"
-    >
-      <RegionMenu
-        :scene="scene"
-        :region="contextRegion"
-        :flipX="contextFlip.x"
-        :flipY="contextFlip.y"
-        :tileSize="512"
-        @close="closeContextMenu()"
-        @search="emit('search', $event)"
-      ></RegionMenu>
-    </ContextMenu>
+      :scene="scene"
+      :region="contextRegion"
+      :tileSize="512"
+      @close="closeContextMenu()"
+      @search="emit('search', $event)"
+    ></RegionMenu>
   </div>
 </template>
 
 <script setup>
-import ContextMenu from '@overcoder/vue-context-menu';
 import { useEventBus, watchDebounced } from '@vueuse/core';
-import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { getRegion, getRegions, useScene, useApi, getRegionClosestTo } from '../api';
-import { useSeekableRegion, useScrollbar, useViewport, useContextMenu, useTimeline, useTags } from '../use.js';
+import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimestamps, useTimestampsDate } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
+import Scrollbar from './Scrollbar.vue';
 
 const props = defineProps({
   interactive: Boolean,
@@ -117,7 +117,6 @@ const {
   regionId,
   focusFileId,
   collectionId,
-  scrollbar,
   layout,
   sort,
   imageHeight,
@@ -134,6 +133,16 @@ const lastView = ref(null);
 const lastNonNativeView = ref(null);
 let lastLoadedScene = null;
 let lastFocusFileId = null;
+
+const nativeScrollHeight = computed(() => {
+  if (!scene.value?.bounds?.h || !viewport.height.value) {
+    return 0;
+  }
+  return Math.min(100000, scene.value.bounds.h - viewport.height.value);
+});
+
+let scrollOffset = 0;
+const scrollY = ref(0);
 
 const focusScreenRatioY = 0.33;
 
@@ -158,7 +167,7 @@ watch(scene, async (newScene) => {
     return;
   }
   if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
-    emit("focusFileId", null);
+    updateFocusFile(null);
     scrollToPixels(0);
   }
   lastLoadedScene = newScene;
@@ -168,13 +177,12 @@ watch(scene, async (newScene) => {
 const {
   items: focusRegions,
 } = useApi(() =>
-  scene.value && focusFileId.value && focusFileId.value != lastFocusFileId &&
+  scene.value && !scene.value.loading && focusFileId.value &&
   `/scenes/${scene.value?.id}/regions?file_id=${focusFileId.value}`
 );
 
 const focusRegion = computed(() => {
   if (!focusFileId.value) return null;
-  if (focusFileId.value == lastFocusFileId) return null;
   return focusRegions.value?.[0];
 });
 
@@ -210,7 +218,7 @@ const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 const contextMenu = ref(null);
 const {
   onContextMenu,
-  flip: contextFlip,
+  openEvent: contextEvent,
   close: closeContextMenu,
   region: contextRegion,
 } = useContextMenu(contextMenu, viewer, scene);
@@ -244,14 +252,6 @@ const nativeScroll = computed(() => {
   return true;
 });
 
-watch(nativeScroll, async (newValue, oldValue) => {
-  if (newValue == oldValue) {
-    return;
-  }
-  if (newValue) {
-    await centerToBounds(lastNonNativeView.value);
-  }
-});
 
 
 const centerToBounds = async (bounds) => {
@@ -284,21 +284,117 @@ const scrollSleep = computed(() => {
   return !nativeScroll.value || lastZoom.value > 1.0001;
 });
 
-const {
-  y: scrollY,
-  yPerSec: scrollSpeed,
-  ratio: scrollRatio,
-  max: scrollMax,
-  scrollToPixels,
-} = useScrollbar(scrollbar, scrollSleep);
+
+const nativeScrollY = ref(window.scrollY);
+function nativeScrollTo(y) {
+  window.scrollTo(0, y);
+  nativeScrollY.value = y;
+}
+
+function scrollToPixels(y) {
+  const nativeHeight = nativeScrollHeight.value;
+  if (nativeHeight <= 0) {
+    return;
+  }
+  const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
+  const nativeScrollTarget = nativeHeight * 0.5;
+  const ty = y - nativeScrollTarget;
+  if (ty < 0) {
+    scrollOffset = 0;
+    nativeScrollTo(y);
+  } else if (ty > maxOffset) {
+    scrollOffset = maxOffset;
+    nativeScrollTo(y - maxOffset);
+  } else {
+    scrollOffset = ty;
+    if (nativeScrollY.value != nativeScrollTarget) {
+      nativeScrollTo(nativeScrollTarget);
+    }
+  }
+  scrollY.value = nativeScrollY.value + scrollOffset;
+}
+
+function updateScrollFromNative(y) {
+  const actionDistanceRatio = 0.1;
+  const nativeHeight = nativeScrollHeight.value;
+  if (nativeHeight <= 0) {
+    return;
+  }
+  const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
+  const actionDist = nativeHeight * actionDistanceRatio;
+  const nativeScrollTarget = nativeHeight * 0.5;
+  const diff = nativeScrollTarget - nativeScrollY.value;
+  const ty = y - nativeScrollTarget;
+  if (ty < 0) {
+    scrollOffset = 0;
+  } else if (ty > maxOffset) {
+    scrollOffset = maxOffset;
+  } else if (Math.abs(diff) > actionDist) {
+    scrollOffset = ty;
+    nativeScrollTo(nativeScrollTarget);
+  }
+  scrollY.value = nativeScrollY.value + scrollOffset;
+}
+
+function onWindowScroll() {
+  nativeScrollY.value = window.scrollY;
+}
+
+watch(regionId, (value) => {
+  document.documentElement.classList.toggle("no-scroll", !!value);
+}, { immediate: true });
+
+onMounted(() => {
+  window.addEventListener("scroll", onWindowScroll);
+  document.documentElement.classList.add("hide-scrollbar");
+});
+onUnmounted(() => {
+  window.removeEventListener("scroll", onWindowScroll);
+  document.documentElement.classList.remove("hide-scrollbar");
+  document.documentElement.classList.remove("no-scroll");
+});
+
+const scrollSpeed = ref(0);
+
+const scrollMax = computed(() => {
+  return canvas.value.height - viewport.height.value;
+});
+
+const scrollRatio = computed(() => {
+  return scrollY.value / scrollMax.value;
+});
+
+let lastScrollTime = 0;
+let scrollSpeedResetTimer = null;
+watch(scrollY, (y, oldy) => {
+  const now = Date.now();
+  const dt = now - lastScrollTime;
+  lastScrollTime = now;
+  if (dt == 0 || dt > 200) {
+    return;
+  }
+  scrollSpeed.value = Math.abs(y - oldy) * 1000 / dt;
+  clearTimeout(scrollSpeedResetTimer);
+  scrollSpeedResetTimer = setTimeout(resetScrollSpeed, 100);
+});
+
+function resetScrollSpeed() {
+  scrollSpeed.value = 0;
+}
+
+watch(nativeScrollY, () => {
+  if (!nativeScroll.value) return;
+  if (!canvas.value.height) return;
+  if (!viewport.height.value) return;
+  updateScrollFromNative(scrollOffset + nativeScrollY.value);
+});
 
 watchDebounced(scrollY, async (sy) => {
   if (!scene.value) return;
   if (!view.value || !view.value.w || !view.value.h) return;
   if (sy < 500) {
     if (!lastFocusFileId) return;
-    lastFocusFileId = null;
-    emit("focusFileId", null);
+    updateFocusFile(null);
     return;
   }
   const { x, y, w, h } = view.value;
@@ -309,25 +405,26 @@ watchDebounced(scrollY, async (sy) => {
   const fileId = center?.data?.id;
   if (!fileId) return;
   lastFocusFileId = fileId;
-  emit("focusFileId", fileId);
+  updateFocusFile(fileId);
 }, { debounce: 1000 });
 
-const { date: scrollDate } = useTimeline({ scene, viewport, scrollRatio });
+function updateFocusFile(id) {
+  if (id == focusFileId.value) return;
+  lastFocusFileId = id;
+  emit("focusFileId", id);
+}
 
-const maxScrollY = computed(() => {
-  return Math.max(1, canvas.value.height - viewport.height.value);
-});
+const timestamps = useTimestamps({ scene, height: viewport.height });
+const scrollDate = useTimestampsDate({ timestamps, ratio: scrollRatio });
 
 const view = computed(() => {
   if (region.value) {
     return region.value.bounds;
   }
 
-  const sy = Math.min(scrollY.value, maxScrollY.value - 1);
-
   return {
     x: 0,
-    y: sy,
+    y: scrollY.value,
     w: viewport.width.value,
     h: viewport.height.value,
   }
@@ -335,8 +432,12 @@ const view = computed(() => {
 
 watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
   if (!focusRegion) return;
-  if (canvas.height <= 1) return;
+  if (canvas.value.height <= 1) return;
   if (regionId.value) return;
+  if (focusRegion.data.id == lastFocusFileId) {
+    lastFocusFileId = null;
+    return;
+  }
   const bounds = focusRegion.bounds;
   scrollToPixels(bounds.y + bounds.h * 0.5 - viewport.height.value * focusScreenRatioY);
 });
@@ -351,19 +452,25 @@ const {
 });
 
 const onClick = async (event) => {
+  if (contextEvent.value) {
+    closeContextMenu();
+    return;
+  }
   if (!event) return false;
   if (region.value) return false;
-  if (tagsSupported.value && (selectTag.value || event.originalEvent.ctrlKey)) {
+  const pos = viewer.value?.elementToViewportCoordinates(event);
+  if (!pos) return false;
+  if (tagsSupported.value && (selectTag.value || event.ctrlKey)) {
     const tag = await selectBounds("INVERT", {
-      x: event.x,
-      y: event.y,
+      x: pos.x,
+      y: pos.y,
       w: 0,
       h: 0,
     });
     emit("selectTag", tag);
     return false;
   }
-  const regions = await getRegions(scene.value?.id, event.x, event.y, 0, 0);
+  const regions = await getRegions(scene.value?.id, pos.x, pos.y, 0, 0);
   if (regions && regions.length > 0) {
     if (regions[0].id == region.value?.id) {
       return false;
@@ -487,13 +594,9 @@ const drawViewToCanvas = (view, target) => {
   return true;
 }
 
-const getScrollY = () => {
-  return scrollY.value;
-}
 
 defineExpose({
   getRegionView,
-  getScrollY,
   drawViewToCanvas,
   centerToBounds,
   getScreenView,
@@ -530,6 +633,13 @@ defineExpose({
   transform: translate(0, 0) !important;
 }
 
+.scrollbar {
+  position: fixed;
+  right: 0;
+  top: 64px;
+  height: calc(100vh - 64px);
+}
+
 .controls {
   position: fixed;
   top: 0;
@@ -538,7 +648,6 @@ defineExpose({
 
 .context-menu {
   position: fixed;
-  width: fit-content;
 }
 
 .date-strip {

@@ -104,7 +104,7 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 		}
 		photo := dag.Photo{
 			Id:          info.Id,
-			AspectRatio: float32(info.Width) / float32(info.Height),
+			AspectRatio: float32(info.AspectRatio()),
 		}
 		photos = append(photos, photo)
 		layoutCounter.Set(len(photos))

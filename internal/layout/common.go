@@ -317,8 +317,7 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 			Id: info.Id,
 		}
 
-		aspectRatio := float64(info.Width) / float64(info.Height)
-		imageWidth := float64(config.ImageHeight) * aspectRatio
+		imageWidth := float64(config.ImageHeight) * info.AspectRatio()
 
 		if x+imageWidth > bounds.W {
 			scale := layoutFitRow(scene.Photos[rowIdx:], bounds, config.ImageSpacing)

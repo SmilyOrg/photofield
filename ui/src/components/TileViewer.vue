@@ -25,7 +25,7 @@ import Projection from 'ol/proj/Projection';
 import { easeIn, easeOut, linear } from 'ol/easing';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
-import {MAC} from 'ol/has';
+import { MAC } from 'ol/has';
 import Kinetic from 'ol/Kinetic';
 import { get as getProjection } from 'ol/proj';
 import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
@@ -38,6 +38,7 @@ import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
 import { getTileUrl } from '../api';
+import { useColorMode } from '@vueuse/core';
 
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
@@ -73,7 +74,6 @@ export default {
     clipview: Object,
     crossNav: Boolean,
     focus: Boolean,
-    backgroundColor: String,
     selectTag: Object,
     debug: Object,
     loading: Boolean,
@@ -103,12 +103,16 @@ export default {
       focusZoom: 1,
     }
   },
-  async created() {
-  },
   async mounted() {
     this.latestView = null;
     this.lastAnimationTime = 0;
     this.reset();
+  },
+  setup() {
+    const colorMode = useColorMode();
+    return {
+      colorMode,
+    }
   },
   watch: {
 
@@ -126,6 +130,10 @@ export default {
         this.reload();
         return;
       }
+    },
+
+    colorMode() {
+      this.reloadMain();
     },
 
     geo(newGeo, oldGeo) {
@@ -243,10 +251,7 @@ export default {
       return this.v.getZoomForResolution(this.v.getResolutionForExtent(extent));
     },
     containerBackgroundColor() {
-      return this.backgroundColor || (
-        this.focus && this.focusZoom > 0.99 ?
-          "black" : null
-      );
+      return this.focus && this.focusZoom > 0.99 ? "black" : null;
     }
   },
   methods: {
@@ -745,11 +750,14 @@ export default {
       if (this.qualityPreset) {
         extra.quality_preset = this.qualityPreset;
       }
+      if (this.colorMode === "dark") {
+        extra.color = "#FFFFFF";
+        extra.background_color = "#222222";
+      }
       return getTileUrl(
         this.scene.id,
         z, x, y,
         this.tileSize,
-        this.backgroundColor,
         extra,
       );
     },
@@ -760,7 +768,6 @@ export default {
         this.scene.id,
         z, x, y,
         this.tileSize,
-        null,
         {
           transparency_mask: true,
         },

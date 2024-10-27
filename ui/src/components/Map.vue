@@ -18,13 +18,14 @@
       v-if="consent"
       v-show="!loading"
       class="map-container"
+      :class="{ dark: colorMode === 'dark' }"
       ref="mapContainer"
     ></div>
   </div>
 </template>
 
 <script setup>
-import { useStorage } from '@vueuse/core';
+import { useColorMode, useStorage } from '@vueuse/core';
 import { Feature } from 'ol';
 import { Point } from 'ol/geom';
 import TileLayer from 'ol/layer/Tile';
@@ -44,6 +45,8 @@ const props = defineProps({
   geoview: Array,
   loading: Boolean,
 });
+
+const colorMode = useColorMode();
 
 const {
   geoview,
@@ -127,6 +130,20 @@ function initOpenLayers(element) {
   width: 100%;
   height: 200px;
   box-sizing: border-box;
+}
+
+.map-container.dark :deep(canvas) {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.map-container.dark :deep(.ol-attribution) {
+  color: var(--mdc-theme-text-primary-on-background);
+  background-color: var(--mdc-theme-background);
+}
+
+.map-container.dark :deep(.ol-attribution ul) {
+  color: var(--mdc-theme-text-secondary-on-background);
+  text-shadow: 0 0 2px var(--mdc-theme-background);
 }
 
 .consent {

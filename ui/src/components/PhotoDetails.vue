@@ -1,6 +1,6 @@
 <template>
   <div class="photo-details" ref="container">
-    <div class="background" ref="background"></div>
+    <div class="background swipeable" ref="background"></div>
     <div class="bar swipeable">
       <ui-icon-button
         icon="close"
@@ -17,9 +17,10 @@
     <dl class="contents" v-if="photo">
       <tags
         v-if="tagsSupported"
-        :region="region"
-        :tags="region?.data?.tags"
+        :tags="tags"
         :loading="loading"
+        @add="addTag($event)"
+        @remove="removeTag($event)"
       ></tags>
       <detail-item
         icon="today"
@@ -71,7 +72,7 @@ import { useSwipe } from '@vueuse/core';
 import dateFormat from 'date-fns/format';
 import dateParseISO from 'date-fns/parseISO';
 import { computed, ref, toRefs } from 'vue';
-import { useRegion } from '../use';
+import { useRegion, useRegionTags } from '../use';
 import DetailItem from './DetailItem.vue';
 import Map from './Map.vue';
 import Tags from './Tags.vue';
@@ -99,7 +100,7 @@ const container = ref(null);
 
 useSwipe(container, {
   onSwipeEnd(event, direction) {
-    if (direction != "DOWN") return;
+    if (direction != "down") return;
     if (!event.target.closest('.swipeable')) {
       return;
     }
@@ -109,8 +110,15 @@ useSwipe(container, {
 
 const {
   region,
+  mutate: updateRegion,
   loading,
 } = useRegion({ scene, id: regionId })
+
+const {
+  tags,
+  add: addTag,
+  remove: removeTag,
+} = useRegionTags({ region, updateRegion });
 
 const createdAt = computed(() => {
   const at = region.value?.data?.created_at;
@@ -165,11 +173,18 @@ const geoview = computed(() => {
 <style scoped>
 
 .photo-details {
-  background-color: white;
+  background-color: var(--mdc-theme-background);
   max-width: 360px;
   max-height: 100%;
   overflow-y: auto;
   box-sizing: border-box;
+  position: relative;
+}
+
+.swipeable, .swipeable * {
+  overscroll-behavior: none;
+  overscroll-behavior-block: none;
+  overscroll-behavior-inline: none;
 }
 
 .background {

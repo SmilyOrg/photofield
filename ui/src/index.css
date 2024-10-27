@@ -2,32 +2,22 @@ html, body {
   margin: 0;
 }
 
-html {
-  overflow-y: scroll;
-}
-
 .plyr {
   min-width: 0 !important;
 }
 
-/* 
-html {
-  scrollbar-width: none;
+html.hide-scrollbar {
+  overflow-y: scroll;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
 }
-::-webkit-scrollbar {
-  width: 0px;
+html.hide-scrollbar::-webkit-scrollbar { /* WebKit */
+  display: none;
+  width: 0;
+  height: 0;
 }
 
-::-webkit-scrollbar-track-piece {
-  background-color: transparent;
-  -webkit-border-radius: 6px;
-} */
+html.no-scroll {
+  overflow: hidden;
+}
 
-/* #app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
-} */
