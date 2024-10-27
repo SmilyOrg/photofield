@@ -1,5 +1,5 @@
 <template>
-  <div class="settings">
+  <ui-card class="settings">
     <ui-select
       :modelValue="query.layout"
       @update:modelValue="emit('query', { layout: $event })"
@@ -7,7 +7,7 @@
     >
       Layout
     </ui-select>
-    <div class="size-icons">
+    <div>
       <ui-icon-button
         icon="photo_size_select_small"
         :class="{ active: query.image_height == '30' }"
@@ -29,6 +29,7 @@
         outlined
       >
       </ui-icon-button>
+      <color-mode-switch></color-mode-switch>
     </div>
 
     <expand-button
@@ -53,12 +54,13 @@
       </ui-form-field>
     </div>
 
-  </div>
+  </ui-card>
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import ExpandButton from './ExpandButton.vue';
+import ColorModeSwitch from './ColorModeSwitch.vue';
 
 const layoutOptions = ref([
     { label: `Default`, value: "DEFAULT" },
@@ -79,17 +81,14 @@ const props = defineProps({
 const emit = defineEmits([
     "query"
 ]);
+
 </script>
 
 <style scoped>
 
 .settings {
-  width: min-content;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  align-self: start;
-  background: var(--mdc-theme-background);
   border-radius: 10px;
   justify-content: center;
 }

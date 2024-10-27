@@ -234,6 +234,7 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
           regionId: index,
         },
         query: route.query,
+        hash: route.hash,
       });
     },
   });
@@ -323,19 +324,31 @@ export function useViewDelta(viewHistory, viewport, now) {
 
 export function useContextMenu(menu, viewer, scene) {
   
-  const openEvent = ref(false);
+  const openEvent = ref(null);
   const flip = ref({ x: false, y: false });
 
   const open = (event) => {
-    menu.value?.open(event);
     openEvent.value = event;
   }
 
   const close = () => {
     if (!openEvent.value) return;
     openEvent.value = null;
-    menu.value.close();
   }
+
+  watch([openEvent, menu], async ([event]) => {
+    if (!event) return;
+    const el = menu?.value?.$el;
+    if (!el) return;
+    const menuWidth = el.offsetWidth;
+    const menuHeight = el.offsetHeight;
+    let x = (event.clientX + menuWidth > window.innerWidth) ? event.clientX - menuWidth : event.clientX;
+    let y = (event.clientY + menuHeight > window.innerHeight) ? event.clientY - menuHeight : event.clientY;
+    if (x < 0) x = 0;
+    if (y < 64) y = 64;
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+  });
 
   const eventBounds = computed(() => {
     const event = openEvent.value;
@@ -351,41 +364,32 @@ export function useContextMenu(menu, viewer, scene) {
 
   const regions = useRegionsInBounds({ scene, bounds: eventBounds });
   const region = computed(() => {
+    if (!openEvent.value) return null;
     return regions.value && regions.value.length >= 1 && regions.value[0];
   })
 
   const onContextMenu = (event) => {
-    if (!menu.value) return;
     open(event);
-    const menuWidth = 250;
-    const menuHeight = 300;
-    const right = event.x + menuWidth;
-    const bottom = event.y + menuHeight;
-    flip.value = {
-      x: right > window.innerWidth,
-      y: bottom > window.innerHeight,
-    }
   }
   
   return {
     onContextMenu,
-    flip,
+    // flip,
     openEvent,
     close,
     region,
   }
 }
 
-export function useTimeline({ scene, viewport, scrollRatio }) {
-  
+export function useTimestamps({ scene, height }) {
   const {
     data: datesBuffer,
   } = useBufferApi(() => 
     scene?.value?.id &&
     !scene?.value?.loading &&
-    viewport?.height.value &&
+    height.value &&
     `/scenes/${scene.value.id}/dates?${qs.stringify({
-      height: Math.round(viewport.height.value),
+      height: Math.round(height.value),
     })}`
   )
 
@@ -393,21 +397,27 @@ export function useTimeline({ scene, viewport, scrollRatio }) {
     return new Uint32Array(datesBuffer.value);
   });
 
-  const date = computed(() => {
-    if (!timestamps.value || timestamps.value.length < 1) return;
+  return timestamps;
+}
+
+export function useTimestampsDate({ timestamps, ratio }) {
+  return computed(() => {
+    if (!timestamps.value || timestamps.value.length < 1) return null;
     const index =
       Math.min(timestamps.value.length - 1,
-      Math.max(0,
-      Math.floor(
-        scrollRatio.value * (timestamps.value.length - 1)
-      )));
+        Math.max(0,
+          Math.round(
+            ratio.value * (timestamps.value.length - 1)
+          )
+        )
+      );
     const timestamp = timestamps.value[index];
-    return new Date(timestamp * 1000);
+    const now = new Date();
+    const offset = now.getTimezoneOffset()*60;
+    const d = new Date((timestamp + offset) * 1000);
+    if (isNaN(Number(d))) return null;
+    return d;
   })
-
-  return {
-    date,
-  }
 }
 
 export function useTags({ supported, selectTag, collectionId, scene }) {
@@ -432,3 +442,30 @@ export function useTags({ supported, selectTag, collectionId, scene }) {
     selectBounds
   };
 };
+
+export function useRegionTags({ region, updateRegion }) {
+  const tags = computed(() => {
+    return region.value?.data?.tags || [];
+  });
+
+  const fileId = computed(() => region.value?.data?.id);
+
+  const op = async (tag, op) => {
+    const id = tag?.id || tag || null;
+    if (!fileId.value || !id) {
+      return;
+    }
+    await postTagFiles(id, {
+      op,
+      file_id: fileId.value,
+    });
+    if (updateRegion) await updateRegion();
+  }
+
+  return {
+    tags,
+    add: tag => op(tag, "ADD"),
+    remove: tag => op(tag, "SUBTRACT"),
+    invert: tag => op(tag, "INVERT"),
+  };
+}

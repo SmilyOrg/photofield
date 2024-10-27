@@ -20,11 +20,10 @@ export default {
   margin: 10px;
   padding: 40px 30px;
   font-size: 1.4em;
-  border: rgb(51, 51, 51);
   border-radius: 20px;
-  background: rgb(241, 241, 241);
+  color: var(--mdc-theme-on-surface);
+  background: var(--mdc-theme-surface);
   text-decoration: none;
-  color: black;
 }
 
 </style>

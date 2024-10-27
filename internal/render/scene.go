@@ -26,6 +26,7 @@ type Render struct {
 	TileSize          int         `json:"tile_size"`
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
 	BackgroundColor   color.Color `json:"background_color"`
+	Color             color.Color `json:"color"`
 	TransparencyMask  bool        `json:"transparency_mask"`
 	LogDraws          bool
 
@@ -206,10 +207,11 @@ func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
 
 	i := 0
 	ty := -1.
-	var t time.Time
+	t := uint32(0)
 	var photo Photo
 	for y := 0; y < height; y++ {
-		for ; ty <= float64(y) && i < len(scene.Photos); i++ {
+		frac := (float64(y) + 0.5) / float64(height)
+		for ; ty <= float64(y)+frac && i < len(scene.Photos); i++ {
 			photo = scene.Photos[i]
 			py := (photo.Sprite.Rect.Y + photo.Sprite.Rect.H) * scale
 			// TODO: figure out why sometimes py can be NaN
@@ -218,8 +220,11 @@ func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
 			}
 		}
 		info := photo.GetInfo(source)
-		t = info.DateTime
-		timestamps[y] = uint32(t.Unix())
+		if !info.DateTime.IsZero() {
+			_, timezoneOffsetSeconds := info.DateTime.Zone()
+			t = uint32(info.DateTime.Unix() + int64(timezoneOffsetSeconds))
+		}
+		timestamps[y] = t
 	}
 
 	return timestamps

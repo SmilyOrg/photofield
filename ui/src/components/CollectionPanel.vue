@@ -1,5 +1,5 @@
 <template>
-  <div class="collection-panel">
+  <ui-card class="collection-panel">
     <collection-settings
       :collection="collection"
       :scenes="scenes"
@@ -11,45 +11,42 @@
         
     <ui-divider></ui-divider>
       
-    <OverlayScrollbars defer class="scrollbar">
-      <div class="scrollable">
-        <collection-debug
-          v-if="expand"
-          :collection="collection"
-          :scenes="scenes"
-          :tasks="tasks"
-          @reload="emit('reload', $event)"
-        >
-        </collection-debug>
-  
-        <ui-list
-          class="list"
-          v-if="collections?.length > 0"
-        >
-            <router-link
-              v-for="c in collections"
-              :key="c.id"
-              class="no-decoration"
-              :to="'/collections/' + c.id"
-              @click="emit('close')"
+    <div class="scrollable">
+      <collection-debug
+        v-if="expand"
+        :collection="collection"
+        :scenes="scenes"
+        :tasks="tasks"
+        @reload="emit('reload', $event)"
+      >
+      </collection-debug>
+
+      <ui-list
+        class="list"
+        v-if="collections?.length > 0"
+      >
+          <router-link
+            v-for="c in collections"
+            :key="c.id"
+            class="link"
+            :to="'/collections/' + c.id"
+            @click="emit('close')"
+          >
+            <ui-item
+              :active="c.id == collection?.id"
             >
-              <ui-item
-                :active="c.id == collection?.id"
-              >
-                  {{ c.name }}
-              </ui-item>
-            </router-link>
-        </ui-list>
-      </div>
-    </OverlayScrollbars>
-  </div>
+                {{ c.name }}
+            </ui-item>
+          </router-link>
+      </ui-list>
+    </div>
+  </ui-card>
 </template>
 
 <script setup>
 import CollectionSettings from './CollectionSettings.vue';
 import CollectionDebug from './CollectionDebug.vue';
 import { ref } from 'vue';
-import { OverlayScrollbarsComponent as OverlayScrollbars } from "overlayscrollbars-vue";
 
 const props = defineProps({
     collections: Array,
@@ -79,8 +76,9 @@ const expand = ref(false);
   flex-direction: column;
 }
 
-.no-decoration {
+.link {
   text-decoration: none;
+  color: var(--mdc-theme-text-primary-on-background);
 }
 
 .tight {
@@ -91,14 +89,12 @@ const expand = ref(false);
   height: 100%;
 }
 
-.scrollbar {
-  flex-basis: 600px;
-}
-
 .scrollable {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  max-height: 600px;
+  overflow-y: auto;
 }
 
 </style>

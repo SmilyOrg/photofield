@@ -3,7 +3,7 @@
     class="region"
     v-if="region && region.data"
     :style="{ width: menuWidth + 'px' }"
-    :class="{ right: flipX, bottom: flipY, contracted: !expanded }"
+    :class="{ contracted: !expanded }"
   >
     <ui-card-media v-if="expanded">
       <tile-viewer
@@ -82,7 +82,7 @@ import { useViewport } from '../use';
 import { useRoute } from 'vue-router';
 
 export default {
-  props: ["region", "scene", "flipX", "flipY", "tileSize"],
+  props: ["region", "scene", "flip", "tileSize"],
   emits: ["close", "search"],
   components: { TileViewer, ExpandButton },
   data() {
@@ -160,16 +160,7 @@ export default {
 
 .region {
   position: absolute;
-  background: white;
   box-shadow: #ffffff54 0 0 17px 15px;
-}
-
-.region.bottom {
-  bottom: 10px;
-}
-
-.region.right {
-  right: 10px;
 }
 
 .thumbnails {
@@ -183,10 +174,6 @@ export default {
   padding: 10px 6px;
   text-decoration: none;
   color: var(--mdc-theme-text-primary-on-background);
-}
-
-.thumbnail:hover {
-  background: rgb(241, 241, 241);
 }
 
 .filename {

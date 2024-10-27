@@ -127,7 +127,7 @@ export async function createTask(type, id) {
   });
 }
 
-export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extraParams) {
+export function getTileUrl(sceneId, level, x, y, tileSize, extraParams) {
   const params = {
     tile_size: tileSize,
     zoom: level,
@@ -135,9 +135,6 @@ export function getTileUrl(sceneId, level, x, y, tileSize, backgroundColor, extr
     y,
     ...extraParams,
   };
-  if (backgroundColor) {
-    params.background_color = backgroundColor;
-  }
   let url = `${host()}/scenes/${sceneId}/tiles?${qs.stringify(params, { arrayFormat: "comma" })}`;
   return url;
 }

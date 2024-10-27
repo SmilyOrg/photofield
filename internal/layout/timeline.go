@@ -24,26 +24,26 @@ type TimelineEvent struct {
 	Location   string
 }
 
-func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, scene *render.Scene, source *image.Source) render.Rect {
+func LayoutTimelineEvent(
+	layout Layout,
+	rect render.Rect,
+	event *TimelineEvent,
+	timeFormat string,
+	headerFont *canvas.FontFace,
+	scene *render.Scene,
+	source *image.Source,
+) render.Rect {
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
-	textHeight := 30.
 	textBounds := render.Rect{
 		X: rect.X,
 		Y: rect.Y,
 		W: rect.W,
-		H: textHeight,
+		H: 30.,
 	}
 
-	startTimeFormat := "Mon, Jan 2"
-	if event.StartTime.Year() != time.Now().Year() {
-		startTimeFormat += ", 2006"
-	}
-
-	startTimeFormat += "   15:04"
-
-	headerText := event.StartTime.Format(startTimeFormat) + " " + event.Location
+	headerText := event.StartTime.Format(timeFormat) + " " + event.Location
 
 	duration := event.EndTime.Sub(event.StartTime)
 	if duration >= 1*time.Minute {
@@ -51,16 +51,14 @@ func LayoutTimelineEvent(layout Layout, rect render.Rect, event *TimelineEvent, 
 		headerText += "   " + dur.LimitFirstN(1).String()
 	}
 
-	font := scene.Fonts.Main.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
-
 	text := render.NewTextFromRect(
 		textBounds,
-		&font,
+		headerFont,
 		headerText,
 	)
 	text.VAlign = canvas.Bottom
 	scene.Texts = append(scene.Texts, text)
-	rect.Y += textHeight + 4
+	rect.Y += textBounds.H + 4
 
 	newBounds := addSectionToScene(&event.Section, scene, rect, layout, source)
 
@@ -102,28 +100,42 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 
 	locations := make(map[string]struct{})
 
+	timeFormat := "Mon, Jan 2   15:04"
+	timeFormatWithYear := "Mon, Jan 2, 2006   15:04"
+	timeNow := time.Now()
+	headerFont := scene.Fonts.Main.Face(40, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+
+	scene.Photos = scene.Photos[:0]
 	index := 0
 	for info := range infos {
 		photoTime := info.DateTime
-		elapsed := lastPhotoTime.Sub(photoTime)
-		if elapsed > 30*time.Minute {
-			event.StartTime = lastPhotoTime
-			for location := range locations {
-				if event.Location != "" {
-					event.Location = event.Location + ", " + location
-				} else {
-					event.Location = location
+		elapsedFromLast := lastPhotoTime.Sub(photoTime)
+		if elapsedFromLast > 30*time.Minute || !SameDay(photoTime, event.EndTime) {
+			if eventCount > 0 {
+				event.StartTime = lastPhotoTime
+				for location := range locations {
+					if event.Location != "" {
+						event.Location = event.Location + ", " + location
+					} else {
+						event.Location = location
+					}
 				}
+				locations = make(map[string]struct{})
+				timef := timeFormat
+				if event.StartTime.Year() != timeNow.Year() {
+					timef = timeFormatWithYear
+				}
+				rect = LayoutTimelineEvent(layout, rect, &event, timef, &headerFont, scene, source)
 			}
-
-			locations = make(map[string]struct{})
-
-			rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
 			eventCount++
 			event = TimelineEvent{
 				EndTime: photoTime,
+				Section: Section{
+					infos: event.Section.infos[:0],
+				},
 			}
 		}
+
 		lastPhotoTime = photoTime
 
 		event.Section.infos = append(event.Section.infos, info)
@@ -155,7 +167,11 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 
 	if len(event.Section.infos) > 0 {
 		event.StartTime = lastPhotoTime
-		rect = LayoutTimelineEvent(layout, rect, &event, scene, source)
+		timef := timeFormat
+		if event.StartTime.Year() != timeNow.Year() {
+			timef = timeFormatWithYear
+		}
+		rect = LayoutTimelineEvent(layout, rect, &event, timef, &headerFont, scene, source)
 		event.Location = ""
 		eventCount++
 	}
