@@ -289,6 +289,7 @@ function scrollToPixels(y) {
   if (nativeHeight.value <= 0) {
     return;
   }
+  y = Math.max(0, Math.min(scrollMax.value, y));
   const maxOffset = Math.max(0, scrollMax.value - nativeHeight.value + viewport.height.value);
   const nativeScrollTarget = nativeHeight.value * 0.5;
   const ty = y - nativeScrollTarget;
