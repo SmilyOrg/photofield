@@ -66,6 +66,7 @@ import (
 	"photofield/io/bench"
 	"photofield/tag"
 )
+//go:generate go run github.com/tc-hib/go-winres@c4d55a3dfc2e22a4a9fb95ae0280ce106daadce9 make --product-version=git-tag
 
 //go:embed defaults.yaml
 var defaultsYaml []byte
