@@ -7,6 +7,19 @@ and this project theoretically adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html), but it's still at major
 version zero.
 
+## [v0.17.1] - 2024-11-02 - Scrolling fixes
+
+### Fixed
+
+* Lots of scrolling glitches with just a few photos in collection due to the height not being fully tested
+* Max scrolling position not being always correctly handled
+* The scrolling position sometimes changing 2s after scrolling (due to persistent scrolling glitches)
+* Being able to scroll out of bounds
+
+[v0.17.1]: https://github.com/SmilyOrg/photofield/compare/v0.17.0...v0.17.1
+
+
+
 ## [v0.17.0] - 2024-10-27 - Photo details, dark mode, scrollbar, open in album
 
 ### New

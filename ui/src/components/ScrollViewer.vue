@@ -45,7 +45,7 @@
 
     <div
       class="virtual-canvas"
-      :style="{ height: nativeScrollHeight + 'px' }">
+      :style="{ height: (nativeHeight - 64) + 'px' }">
     </div>
     
     <Scrollbar
@@ -134,11 +134,11 @@ const lastNonNativeView = ref(null);
 let lastLoadedScene = null;
 let lastFocusFileId = null;
 
-const nativeScrollHeight = computed(() => {
-  if (!scene.value?.bounds?.h || !viewport.height.value) {
+const nativeHeight = computed(() => {
+  if (!canvas.value?.height) {
     return 0;
   }
-  return Math.min(100000, scene.value.bounds.h - viewport.height.value);
+  return Math.min(100000, canvas.value.height);
 });
 
 let scrollOffset = 0;
@@ -182,7 +182,6 @@ const {
 );
 
 const focusRegion = computed(() => {
-  if (!focusFileId.value) return null;
   return focusRegions.value?.[0];
 });
 
@@ -280,11 +279,6 @@ const zoomOut = () => {
   viewer.value?.setView(view.value);
 }
 
-const scrollSleep = computed(() => {
-  return !nativeScroll.value || lastZoom.value > 1.0001;
-});
-
-
 const nativeScrollY = ref(window.scrollY);
 function nativeScrollTo(y) {
   window.scrollTo(0, y);
@@ -292,12 +286,12 @@ function nativeScrollTo(y) {
 }
 
 function scrollToPixels(y) {
-  const nativeHeight = nativeScrollHeight.value;
-  if (nativeHeight <= 0) {
+  if (nativeHeight.value <= 0) {
     return;
   }
-  const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
-  const nativeScrollTarget = nativeHeight * 0.5;
+  y = Math.max(0, Math.min(scrollMax.value, y));
+  const maxOffset = Math.max(0, scrollMax.value - nativeHeight.value + viewport.height.value);
+  const nativeScrollTarget = nativeHeight.value * 0.5;
   const ty = y - nativeScrollTarget;
   if (ty < 0) {
     scrollOffset = 0;
@@ -316,13 +310,12 @@ function scrollToPixels(y) {
 
 function updateScrollFromNative(y) {
   const actionDistanceRatio = 0.1;
-  const nativeHeight = nativeScrollHeight.value;
-  if (nativeHeight <= 0) {
+  if (nativeHeight.value <= 0) {
     return;
   }
-  const maxOffset = scrollMax.value - nativeHeight + viewport.height.value;
-  const actionDist = nativeHeight * actionDistanceRatio;
-  const nativeScrollTarget = nativeHeight * 0.5;
+  const maxOffset = Math.max(0, scrollMax.value - nativeHeight.value + viewport.height.value);
+  const actionDist = nativeHeight.value * actionDistanceRatio;
+  const nativeScrollTarget = nativeHeight.value * 0.5;
   const diff = nativeScrollTarget - nativeScrollY.value;
   const ty = y - nativeScrollTarget;
   if (ty < 0) {
@@ -357,7 +350,7 @@ onUnmounted(() => {
 const scrollSpeed = ref(0);
 
 const scrollMax = computed(() => {
-  return canvas.value.height - viewport.height.value;
+  return Math.max(0, canvas.value.height - viewport.height.value);
 });
 
 const scrollRatio = computed(() => {
@@ -393,7 +386,6 @@ watchDebounced(scrollY, async (sy) => {
   if (!scene.value) return;
   if (!view.value || !view.value.w || !view.value.h) return;
   if (sy < 500) {
-    if (!lastFocusFileId) return;
     updateFocusFile(null);
     return;
   }
@@ -404,7 +396,6 @@ watchDebounced(scrollY, async (sy) => {
   );
   const fileId = center?.data?.id;
   if (!fileId) return;
-  lastFocusFileId = fileId;
   updateFocusFile(fileId);
 }, { debounce: 1000 });
 
