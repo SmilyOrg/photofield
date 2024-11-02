@@ -41,14 +41,28 @@ tasks:
     cmds:
       - task --list-all
 
-  release:local:
-    cmds:
+  package:
+    deps:
       - task: tidy
       - task: gen
       - task: build:deps
       - task: archive:all
       - task: checksums
+
+  release:
+    cmds:
+      - task: package
+      - task: docker:multiarch:push
+
+  release:local:
+    cmds:
+      - task: package
       - task: docker
+
+  release:local:multiarch:
+    cmds:
+      - task: package
+      - task: docker:multiarch:push:local
 
   tidy: go mod tidy
   gen: go generate -x
