@@ -3,6 +3,7 @@ version: '3'
 vars:
   BINARY_NAME: photofield
   DOCKER_REPO: ghcr.io/smilyorg/photofield
+  DOCKER_REPO_LOCAL: localhost:5000/photofield
   BUILD_OS_ARCH:
     # - android/arm64
     - darwin/amd64
@@ -26,30 +27,31 @@ vars:
     - windows/amd64
     - windows/arm64
   DOCKER_ARCH:
-    - amd64
-    - arm64
+    - linux/amd64
+    - linux/arm64
+  DOCKER_ANNOTATIONS: >-
+    --annotation 'index:org.opencontainers.image.source=https://github.com/smilyorg/photofield'
+    --annotation 'index:org.opencontainers.image.description=A non-invasive local photo viewer with a focus on speed and simplicity'
+    --annotation 'index:org.opencontainers.image.licenses=MIT'
   VERSION:
     sh: git describe --tags --match "v*" --always --dirty
 
 tasks:
+  default:
+    cmds:
+      - task --list-all
+
   release:local:
     cmds:
       - task: tidy
-      - task: generate
+      - task: gen
       - task: build:deps
-      - task: package:archives
-      - task: package:checksums
-      - task: package:docker:all
+      - task: archive:all
+      - task: checksums
+      - task: docker
 
-  tidy:
-    cmds:
-      - go mod tidy
-  
-
-  generate:
-    cmds:
-      - go generate -x
-  
+  tidy: go mod tidy
+  gen: go generate -x
 
   build:deps:
     deps:
@@ -67,6 +69,76 @@ tasks:
     cmds:
       - npm install
       - npm run build -- --clearScreen=false -l warn
+
+  build:
+    sources:
+      - '**/*.go'
+      - 'go.mod'
+      - '**/*.yaml'
+      - '**/*.syso'
+    cmds:
+      - go build
+
+  db:
+    cmds:
+      - migrate -database sqlite://data/photofield.cache.db -path db/migrations {{.CLI_ARGS}}
+
+  assets:
+    dir: data/geo
+    silent: true
+    vars:
+      EMBED_GO: ../../embed-geo.go
+      GPKG_FILE:
+        sh: grep -e '//go:embed data/geo/' ../../embed-geo.go | cut -d / -f 5
+      GPKG_VER:
+        sh: grep -e '// tinygpkg-data release:' ../../embed-geo.go | cut -d ' ' -f 4
+    generates:
+      - "{{.GPKG_FILE}}"
+    status:
+      - test -f "{{.GPKG_FILE}}"
+    cmds:
+      - |
+        # gpkg_file="$(grep -e '//go:embed data/geo/' ../../embed-geo.go | cut -d / -f 5)"
+        # gpkg_ver="$(grep -e '// tinygpkg-data release:' ../../embed-geo.go | cut -d ' ' -f 4)"
+        # gpkg_dst="$gpkg_file"
+        echo "downloading tinygpkg-data/{{ .GPKG_VER }}/{{ .GPKG_FILE }}"
+        wget -q -O "{{ .GPKG_FILE }}" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
+        echo "downloaded to $PWD/{{ .GPKG_FILE }}"
+
+  run:
+    cmds:
+      - ./photofield
+
+  run:embed:
+    deps: [build:deps]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedui,embeddocs
+      - ./photofield
+
+  run:ui:
+    deps: [build:ui]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedui
+      - ./photofield
+
+  run:geo:
+    deps: [assets]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedgeo
+      - ./photofield
+
+  docs:
+    dir: docs
+    cmds:
+      - npm run docs:dev
+
+  e2e:
+    dir: e2e
+    cmds:
+      - npm run watch
 
   build:binary:all:
     deps:
@@ -110,21 +182,21 @@ tasks:
           || echo "build failed for {{.OUTPUT}}"
     silent: true
 
-  package:archive:all:
+  archive:all:
     deps:
       - for:
           var: BUILD_OS_ARCH
-        task: package:archive
+        task: archive
         vars:
           GOOS:
             sh: "echo {{.ITEM}} | cut -d'/' -f1"
           GOARCH:
             sh: "echo {{.ITEM}} | cut -d'/' -f2"
 
-  package:archive:dir:
+  archive:dir:
     dir: dist/archives
 
-  package:archive:
+  archive:
     requires:
       vars:
         - GOOS
@@ -144,7 +216,7 @@ tasks:
     generates:
       - "{{.OUTPUT}}"
     deps:
-      - task: package:archive:dir
+      - task: archive:dir
       - task: build:binary
         vars:
           GOOS: "{{.GOOS}}"
@@ -153,74 +225,52 @@ tasks:
     cmds:
       - go run ./cmd/zip "{{.OUTPUT}}" "{{.INPUT}}"
 
-  package:checksums:
+  checksums:
     dir: dist/archives
     cmds:
       - go run ../../cmd/sha256 *.zip > checksums.txt
 
-  # package:docker:all:
-  #   cmds:
-  #     - docker buildx create --use
-  #     - docker buildx build --pull --platform linux/amd64 -t {{.DOCKER_REPO}}:latest-amd64 -f Dockerfile-goreleaser .
-  #     - docker buildx build --pull --platform linux/arm64 -t {{.DOCKER_REPO}}:latest-arm64 -f Dockerfile-goreleaser .
-  #     - docker push {{.DOCKER_REPO}}:latest-amd64
-  #     - docker push {{.DOCKER_REPO}}:latest-arm64
-  #     - docker manifest create {{.DOCKER_REPO}}:latest 
-  #         --amend {{.DOCKER_REPO}}:latest-amd64 
-  #         --amend {{.DOCKER_REPO}}:latest-arm64
-  #     - docker manifest push {{.DOCKER_REPO}}:latest
+  docker:
+    dir: dist/binaries
+    vars:
+      TAGS: >-
+        {{- if (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+$" .VERSION) }}
+          {{- $versionParts := regexFindAll "[0-9]+" .VERSION 3 }}
+          {{- $major := index $versionParts 0 }}
+          {{- $minor := index $versionParts 1 }}
+          {{- $patch := index $versionParts 2 }}
+          -t {{.DOCKER_REPO}}:latest
+          -t {{.DOCKER_REPO}}:v{{$major}}
+          -t {{.DOCKER_REPO}}:v{{$major}}.{{$minor}}
+          -t {{.DOCKER_REPO}}:v{{$major}}.{{$minor}}.{{$patch}}
+        {{- else if (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+" .VERSION) }}
+          -t {{.DOCKER_REPO}}:{{.VERSION}}
+        {{- else }}
+        {{- end }}
+    preconditions:
+      - sh: test -n "{{.TAGS}}"
+        msg: "Git tag must be in the format vMAJOR.MINOR.PATCH* for docker build: {{.VERSION}}"
+    cmds:
+      - docker build --build-arg VERSION={{.VERSION}} {{.TAGS | replace "\n" " "}} -f ../../Dockerfile-multiarch {{.EXTRA_ARGS}} .
 
-  package:docker:all:
+  docker:multiarch:
     deps:
-      - for:
-          var: DOCKER_ARCH
-          as: ARCH
-        task: package:docker
+      - task: docker
         vars:
-          ARCH: "{{.ARCH}}"
-          BINARY: "{{.BINARY_NAME}}_{{.VERSION}}_linux_{{.ARCH}}"
-    vars:
-      AMENDS: >
-        {{$root := .}}{{range .DOCKER_ARCH}}
-        --amend {{$root.DOCKER_REPO}}:{{$root.VERSION}}-{{.}}
-        {{end}}
-      ARCH_IMAGES: >
-        {{$root := .}}{{range .DOCKER_ARCH}}
-        {{$root.DOCKER_REPO}}:{{$root.VERSION}}-{{.}}
-        {{end}}
-      IMAGE: "{{.DOCKER_REPO}}:{{.VERSION}}"
-    cmds:
-      - docker manifest create {{.IMAGE}} {{.ARCH_IMAGES}}
-      # - docker push {{.DOCKER_REPO}}:latest-amd64
-      # - docker push {{.DOCKER_REPO}}:latest-arm64
-      # - docker manifest create {{.DOCKER_REPO}}:latest 
-      #     --amend {{.DOCKER_REPO}}:latest-amd64 
-      #     --amend {{.DOCKER_REPO}}:latest-arm64
-      # - docker manifest push {{.DOCKER_REPO}}:latest
+          EXTRA_ARGS: >-
+            --platform {{range $index, $arch := .DOCKER_ARCH}}{{if $index}},{{end}}{{$arch}}{{end}}
+            {{.EXTRA_ARGS}}
+          DOCKER_REPO: "{{.DOCKER_REPO}}"
 
-  package:docker:
-    dir: dist/binaries
-    requires:
-      vars:
-        - ARCH
-        - BINARY
-    vars:
-      IMAGE: "{{.DOCKER_REPO}}:{{.VERSION}}-{{.ARCH}}"
-    # sources:
-    #   - dist/binaries/{{.BINARY}}
-    #   - Dockerfile-goreleaser
-    cmds:
-      # - docker buildx build --platform linux/{{.ARCH}} --build-arg binary={{.BINARY}} -t {{.IMAGE}} -f ../../Dockerfile-goreleaser .
-      - docker build --platform=linux/{{.ARCH}} --build-arg binary={{.BINARY}} -t {{.IMAGE}} --progress=plain -f ../../Dockerfile-goreleaser .
+  docker:multiarch:push:
+    deps:
+      - task: docker:multiarch
+        vars:
+          EXTRA_ARGS: "--push"
+          DOCKER_REPO: "{{.DOCKER_REPO}}"
 
-  package:docker:multi:
-    dir: dist/binaries
-    vars:
-      ARCH_IMAGES: >
-        {{$root := .}}{{range .DOCKER_ARCH}}
-        {{$root.DOCKER_REPO}}:{{$root.VERSION}}-{{.}}
-        {{end}}
-      ARCHS: "{{range $index, $arch := .DOCKER_ARCH}}{{if $index}},{{end}}linux/{{$arch}}{{end}}"
-      IMAGE: "{{.DOCKER_REPO}}:{{.VERSION}}"
-    cmds:
-      - docker build --pull --platform {{.ARCHS}} --build-arg VERSION={{.VERSION}} -t {{.IMAGE}} -f ../../Dockerfile-multi .
+  docker:multiarch:push:local:
+    deps:
+      - task: docker:multiarch:push
+        vars:
+          DOCKER_REPO: "{{.DOCKER_REPO_LOCAL}}"

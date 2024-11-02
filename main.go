@@ -67,6 +67,8 @@ import (
 	"photofield/tag"
 )
 
+//go:generate oapi-codegen -generate=types,chi-server -package=openapi -o internal/openapi/api.gen.go api.yaml
+
 //go:embed defaults.yaml
 var defaultsYaml []byte
 var defaults AppConfig

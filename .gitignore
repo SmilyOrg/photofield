@@ -17,3 +17,4 @@ tools/jupyter/data
 dist/
 node_modules/
 /blob-report/
+.task/
