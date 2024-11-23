@@ -1,0 +1,30 @@
+changesDir: .changes
+unreleasedDir: unreleased
+headerPath: header.tpl.md
+changelogPath: CHANGELOG.md
+versionExt: md
+kindFormat: '### {{.Kind}}'
+changeFormat: '* {{.Body}}'
+versionFormat: '## [{{.Version}}] - {{.Time.Format "2006-01-02"}}'
+footerFormat: |
+
+  [{{ .Version }}]: https://github.com/SmilyOrg/photofield/compare/{{ .PreviousVersion }}...{{ .Version }}
+kinds:
+    - label: Breaking Changes
+      auto: minor # at version zero, this is still minor
+    - label: Added
+      auto: minor
+    - label: Removed
+      auto: minor # at version zero, this is still minor
+    - label: Deprecated
+      auto: minor
+    - label: Fixed
+      auto: patch
+    - label: Security
+      auto: patch
+newlines:
+    afterChangelogHeader: 1
+    beforeChangelogVersion: 3
+    endOfVersion: 1
+    beforeKind: 1
+envPrefix: CHANGIE_

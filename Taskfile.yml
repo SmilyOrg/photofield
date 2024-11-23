@@ -49,7 +49,24 @@ tasks:
       - task: archive:all
       - task: checksums
 
+  added: { cmds: [changie new -k Added -e] }
+  deprecated: { cmds: [changie new -k Deprecated -e] }
+  removed: { cmds: [changie new -k Removed -e] }
+  fixed: { cmds: [changie new -k Fixed -e] }
+  security: { cmds: [changie new -k Security -e] }
+  breaking: { cmds: [changie new -k 'Breaking Changes' -e] }
+
   release:
+    cmds:
+      - changie batch auto
+      - code --wait .changes/$(changie latest).md
+      - changie merge
+
+  changelog:latest:
+    cmds:
+      - cat .changes/$(changie latest).md
+
+  release:push:
     cmds:
       - task: package
       - task: docker:multiarch:push
