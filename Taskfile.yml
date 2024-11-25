@@ -132,23 +132,22 @@ tasks:
 
   assets:
     deps: [assets:dir]
-    dir: data/geo
     vars:
-      EMBED_GO: ../../embed-geo.go
       GPKG_FILE:
-        sh: grep -o 'data/geo/.*gpkg' ../../embed-geo.go | cut -d / -f 3
+        sh: grep -o 'data/geo/.*gpkg' embed-geo.go | cut -d / -f 3
       GPKG_VER:
-        sh: grep -e '// tinygpkg-data release:' ../../embed-geo.go | cut -d ' ' -f 4
+        sh: grep -e '// tinygpkg-data release:' embed-geo.go | cut -d ' ' -f 4
     generates:
-      - "{{.GPKG_FILE}}"
+      - "data/geo/{{.GPKG_FILE}}"
     status:
-      - test -f "{{.GPKG_FILE}}"
+      - test -f "data/geo/{{.GPKG_FILE}}"
     cmds:
       - silent: true
         cmd: |
+          gpkg_path="data/geo/{{ .GPKG_FILE }}"
           echo "downloading tinygpkg-data/{{ .GPKG_VER }}/{{ .GPKG_FILE }}"
-          wget -q -O "{{ .GPKG_FILE }}" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
-          echo "downloaded to $PWD/{{ .GPKG_FILE }}"
+          wget -q -O "$gpkg_path" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
+          echo "downloaded to $PWD/$gpkg_path"
 
   run:
     cmds:
