@@ -127,12 +127,16 @@ tasks:
     cmds:
       - migrate -database sqlite://data/photofield.cache.db -path db/migrations {{.CLI_ARGS}}
 
+  assets:dir:
+    dir: data/geo
+
   assets:
+    deps: [assets:dir]
     dir: data/geo
     vars:
       EMBED_GO: ../../embed-geo.go
       GPKG_FILE:
-        sh: grep -e '//go:embed data/geo/' ../../embed-geo.go | cut -d / -f 5
+        sh: grep -o 'data/geo/.*gpkg' ../../embed-geo.go | cut -d / -f 3
       GPKG_VER:
         sh: grep -e '// tinygpkg-data release:' ../../embed-geo.go | cut -d ' ' -f 4
     generates:
