@@ -56,11 +56,19 @@ tasks:
   security: { cmds: [changie new -k Security -e] }
   breaking: { cmds: [changie new -k 'Breaking Changes' -e] }
 
-  release:
+  release:commit:
     cmds:
+      - cmd: git diff-index --quiet HEAD -- || { echo "Working directory is not clean. Please commit or stash your changes."; exit 1; }
+        silent: true
       - changie batch auto
       - code --wait .changes/$(changie latest).md
       - changie merge
+      - git add CHANGELOG.md .changes
+      - git commit -m "Release $(changie latest)"
+
+  release:tag:
+    cmds:
+      - git tag -a $(changie latest) -m "Release $(changie latest)"
 
   changelog:latest:
     cmds:
