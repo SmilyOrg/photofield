@@ -18,7 +18,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.1
 	github.com/golang/geo v0.0.0-20230421003525-6adc56603217
 	github.com/gosimple/slug v1.10.0
-	github.com/grafana/pyroscope-go v1.1.0
+	github.com/grafana/pyroscope-go v1.2.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/imdario/mergo v0.3.13
 	github.com/joho/godotenv v1.3.0
@@ -62,13 +62,13 @@ require (
 	github.com/google/pprof v0.0.0-20240409012703-83162a5b38cd // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gosimple/unidecode v1.0.0 // indirect
-	github.com/grafana/pyroscope-go/godeltaprof v0.1.6 // indirect
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.8 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5 // indirect
-	github.com/klauspost/compress v1.17.3 // indirect
+	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.0.3 // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

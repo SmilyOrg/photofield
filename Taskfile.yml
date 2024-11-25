@@ -1,0 +1,319 @@
+version: '3'
+
+vars:
+  BINARY_NAME: photofield
+  DOCKER_REPO: ghcr.io/smilyorg/photofield
+  DOCKER_REPO_LOCAL: localhost:5000/photofield
+  BUILD_OS_ARCH:
+    # - android/arm64
+    - darwin/amd64
+    - darwin/arm64
+    - freebsd/386
+    - freebsd/amd64
+    - freebsd/arm
+    - freebsd/arm64
+    - linux/386
+    - linux/amd64
+    - linux/arm
+    - linux/arm64
+    - linux/loong64
+    - linux/ppc64le
+    - linux/riscv64
+    - linux/s390x
+    - netbsd/amd64
+    - openbsd/amd64
+    - openbsd/arm64
+    - windows/386
+    - windows/amd64
+    - windows/arm64
+  DOCKER_ARCH:
+    - linux/amd64
+    - linux/arm64
+  DOCKER_ANNOTATIONS: >-
+    --annotation 'index:org.opencontainers.image.source=https://github.com/smilyorg/photofield'
+    --annotation 'index:org.opencontainers.image.description=A non-invasive local photo viewer with a focus on speed and simplicity'
+    --annotation 'index:org.opencontainers.image.licenses=MIT'
+  VERSION:
+    sh: git describe --tags --match "v*" --always --dirty
+
+tasks:
+  default:
+    cmds:
+      - task --list-all
+
+  added: { cmds: [changie new -k Added -e] }
+  deprecated: { cmds: [changie new -k Deprecated -e] }
+  removed: { cmds: [changie new -k Removed -e] }
+  fixed: { cmds: [changie new -k Fixed -e] }
+  security: { cmds: [changie new -k Security -e] }
+  breaking: { cmds: [changie new -k 'Breaking Changes' -e] }
+
+  release:commit:
+    cmds:
+      - cmd: git diff-index --quiet HEAD -- || { echo "Working directory is not clean. Please commit or stash your changes."; exit 1; }
+        silent: true
+      - changie batch auto
+      - code --wait .changes/$(changie latest).md
+      - changie merge
+      - git add CHANGELOG.md .changes
+      - git commit -m "Release $(changie latest)"
+
+  release:tag:
+    cmds:
+      - git tag -a $(changie latest) -m "Release $(changie latest)"
+
+  changelog:latest:
+    cmds:
+      - cat .changes/$(changie latest).md
+
+  package:
+    deps:
+      - task: build:deps
+      - task: archive:all
+      - task: checksums
+
+  release:local:
+    cmds:
+      - task: package
+      - task: docker
+
+  release:local:multiarch:
+    cmds:
+      - task: package
+      - task: docker:multiarch:push:local
+
+  check:
+    cmds:
+      - task: tidy
+      - git diff --exit-code go.mod go.sum
+      - task: gen
+      - git diff --exit-code
+
+  tidy: go mod tidy
+  gen: go generate -x
+
+  deps:
+    deps:
+      - task: assets
+      - task: build:deps
+
+  build:deps:
+    deps:
+      - build:docs
+      - build:ui
+
+  build:docs:
+    dir: docs
+    cmds:
+      - npm install
+      - npm run docs:build
+
+  build:ui:
+    dir: ui
+    cmds:
+      - npm install
+      - npm run build -- --clearScreen=false -l warn
+
+  build:
+    sources:
+      - '**/*.go'
+      - 'go.mod'
+      - '**/*.yaml'
+      - '**/*.syso'
+    cmds:
+      - go build
+
+  db:
+    cmds:
+      - migrate -database sqlite://data/photofield.cache.db -path db/migrations {{.CLI_ARGS}}
+
+  assets:dir:
+    dir: data/geo
+
+  assets:
+    deps: [assets:dir]
+    vars:
+      GPKG_FILE:
+        sh: grep -o 'data/geo/.*gpkg' embed-geo.go | cut -d / -f 3
+      GPKG_VER:
+        sh: grep -e '// tinygpkg-data release:' embed-geo.go | cut -d ' ' -f 4
+    generates:
+      - "data/geo/{{.GPKG_FILE}}"
+    status:
+      - test -f "data/geo/{{.GPKG_FILE}}"
+    cmds:
+      - silent: true
+        cmd: |
+          gpkg_path="data/geo/{{ .GPKG_FILE }}"
+          echo "downloading tinygpkg-data/{{ .GPKG_VER }}/{{ .GPKG_FILE }}"
+          wget -q -O "$gpkg_path" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
+          echo "downloaded to $PWD/$gpkg_path"
+
+  run:
+    cmds:
+      - ./photofield
+
+  run:embed:
+    deps: [build:deps]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedui,embeddocs
+      - ./photofield
+
+  run:ui:
+    deps: [build:ui]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedui
+      - ./photofield
+
+  run:geo:
+    deps: [assets]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedgeo
+      - ./photofield
+
+  docs:
+    dir: docs
+    cmds:
+      - npm run docs:dev
+
+  e2e:
+    dir: e2e
+    cmds:
+      - npm run watch
+
+  build:binary:all:
+    deps:
+      - for:
+          var: BUILD_OS_ARCH
+        task: build:binary
+        vars:
+          GOOS: "{{(.ITEM | split \"/\")._0}}"
+          GOARCH: "{{(.ITEM | split \"/\")._1}}"
+          OUTPUT:
+            sh: |
+              OS="{{(.ITEM | split "/")._0}}"
+              ARCH="{{(.ITEM | split "/")._1}}"
+              OUTPUT="dist/bin/{{.BINARY_NAME}}_{{.VERSION}}_${OS}_${ARCH}"
+              if [ "$OS" = "windows" ]; then
+                OUTPUT="${OUTPUT}.exe"
+              fi
+              echo $OUTPUT
+
+  build:binary:
+    requires:
+      vars:
+        - GOOS
+        - GOARCH
+        - OUTPUT
+    generates:
+      - "{{.OUTPUT}}"
+    cmds:
+      - |
+        set -eou pipefail
+        echo "build {{.OUTPUT}}"
+        VERSION={{.VERSION}}
+        COMMIT=$(git rev-parse HEAD)
+        DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILT_BY=$(whoami)
+        GOOS={{.GOOS}} GOARCH={{.GOARCH}} CGO_ENABLED=0 go build \
+          -ldflags "-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE -X main.builtBy=$BUILT_BY" \
+          -tags embedui,embeddocs,embedgeo \
+          -o "{{.OUTPUT}}" \
+          || echo "build failed for {{.OUTPUT}}"
+    silent: true
+
+  archive:all:
+    deps:
+      - for:
+          var: BUILD_OS_ARCH
+        task: archive
+        vars:
+          GOOS:
+            sh: "echo {{.ITEM}} | cut -d'/' -f1"
+          GOARCH:
+            sh: "echo {{.ITEM}} | cut -d'/' -f2"
+
+  archive:dir:
+    dir: dist/archives
+
+  archive:
+    requires:
+      vars:
+        - GOOS
+        - GOARCH
+    vars:
+      INPUT:
+        sh: |
+          OUTPUT="dist/binaries/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}"
+          if [ "$OS" = "windows" ]; then
+            OUTPUT="${OUTPUT}.exe"
+          fi
+          echo $OUTPUT
+      OUTPUT:
+        sh: echo "dist/archives/{{.BINARY_NAME}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}.zip"
+    sources:
+      - "{{.INPUT}}"
+    generates:
+      - "{{.OUTPUT}}"
+    deps:
+      - task: archive:dir
+      - task: build:binary
+        vars:
+          GOOS: "{{.GOOS}}"
+          GOARCH: "{{.GOARCH}}"
+          OUTPUT: "{{.INPUT}}"
+    cmds:
+      - go run ./cmd/zip "{{.OUTPUT}}" "{{.INPUT}}"
+
+  checksums:
+    dir: dist/archives
+    cmds:
+      - go run ../../cmd/sha256 *.zip > checksums.txt
+
+  docker:
+    dir: dist/binaries
+    vars:
+      TAGS: >-
+        {{- if (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+$" .VERSION) }}
+          {{- $versionParts := regexFindAll "[0-9]+" .VERSION 3 }}
+          {{- $major := index $versionParts 0 }}
+          {{- $minor := index $versionParts 1 }}
+          {{- $patch := index $versionParts 2 }}
+          -t {{.DOCKER_REPO}}:latest
+          -t {{.DOCKER_REPO}}:v{{$major}}
+          -t {{.DOCKER_REPO}}:v{{$major}}.{{$minor}}
+          -t {{.DOCKER_REPO}}:v{{$major}}.{{$minor}}.{{$patch}}
+        {{- else if (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+" .VERSION) }}
+          -t {{.DOCKER_REPO}}:{{.VERSION}}
+        {{- else }}
+        {{- end }}
+    preconditions:
+      - sh: test -n "{{.TAGS}}"
+        msg: "Git tag must be in the format vMAJOR.MINOR.PATCH* for docker build: {{.VERSION}}"
+    cmds:
+      - docker build --build-arg VERSION={{.VERSION}} {{.TAGS | replace "\n" " "}} -f ../../Dockerfile-multiarch {{.EXTRA_ARGS}} .
+
+  docker:multiarch:
+    deps:
+      - task: docker
+        vars:
+          EXTRA_ARGS: >-
+            --platform {{range $index, $arch := .DOCKER_ARCH}}{{if $index}},{{end}}{{$arch}}{{end}}
+            {{.EXTRA_ARGS}}
+          DOCKER_REPO: "{{.DOCKER_REPO}}"
+
+  docker:multiarch:push:
+    deps:
+      - task: docker:multiarch
+        vars:
+          EXTRA_ARGS: "--push"
+          DOCKER_REPO: "{{.DOCKER_REPO}}"
+
+  docker:multiarch:push:local:
+    deps:
+      - task: docker:multiarch:push
+        vars:
+          DOCKER_REPO: "{{.DOCKER_REPO_LOCAL}}"
