@@ -1,4 +1,4 @@
-name: goreleaser
+name: release
 
 on:
   push:
@@ -12,58 +12,41 @@ permissions:
   packages: write
 
 jobs:
-  goreleaser:
+  release:
     runs-on: ubuntu-latest
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          node-version: '20'
 
-      - name: Install just
-        uses: extractions/setup-just@v1
+      - name: Install taskfile
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
-      - name: Download assets
-        run: just assets
+      - name: Check dependencies & generated files
+        run: task check
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build/download dependencies
+        run: task deps
 
+      - name: Build one platform
+        run: |
+          GOOS=linux GOARCH=amd64 OUTPUT=./photofield task build:binary
+          ./photofield -version
+          rm ./photofield
 
-      - name: Set up QEMU for Multiarch Builds
-        uses: docker/setup-qemu-action@v3
+      - name: Build & package all platforms
+        run: |
+          task archive:all checksums
 
-      - name: Run GoReleaser (Push)
-        if: github.event_name == 'push'
-        uses: goreleaser/goreleaser-action@v4
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run GoReleaser (PR)
-        if: github.event_name == 'pull_request'
-        uses: goreleaser/goreleaser-action@v4
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --snapshot --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

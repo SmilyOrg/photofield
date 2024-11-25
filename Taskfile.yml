@@ -41,14 +41,6 @@ tasks:
     cmds:
       - task --list-all
 
-  package:
-    deps:
-      - task: tidy
-      - task: gen
-      - task: build:deps
-      - task: archive:all
-      - task: checksums
-
   added: { cmds: [changie new -k Added -e] }
   deprecated: { cmds: [changie new -k Deprecated -e] }
   removed: { cmds: [changie new -k Removed -e] }
@@ -74,10 +66,11 @@ tasks:
     cmds:
       - cat .changes/$(changie latest).md
 
-  release:push:
-    cmds:
-      - task: package
-      - task: docker:multiarch:push
+  package:
+    deps:
+      - task: build:deps
+      - task: archive:all
+      - task: checksums
 
   release:local:
     cmds:
@@ -89,8 +82,20 @@ tasks:
       - task: package
       - task: docker:multiarch:push:local
 
+  check:
+    cmds:
+      - task: tidy
+      - git diff --exit-code go.mod go.sum
+      - task: gen
+      - git diff --exit-code
+
   tidy: go mod tidy
   gen: go generate -x
+
+  deps:
+    deps:
+      - task: assets
+      - task: build:deps
 
   build:deps:
     deps:
@@ -124,7 +129,6 @@ tasks:
 
   assets:
     dir: data/geo
-    silent: true
     vars:
       EMBED_GO: ../../embed-geo.go
       GPKG_FILE:
@@ -136,13 +140,11 @@ tasks:
     status:
       - test -f "{{.GPKG_FILE}}"
     cmds:
-      - |
-        # gpkg_file="$(grep -e '//go:embed data/geo/' ../../embed-geo.go | cut -d / -f 5)"
-        # gpkg_ver="$(grep -e '// tinygpkg-data release:' ../../embed-geo.go | cut -d ' ' -f 4)"
-        # gpkg_dst="$gpkg_file"
-        echo "downloading tinygpkg-data/{{ .GPKG_VER }}/{{ .GPKG_FILE }}"
-        wget -q -O "{{ .GPKG_FILE }}" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
-        echo "downloaded to $PWD/{{ .GPKG_FILE }}"
+      - silent: true
+        cmd: |
+          echo "downloading tinygpkg-data/{{ .GPKG_VER }}/{{ .GPKG_FILE }}"
+          wget -q -O "{{ .GPKG_FILE }}" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
+          echo "downloaded to $PWD/{{ .GPKG_FILE }}"
 
   run:
     cmds:
@@ -196,7 +198,6 @@ tasks:
                 OUTPUT="${OUTPUT}.exe"
               fi
               echo $OUTPUT
-    silent: true
 
   build:binary:
     requires:
