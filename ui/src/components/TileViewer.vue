@@ -23,12 +23,13 @@ import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
 import { easeIn, easeOut, linear } from 'ol/easing';
-import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
+import { defaults as defaultInteractions, DoubleClickZoom, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
 import { MAC } from 'ol/has';
 import Kinetic from 'ol/Kinetic';
 import { get as getProjection } from 'ol/proj';
 import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
+import { TileDebug } from 'ol/source';
 
 import equal from 'fast-deep-equal';
 import CrossDragPan from './openlayers/CrossDragPan';
@@ -39,7 +40,10 @@ import PhotoSkeleton from './PhotoSkeleton.vue';
 import "ol/ol.css";
 import { getTileUrl } from '../api';
 import { useColorMode } from '@vueuse/core';
+import { createXYZ } from 'ol/tilegrid';
+import TileGrid from 'ol/tilegrid/TileGrid';
 
+const fitScale = 100;
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
   const originalEvent = /** @type {KeyboardEvent|MouseEvent|TouchEvent} */ (
@@ -117,6 +121,8 @@ export default {
   watch: {
 
     scene(newScene, oldScene) {
+      console.log("old scene", oldScene?.id, "files", oldScene?.file_count, "loading", oldScene?.loading);
+      console.log("new scene", newScene?.id, "files", newScene?.file_count, "loading", newScene?.loading);
       if (
         newScene?.id != oldScene?.id ||
         newScene.bounds.w != oldScene.bounds.w ||
@@ -126,6 +132,34 @@ export default {
         this.reset();
         return;
       }
+      // if (oldScene?.file_count != newScene?.file_count) {
+      //   // this.reload();
+      //   this.reset();
+      //   // this.projection = new Projection({
+      //   //   code: "tiles",
+      //   //   units: "pixels",
+      //   //   extent: this.projectionExtent,
+      //   // });
+      //   // const extent = this.viewExtent;
+      //   // this.v = new View({
+      //   //   // center: [extent[2]/4, extent[3]],
+      //   //   // center: [0, 0],
+      //   //   center: [extent[2]/4, extent[3]],
+      //   //   projection: this.projection,
+      //   //   zoom: 0,
+      //   //   minZoom: 0,
+      //   //   maxZoom: this.maxZoom,
+      //   //   enableRotation: false,
+      //   //   extent,
+      //   //   smoothExtentConstraint: false,
+      //   //   // smoothExtentConstraint: true,
+      //   //   showFullExtent: true,
+      //   // });
+      //   // this.map.setView(this.v);
+      //   // this.v.setProjection(this.projection);
+      //   // console.log(this.v)
+      //   return;
+      // }
       if (oldScene?.loading && !newScene?.loading) {
         this.reload();
         return;
@@ -219,12 +253,19 @@ export default {
       return 300;
     },
     projectionExtent() {
-      let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
-      return [0, 0, width, height];
+      // let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
+      // return [0, 0, width, height];
+      // return [0, 0, 1000, 1000];
+      // return [0, 0, 512, 512];
+      return [0, 0, this.scene.bounds.w, this.scene.bounds.h];
     },
     viewExtent() {
-      let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
+      const width = this.scene.bounds.w;
+      const height = this.scene.bounds.h;
+      // return [0, 0, this.scene.bounds.w, this.scene.bounds.h];
+      // let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
       return [-width*0.95, -height, width*1.95, height];
+      // return [0, 0, width, height];
     },
     crossPanActive() {
       return this.pannable && this.crossNav && this.focusZoom < 1.1;
@@ -284,6 +325,67 @@ export default {
     },
 
     createMainLayer() {
+      const tileGrid = createXYZ({
+        tileSize: this.tileSize,
+        extent: this.projectionExtent,
+        maxZoom: this.maxZoom,
+        maxResolution: this.scene?.bounds?.w / this.tileSize * fitScale,
+      })
+      
+      // console.log("tileSize", this.tileSize);
+      // console.log("maxZoom", this.maxZoom);
+      // const resolutions = tileGrid.getResolutions();
+      // const rows = Math.ceil(this.scene.bounds.h / this.tileSize);
+      // console.log("resolution", resolutions);
+      // console.log("rows", rows);
+      // resolutions.forEach((_, i) => {
+      //   resolutions[i] /= rows;
+      // });
+      // tileGrid = new TileGrid({
+      //   tileSize: [this.tileSize, this.tileSize],
+      //   extent: this.projectionExtent,
+      //   resolutions,
+      //   sizes: [
+      //     [1, 1*rows],
+      //     [2, 2*rows],
+      //     [4, 4*rows],
+      //     [8, 8*rows],
+      //     [16, 16*rows],
+      //   ],
+      //   // sizes: tileGrid
+      // });
+
+      
+      // const maxZoom = this.maxZoom;
+
+      // const width = this.projectionExtent[2];
+      // const height = this.projectionExtent[3];
+
+      // const tileSize = this.tileSize;
+      // const maxResolution = Math.max(width / tileSize, height / tileSize);
+
+      // const length = maxZoom + 1;
+      // const resolutions = new Array(length);
+      // for (let z = 0; z < length; ++z) {
+      //   resolutions[z] = maxResolution / Math.pow(2, z);
+      // }
+
+      // const tileGrid = new TileGrid({
+      //   extent: this.projectionExtent,
+      //   tileSize: this.tileSize,
+      //   resolutions,
+      // });
+
+
+      // tileGrid.sizes = [
+      //   [1, 2],
+      //   [2, 2],
+      //   [4, 4],
+      //   [8, 8],
+      //   [16, 16],
+      // ];
+      // tileGrid.resolutions
+      // console.log("tileGrid", tileGrid);
       const main = new TileLayer({
         properties: {
           main: true,
@@ -294,8 +396,25 @@ export default {
           crossOrigin: "Anonymous",
           projection: this.projection,
           tileSize: [this.tileSize, this.tileSize],
-          opaque: false,
-          transition: 100,
+          // opaque: false,
+          opaque: true,
+          // transition: 100,
+          tileGrid,
+          // tileGrid: new TileGrid({
+          //   tileSize: [this.tileSize, this.tileSize],
+          //   extent: this.projectionExtent,
+          //   resolutions: []
+          //   // resolutions: [
+          //   //   1,
+          //   //   0.5,
+          //   //   0.25,
+          //   // ],
+          //   sizes: [
+          //     [1, 10],
+          //     [2, 2],
+          //     [4, 4],
+          //   ],
+          // }),
         }),
       });
       
@@ -313,55 +432,55 @@ export default {
         });
       }
 
-      main.on("postrender", event => {
-        if (!this.focus) return;
+      // main.on("postrender", event => {
+      //   if (!this.focus) return;
 
-        const ctx = event.context;
-        const view = this.view;
-        if (!view) return;
+      //   const ctx = event.context;
+      //   const view = this.view;
+      //   if (!view) return;
 
-        const size = this.map.getSize();
-        const corners = this.pixelCornersFromView(view);
-        const pixelRatio = window.devicePixelRatio;
-        const mapw = size[0] * pixelRatio;
-        const maph = size[1] * pixelRatio;
-        corners.tl[0] *= pixelRatio;
-        corners.tl[1] *= pixelRatio;
-        corners.tr[0] *= pixelRatio;
-        corners.tr[1] *= pixelRatio;
-        corners.br[0] *= pixelRatio;
-        corners.br[1] *= pixelRatio;
-        corners.bl[0] *= pixelRatio;
-        corners.bl[1] *= pixelRatio;
+      //   const size = this.map.getSize();
+      //   const corners = this.pixelCornersFromView(view);
+      //   const pixelRatio = window.devicePixelRatio;
+      //   const mapw = size[0] * pixelRatio;
+      //   const maph = size[1] * pixelRatio;
+      //   corners.tl[0] *= pixelRatio;
+      //   corners.tl[1] *= pixelRatio;
+      //   corners.tr[0] *= pixelRatio;
+      //   corners.tr[1] *= pixelRatio;
+      //   corners.br[0] *= pixelRatio;
+      //   corners.br[1] *= pixelRatio;
+      //   corners.bl[0] *= pixelRatio;
+      //   corners.bl[1] *= pixelRatio;
 
-        const viewExtent = this.extentFromView(view);
-        const viewRes = this.v.getResolutionForExtent(viewExtent);
-        const refRes = viewRes * 3;
-        const res = this.v.getResolution();
-        const resFrac = 1 - Math.min(1, (res - viewRes) / (refRes - viewRes));
+      //   const viewExtent = this.extentFromView(view);
+      //   const viewRes = this.v.getResolutionForExtent(viewExtent);
+      //   const refRes = viewRes * 3;
+      //   const res = this.v.getResolution();
+      //   const resFrac = 1 - Math.min(1, (res - viewRes) / (refRes - viewRes));
         
-        const alpha = resFrac;
+      //   const alpha = resFrac;
 
-        const e = 1;
+      //   const e = 1;
         
-        ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
-        ctx.strokeStyle = "green";
-        ctx.lineWidth = 20;
-        ctx.beginPath();
-        ctx.rect(0, 0, mapw, maph);
-        ctx.moveTo(corners.tl[0] + e, corners.tl[1] + e);
-        ctx.lineTo(corners.tr[0] - e, corners.tr[1] + e);
-        ctx.lineTo(corners.br[0] - e, corners.br[1] - e);
-        ctx.lineTo(corners.bl[0] + e, corners.bl[1] - e);
-        ctx.closePath();
-        ctx.fill("evenodd");
+      //   ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+      //   ctx.strokeStyle = "green";
+      //   ctx.lineWidth = 20;
+      //   ctx.beginPath();
+      //   ctx.rect(0, 0, mapw, maph);
+      //   ctx.moveTo(corners.tl[0] + e, corners.tl[1] + e);
+      //   ctx.lineTo(corners.tr[0] - e, corners.tr[1] + e);
+      //   ctx.lineTo(corners.br[0] - e, corners.br[1] - e);
+      //   ctx.lineTo(corners.bl[0] + e, corners.bl[1] - e);
+      //   ctx.closePath();
+      //   ctx.fill("evenodd");
 
-        if (alpha === 1 || alpha === 0) {
-          return;
-        }
+      //   if (alpha === 1 || alpha === 0) {
+      //     return;
+      //   }
 
-        this.map.render();
-      });
+      //   this.map.render();
+      // });
       
       return main;
     },
@@ -416,10 +535,20 @@ export default {
           osmLayer,
           mask,
           main,
+          // new TileLayer({
+          //   source: new TileDebug({
+          //     projection: this.projection,
+          //   }),
+          // })
         ]
       } else {
         return [
           main,
+          // new TileLayer({
+          //   source: new TileDebug({
+          //     projection: this.projection,
+          //   }),
+          // })
         ];
       }
     },
@@ -461,6 +590,10 @@ export default {
         crossPan,
         mouseWheelZoom,
         dragBox,
+        // new DoubleClickZoom({
+        //   duration: 3000,
+        //   delta: 8,
+        // })
       ]);
       this.interactions = interactions;
       this.dragPan = dragPan;
@@ -486,7 +619,11 @@ export default {
           extent: this.projectionExtent,
         });
         const extent = this.viewExtent;
+        // console.log("extent", extent, "projection", this.projection);
+        // console.log("projection extent", this.projectionExtent);
         this.v = new View({
+          // center: [extent[2]/4, extent[3]],
+          // center: [0, 0],
           center: [extent[2]/4, extent[3]],
           projection: this.projection,
           zoom: 0,
@@ -495,6 +632,7 @@ export default {
           enableRotation: false,
           extent,
           smoothExtentConstraint: false,
+          // smoothExtentConstraint: true,
           showFullExtent: true,
         });
       }
@@ -517,7 +655,7 @@ export default {
       this.map.on("moveend", event => this.onMoveEnd(event));
       this.map.on("loadend", event => this.onLoadEnd(event));
 
-      this.v.setMinZoom(this.minViewportZoom);
+      // this.v.setMinZoom(this.minViewportZoom);
       this.v.on('change:center', this.onCenterChange);
       this.v.on('change:resolution', this.onResolutionChange);
 
@@ -695,7 +833,8 @@ export default {
     },
 
     reset() {
-      if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
+      // if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
+      if (!this.scene?.bounds?.w) return;
       if (this.map) {
         this.map.dispose();
         this.dragPan = null;
@@ -754,6 +893,7 @@ export default {
         extra.color = "#FFFFFF";
         extra.background_color = "#222222";
       }
+      extra.fit_width = this.tileSize / fitScale;
       return getTileUrl(
         this.scene.id,
         z, x, y,
@@ -891,11 +1031,11 @@ export default {
         return;
       }
 
-      if (this.scene.loading) {
-        console.warn("Scene loading, setting pending view", view);
-        this.pendingView = { view, options };
-        return;
-      }
+      // if (this.scene.loading) {
+      //   console.warn("Scene loading, setting pending view", view);
+      //   this.pendingView = { view, options };
+      //   return;
+      // }
 
       if (this.scene.bounds.w == 0 || this.scene.bounds.h == 0) {
         console.warn("Scene has zero width or height, ignoring", this.scene);
@@ -932,6 +1072,7 @@ export default {
 
         if (zoomDiff > 1e-4 && !options) {
           const t = Math.pow(zoomDiff, 0.8) * 0.1;
+          // const t = Math.pow(zoomDiff, 0.8) * 0.5;
           options = { animationTime: t }
         }
       }

@@ -24,6 +24,7 @@ const (
 
 type Render struct {
 	TileSize          int         `json:"tile_size"`
+	FitWidth          float64     `json:"fit_width"`
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
 	BackgroundColor   color.Color `json:"background_color"`
 	Color             color.Color `json:"color"`

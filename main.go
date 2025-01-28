@@ -199,12 +199,19 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 	ty := float64(zoomPower-1-y) * tileSize
 
 	var scale float64
-	if 1 < scene.Bounds.W/scene.Bounds.H {
-		scale = tileSize / scene.Bounds.W
-		tx += (scale*scene.Bounds.W - tileSize) * 0.5
+	if r.FitWidth != 0 {
+		// Fit width
+		scale = float64(r.FitWidth) / scene.Bounds.W
+		// fmt.Printf("ty %0.2f bounds %0.2f\n", ty, scene.Bounds.H)
 	} else {
-		scale = tileSize / scene.Bounds.H
-		ty += (scale*scene.Bounds.H - tileSize) * 0.5
+		// Fit inside
+		if 1 < scene.Bounds.W/scene.Bounds.H {
+			scale = tileSize / scene.Bounds.W
+			tx += (scale*scene.Bounds.W - tileSize) * 0.5
+		} else {
+			scale = tileSize / scene.Bounds.H
+			ty += (scale*scene.Bounds.H - tileSize) * 0.5
+		}
 	}
 
 	scale *= float64(zoomPower)
@@ -814,6 +821,9 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 
 	rn.CanvasImage = img
 	rn.Zoom = zoom
+	if params.FitWidth != nil {
+		rn.FitWidth = float64(*params.FitWidth)
+	}
 	drawTile(context, &rn, scene, zoom, x, y)
 
 	if incomplete {

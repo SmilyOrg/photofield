@@ -292,6 +292,7 @@ type GetScenesSceneIdTilesParams struct {
 	Zoom             int       `json:"zoom"`
 	X                TileCoord `json:"x"`
 	Y                TileCoord `json:"y"`
+	FitWidth         *float32  `json:"fit_width,omitempty"`
 	Sources          *[]string `json:"sources,omitempty"`
 
 	// Show images with this tag as selected.
@@ -1024,6 +1025,17 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, 
 	err = runtime.BindQueryParameter("form", true, true, "y", r.URL.Query(), &params.Y)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter y: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "fit_width" -------------
+	if paramValue := r.URL.Query().Get("fit_width"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "fit_width", r.URL.Query(), &params.FitWidth)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter fit_width: %s", err), http.StatusBadRequest)
 		return
 	}
 

@@ -11,6 +11,20 @@
       :response="collectionResponse"
     ></response-loader>
 
+    <simple-viewer
+      class="viewer"
+      :collectionId="collection && collectionId"
+      :regionId="regionId"
+      :focusFileId="focusFileId"
+      :layout="layout"
+      :sort="sort"
+      :imageHeight="imageHeight"
+      :search="search"
+      :debug="debug"
+      :tweaks="tweaks"
+    ></simple-viewer>
+
+
     <map-viewer
       class="viewer"
       v-if="layout == 'MAP'"
@@ -99,6 +113,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import ResponseLoader from './ResponseLoader.vue';
 import Controls from './Controls.vue';
+import SimpleViewer from './SimpleViewer.vue';
 import ScrollViewer from './ScrollViewer.vue';
 import MapViewer from './MapViewer.vue';
 import PageTitle from './PageTitle.vue';

@@ -112,6 +112,7 @@ func LayoutAlbum(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sc
 				event.EndTime = lastPhotoTime
 				event.LastOnDay = !SameDay(lastPhotoTime, photoTime)
 				rect = LayoutAlbumEvent(layout, rect, &event, scene, source)
+				scene.Bounds.H = rect.Y
 			}
 			eventCount++
 			event = AlbumEvent{
@@ -127,6 +128,8 @@ func LayoutAlbum(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sc
 		lastPhotoTime = photoTime
 
 		event.Section.infos = append(event.Section.infos, info)
+
+		// time.Sleep(1 * time.Millisecond)
 
 		layoutCounter.Set(index)
 		index++
@@ -144,6 +147,7 @@ func LayoutAlbum(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sc
 	log.Printf("layout events %d\n", eventCount)
 
 	scene.Bounds.H = rect.Y + sceneMargin
+	// scene.Bounds.H = rect.Y*0.5 + sceneMargin
 	scene.RegionSource = PhotoRegionSource{
 		Source: source,
 	}

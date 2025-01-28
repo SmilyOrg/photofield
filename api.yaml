@@ -214,6 +214,13 @@ paths:
           schema:
             $ref: "#/components/schemas/TileCoord"
 
+        - name: fit_width
+          in: query
+          schema:
+            type: number
+            minimum: 1
+            example: 256
+
         - name: sources
           in: query
           schema:
