@@ -935,6 +935,7 @@ func (source *Database) Get(id ImageId) (InfoResult, bool) {
 	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
+	// TODO fix
 	stmt := conn.Prep(`
 		SELECT width, height, orientation, color, created_at, latitude, longitude
 		FROM infos
