@@ -8,6 +8,7 @@ import (
 	"math"
 	"photofield/internal/image"
 	"photofield/io"
+	"runtime/trace"
 	"time"
 
 	"github.com/tdewolff/canvas"
@@ -43,7 +44,9 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
-func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool) {
+func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool) {
+	defer trace.StartRegion(ctx, "photo.Draw").End()
+
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
 
 	// Avoid drawing almost-invisible photos or squares
@@ -109,7 +112,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			break
 		}
 		start := time.Now()
-		r := s.Get(context.TODO(), io.ImageId(photo.Id), path)
+		r := s.Get(ctx, io.ImageId(photo.Id), path, io.Size(size))
 		elapsed := time.Since(start)
 
 		img, err := r.Image, r.Error
@@ -147,7 +150,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			scale = 0.8
 		}
 
-		bitmap.DrawImage(config.CanvasImage, img, c, scale, hq)
+		bitmap.DrawImage(ctx, config.CanvasImage, img, c, scale, hq)
 		drawn = true
 
 		if source.IsSupportedVideo(path) {
@@ -161,7 +164,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 
 		if config.DebugThumbnails {
 			size := img.Bounds().Size()
-			text := fmt.Sprintf("%dx%d %d %4f\n%s", size.X, size.Y, i, s.Cost, s.Name())
+			text := fmt.Sprintf("%dx%d %d %4.0f\n%s", size.X, size.Y, i, s.Cost, s.Name())
 			font := scene.Fonts.Debug
 			font.Color = canvas.Yellow
 			s := bitmap.Sprite

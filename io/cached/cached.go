@@ -54,7 +54,7 @@ func (c *Cached) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return c.Source.Exists(ctx, id, path)
 }
 
-func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+func (c *Cached) Get(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
 	r := c.Cache.GetWithName(ctx, id, c.Source.Name())
 	// fmt.Printf("%v %v %v\n", id, c.Source.Name(), r.Error)
 	if r.Image != nil || r.Error != nil {
@@ -64,7 +64,7 @@ func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result 
 		return r
 	}
 	// r = c.Source.Get(ctx, id, path)
-	r = c.load(ctx, id, path)
+	r = c.load(ctx, id, path, original)
 	// fmt.Printf("%v %v cache load end\n", id, c.Source.Name())
 	// c.Ristretto.SetWithName(ctx, id, c.Source.Name(), r)
 	// fmt.Printf("%v cache set\n", id)
@@ -81,12 +81,12 @@ func (c *Cached) Reader(ctx context.Context, id io.ImageId, path string, fn func
 	r.Reader(ctx, id, path, fn)
 }
 
-func (c *Cached) load(ctx context.Context, id io.ImageId, path string) io.Result {
+func (c *Cached) load(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
 	key := fmt.Sprintf("%d", id)
 	// fmt.Printf("%v cache load begin %v\n", id, key)
 	ri, _, _ := c.loading.Do(key, func() (interface{}, error) {
 		// fmt.Printf("%p %v %s %v cache get begin\n", c, c.Source, c.Source.Name(), id)
-		r := c.Source.Get(ctx, id, path)
+		r := c.Source.Get(ctx, id, path, original)
 		// fmt.Printf("%p %v %s %v cache get end\n", c, c.Source, c.Source.Name(), id)
 		c.Cache.SetWithName(ctx, id, c.Source.Name(), r)
 		// fmt.Printf("%v cache set\n", id)

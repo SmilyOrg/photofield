@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"photofield/io"
+	"runtime/trace"
 	"strconv"
 	"time"
 
@@ -63,7 +64,8 @@ func (e Exif) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return exists
 }
 
-func (e Exif) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+func (e Exif) Get(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
+	defer trace.StartRegion(ctx, "goexif.Get").End()
 	b, o, err := load(path)
 	if err != nil {
 		return io.Result{Error: err}

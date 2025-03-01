@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/trace"
 	"strings"
 	"text/template"
 	"time"
@@ -145,8 +146,9 @@ func (t Thumb) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return !errors.Is(err, os.ErrNotExist)
 }
 
-func (t Thumb) Get(ctx context.Context, id io.ImageId, path string) io.Result {
-	r := t.goimage.Get(ctx, id, t.resolvePath(path))
+func (t Thumb) Get(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
+	defer trace.StartRegion(ctx, "thumb.Get").End()
+	r := t.goimage.Get(ctx, id, t.resolvePath(path), original)
 	r.Orientation = io.Normal
 	return r
 }

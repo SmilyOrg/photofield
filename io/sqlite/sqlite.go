@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"photofield/internal/metrics"
 	"photofield/io"
+	"runtime/trace"
 	"time"
 
 	goio "io"
@@ -302,7 +303,8 @@ func (s *Source) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return exists
 }
 
-func (s *Source) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+func (s *Source) Get(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
+	defer trace.StartRegion(ctx, "sqlite.Get").End()
 	c := s.pool.Get(ctx)
 	defer s.pool.Put(c)
 
