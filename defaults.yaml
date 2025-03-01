@@ -233,7 +233,9 @@ media:
       fit: "INSIDE"
       cost:
         time_per_original_megapixel: 220ms
-      
+
+    djpeg:
+      extensions: [".jpg", ".jpeg"]
 
   sources:
     
@@ -246,6 +248,31 @@ media:
     
     # Native image decoding
     - type: image
+
+    # libjpeg-turbo or compatible djpeg decoding
+    - type: djpeg
+      scale: 8/8
+
+    - type: djpeg
+      scale: 7/8
+
+    - type: djpeg
+      scale: 6/8
+
+    - type: djpeg
+      scale: 5/8
+
+    - type: djpeg
+      scale: 4/8
+
+    - type: djpeg
+      scale: 3/8
+
+    - type: djpeg
+      scale: 2/8
+
+    - type: djpeg
+      scale: 1/8
 
     # 
     # Synology Moments / Photo Station thumbnails

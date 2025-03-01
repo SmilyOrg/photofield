@@ -7,6 +7,7 @@ import (
 	"photofield/io"
 	"photofield/io/cached"
 	"photofield/io/configured"
+	"photofield/io/djpeg"
 	"photofield/io/ffmpeg"
 	"photofield/io/filtered"
 	"photofield/io/goexif"
@@ -27,6 +28,7 @@ const (
 	SourceTypeThumb  = "THUMB"
 	SourceTypeImage  = "IMAGE"
 	SourceTypeFFmpeg = "FFMPEG"
+	SourceTypeDjpeg  = "DJPEG"
 )
 
 // SourceType is the type of a source (e.g. SQLITE, THUMB, IMAGE, FFMPEG)
@@ -48,6 +50,7 @@ type SourceConfig struct {
 	Path       string            `json:"path"`
 	Width      int               `json:"width"`
 	Height     int               `json:"height"`
+	Scale      string            `json:"scale"`
 	Fit        io.AspectRatioFit `json:"fit"`
 	Extensions []string          `json:"extensions"`
 }
@@ -79,6 +82,7 @@ type SourceEnvironment struct {
 	SourceTypes SourceTypeMap
 	DataDir     string
 	FFmpegPath  string
+	DjpegPath   string
 	Migrations  embed.FS
 	ImageCache  *ristretto.Ristretto
 	Databases   map[string]*sqlite.Source
@@ -144,6 +148,34 @@ func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
 			Height: c.Height,
 			Fit:    c.Fit,
 		}
+
+	case SourceTypeDjpeg:
+		d := djpeg.Djpeg{
+			Path:   env.DjpegPath,
+			Width:  c.Width,
+			Height: c.Height,
+			Scale:  c.Scale,
+		}
+		if c.Scale != "" {
+			parts := strings.Split(c.Scale, "/")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid scale format: %s", c.Scale)
+			}
+			m, err := strconv.Atoi(parts[0])
+			if err != nil {
+				return nil, fmt.Errorf("invalid scale numerator: %s", parts[0])
+			}
+			n, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return nil, fmt.Errorf("invalid scale denominator: %s", parts[1])
+			}
+			if n != 8 {
+				return nil, fmt.Errorf("invalid scale denominator: %d, must be 8", n)
+			}
+			d.ScaleM = m
+			d.ScaleN = n
+		}
+		s = d
 
 	default:
 		return nil, fmt.Errorf("unknown source type: %s", c.Type)
