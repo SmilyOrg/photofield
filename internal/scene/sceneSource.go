@@ -111,14 +111,18 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				if query != nil {
 					text = query.Words()
 				}
-				done := metrics.Elapsed("search embed")
-				embedding, err := imageSource.Clip.EmbedText(text)
-				done()
-				if err != nil {
-					log.Println("search embed failed")
-					scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+				if imageSource.Clip == nil {
+					scene.Error = "Search not available"
+				} else {
+					done := metrics.Elapsed("search embed")
+					embedding, err := imageSource.Clip.EmbedText(text)
+					done()
+					if err != nil {
+						log.Println("search embed failed")
+						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+					}
+					scene.SearchEmbedding = embedding
 				}
-				scene.SearchEmbedding = embedding
 			}
 			searchDone()
 		}
@@ -196,6 +200,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				Source: imageSource,
 			}
 		}
+		scene.BuildIndex()
 		scene.Dependencies = append(scene.Dependencies, config.Collection)
 		scene.FileCount = len(scene.Photos)
 		scene.Loading = false

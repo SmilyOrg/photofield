@@ -9,7 +9,7 @@ require (
 	github.com/deepmap/oapi-codegen v1.8.2
 	github.com/dgraph-io/ristretto v0.1.2-0.20230929213430-5239be55a219
 	github.com/docker/go-units v0.4.0
-	github.com/felixge/fgprof v0.9.1
+	github.com/felixge/fgprof v0.9.5
 	github.com/gammazero/deque v0.2.1
 	github.com/go-chi/chi/v5 v5.0.4
 	github.com/go-chi/cors v1.2.0
@@ -21,6 +21,7 @@ require (
 	github.com/grafana/pyroscope-go v1.2.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/imdario/mergo v0.3.13
+	github.com/jbuchbinder/gopnm v0.0.0-20220507095634-e31f54490ce0
 	github.com/joho/godotenv v1.3.0
 	github.com/karrick/godirwalk v1.15.6
 	github.com/kelindar/intmap v1.1.0
@@ -41,8 +42,8 @@ require (
 	golang.org/x/exp v0.0.0-20231108232855-2478ac86f678
 	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52
 	golang.org/x/sync v0.6.0
-	modernc.org/sqlite v1.32.0
-	zombiezen.com/go/sqlite v0.13.1
+	modernc.org/sqlite v1.34.5
+	zombiezen.com/go/sqlite v1.4.0
 )
 
 require (
@@ -65,7 +66,6 @@ require (
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.8 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
-	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
@@ -89,10 +89,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
-	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
-	modernc.org/strutil v1.2.0 // indirect
-	modernc.org/token v1.1.0 // indirect
 )

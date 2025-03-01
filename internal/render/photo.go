@@ -168,7 +168,6 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 			font := scene.Fonts.Debug
 			font.Color = canvas.Yellow
 			s := bitmap.Sprite
-			s.Rect.Y -= 20
 			s.DrawText(config, c, scales, &font, text)
 		}
 

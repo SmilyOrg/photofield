@@ -145,7 +145,7 @@ func LayoutTimeline(infos <-chan image.SourcedInfo, layout Layout, scene *render
 			if lastLocationTimeElapsed < 0 {
 				lastLocationTimeElapsed = -lastLocationTimeElapsed
 			}
-			queryLocation := lastLocationTime.IsZero() || lastLocationTimeElapsed > 15*time.Minute
+			queryLocation := lastLocationTime.IsZero() || lastLocationTimeElapsed > 1*time.Hour
 			if queryLocation && image.IsValidLatLng(info.LatLng) {
 				lastLocationTime = photoTime
 				dist := image.AngleToKm(lastLatLng.Distance(info.LatLng))
