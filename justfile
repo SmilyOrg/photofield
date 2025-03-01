@@ -84,6 +84,9 @@ pprof := "http://localhost:8080/debug/pprof"
 prof-cpu seconds="10":
   go tool pprof -http=: {{pprof}}/profile?seconds={{seconds}}
 
+prof-trace seconds="10":
+  curl -s -o trace.out {{pprof}}/trace?seconds={{seconds}}
+
 prof-heap:
   go tool pprof -http=: {{pprof}}/heap
 
