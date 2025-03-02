@@ -111,6 +111,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker multiarch build
+        uses: docker/setup-buildx-action@v3
+
       - name: Build & push Docker images
         id: docker
         # if: github.event_name == 'push'
