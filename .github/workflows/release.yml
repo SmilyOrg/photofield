@@ -75,11 +75,11 @@ jobs:
         run: |
           (
             changie batch auto &&
-            task release:changelog > task-release-changelog.md &&
+            task release:changelog > .task-release-changelog.md &&
             echo "TITLE=$(task release:title)" >> $GITHUB_OUTPUT
             echo "VERSION=$(task release:version)" >> $GITHUB_OUTPUT
           ) || (
-            echo 'No changelog found, use e.g. `task added` to add some changes' > task-release-changelog.md &&
+            echo 'No changelog found, use e.g. `task added` to add some changes' > .task-release-changelog.md &&
             echo "TITLE=$(task release:version)" >> $GITHUB_OUTPUT
             echo "VERSION=$(task release:version)" >> $GITHUB_OUTPUT
           )
@@ -95,7 +95,7 @@ jobs:
         with:
           draft: true
           name: ${{ steps.changelog.outputs.TITLE }}
-          body_path: ./task-release-changelog.md
+          body_path: .task-release-changelog.md
           tag_name: ${{ steps.changelog.outputs.VERSION }}
           target_commitish: ${{ github.sha }}
           files: |
