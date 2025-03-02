@@ -70,19 +70,21 @@ jobs:
         run: |
           task package
 
-      - name: Extract release changelog & title
+      - name: Prepare temporary changelog
+        if: startsWith(github.ref, 'refs/tags/') != true
+        run: |
+          changie batch auto || (changie new -k Added -b 'Undocumented changes, use e.g. `task added` to document them' && changie batch auto)
+
+      - name: Extract release changelog & title (PR)
         id: changelog
         run: |
-          (
-            changie batch auto &&
-            task release:changelog > .task-release-changelog.md &&
-            echo "TITLE=$(task release:title)" >> $GITHUB_OUTPUT
-            echo "VERSION=$(task release:version)" >> $GITHUB_OUTPUT
-          ) || (
-            echo 'No changelog found, use e.g. `task added` to add some changes' > .task-release-changelog.md &&
-            echo "TITLE=$(task release:version)" >> $GITHUB_OUTPUT
-            echo "VERSION=$(task release:version)" >> $GITHUB_OUTPUT
-          )
+          task release:changelog > .task-release-changelog.md
+          echo "TITLE=$(task release:title)" >> $GITHUB_OUTPUT
+          echo "VERSION=$(task release:version)" >> $GITHUB_OUTPUT
+
+      - name: Cleanup temporary changelog
+        if: startsWith(github.ref, 'refs/tags/') != true
+        run: git clean -fd .changes; git checkout -- .changes
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
