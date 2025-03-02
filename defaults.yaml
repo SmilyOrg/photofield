@@ -252,27 +252,44 @@ media:
     # libjpeg-turbo or compatible djpeg decoding
     - type: djpeg
       scale: 8/8
+      cost:
+        time_per_original_megapixel: 34ms
 
     - type: djpeg
       scale: 7/8
+      cost:
+        time_per_original_megapixel: 27ms
 
     - type: djpeg
       scale: 6/8
+      cost:
+        time_per_original_megapixel: 23ms
 
     - type: djpeg
       scale: 5/8
+      cost:
+        time_per_original_megapixel: 20ms
+
 
     - type: djpeg
       scale: 4/8
+      cost:
+        time_per_original_megapixel: 19ms
 
     - type: djpeg
       scale: 3/8
+      cost:
+        time_per_original_megapixel: 16ms
 
     - type: djpeg
       scale: 2/8
+      cost:
+        time_per_original_megapixel: 15ms
 
     - type: djpeg
       scale: 1/8
+      cost:
+        time_per_original_megapixel: 7ms
 
     # 
     # Synology Moments / Photo Station thumbnails

@@ -17,6 +17,7 @@ import (
 	"photofield/internal/metrics"
 	"photofield/internal/queue"
 	"photofield/io"
+	"photofield/io/djpeg"
 	"photofield/io/ffmpeg"
 	"photofield/io/ristretto"
 	"photofield/io/sqlite"
@@ -204,6 +205,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 	env := SourceEnvironment{
 		SourceTypes: config.SourceTypes,
 		FFmpegPath:  ffmpeg.FindPath(),
+		DjpegPath:   djpeg.FindPath(),
 		Migrations:  migrationsThumbs,
 		ImageCache:  source.imageCache,
 		DataDir:     config.DataDir,

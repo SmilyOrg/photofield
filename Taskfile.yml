@@ -274,7 +274,7 @@ tasks:
   bench:
     desc: Run benchmarks for a specified collection
     cmds:
-      - ./photofield -bench -bench.collection {{.CLI_ARGS}} -test.benchtime 1s -test.count 6
+      - ./photofield -bench -test.benchtime 1s -test.count 6 -bench.collection {{.CLI_ARGS}}
 
   grafana:export:
     desc: Export Grafana configuration

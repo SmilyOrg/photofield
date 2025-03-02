@@ -15,6 +15,7 @@ import (
 	"photofield/io/ristretto"
 	"photofield/io/sqlite"
 	"photofield/io/thumb"
+	"strconv"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -142,19 +143,26 @@ func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
 		}
 
 	case SourceTypeFFmpeg:
-		s = ffmpeg.FFmpeg{
-			Path:   env.FFmpegPath,
+		f := ffmpeg.FFmpeg{
+			Path:   c.Path,
 			Width:  c.Width,
 			Height: c.Height,
 			Fit:    c.Fit,
 		}
+		if f.Path == "" {
+			f.Path = env.FFmpegPath
+		}
+		s = f
 
 	case SourceTypeDjpeg:
 		d := djpeg.Djpeg{
-			Path:   env.DjpegPath,
+			Path:   c.Path,
 			Width:  c.Width,
 			Height: c.Height,
 			Scale:  c.Scale,
+		}
+		if d.Path == "" {
+			d.Path = env.DjpegPath
 		}
 		if c.Scale != "" {
 			parts := strings.Split(c.Scale, "/")
