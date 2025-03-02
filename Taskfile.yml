@@ -359,6 +359,7 @@ tasks:
     deps:
       - for:
           var: BUILD_OS_ARCH
+          split: ","
         task: archive
         vars:
           GOOS: "{{(.ITEM | split \"/\")._0}}"
