@@ -67,8 +67,14 @@ jobs:
       - name: Extract release changelog & title
         id: changelog
         run: |
-          task release:changelog > task-release-changelog.md
-          echo "TITLE=$(task release:title)" >> $GITHUB_OUTPUT
+          (
+            changie batch auto &&
+            task release:changelog > task-release-changelog.md &&
+            echo "TITLE=$(task release:title)" >> $GITHUB_OUTPUT
+          ) || (
+            echo 'No changelog found, use e.g. `task added` to add some changes' > task-release-changelog.md &&
+            echo "TITLE=$(task release:version)" >> $GITHUB_OUTPUT
+          )
 
       - name: Create GitHub Release
         # if: startsWith(github.ref, 'refs/tags/')

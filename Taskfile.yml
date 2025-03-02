@@ -88,6 +88,12 @@ tasks:
     cmds:
       - git tag -a $(changie latest) -m "Release $(changie latest)"
 
+  release:version:
+    desc: Display the version of the latest release
+    cmds:
+      - echo {{ .VERSION }}
+    silent: true
+
   release:changelog:
     desc: Display the changelog for the latest release
     cmds:
@@ -100,7 +106,7 @@ tasks:
       CHANGELOG_HEAD:
         sh: head -n 1 .changes/$(changie latest).md
     cmds:
-      - echo "{{ regexReplaceAll "## \\[(.*?)\\] - (.*?) - (.*)" .CHANGELOG_HEAD "${1} - ${3}" }}"
+      - echo "{{ regexReplaceAll "## \\[(.*?)\\] - (.*?)( - )?(.*)" .CHANGELOG_HEAD "${1} - ${4}" }}"
     silent: true
 
   package:
