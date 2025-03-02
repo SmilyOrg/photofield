@@ -63,7 +63,7 @@ jobs:
       - name: Build & package for reduced set of platforms
         if: github.event_name == 'pull_request'
         run: |
-          task package BUILD_OS_ARCH=windows/amd64,linux/amd64,darwin/arm64
+          task package BUILD_OS_ARCH=windows/amd64,linux/amd64,linux/arm64,darwin/arm64
 
       - name: Build & package all platforms
         if: github.event_name == 'push'
