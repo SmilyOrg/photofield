@@ -18,3 +18,5 @@ dist/
 node_modules/
 /blob-report/
 .task/
+.docker-image-id
+.task-release-changelog.md
