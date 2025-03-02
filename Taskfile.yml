@@ -1,0 +1,446 @@
+# Commands to build, run, and package the app
+#
+# See https://taskfile.dev/ for instructions on how to use Taskfile.yml
+#
+# Run `task` to see the list of tasks
+version: '3'
+
+vars:
+  BINARY_NAME: photofield
+  DOCKER_REPO: ghcr.io/smilyorg/photofield
+  DOCKER_REPO_LOCAL: localhost:5000/photofield
+  BUILD_OS_ARCH:
+    - darwin/amd64
+    - darwin/arm64
+    - freebsd/386
+    - freebsd/amd64
+    - freebsd/arm
+    - freebsd/arm64
+    - linux/386
+    - linux/amd64
+    - linux/arm
+    - linux/arm64
+    - linux/loong64
+    - linux/ppc64le
+    - linux/riscv64
+    - linux/s390x
+    - openbsd/amd64
+    - openbsd/arm64
+    - windows/386
+    - windows/amd64
+    - windows/arm64
+  DOCKER_ARCH:
+    - linux/amd64
+    - linux/arm64
+  DOCKER_ANNOTATIONS: >-
+    --annotation 'index:org.opencontainers.image.source=https://github.com/smilyorg/photofield'
+    --annotation 'index:org.opencontainers.image.description=A non-invasive local photo viewer with a focus on speed and simplicity'
+    --annotation 'index:org.opencontainers.image.licenses=MIT'
+  VERSION:
+    sh: git describe --tags --match "v*" --always --dirty
+
+tasks:
+  default:
+    cmds:
+      - task --list
+      - echo ""
+      - echo "Common tasks:"
+      - "echo '  task dev: Run the API and UI in watch mode'"
+      - "echo '  task watch: Run the API in watch mode'"
+      - "echo '  task ui: Run the UI in watch mode'"
+      - "echo '  task docs: Run the docs frontend in development mode'"
+      - "echo '  task e2e: Run end-to-end tests in watch mode'"
+      - "echo '  task release:local: Build, package, and create a local Docker image'"
+    silent: true
+
+  added: 
+    desc: Create a new changelog entry for added features
+    cmds: [changie new -k Added -e] 
+  deprecated: 
+    desc: Create a new changelog entry for deprecated features
+    cmds: [changie new -k Deprecated -e] 
+  removed: 
+    desc: Create a new changelog entry for removed features
+    cmds: [changie new -k Removed -e] 
+  fixed: 
+    desc: Create a new changelog entry for bug fixes
+    cmds: [changie new -k Fixed -e] 
+  security: 
+    desc: Create a new changelog entry for security updates
+    cmds: [changie new -k Security -e] 
+  breaking: 
+    desc: Create a new changelog entry for breaking changes
+    cmds: [changie new -k 'Breaking Changes' -e] 
+
+  release:commit:
+    desc: Prepare a new release by updating changelog and committing changes
+    cmds:
+      - cmd: git diff-index --quiet HEAD -- || { echo "Working directory is not clean. Please commit or stash your changes."; exit 1; }
+        silent: true
+      - changie batch auto
+      - code --wait .changes/$(changie latest).md
+      - changie merge
+      - git add CHANGELOG.md .changes
+      - git commit -m "Release $(changie latest)"
+
+  release:tag:
+    desc: Create a git tag for the latest release
+    cmds:
+      - git tag -a $(changie latest) -m "Release $(changie latest)"
+
+  release:version:
+    desc: Display the version of the latest release
+    cmds:
+      - echo {{ .VERSION }}
+    silent: true
+
+  release:changelog:
+    desc: Display the changelog for the latest release
+    cmds:
+      - tail -n +2 .changes/$(changie latest).md
+    silent: true
+
+  release:title:
+    desc: Get the title of the latest release
+    vars:
+      CHANGELOG_HEAD:
+        sh: head -n 1 .changes/$(changie latest).md
+    cmds:
+      - echo "{{ regexReplaceAll "## \\[(.*?)\\] - (.*?)( - )?(.*)" .CHANGELOG_HEAD "${1} - ${4}" }}"
+    silent: true
+
+  package:
+    desc: Build and package the application for all platforms
+    cmds:
+      - task: build:deps
+      - task: build:release:all
+      - task: archive:all
+      - task: checksums
+
+  release:local:
+    desc: Build, package, and create a local Docker image
+    cmds:
+      - task: package
+      - task: docker
+
+  release:local:multiarch:
+    desc: Build and create a multi-architecture local Docker image
+    cmds:
+      - task: package
+      - task: docker:multiarch:push:local
+
+  check:
+    cmds:
+      - task: tidy
+      - git diff --exit-code go.mod go.sum
+      - task: gen
+      - git diff --exit-code
+
+  tidy: go mod tidy
+  gen: go generate -x
+
+  deps:
+    deps:
+      - assets
+      - build:deps
+
+  build:deps:
+    desc: Build UI and docs frontends
+    deps:
+      - build:docs
+      - build:ui
+
+  build:docs:
+    desc: Build the docs frontend
+    dir: docs
+    cmds:
+      - npm install
+      - npm run docs:build
+
+  build:ui:
+    desc: Build the UI frontend
+    dir: ui
+    cmds:
+      - npm install
+      - npm run build -- --clearScreen=false -l warn
+
+  build:
+    desc: Build the API
+    sources:
+      - '**/*.go'
+      - 'go.mod'
+      - '**/*.yaml'
+      - '**/*.syso'
+    cmds:
+      - go build
+
+  db:
+    desc: Run database migrations using "golang-migrate"
+    cmds:
+      - migrate -database sqlite://data/photofield.cache.db -path db/migrations {{.CLI_ARGS}}
+
+  db:add:
+    desc: Add a new database migration
+    cmds:
+      - migrate create -ext sql -dir db/migrations -seq {{.CLI_ARGS}}
+  
+  dbt:
+    desc: Run thumbs database migrations
+    cmds:
+      - migrate -database sqlite://data/photofield.thumbs.db -path db/migrations-thumbs {{.CLI_ARGS}}
+
+  dbt:add:
+    desc: Add a new thumbs database migration
+    cmds:
+      - migrate create -ext sql -dir db/migrations-thumbs -seq {{.CLI_ARGS}}
+  
+  assets:dir:
+    dir: data/geo
+    internal: true
+
+  assets:
+    desc: Download optional reverse geocoding assets
+    deps: [assets:dir]
+    vars:
+      GPKG_FILE:
+        sh: grep -o 'data/geo/.*gpkg' embed-geo.go | cut -d / -f 3
+      GPKG_VER:
+        sh: grep -e '// tinygpkg-data release:' embed-geo.go | cut -d ' ' -f 4
+    generates:
+      - "data/geo/{{.GPKG_FILE}}"
+    status:
+      - test -f "data/geo/{{.GPKG_FILE}}"
+    cmds:
+      - silent: true
+        cmd: |
+          gpkg_path="data/geo/{{ .GPKG_FILE }}"
+          echo "downloading tinygpkg-data/{{ .GPKG_VER }}/{{ .GPKG_FILE }}"
+          wget -q -O "$gpkg_path" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
+          echo "downloaded to $PWD/$gpkg_path"
+
+  dev:
+    desc: Run the API and UI in watch mode
+    deps:
+      - watch
+      - ui
+
+  ui:
+    desc: Run the UI in watch mode
+    dir: ui
+    cmds:
+      - npm run dev
+
+  watch:
+    desc: Run the API in watch mode
+    cmds:
+      - task build:run -w
+
+  build:run:
+    desc: Build and run the API
+    cmds:
+      - task: build
+      - task: run
+
+  run:
+    desc: Run the built API
+    cmds:
+      - ./photofield
+
+  run:embed:
+    desc: Run the built API with embedded UI and docs
+    deps: [build:deps]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedui,embeddocs
+      - ./photofield
+
+  run:ui:
+    desc: Run the built API with embedded UI
+    deps: [build:ui]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedui
+      - ./photofield
+
+  run:geo:
+    desc: Run the built API with embedded reverse geocoding assets
+    deps: [assets]
+    env: { PHOTOFIELD_API_PREFIX: /api }
+    cmds:
+      - go build -tags embedgeo
+      - ./photofield
+
+  bench:
+    desc: Run benchmarks for a specified collection
+    cmds:
+      - ./photofield -bench -bench.collection {{.CLI_ARGS}} -test.benchtime 1s -test.count 6
+
+  grafana:export:
+    desc: Export Grafana configuration
+    cmds:
+      - cmd: hamara export --host=localhost:9091 --key=$GRAFANA_API_KEY > docker/grafana/provisioning/datasources/default.yaml
+        
+  prof:cpu:
+    desc: Profile CPU usage
+    vars:
+      SECONDS: '{{default "10" .CLI_ARGS}}'
+    cmds:
+      - "go tool pprof -http=: http://localhost:8080/debug/pprof/profile?seconds={{.SECONDS}}"
+  
+  prof:heap:
+    desc: Profile heap usage
+    cmds:
+      - "go tool pprof -http=: http://localhost:8080/debug/pprof/heap"
+  
+  prof:reload:
+    desc: Profile reload performance
+    cmds:
+      - "go test -benchmem -benchtime 10s '-run=^$' -bench '^BenchmarkReload$' photofield"
+  
+  monitor:
+    desc: Run monitoring services
+    cmds:
+      - docker compose up prometheus grafana pyroscope
+  
+  test:reload:
+    desc: Run reload leak tests
+    cmds:
+      - mkdir -p profiles/
+      - go test -v '-run=^TestReloadLeaks$' photofield
+      - go tool pprof -http ':' -diff_base profiles/reload-before.pprof profiles/reload-after.pprof
+
+  docs:
+    desc: Run the docs frontend in development mode
+    dir: docs
+    cmds:
+      - npm run docs:dev
+
+  e2e:
+    desc: Run end-to-end tests in watch mode
+    dir: e2e
+    cmds:
+      - npm run watch
+
+  build:release:
+    desc: Build the release binary for GOOS and GOARCH (current platform by default)
+    vars:
+      DEFAULT_OUTPUT: "dist/bin/{{.BINARY_NAME}}_{{.VERSION}}_{{ coalesce .GOOS OS }}_{{ coalesce .GOARCH ARCH }}{{ if eq (coalesce .GOOS OS) \"windows\" }}.exe{{ end }}"
+      OUTPUT: "{{ coalesce .OUTPUT .DEFAULT_OUTPUT }}"
+    generates:
+      - "{{.OUTPUT}}"
+    cmds:
+      - |
+        set -eou pipefail
+        echo "build {{.OUTPUT}}"
+        VERSION={{.VERSION}}
+        COMMIT=$(git rev-parse HEAD)
+        DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILT_BY=$(whoami)
+        GOOS={{.GOOS}} GOARCH={{.GOARCH}} CGO_ENABLED=0 go build \
+          -ldflags "-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE -X main.builtBy=$BUILT_BY" \
+          -tags embedui,embeddocs,embedgeo \
+          -o "{{.OUTPUT}}" \
+          || echo "build failed for {{.OUTPUT}}"
+    silent: true
+
+  build:release:all:
+    desc: Build the release binary for all supported platforms
+    deps:
+      - for:
+          var: BUILD_OS_ARCH
+          split: ","
+        task: build:release
+        vars:
+          GOOS: "{{(.ITEM | split \"/\")._0}}"
+          GOARCH: "{{(.ITEM | split \"/\")._1}}"
+
+  archive:all:
+    desc: Archive all release binaries
+    deps:
+      - for:
+          var: BUILD_OS_ARCH
+          split: ","
+        task: archive
+        vars:
+          GOOS: "{{(.ITEM | split \"/\")._0}}"
+          GOARCH: "{{(.ITEM | split \"/\")._1}}"
+
+  archive:dir:
+    dir: dist/archives
+    internal: true
+
+  archive:
+    desc: Archive the release binary for GOOS and GOARCH (current platform by default)
+    vars:
+      INPUT: "dist/bin/{{.BINARY_NAME}}_{{.VERSION}}_{{ coalesce .GOOS OS }}_{{ coalesce .GOARCH ARCH }}{{ if eq (coalesce .GOOS OS) \"windows\" }}.exe{{ end }}"
+      OUTPUT: "dist/archives/{{.BINARY_NAME}}_{{.VERSION}}_{{ coalesce .GOOS OS }}_{{ coalesce .GOARCH ARCH }}.zip"
+    sources:
+      - "{{.INPUT}}"
+    generates:
+      - "{{.OUTPUT}}"
+    deps:
+      - task: archive:dir
+    cmds:
+      - echo "archive {{.OUTPUT}}"
+      - go run ./cmd/zip "{{.OUTPUT}}" "{{.INPUT}}"
+    silent: true
+
+  checksums:
+    desc: Generate checksums for all archives
+    dir: dist/archives
+    cmds:
+      - go run ../../cmd/sha256 *.zip > checksums.txt
+
+  docker:
+    desc: Build a Docker image with the latest git tag and EXTRA_ARGS
+    dir: dist/bin
+    vars:
+      TAGS: >-
+        {{- if (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+$" .VERSION) }}
+          {{- $versionParts := regexFindAll "[0-9]+" .VERSION 3 }}
+          {{- $major := index $versionParts 0 }}
+          {{- $minor := index $versionParts 1 }}
+          {{- $patch := index $versionParts 2 }}
+          -t {{.DOCKER_REPO}}:latest
+          -t {{.DOCKER_REPO}}:v{{$major}}
+          -t {{.DOCKER_REPO}}:v{{$major}}.{{$minor}}
+          -t {{.DOCKER_REPO}}:v{{$major}}.{{$minor}}.{{$patch}}
+        {{- else if (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+" .VERSION) }}
+          -t {{.DOCKER_REPO}}:{{.VERSION}}
+        {{- else }}
+        {{- end }}
+    preconditions:
+      - sh: test -n "{{.TAGS}}"
+        msg: "Git tag must be in the format vMAJOR.MINOR.PATCH* for docker build: {{.VERSION}}"
+    cmds:
+      - docker build --build-arg VERSION={{.VERSION}} {{.TAGS | replace "\n" " "}} -f ../../Dockerfile-multiarch {{.EXTRA_ARGS}} .
+
+  docker:multiarch:
+    desc: Build multi-architecture Docker images
+    deps:
+      - task: docker
+        vars:
+          EXTRA_ARGS: >-
+            --platform {{ join "," .DOCKER_ARCH }}
+            {{.EXTRA_ARGS}}
+          DOCKER_REPO: "{{.DOCKER_REPO}}"
+
+  docker:multiarch:push:
+    desc: Build and push multi-architecture Docker images to GitHub Container Registry
+    deps:
+      - task: docker:multiarch
+        vars:
+          EXTRA_ARGS: >-
+            --iidfile ../../.docker-image-id
+            --push {{ .DOCKER_ANNOTATIONS }}
+          DOCKER_REPO: "{{.DOCKER_REPO}}"
+
+  docker:multiarch:push:local:
+    desc: Build and push multi-architecture Docker images to local registry
+    preconditions:
+      - sh: curl localhost:5000/v2/_catalog
+        msg: "Local Docker registry is not running. Run 'docker compose up -d registry' to start it."
+    cmds:
+      - task: docker:multiarch:push
+        vars:
+          DOCKER_REPO: "{{.DOCKER_REPO_LOCAL}}"

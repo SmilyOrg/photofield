@@ -38,3 +38,11 @@ services:
       - ./docker/grafana/provisioning:/provisioning
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
       - ./data/grafana:/var/lib/grafana
+
+  # Local Docker registry for "task docker:multiarch:push:local"
+  registry:
+    image: registry:2
+    ports:
+      - 5000:5000
+    volumes:
+      - ./dist/registry:/var/lib/registry

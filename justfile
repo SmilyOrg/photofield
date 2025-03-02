@@ -1,3 +1,5 @@
+# Superseded by Taskfile.yml
+
 set dotenv-load := true
 
 default:

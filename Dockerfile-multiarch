@@ -1,0 +1,18 @@
+FROM --platform=$BUILDPLATFORM alpine:latest
+RUN apk add --no-cache exiftool ffmpeg
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG VERSION
+
+WORKDIR /app
+
+COPY photofield_${VERSION}_${TARGETOS}_${TARGETARCH} ./photofield
+
+RUN mkdir ./data && touch ./data/configuration.yaml
+
+EXPOSE 8080
+ENV PHOTOFIELD_DATA_DIR=./data
+ENTRYPOINT ["./photofield"]
