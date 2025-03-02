@@ -87,6 +87,7 @@ jobs:
         run: git clean -fd .changes; git checkout -- .changes
 
       - name: Attest release artifacts
+        if: github.event_name == 'push'
         uses: actions/attest-build-provenance@v2
         with:
           subject-checksums: dist/archives/checksums.txt
