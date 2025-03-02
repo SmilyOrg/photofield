@@ -1,0 +1,3 @@
+kind: Added
+body: Refactored the build and release process to use Taskfile and changie
+time: 2025-03-02T11:43:53.4972003+01:00

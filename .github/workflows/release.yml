@@ -42,11 +42,29 @@ jobs:
 
       - name: Build one platform
         run: |
-          GOOS=linux GOARCH=amd64 OUTPUT=./photofield task build:binary
+          task build:release OUTPUT=./photofield
           ./photofield -version
           rm ./photofield
 
       - name: Build & package all platforms
         run: |
-          task archive:all checksums
+          task package
 
+      - name: Get the latest version
+        id: latest
+        uses: miniscruff/changie-action@v2
+        with:
+          version: latest
+          args: latest
+
+      - name: Create GitHub Release
+        # if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          body_path: .changes/${{ steps.latest.outputs.output }}.md
+          files: |
+            dist/archives/*.zip
+            dist/archives/checksums.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
