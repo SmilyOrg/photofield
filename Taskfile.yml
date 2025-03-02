@@ -77,6 +77,7 @@ tasks:
     cmds:
       - cmd: git diff-index --quiet HEAD -- || { echo "Working directory is not clean. Please commit or stash your changes."; exit 1; }
         silent: true
+      - git checkout -b release/$(changie latest)
       - changie batch auto
       - code --wait .changes/$(changie latest).md
       - changie merge
