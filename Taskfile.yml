@@ -421,7 +421,7 @@ tasks:
       - task: docker
         vars:
           EXTRA_ARGS: >-
-            --platform {{range $index, $arch := .DOCKER_ARCH}}{{if $index}},{{end}}{{$arch}}{{end}}
+            --platform {{ join "," .DOCKER_ARCH }}
             {{.EXTRA_ARGS}}
           DOCKER_REPO: "{{.DOCKER_REPO}}"
 
@@ -430,7 +430,9 @@ tasks:
     deps:
       - task: docker:multiarch
         vars:
-          EXTRA_ARGS: "--push {{ .DOCKER_ANNOTATIONS }}"
+          EXTRA_ARGS: >-
+            --iidfile ../../.docker-image-id
+            --push {{ .DOCKER_ANNOTATIONS }}
           DOCKER_REPO: "{{.DOCKER_REPO}}"
 
   docker:multiarch:push:local:

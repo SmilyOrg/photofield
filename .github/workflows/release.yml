@@ -7,6 +7,10 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 permissions:
   contents: write
   packages: write
@@ -78,6 +82,11 @@ jobs:
             echo "VERSION=$(task release:version)" >> $GITHUB_OUTPUT
           )
 
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-checksums: dist/archives/checksums.txt
+
       - name: Create GitHub Release
         # if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
@@ -92,3 +101,24 @@ jobs:
             dist/archives/checksums.txt
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Docker images
+        id: docker
+        # if: github.event_name == 'push'
+        run: |
+          task docker:multiarch:push
+          echo "DIGEST=$(cat ./.docker-image-id)" >> $GITHUB_OUTPUT
+
+      - name: Attest Docker image
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-digest: ${{ steps.docker.outputs.DIGEST }}
+          push-to-registry: true
