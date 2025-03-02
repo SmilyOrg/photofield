@@ -34,6 +34,14 @@ jobs:
       - name: Install taskfile
         run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
+      - name: Install changie
+        env:
+          CHANGIE_VERSION: "1.21.1"
+        run: >-
+            curl -sL https://github.com/miniscruff/changie/releases/download/v${CHANGIE_VERSION}/changie_${CHANGIE_VERSION}_$(go env GOOS)_$(go env GOARCH).tar.gz
+            | tar xz -C /usr/local/bin changie
+            && chmod +x /usr/local/bin/changie
+
       - name: Check dependencies & generated files
         run: task check
 
@@ -46,23 +54,29 @@ jobs:
           ./photofield -version
           rm ./photofield
 
+      - name: Build & package for reduced set of platforms
+        if: github.event_name == 'pull_request'
+        run: |
+          task package BUILD_OS_ARCH=windows/amd64,linux/amd64,darwin/arm64
+
       - name: Build & package all platforms
+        if: github.event_name == 'push'
         run: |
           task package
 
-      - name: Get the latest version
-        id: latest
-        uses: miniscruff/changie-action@v2
-        with:
-          version: latest
-          args: latest
+      - name: Extract release changelog & title
+        id: changelog
+        run: |
+          task release:changelog > task-release-changelog.md
+          echo "TITLE=$(task release:title)" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         # if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          body_path: .changes/${{ steps.latest.outputs.output }}.md
+          name: ${{ steps.changelog.outputs.TITLE }}
+          body_path: ./task-release-changelog.md
           files: |
             dist/archives/*.zip
             dist/archives/checksums.txt

@@ -10,7 +10,6 @@ vars:
   DOCKER_REPO: ghcr.io/smilyorg/photofield
   DOCKER_REPO_LOCAL: localhost:5000/photofield
   BUILD_OS_ARCH:
-    # - android/arm64
     - darwin/amd64
     - darwin/arm64
     - freebsd/386
@@ -89,10 +88,20 @@ tasks:
     cmds:
       - git tag -a $(changie latest) -m "Release $(changie latest)"
 
-  changelog:latest:
+  release:changelog:
     desc: Display the changelog for the latest release
     cmds:
-      - cat .changes/$(changie latest).md
+      - tail -n +2 .changes/$(changie latest).md
+    silent: true
+
+  release:title:
+    desc: Get the title of the latest release
+    vars:
+      CHANGELOG_HEAD:
+        sh: head -n 1 .changes/$(changie latest).md
+    cmds:
+      - echo "{{ regexReplaceAll "## \\[(.*?)\\] - (.*?) - (.*)" .CHANGELOG_HEAD "${1} - ${3}" }}"
+    silent: true
 
   package:
     desc: Build and package the application for all platforms
@@ -333,6 +342,7 @@ tasks:
     deps:
       - for:
           var: BUILD_OS_ARCH
+          split: ","
         task: build:release
         vars:
           GOOS: "{{(.ITEM | split \"/\")._0}}"
