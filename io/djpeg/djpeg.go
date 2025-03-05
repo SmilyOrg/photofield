@@ -113,7 +113,7 @@ func (o Djpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return true
 }
 
-func (o Djpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+func (o Djpeg) Get(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
 	defer trace.StartRegion(ctx, "djpeg.Get").End()
 
 	if o.Path == "" {
@@ -164,7 +164,7 @@ func (o Djpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 }
 
 func (o Djpeg) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
-	r := o.Get(ctx, id, path)
+	r := o.Get(ctx, id, path, io.Size{})
 	if r.Error != nil {
 		fn(nil, r.Error)
 		return

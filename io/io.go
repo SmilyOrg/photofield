@@ -107,7 +107,7 @@ type Source interface {
 	Rotate() bool
 	GetDurationEstimate(original Size) time.Duration
 	Exists(ctx context.Context, id ImageId, path string) bool
-	Get(ctx context.Context, id ImageId, path string) Result
+	Get(ctx context.Context, id ImageId, path string, original Size) Result
 	Close() error
 }
 

@@ -109,7 +109,7 @@ func (photo *Photo) Draw(config *Render, scene *Scene, c *canvas.Context, scales
 			break
 		}
 		start := time.Now()
-		r := s.Get(context.TODO(), io.ImageId(photo.Id), path)
+		r := s.Get(context.TODO(), io.ImageId(photo.Id), path, io.Size(size))
 		elapsed := time.Since(start)
 
 		img, err := r.Image, r.Error

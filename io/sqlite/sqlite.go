@@ -302,7 +302,7 @@ func (s *Source) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return exists
 }
 
-func (s *Source) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+func (s *Source) Get(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
 	c := s.pool.Get(ctx)
 	defer s.pool.Put(c)
 

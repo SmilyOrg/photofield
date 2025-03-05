@@ -70,7 +70,7 @@ func BenchmarkSource(b *testing.B, seed int64, source io.Source, samples []Sampl
 		sample := samples[rnd.Intn(len(samples))]
 		resized := source.Size(sample.Size)
 		b.StartTimer()
-		r := source.Get(ctx, sample.Id, sample.Path)
+		r := source.Get(ctx, sample.Id, sample.Path, sample.Size)
 		b.StopTimer()
 		if r.Error != nil {
 			b.Fatal(r.Error)

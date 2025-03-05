@@ -228,7 +228,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 	for _, s := range tsrcs {
 		rd, ok := s.(io.ReadDecoderSource)
 		if !ok {
-			log.Fatalf("source %s does not implement io.ReadDecoder", s.Name())
+			log.Fatalf("thumbnail source %s does not implement io.ReadDecoderSource", s.Name())
 		}
 		source.thumbnailSources = append(source.thumbnailSources, rd)
 	}
@@ -240,14 +240,15 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 	source.thumbnailGenerators = gens
 
 	sink, err := config.Thumbnail.Sink.NewSource(&env)
-	if err != nil {
-		log.Fatalf("failed to create thumbnail sink: %s", err)
+	if err == nil {
+		sqliteSink, ok := sink.(*sqlite.Source)
+		if !ok {
+			log.Fatalf("thumbnail sink %s is not a sqlite source", sink.Name())
+		}
+		source.thumbnailSink = sqliteSink
+	} else {
+		log.Printf("skipping thumbnail sink: %s", err)
 	}
-	sqliteSink, ok := sink.(*sqlite.Source)
-	if !ok {
-		log.Fatalf("thumbnail sink %s is not a sqlite source", sink.Name())
-	}
-	source.thumbnailSink = sqliteSink
 
 	if config.SkipLoadInfo {
 		log.Printf("skipping load info")

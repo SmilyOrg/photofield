@@ -1,7 +1,6 @@
 package render
 
 import (
-	"image/color"
 	"photofield/internal/image"
 
 	"github.com/tdewolff/canvas"
@@ -32,7 +31,6 @@ func (text *Text) Draw(config *Render, c *canvas.Context, scales Scales) {
 		}
 
 		face := *text.Font
-		face.Color = config.Color.(color.RGBA)
 
 		textLine := canvas.NewTextBox(face, text.Text, text.Sprite.Rect.W, text.Sprite.Rect.H, text.HAlign, text.VAlign, 0, 0)
 		rect := text.Sprite.Rect

@@ -24,6 +24,10 @@ func (rect Rect) ToCanvasRect() canvas.Rect {
 	return canvas.Rect{X: rect.X, Y: rect.Y, W: rect.W, H: rect.H}
 }
 
+func (rect Rect) Rectangle() goimage.Rectangle {
+	return goimage.Rect(int(rect.X), int(rect.Y), int(rect.X+rect.W), int(rect.Y+rect.H))
+}
+
 func (rect Rect) Move(offset Point) Rect {
 	rect.X += offset.X
 	rect.Y += offset.Y
@@ -269,12 +273,8 @@ func (rect Rect) GetPixelZoomDist(c *canvas.Context, size image.Size) float64 {
 }
 
 func (rect Rect) RenderedSize(c *canvas.Context, size image.Size) image.Size {
-	r := canvas.Rect{
-		X: 0,
-		Y: 0,
-		W: rect.W,
-		H: rect.W * float64(size.Y) / float64(size.X),
-	}
+	dst := Rect{W: float64(size.X), H: float64(size.Y)}
+	r := dst.FitInside(rect)
 	t := r.Transform(c.View())
 	return image.Size{
 		X: int(math.Round(t.W)),

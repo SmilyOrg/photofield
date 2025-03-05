@@ -95,7 +95,7 @@ func (source *Source) indexContentsGenerate(ctx context.Context, id io.ImageId, 
 	errs := make([]error, 0)
 	for _, gen := range source.thumbnailGenerators {
 		// Generate thumbnail
-		r := gen.Get(ctx, id, path)
+		r := gen.Get(ctx, id, path, io.Size{})
 		if r.Image == nil || r.Error != nil {
 			errs = append(errs, r.Error)
 			continue

@@ -80,7 +80,7 @@ func (o Image) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return true
 }
 
-func (o Image) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+func (o Image) Get(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
 	f, err := os.Open(path)
 	if err != nil {
 		return io.Result{Error: err}

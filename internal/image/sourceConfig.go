@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"photofield/io"
+	"photofield/io/autotuned"
 	"photofield/io/cached"
 	"photofield/io/configured"
 	"photofield/io/djpeg"
@@ -204,10 +205,12 @@ func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
 		}
 	}
 
-	s = configured.New(
-		c.Name,
-		c.Cost,
-		s,
+	s = autotuned.New(
+		configured.New(
+			c.Name,
+			c.Cost,
+			s,
+		),
 	)
 
 	// println(s.Name(), c.Cost.Time.String(), c.Cost.TimePerOriginalMegapixel.String(), c.Cost.TimePerResizedMegapixel.String())
