@@ -9,6 +9,7 @@ vars:
   BINARY_NAME: photofield
   DOCKER_REPO: ghcr.io/smilyorg/photofield
   DOCKER_REPO_LOCAL: localhost:5000/photofield
+  PPROF_URL: http://localhost:8080/debug/pprof
   BUILD_OS_ARCH:
     - darwin/amd64
     - darwin/arm64
@@ -286,18 +287,23 @@ tasks:
     vars:
       SECONDS: '{{default "10" .CLI_ARGS}}'
     cmds:
-      - "go tool pprof -http=: http://localhost:8080/debug/pprof/profile?seconds={{.SECONDS}}"
+      - "go tool pprof -http=: {{ .PPROF_URL }}/profile?seconds={{.SECONDS}}"
   
   prof:heap:
     desc: Profile heap usage
     cmds:
-      - "go tool pprof -http=: http://localhost:8080/debug/pprof/heap"
+      - "go tool pprof -http=: {{ .PPROF_URL }}/heap"
   
   prof:reload:
     desc: Profile reload performance
     cmds:
       - "go test -benchmem -benchtime 10s '-run=^$' -bench '^BenchmarkReload$' photofield"
   
+  prof:trace:
+    desc: Generate a trace for profiling
+    cmds:
+      - curl -s -o trace.out {{ .PPROF_URL }}/trace?seconds={{ default "10" .CLI_ARGS }}
+
   monitor:
     desc: Run monitoring services
     cmds:

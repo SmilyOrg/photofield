@@ -1,9 +1,11 @@
 package render
 
 import (
+	"context"
 	"image/color"
 	"math"
 	"runtime"
+	"runtime/trace"
 	"sync"
 	"time"
 
@@ -124,15 +126,14 @@ type PhotoRef struct {
 	Photo *Photo
 }
 
-func drawPhotoRefs(id int, photoRefs <-chan PhotoRef, counts chan int, config *Render, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *image.Source) {
-	count := 0
-	for photoRef := range photoRefs {
-		selected := config.Selected.Contains(int(photoRef.Photo.Id))
-		photoRef.Photo.Draw(config, scene, c, scales, source, selected)
-		count++
-	}
-	wg.Done()
-	counts <- count
+func drawPhotoRefs(ctx context.Context, id int, photoRefs <-chan PhotoRef, config *Render, scene *Scene, c *canvas.Context, scales Scales, wg *sync.WaitGroup, source *image.Source) {
+	trace.WithRegion(ctx, "drawPhotoRefs", func() {
+		for photoRef := range photoRefs {
+			selected := config.Selected.Contains(int(photoRef.Photo.Id))
+			photoRef.Photo.Draw(ctx, config, scene, c, scales, source, selected)
+		}
+		wg.Done()
+	})
 }
 
 // Workaround for "determinant of affine transformation matrix is zero"
@@ -153,11 +154,13 @@ func invertMatrix(m canvas.Matrix) canvas.Matrix {
 	}}
 }
 
-func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, source *image.Source) {
-	for i := range scene.Solids {
-		solid := &scene.Solids[i]
-		solid.Draw(c, scales)
-	}
+func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context, scales Scales, source *image.Source) {
+	trace.WithRegion(ctx, "solid.Draw", func() {
+		for i := range scene.Solids {
+			solid := &scene.Solids[i]
+			solid.Draw(c, scales)
+		}
+	})
 
 	// for i := range scene.Photos {
 	// 	photo := &scene.Photos[i]
@@ -178,19 +181,14 @@ func (scene *Scene) Draw(config *Render, c *canvas.Context, scales Scales, sourc
 	tileCanvasRect := tileRect.Transform(tileToCanvas)
 	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
 
-	visiblePhotos := scene.GetVisiblePhotoRefs(tileCanvasRect, 0)
-	visiblePhotoCount := 0
+	visiblePhotos := scene.GetVisiblePhotoRefs(ctx, tileCanvasRect, 0)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(concurrent)
-	counts := make(chan int)
 	for i := 0; i < concurrent; i++ {
-		go drawPhotoRefs(i, visiblePhotos, counts, config, scene, c, scales, wg, source)
+		go drawPhotoRefs(ctx, i, visiblePhotos, config, scene, c, scales, wg, source)
 	}
 	wg.Wait()
-	for i := 0; i < concurrent; i++ {
-		visiblePhotoCount += <-counts
-	}
 
 	// micros := time.Since(startTime).Microseconds()
 	// log.Printf("scene draw %5d / %5d photos, %6d μs all, %.2f μs / photo\n", visiblePhotoCount, photoCount, micros, float64(micros)/float64(visiblePhotoCount))
@@ -248,9 +246,12 @@ func (scene *Scene) AddPhotosFromIdSlice(ids []image.ImageId) {
 	scene.FileCount = len(scene.Photos)
 }
 
-func (scene *Scene) GetVisiblePhotoRefs(view Rect, maxCount int) <-chan PhotoRef {
+func (scene *Scene) GetVisiblePhotoRefs(ctx context.Context, view Rect, maxCount int) <-chan PhotoRef {
+	defer trace.StartRegion(ctx, "GetVisiblePhotoRefs").End()
 	out := make(chan PhotoRef, 10)
+
 	go func() {
+		defer trace.StartRegion(ctx, "GetVisiblePhotoRefs goroutine").End()
 		count := 0
 		if maxCount == 0 {
 			maxCount = len(scene.Photos)

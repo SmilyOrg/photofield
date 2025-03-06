@@ -8,6 +8,7 @@ import (
 	"log"
 	"os/exec"
 	"photofield/io"
+	"runtime/trace"
 	"strconv"
 	"time"
 
@@ -120,6 +121,8 @@ func (f FFmpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
 }
 
 func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+	defer trace.StartRegion(ctx, "ffmpeg.Get").End()
+
 	if f.Path == "" {
 		return io.Result{Error: ErrMissingBinary}
 	}
@@ -145,6 +148,7 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	)
 
 	// println(cmd.String())
+	trace.Log(ctx, "cmd", cmd.String())
 	b, err := cmd.Output()
 	err = formatErr(err, "ffmpeg")
 	if err != nil {

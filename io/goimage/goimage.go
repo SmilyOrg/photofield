@@ -5,6 +5,7 @@ import (
 	"image"
 	"os"
 	"photofield/io"
+	"runtime/trace"
 	"time"
 
 	goio "io"
@@ -81,6 +82,9 @@ func (o Image) Exists(ctx context.Context, id io.ImageId, path string) bool {
 }
 
 func (o Image) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+	defer trace.StartRegion(ctx, "image.Get").End()
+	trace.Log(ctx, "path", path)
+
 	f, err := os.Open(path)
 	if err != nil {
 		return io.Result{Error: err}
