@@ -10,6 +10,7 @@
       :selectTag="selectTag"
       :debug="debug"
       :tileSize="512"
+      :imageHeight="imageHeight"
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
       :zoomable="!nativeScroll && interactive"
