@@ -10,6 +10,7 @@
       :selectTag="selectTag"
       :debug="debug"
       :tileSize="512"
+      :preloadYDelta="preloadYDelta"
       :imageHeight="imageHeight"
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
@@ -356,6 +357,10 @@ const scrollMax = computed(() => {
 
 const scrollRatio = computed(() => {
   return scrollY.value / scrollMax.value;
+});
+
+const preloadYDelta = computed(() => {
+  return scrollSpeed.value * 1;
 });
 
 let lastScrollTime = 0;

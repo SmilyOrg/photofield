@@ -882,6 +882,12 @@ func GetScenesSceneIdFeaturesImpl(w http.ResponseWriter, r *http.Request, sceneI
 		)
 	}
 
+	if scene.Loading {
+		w.Header().Add("Cache-Control", "no-cache")
+	} else {
+		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+	}
+
 	respond(w, r, http.StatusOK, geojson)
 }
 

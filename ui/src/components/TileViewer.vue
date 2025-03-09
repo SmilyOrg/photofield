@@ -76,6 +76,7 @@ export default {
     kinetic: Boolean,
     tileSize: Number,
     imageHeight: Number,
+    preloadYDelta: Number,
     view: Object,
     clipview: Object,
     crossNav: Boolean,
@@ -112,6 +113,7 @@ export default {
   async mounted() {
     this.latestView = null;
     this.lastAnimationTime = 0;
+    this.loadingVectorTiles = 0;
     this.reset();
   },
   setup() {
@@ -468,26 +470,71 @@ export default {
         const approxEdge = Math.sqrt(approxFeaturesPerTile) * this.imageHeight;
         const tileSize = Math.max(256, Math.pow(2, Math.ceil(Math.log2(approxEdge))));
         
-        const vector = new VectorTileLayer({
-          source: new VectorTile({
-            format: new GeoJSON({
-              dataProjection: sceneProjection,
-              featureProjection: this.projection,
-            }),
-            tileUrlFunction: this.featuresUrlFunction,
-            projection: this.projection,
-            tileSize,
-            zDirection: 0,
+        const vectorSource = new VectorTile({
+          format: new GeoJSON({
+            dataProjection: sceneProjection,
+            featureProjection: this.projection,
           }),
+          tileUrlFunction: this.featuresUrlFunction,
+          projection: this.projection,
+          tileSize,
+          zDirection: 0,
+        });
+        const vector = new VectorTileLayer({
+          properties: {
+            vector: true,
+          },
+          source: vectorSource,
           declutter: false,
           style: this.styleFunction,
         })
+        vectorSource.on('tileloadstart', this.onVectorTileLoadStart);
+        vectorSource.on('tileloadend', this.onVectorTileLoadEnd);
+        vectorSource.on('tileloaderror', this.onVectorTileLoadError);
 
         return [
           vector,
           main,
         ];
       }
+    },
+
+    onVectorTileLoadStart(event) {
+      this.loadingVectorTiles++;
+    },
+
+    onVectorTileLoadEnd(event) {
+      this.loadingVectorTiles = Math.max(0, this.loadingVectorTiles - 1);
+      if (this.loadingVectorTiles == 0) {
+        this.loadAdjacentTiles(event.tile.tileCoord[0]);
+      }
+    },
+
+    onVectorTileLoadError(event) {
+      this.loadingVectorTiles = Math.max(0, this.loadingVectorTiles - 1);
+    },
+
+    loadAdjacentTiles(zoom, deltaY) {
+      if (!this.map || !this.v) return;
+      if (deltaY === undefined) deltaY = 2;
+      const layer = this.map.getLayers().getArray().find(l => l.get("vector"));
+      if (!layer) return;
+      const source = layer.getSource();
+      if (!source) return;
+      const grid = source.getTileGrid();
+      const projection = source.getProjection();
+      const visibleExtent = this.v.calculateExtent(this.map.getSize());
+      const view = this.viewFromExtent(visibleExtent);
+      const preloadDist = this.preloadYDelta;
+      if (!preloadDist) return;
+      view.h += preloadDist;
+      view.y -= preloadDist * 0.5;
+      const preloadExtent = this.extentFromView(view);
+      grid.forEachTileCoord(preloadExtent, zoom, tileCoord => {
+        console.log("preload", tileCoord);
+        const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
+        tile.load();
+      });
     },
 
     initOpenLayers(element) {
