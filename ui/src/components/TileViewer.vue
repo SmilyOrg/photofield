@@ -531,7 +531,6 @@ export default {
       view.y -= preloadDist * 0.5;
       const preloadExtent = this.extentFromView(view);
       grid.forEachTileCoord(preloadExtent, zoom, tileCoord => {
-        console.log("preload", tileCoord);
         const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
         tile.load();
       });
