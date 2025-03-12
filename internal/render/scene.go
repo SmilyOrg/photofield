@@ -41,6 +41,7 @@ type Render struct {
 	QualityPreset   QualityPreset
 
 	Zoom        int
+	TileRect    Rect
 	CanvasImage draw.Image
 }
 
@@ -117,8 +118,7 @@ func (scene *Scene) UpdateStaleness() {
 }
 
 type Scales struct {
-	Pixel float64
-	Tile  float64
+	Tile float64
 }
 
 type PhotoRef struct {
@@ -154,6 +154,34 @@ func invertMatrix(m canvas.Matrix) canvas.Matrix {
 	}}
 }
 
+func (scene *Scene) TileView(zoom int, x int, y int, tileSize int) (canvasToTile canvas.Matrix, tileOnCanvas Rect) {
+	zoomPower := 1 << zoom
+	ts := float64(tileSize)
+	tx := float64(x) * ts
+	ty := float64(zoomPower-1-y) * ts
+	sw := scene.Bounds.W
+	sh := scene.Bounds.H
+	var s float64
+	if 1 < sw/sh {
+		s = ts / sw
+		tx += (s*sw - ts) * 0.5
+	} else {
+		s = ts / sh
+		ty += (s*sh - ts) * 0.5
+	}
+	s *= float64(zoomPower)
+
+	canvasToTile = canvas.Identity.
+		Translate(-tx, -ty+ts*float64(zoomPower)).
+		Scale(s, s)
+
+	tileRect := Rect{X: 0, Y: 0, W: ts, H: ts}
+	tileToCanvas := invertMatrix(canvasToTile)
+	tileOnCanvas = tileRect.Transform(tileToCanvas)
+	tileOnCanvas.Y = -tileOnCanvas.Y - tileOnCanvas.H
+	return
+}
+
 func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context, scales Scales, source *image.Source) {
 	trace.WithRegion(ctx, "solid.Draw", func() {
 		for i := range scene.Solids {
@@ -175,13 +203,7 @@ func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context,
 
 	// startTime := time.Now()
 
-	tileRect := Rect{X: 0, Y: 0, W: (float64)(config.TileSize), H: (float64)(config.TileSize)}
-
-	tileToCanvas := invertMatrix(c.View())
-	tileCanvasRect := tileRect.Transform(tileToCanvas)
-	tileCanvasRect.Y = -tileCanvasRect.Y - tileCanvasRect.H
-
-	visiblePhotos := scene.GetVisiblePhotoRefs(ctx, tileCanvasRect, 0)
+	visiblePhotos := scene.GetVisiblePhotoRefs(ctx, config.TileRect, 0)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(concurrent)

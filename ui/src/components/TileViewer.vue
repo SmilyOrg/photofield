@@ -19,6 +19,7 @@
 import Map from 'ol/Map';
 import XYZ from 'ol/source/XYZ';
 import OSM from 'ol/source/OSM';
+import GeoJSON from 'ol/format/GeoJSON';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
@@ -27,7 +28,7 @@ import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } fro
 import { defaults as defaultControls } from 'ol/control';
 import { MAC } from 'ol/has';
 import Kinetic from 'ol/Kinetic';
-import { get as getProjection } from 'ol/proj';
+import { addCoordinateTransforms, get as getProjection } from 'ol/proj';
 import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
 
 import equal from 'fast-deep-equal';
@@ -37,8 +38,12 @@ import Geoview from './openlayers/geoview.js';
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
-import { getTileUrl } from '../api';
+import { getFeaturesUrl, getTileUrl } from '../api';
 import { useColorMode } from '@vueuse/core';
+import VectorTileLayer from 'ol/layer/VectorTile';
+import VectorTile from 'ol/source/VectorTile';
+import Style from 'ol/style/Style';
+import Fill from 'ol/style/Fill';
 
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
@@ -70,6 +75,8 @@ export default {
     zoomTransition: Boolean,
     kinetic: Boolean,
     tileSize: Number,
+    imageHeight: Number,
+    preloadYDelta: Number,
     view: Object,
     clipview: Object,
     crossNav: Boolean,
@@ -106,6 +113,7 @@ export default {
   async mounted() {
     this.latestView = null;
     this.lastAnimationTime = 0;
+    this.loadingVectorTiles = 0;
     this.reset();
   },
   setup() {
@@ -288,17 +296,17 @@ export default {
         properties: {
           main: true,
         },
-        preload: this.geo ? 2 : Infinity,
+        preload: this.geo ? 2 : 0,
         source: new XYZ({
           tileUrlFunction: this.tileUrlFunction,
           crossOrigin: "Anonymous",
           projection: this.projection,
-          tileSize: [this.tileSize, this.tileSize],
+          tileSize: this.tileSize,
           opaque: false,
           transition: 100,
         }),
       });
-      
+
       if (this.geo) {
         main.on("prerender", event => {
           const ctx = event.context;
@@ -366,6 +374,20 @@ export default {
       return main;
     },
 
+    styleFunction(feature) {
+      const geom = feature.getGeometry();
+      const type = geom.getType();
+      switch (type) {
+        case "Polygon":
+          return new Style({
+            fill: new Fill({
+              color: feature.get('color'),
+            }),
+          });
+      }
+      return null;
+    },
+
     createLayers() {
 
       const main = this.createMainLayer();
@@ -381,7 +403,7 @@ export default {
             tileUrlFunction: this.maskUrlFunction,
             crossOrigin: "Anonymous",
             projection: this.projection,
-            tileSize: [this.tileSize, this.tileSize],
+            tileSize: this.tileSize,
             opaque: false,
             transition: 0,
           }),
@@ -418,10 +440,100 @@ export default {
           main,
         ]
       } else {
+          
+        const sceneProjection = new Projection({
+          code: 'CUSTOM:SCENE',
+          units: 'pixels',
+        });
+
+        addCoordinateTransforms(
+          sceneProjection,
+          this.projection, 
+          // Forward transform (custom to map projection)
+          coordinate => {
+            const coord = this.coordinateFromView({
+              x: coordinate[0],
+              y: coordinate[1],
+            });
+            return coord;
+          },
+          // Inverse transform (map projection to custom)
+          function(coordinate) {
+            const view = this.viewFromCoordinate(coordinate);
+            return [view.x, view.y];
+          }
+        );
+
+        // Tile size based on image height so that we always get
+        // approx. the same amount of features
+        const approxFeaturesPerTile = 50;
+        const approxEdge = Math.sqrt(approxFeaturesPerTile) * this.imageHeight;
+        const tileSize = Math.max(256, Math.pow(2, Math.ceil(Math.log2(approxEdge))));
+        
+        const vectorSource = new VectorTile({
+          format: new GeoJSON({
+            dataProjection: sceneProjection,
+            featureProjection: this.projection,
+          }),
+          tileUrlFunction: this.featuresUrlFunction,
+          projection: this.projection,
+          tileSize,
+          zDirection: 0,
+        });
+        const vector = new VectorTileLayer({
+          properties: {
+            vector: true,
+          },
+          source: vectorSource,
+          declutter: false,
+          style: this.styleFunction,
+        })
+        vectorSource.on('tileloadstart', this.onVectorTileLoadStart);
+        vectorSource.on('tileloadend', this.onVectorTileLoadEnd);
+        vectorSource.on('tileloaderror', this.onVectorTileLoadError);
+
         return [
+          vector,
           main,
         ];
       }
+    },
+
+    onVectorTileLoadStart(event) {
+      this.loadingVectorTiles++;
+    },
+
+    onVectorTileLoadEnd(event) {
+      this.loadingVectorTiles = Math.max(0, this.loadingVectorTiles - 1);
+      if (this.loadingVectorTiles == 0) {
+        this.loadAdjacentTiles(event.tile.tileCoord[0]);
+      }
+    },
+
+    onVectorTileLoadError(event) {
+      this.loadingVectorTiles = Math.max(0, this.loadingVectorTiles - 1);
+    },
+
+    loadAdjacentTiles(zoom, deltaY) {
+      if (!this.map || !this.v) return;
+      if (deltaY === undefined) deltaY = 2;
+      const layer = this.map.getLayers().getArray().find(l => l.get("vector"));
+      if (!layer) return;
+      const source = layer.getSource();
+      if (!source) return;
+      const grid = source.getTileGrid();
+      const projection = source.getProjection();
+      const visibleExtent = this.v.calculateExtent(this.map.getSize());
+      const view = this.viewFromExtent(visibleExtent);
+      const preloadDist = this.preloadYDelta;
+      if (!preloadDist) return;
+      view.h += preloadDist;
+      view.y -= preloadDist * 0.5;
+      const preloadExtent = this.extentFromView(view);
+      grid.forEachTileCoord(preloadExtent, zoom, tileCoord => {
+        const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
+        tile.load();
+      });
     },
 
     initOpenLayers(element) {
@@ -762,6 +874,14 @@ export default {
       );
     },
 
+    featuresUrlFunction([z, x, y]) {
+      if (!this.scene) return;
+      return getFeaturesUrl(
+        this.scene.id,
+        z, x, y,
+      );
+    },
+
     maskUrlFunction([z, x, y]) {
       if (!this.scene) return;
       return getTileUrl(
@@ -837,6 +957,16 @@ export default {
         x: (coord[0] - xa) / (xb - xa) * this.scene.bounds.w,
         y: (yb - coord[1]) / (yb - ya) * this.scene.bounds.h,
       }
+    },
+
+    coordinateFromView(view) {
+      if (!this.scene) return null;
+      const fullExtent = this.projection.getExtent();
+      const [xa, ya, xb, yb] = fullExtent;
+      return [
+        view.x / this.scene.bounds.w * (xb - xa) + xa,
+        yb - view.y / this.scene.bounds.h * (yb - ya),
+      ]
     },
 
     elementFromView(view) {
