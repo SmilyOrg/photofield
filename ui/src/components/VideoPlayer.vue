@@ -12,11 +12,31 @@
       controls
     >
     </video>
+    <ui-icon
+      light
+      class="icon"
+      size="32"
+      @click="embedVideo"
+    >
+      video_library
+    </ui-icon>
+    <div class="frames-container" v-if="frames.length > 0">
+      <div 
+        v-for="(frame, index) in frames" 
+        :key="index" 
+        class="frame-bar" 
+        :style="{
+          left: (frame.time / player?.duration * 100 || 0) + '%',
+          height: (Math.max(0, frame.similarity - 0.2) * 20 * 100) + '%'
+        }"
+        :title="`Time: ${frame.time}s, Similarity: ${frame.similarity.toFixed(2)}`"
+      ></div>
+    </div>
   </div>
 </template>
 
 <script>
-import { getFileUrl, getThumbnailUrl } from '../api';
+import { createTask, getFileUrl, getThumbnailUrl } from '../api';
 import Plyr from 'plyr';
 
 const originalQualitySize = 1000000;
@@ -38,6 +58,7 @@ export default {
       loading: 0,
       hasPlayed: false,
       interactive: true,
+      frames: [],
     };
   },
 
@@ -178,6 +199,13 @@ export default {
     onControlsPointerLeave() {
       this.interactive = true;
     },
+    async embedVideo() {
+      const response = await createTask("EMBED_VIDEO", {
+        file_id: this.region.data.id,
+      });
+      this.frames = response.items;
+    }
+
   }
 
 };
@@ -188,4 +216,33 @@ export default {
   width: 100%;
   height: 100%;
 }
+.video-player .icon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 20px;
+  text-shadow: #000 0px 0px 2px;
+  color: white;
+}
+
+.frames-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.frame-bar {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background-color: white;
+}
+
 </style>

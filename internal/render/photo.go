@@ -13,9 +13,17 @@ import (
 	"github.com/tdewolff/canvas"
 )
 
+type TimestampSec uint32
+
 type Photo struct {
-	Id     image.ImageId
-	Sprite Sprite
+	Id         image.ImageId
+	Time       TimestampSec
+	FrameIndex int
+	Sprite     Sprite
+}
+
+func (t TimestampSec) Duration() time.Duration {
+	return time.Duration(t) * time.Second
 }
 
 func (photo *Photo) GetSize(source *image.Source) image.Size {
@@ -28,7 +36,15 @@ func (photo *Photo) GetInfo(source *image.Source) image.Info {
 }
 
 func (photo *Photo) GetPath(source *image.Source) string {
-	path, err := source.GetImagePath(photo.Id)
+	var path string
+	var err error
+	if photo.FrameIndex != 0 {
+		path, err = source.GetVideoIndexPath(photo.Id, photo.FrameIndex)
+	} else if photo.Time != 0 {
+		path, err = source.GetVideoFramePath(photo.Id, photo.Time.Duration())
+	} else {
+		path, err = source.GetImagePath(photo.Id)
+	}
 	if err != nil {
 		log.Fatalf("Unable to get photo path for id %v", photo.Id)
 	}

@@ -102,6 +102,20 @@ func (r *Ristretto) GetWithName(ctx context.Context, id io.ImageId, name string)
 	return io.Result{}
 }
 
+func (r *Ristretto) GetWithPath(ctx context.Context, path string) io.Result {
+	idn := IdWithName{Name: path}
+	value, found := r.cache.Get(idn)
+	if found {
+		return value
+	}
+	return io.Result{}
+}
+
+func (r *Ristretto) SetWithPath(ctx context.Context, path string, v io.Result) bool {
+	idn := IdWithName{Name: path}
+	return r.cache.SetWithTTL(idn, v, 0, 10*time.Minute)
+}
+
 func (r *Ristretto) SetWithName(ctx context.Context, id io.ImageId, name string, v io.Result) bool {
 	idn := IdWithName{
 		Id:   id,

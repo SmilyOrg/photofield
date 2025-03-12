@@ -24,6 +24,7 @@ type Collection struct {
 	Dirs          []string   `json:"dirs"`
 	IndexedAt     *time.Time `json:"indexed_at,omitempty"`
 	IndexedCount  int        `json:"indexed_count"`
+	Extensions    []string   `json:"extensions"`
 	InvalidatedAt *time.Time `json:"-"`
 }
 
@@ -77,6 +78,7 @@ func (collection *Collection) Expand() []Collection {
 				Dirs:       []string{filepath.Join(collectionDir, name)},
 				Limit:      collection.Limit,
 				IndexLimit: collection.IndexLimit,
+				Extensions: collection.Extensions,
 			}
 			child.MakeValid()
 			collections = append(collections, child)

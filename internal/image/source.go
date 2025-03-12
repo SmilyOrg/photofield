@@ -1,6 +1,7 @@
 package image
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"errors"
@@ -57,6 +58,7 @@ func MissingInfoToInterface(c <-chan MissingInfo) <-chan interface{} {
 type SourcedInfo struct {
 	Id ImageId
 	Info
+	Time time.Duration
 }
 
 type Missing struct {
@@ -265,7 +267,7 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 			ID:          "index_contents",
 			Name:        "index contents",
 			Worker:      source.indexContents,
-			WorkerCount: 8,
+			WorkerCount: config.ConcurrentColorLoads,
 		}
 		go source.contentsQueue.Run()
 	}
@@ -395,6 +397,28 @@ func (source *Source) GetImagePath(id ImageId) (string, error) {
 	return path, nil
 }
 
+// Prefer using ImageId over this unless you absolutely need the path
+func (source *Source) GetVideoFramePath(id ImageId, time time.Duration) (string, error) {
+	path, ok := source.database.GetPathFromId(id)
+	if !ok {
+		return "", ErrNotFound
+	}
+	return fmt.Sprintf("%s?t=%d", path, uint32(time.Seconds())), nil
+}
+
+// Prefer using ImageId over this unless you absolutely need the path
+func (source *Source) GetVideoIndexPath(id ImageId, index int) (string, error) {
+	path, ok := source.database.GetPathFromId(id)
+	if !ok {
+		return "", ErrNotFound
+	}
+	return fmt.Sprintf("%s?fi=%d", path, index), nil
+}
+
+func (source *Source) GetVideoIndexTimestampSec(ctx context.Context, id ImageId, index int) int64 {
+	return source.thumbnailSink.GetFrameTimestampSec(ctx, io.ImageId(id), index)
+}
+
 func (source *Source) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
 	return source.database.GetImageEmbedding(id)
 }
@@ -422,6 +446,79 @@ func (source *Source) IndexMetadata(dirs []string, maxPhotos int, force Missing)
 
 func (source *Source) IndexContents(dirs []string, maxPhotos int, force Missing) {
 	source.contentsQueue.AppendItems(MissingInfoToInterface(source.ListMissingContents(dirs, maxPhotos, force)))
+}
+
+type VideoSimilarityFrame struct {
+	io.FrameResult
+	Similarity float32
+}
+
+func (source *Source) EmbedVideo(path string, threshold float64) (<-chan VideoSimilarityFrame, error) {
+	var f io.FrameStreamer
+	var ok bool
+	for _, s := range source.thumbnailGenerators {
+		f, ok = s.(io.FrameStreamer)
+		println("source", s.Name(), ok)
+		if ok {
+			break
+		}
+	}
+	if !ok {
+		return nil, fmt.Errorf("no frame streamer found")
+	}
+
+	search, err := source.Clip.EmbedText("a photo of a woman smiling")
+	if err != nil {
+		return nil, fmt.Errorf("unable to embed text: %v", err)
+	}
+	searchFloat32 := search.Float32()
+	searchInvNorm := search.InvNormFloat32()
+
+	frames := f.StreamFrames(context.Background(), path, io.StreamOptions{
+		Threshold: threshold,
+	})
+	out := make(chan VideoSimilarityFrame)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case f, ok := <-frames:
+				if !ok {
+					return
+				}
+				buf := bytes.Buffer{}
+				// if err := jpeg.Encode(&buf, f.Image, nil); err != nil {
+				// 	fmt.Printf("error encoding frame %v\n", err)
+				// 	continue
+				// }
+				emb, err := source.Clip.EmbedImageReader(&buf)
+				if err != nil {
+					fmt.Printf("error embedding frame %v\n", err)
+					continue
+				}
+
+				sim, err := clip.CosineSimilarityEmbeddingFloat32(emb, searchFloat32, searchInvNorm)
+				if err != nil {
+					fmt.Printf("error calculating similarity: %v\n", err)
+					continue
+				}
+
+				// fmt.Printf("frame %6d %6d %v %v %5d %5d %0.3f\n", f.FrameNumber, f.TimestampSec, f.IsKeyframe, f.Type, f.Image.Bounds().Dx(), f.Image.Bounds().Dy(), sim)
+
+				// fmt.Printf("frame %6d %6d %v %v %5d %5d\n", f.FrameNumber, f.TimestampSec, f.IsKeyframe, f.Type, f.Image.Bounds().Dx(), f.Image.Bounds().Dy())
+				out <- VideoSimilarityFrame{
+					FrameResult: f,
+					Similarity:  sim,
+				}
+				// case err, ok := <-errs:
+				// 	if !ok {
+				// 		return
+				// 	}
+				// 	fmt.Printf("error %v\n", err)
+			}
+		}
+	}()
+	return out, nil
 }
 
 func (source *Source) GetDir(dir string) Info {

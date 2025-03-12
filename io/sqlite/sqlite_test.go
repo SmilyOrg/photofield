@@ -22,7 +22,7 @@ func TestRoundtrip(t *testing.T) {
 
 	id := uint32(1)
 
-	s.Write(id, bytes)
+	s.Write(id, bytes, 0)
 	r := s.Get(context.Background(), io.ImageId(id), p)
 	if r.Error != nil {
 		t.Fatal(r.Error)

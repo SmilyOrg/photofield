@@ -377,12 +377,16 @@ export default {
       this.recreateEvent.emit();
     },
     async reindex() {
-      await createTask("INDEX_FILES", this.collection?.id);
+      await createTask("INDEX_FILES", {
+        collection_id: this.collection?.id
+      });
       await this.remoteTasksUpdateUntilDone();
       this.recreateScene();
     },
     async reload(type) {
-      await createTask(type, this.collection?.id);
+      await createTask(type, {
+        collection_id: this.collection?.id
+      });
       this.drawer = false;
       await this.remoteTasksUpdateUntilDone();
       this.recreateScene();

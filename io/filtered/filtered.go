@@ -91,3 +91,16 @@ func (f *Filtered) Decode(ctx context.Context, r goio.Reader) io.Result {
 	}
 	return d.Decode(ctx, r)
 }
+
+func (f *Filtered) StreamFrames(ctx context.Context, path string, opts io.StreamOptions) <-chan io.FrameResult {
+	s, ok := f.Source.(io.FrameStreamer)
+	if !ok {
+		frames := make(chan io.FrameResult)
+		go func() {
+			frames <- io.FrameResult{Error: fmt.Errorf("frame streaming not supported by %s", f.Source.Name())}
+			close(frames)
+		}()
+		return frames
+	}
+	return s.StreamFrames(ctx, path, opts)
+}

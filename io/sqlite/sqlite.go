@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"image/jpeg"
 	"log"
+	"math"
 	"net/http"
 	"path/filepath"
 	"photofield/internal/metrics"
 	"photofield/io"
+	"strconv"
+	"strings"
 	"time"
 
 	goio "io"
@@ -36,8 +39,9 @@ type Source struct {
 }
 
 type Thumb struct {
-	Id    uint32
-	Bytes []byte
+	Id           uint32
+	Bytes        []byte
+	TimestampSec int64
 }
 
 func (s *Source) Name() string {
@@ -199,10 +203,11 @@ func (s *Source) migrate(migrations embed.FS) {
 	}
 }
 
-func (s *Source) Write(id uint32, bytes []byte) error {
+func (s *Source) Write(id uint32, bytes []byte, timestampSec int64) error {
 	s.pending <- Thumb{
-		Id:    id,
-		Bytes: bytes,
+		Id:           id,
+		Bytes:        bytes,
+		TimestampSec: timestampSec,
 	}
 	return nil
 }
@@ -225,13 +230,20 @@ func (s *Source) writePending() {
 	}
 
 	insert := c.Prep(`
-		INSERT OR REPLACE INTO thumb256(id, created_at_unix, data)
-		VALUES (?, ?, ?);`)
+		INSERT INTO thumb256(file_id, created_at_unix, data, timestamp_sec)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(file_id, timestamp_sec) DO UPDATE SET
+		created_at_unix = excluded.created_at_unix,
+		data = excluded.data;`)
 	defer insert.Reset()
 
-	delete := c.Prep(`
-		DELETE FROM thumb256 WHERE id = ?;`)
-	defer delete.Reset()
+	deleteFile := c.Prep(`
+		DELETE FROM thumb256 WHERE file_id = ?;`)
+	defer deleteFile.Reset()
+
+	deleteFrames := c.Prep(`
+		DELETE FROM thumb256 WHERE file_id = ? AND timestamp_sec != 0;`)
+	defer deleteFrames.Reset()
 
 	lastCommit := time.Now()
 	lastOptimize := time.Time{}
@@ -249,17 +261,25 @@ func (s *Source) writePending() {
 
 		now := time.Now()
 
-		if t.Bytes == nil {
-			delete.BindInt64(1, int64(t.Id))
-			_, err := delete.Step()
+		if t.Bytes == nil && t.TimestampSec == math.MaxInt64 {
+			deleteFrames.BindInt64(1, int64(t.Id))
+			_, err := deleteFrames.Step()
+			if err != nil {
+				log.Printf("Unable to delete frames %d: %s\n", t.Id, err)
+			}
+			deleteFrames.Reset()
+		} else if t.Bytes == nil {
+			deleteFile.BindInt64(1, int64(t.Id))
+			_, err := deleteFile.Step()
 			if err != nil {
 				log.Printf("Unable to delete image %d: %s\n", t.Id, err)
 			}
-			delete.Reset()
+			deleteFile.Reset()
 		} else {
 			insert.BindInt64(1, int64(t.Id))
 			insert.BindInt64(2, now.Unix())
 			insert.BindBytes(3, t.Bytes)
+			insert.BindInt64(4, t.TimestampSec)
 			_, err := insert.Step()
 			if err != nil {
 				log.Printf("Unable to insert image %d: %s\n", t.Id, err)
@@ -306,13 +326,36 @@ func (s *Source) Get(ctx context.Context, id io.ImageId, path string) io.Result 
 	c := s.pool.Get(ctx)
 	defer s.pool.Put(c)
 
+	// tidx := strings.Index(path, "?t=")
+	// tstr := ""
+	// t := int64(0)
+	// if tidx != -1 {
+	// 	tstr = path[tidx+3:]
+	// 	path = path[:tidx]
+	// 	t, _ = strconv.ParseInt(tstr, 10, 64)
+	// }
+
+	fidx := strings.Index(path, "?fi=")
+	fstr := ""
+	fi := int64(0)
+	if fidx != -1 {
+		fstr = path[fidx+4:]
+		path = path[:fidx]
+		fi, _ = strconv.ParseInt(fstr, 10, 64)
+	}
+
+	// println("Get", id, path, fi)
+
 	stmt := c.Prep(`
 		SELECT data
 		FROM thumb256
-		WHERE id == ?;`)
+		WHERE file_id == ?
+		ORDER BY timestamp_sec ASC
+		LIMIT ?, 1;`)
 	defer stmt.Reset()
 
 	stmt.BindInt64(1, int64(id))
+	stmt.BindInt64(2, fi)
 
 	exists, err := stmt.Step()
 	if err != nil {
@@ -333,7 +376,7 @@ func (s *Source) Reader(ctx context.Context, id io.ImageId, path string, fn func
 	stmt := c.Prep(`
 		SELECT data
 		FROM thumb256
-		WHERE id == ?;`)
+		WHERE id == ? AND timestamp_sec == 0;`)
 	defer stmt.Reset()
 
 	stmt.BindInt64(1, int64(id))
@@ -371,8 +414,50 @@ func (s *Source) Set(ctx context.Context, id io.ImageId, path string, r io.Resul
 func (s *Source) SetWithBuffer(ctx context.Context, id io.ImageId, path string, b *bytes.Buffer, r io.Result) bool {
 	w := bufio.NewWriter(b)
 	s.Encode(ctx, r, w)
-	s.Write(uint32(id), b.Bytes())
+	s.Write(uint32(id), b.Bytes(), 0)
 	return true
+}
+
+func (s *Source) DeleteFrames(ctx context.Context, id io.ImageId) {
+	s.pending <- Thumb{
+		Id:           uint32(id),
+		Bytes:        nil,
+		TimestampSec: math.MaxInt64,
+	}
+}
+
+func (s *Source) GetFrameTimestampSec(ctx context.Context, id io.ImageId, frameIndex int) int64 {
+	c := s.pool.Get(ctx)
+	defer s.pool.Put(c)
+
+	stmt := c.Prep(`
+		SELECT timestamp_sec
+		FROM thumb256
+		WHERE file_id == ? AND timestamp_sec != 0
+		ORDER BY timestamp_sec ASC
+		LIMIT ?, 1;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(id))
+	stmt.BindInt64(2, int64(frameIndex))
+
+	exists, err := stmt.Step()
+	if err != nil {
+		return 0
+	}
+	if !exists {
+		return 0
+	}
+
+	return stmt.ColumnInt64(0)
+}
+
+func (s *Source) SetFrame(ctx context.Context, id io.ImageId, frame io.FrameResult) {
+	s.pending <- Thumb{
+		Id:           uint32(id),
+		Bytes:        frame.Bytes,
+		TimestampSec: int64(frame.TimestampSec),
+	}
 }
 
 func (s *Source) Encode(ctx context.Context, r io.Result, w goio.Writer) bool {

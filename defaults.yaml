@@ -242,104 +242,104 @@ media:
 
     
     # Embedded JPEG thumbnails
-    - type: goexif
+    # - type: goexif
     
     # Native image decoding
-    - type: image
+    # - type: image
 
     # 
     # Synology Moments / Photo Station thumbnails
     # 
-    - name: S
-      type: thumb
-      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
-      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
-      fit: "INSIDE"
-      width: 120
-      height: 120
-      cost:
-        time_per_resized_megapixel: 89ms
+    # - name: S
+    #   type: thumb
+    #   path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg"
+    #   extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+    #   fit: "INSIDE"
+    #   width: 120
+    #   height: 120
+    #   cost:
+    #     time_per_resized_megapixel: 89ms
       
-    - name: SM
-      type: thumb
-      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg"
-      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
-      fit: OUTSIDE
-      width: 240
-      height: 240
-      cost:
-        time_per_resized_megapixel: 70ms
+    # - name: SM
+    #   type: thumb
+    #   path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_SM.jpg"
+    #   extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+    #   fit: OUTSIDE
+    #   width: 240
+    #   height: 240
+    #   cost:
+    #     time_per_resized_megapixel: 70ms
       
-    - name: M
-      type: thumb
-      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg"
-      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
-      fit: OUTSIDE
-      width: 320
-      height: 320
-      cost:
-        time_per_resized_megapixel: 66ms
+    # - name: M
+    #   type: thumb
+    #   path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_M.jpg"
+    #   extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+    #   fit: OUTSIDE
+    #   width: 320
+    #   height: 320
+    #   cost:
+    #     time_per_resized_megapixel: 66ms
       
-    - name: B
-      type: thumb
-      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg"
-      extensions: [".jpg", ".jpeg", ".png", ".gif"]
-      fit: INSIDE
-      width: 640
-      height: 640
-      cost:
-        time_per_resized_megapixel: 42ms
+    # - name: B
+    #   type: thumb
+    #   path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_B.jpg"
+    #   extensions: [".jpg", ".jpeg", ".png", ".gif"]
+    #   fit: INSIDE
+    #   width: 640
+    #   height: 640
+    #   cost:
+    #     time_per_resized_megapixel: 42ms
       
-    - name: XL
-      type: thumb
-      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg"
-      extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
-      fit: OUTSIDE
-      width: 1280
-      height: 1280
-      cost:
-        time_per_resized_megapixel: 35ms
+    # - name: XL
+    #   type: thumb
+    #   path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_XL.jpg"
+    #   extensions: [".jpg", ".jpeg", ".png", ".gif", ".mp4"]
+    #   fit: OUTSIDE
+    #   width: 1280
+    #   height: 1280
+    #   cost:
+    #     time_per_resized_megapixel: 35ms
       
     #
     # Synology Moments / Photo Station video variants
     #
-    - name: FM
-      type: thumb
-      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
-      extensions: [".mp4"]
-      fit: OUTSIDE
-      width: 720
-      height: 720
+    # - name: FM
+    #   type: thumb
+    #   path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_M.mp4"
+    #   extensions: [".mp4"]
+    #   fit: OUTSIDE
+    #   width: 720
+    #   height: 720
       
-    - name: H264
-      type: thumb
-      path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4"
-      extensions: [".mp4"]
-      fit: ORIGINAL
+    # - name: H264
+    #   type: thumb
+    #   path: "{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_FILM_H264.mp4"
+    #   extensions: [".mp4"]
+    #   fit: ORIGINAL
 
     # 
     # FFmpeg on-the-fly decoding
     # 
-    - type: ffmpeg
-      width: 256
-      height: 256
-      fit: INSIDE
-      cost:
-        time_per_original_megapixel: 120ms
+    # - type: ffmpeg
+    #   width: 256
+    #   height: 256
+    #   fit: INSIDE
+    #   cost:
+    #     time_per_original_megapixel: 120ms
 
-    - type: ffmpeg
-      width: 1280
-      height: 1280
-      fit: INSIDE
-      cost:
-        time_per_original_megapixel: 160ms
+    # - type: ffmpeg
+    #   width: 1280
+    #   height: 1280
+    #   fit: INSIDE
+    #   cost:
+    #     time_per_original_megapixel: 160ms
 
-    - type: ffmpeg
-      width: 4096
-      height: 4096
-      fit: INSIDE
-      cost:
-        time_per_original_megapixel: 180ms
+    # - type: ffmpeg
+    #   width: 4096
+    #   height: 4096
+    #   fit: INSIDE
+    #   cost:
+    #     time_per_original_megapixel: 180ms
 
 
   # These sources are used for handling small thumbnails specifically for
@@ -389,9 +389,9 @@ media:
         fit: INSIDE
 
       # Native decoding (resized to 256px x 256px)
-      - type: image
-        width: 256
-        height: 256
+      # - type: image
+      #   width: 256
+      #   height: 256
 
     # The sink is used to save the generated thumbnail above
     # so that it persists and can be reused while rendering.

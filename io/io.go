@@ -99,6 +99,15 @@ type Result struct {
 	Error       error
 }
 
+type FrameResult struct {
+	Bytes        []byte
+	Error        error
+	FrameNumber  int
+	TimestampSec int
+	Type         string // I, P, B frame type
+	IsKeyframe   bool
+}
+
 type Source interface {
 	Name() string
 	DisplayName() string
@@ -131,6 +140,14 @@ type ReadDecoder interface {
 type ReadDecoderSource interface {
 	Source
 	ReadDecoder
+}
+
+type StreamOptions struct {
+	Threshold float64
+}
+
+type FrameStreamer interface {
+	StreamFrames(ctx context.Context, path string, opts StreamOptions) <-chan FrameResult
 }
 
 type Sources []Source

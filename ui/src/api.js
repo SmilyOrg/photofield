@@ -120,10 +120,10 @@ export async function getCollection(id) {
   return get(`/collections/` + id);
 }
 
-export async function createTask(type, id) {
+export async function createTask(type, params) {
   return await post(`/tasks`, {
     type,
-    collection_id: id
+    ...params,
   });
 }
 

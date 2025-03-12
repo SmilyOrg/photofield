@@ -1,0 +1,1 @@
+ALTER TABLE clip_emb ADD COLUMN timestamp_sec INTEGER DEFAULT NULL;

@@ -91,18 +91,19 @@ type RegionTag struct {
 }
 
 type PhotoRegionData struct {
-	Id         int                `json:"id"`
-	Path       string             `json:"path"`
-	Filename   string             `json:"filename"`
-	Extension  string             `json:"extension"`
-	Video      bool               `json:"video"`
-	Width      int                `json:"width"`
-	Height     int                `json:"height"`
-	CreatedAt  string             `json:"created_at"`
-	Thumbnails []RegionThumbnail  `json:"thumbnails"`
-	Tags       []tag.Tag          `json:"tags"`
-	Location   string             `json:"location,omitempty"` // reverse geocoded location
-	LatLng     *PhotoRegionLatLng `json:"latlng,omitempty"`
+	Id           int                `json:"id"`
+	Path         string             `json:"path"`
+	Filename     string             `json:"filename"`
+	Extension    string             `json:"extension"`
+	Video        bool               `json:"video"`
+	Width        int                `json:"width"`
+	Height       int                `json:"height"`
+	TimestampSec int64              `json:"timestamp_sec"`
+	CreatedAt    string             `json:"created_at"`
+	Thumbnails   []RegionThumbnail  `json:"thumbnails"`
+	Tags         []tag.Tag          `json:"tags"`
+	Location     string             `json:"location,omitempty"` // reverse geocoded location
+	LatLng       *PhotoRegionLatLng `json:"latlng,omitempty"`
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
 }
 
@@ -148,6 +149,11 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 	filename := filepath.Base(originalPath)
 	basename := strings.TrimSuffix(filename, extension)
 
+	var timestampSec int64
+	if photo.FrameIndex > 0 {
+		timestampSec = source.GetVideoIndexTimestampSec(context.TODO(), photo.Id, photo.FrameIndex)
+	}
+
 	var thumbnails []RegionThumbnail
 
 	for _, s := range source.Sources {
@@ -192,18 +198,19 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 		Id:     id,
 		Bounds: photo.Sprite.Rect,
 		Data: PhotoRegionData{
-			Id:         int(photo.Id),
-			Path:       originalPath,
-			Filename:   filename,
-			Extension:  extension,
-			Video:      isVideo,
-			Width:      info.Width,
-			Height:     info.Height,
-			CreatedAt:  info.DateTime.Format(time.RFC3339),
-			Thumbnails: thumbnails,
-			Tags:       tags,
-			Location:   location,
-			LatLng:     latlng,
+			Id:           int(photo.Id),
+			Path:         originalPath,
+			Filename:     filename,
+			Extension:    extension,
+			Video:        isVideo,
+			Width:        info.Width,
+			Height:       info.Height,
+			TimestampSec: timestampSec,
+			CreatedAt:    info.DateTime.Format(time.RFC3339),
+			Thumbnails:   thumbnails,
+			Tags:         tags,
+			Location:     location,
+			LatLng:       latlng,
 		},
 	}
 }
@@ -313,39 +320,47 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 	rowIdx := len(scene.Photos)
 
 	for _, info := range section.infos {
-		photo := render.Photo{
-			Id: info.Id,
+		for f := 0; f < 20; f++ {
+			photo := render.Photo{
+				Id: info.Id,
+				// Time: render.TimestampSec(info.Time.Seconds()),
+				// Time: render.TimestampSec(f),
+				FrameIndex: f,
+			}
+
+			imageWidth := float64(config.ImageHeight) * info.AspectRatio()
+
+			if x+imageWidth > bounds.W {
+				scale := layoutFitRow(scene.Photos[rowIdx:], bounds, config.ImageSpacing)
+				rowIdx = len(scene.Photos)
+				x = 0
+				y += config.ImageHeight*scale + config.LineSpacing
+			}
+
+			photo.Sprite.PlaceFitHeight(
+				bounds.X+x,
+				bounds.Y+y,
+				config.ImageHeight,
+				float64(info.Width),
+				float64(info.Height),
+			)
+
+			// println(photo.GetPath(source), photo.Sprite.Rect.String(), bounds.X, bounds.Y, x, y, config.ImageHeight, photo.Size.X, photo.Size.Y)
+
+			scene.Photos = append(scene.Photos, photo)
+
+			x += imageWidth
+			if f == 19 {
+				x += config.ImageSpacing
+			}
+
+			now := time.Now()
+			if now.Sub(lastLogTime) > 1*time.Second {
+				lastLogTime = now
+				log.Printf("layout section %d\n", i)
+			}
+			i++
 		}
-
-		imageWidth := float64(config.ImageHeight) * info.AspectRatio()
-
-		if x+imageWidth > bounds.W {
-			scale := layoutFitRow(scene.Photos[rowIdx:], bounds, config.ImageSpacing)
-			rowIdx = len(scene.Photos)
-			x = 0
-			y += config.ImageHeight*scale + config.LineSpacing
-		}
-
-		photo.Sprite.PlaceFitHeight(
-			bounds.X+x,
-			bounds.Y+y,
-			config.ImageHeight,
-			float64(info.Width),
-			float64(info.Height),
-		)
-
-		// println(photo.GetPath(source), photo.Sprite.Rect.String(), bounds.X, bounds.Y, x, y, config.ImageHeight, photo.Size.X, photo.Size.Y)
-
-		scene.Photos = append(scene.Photos, photo)
-
-		x += imageWidth + config.ImageSpacing
-
-		now := time.Now()
-		if now.Sub(lastLogTime) > 1*time.Second {
-			lastLogTime = now
-			log.Printf("layout section %d\n", i)
-		}
-		i++
 	}
 	x = 0
 	y += config.ImageHeight + config.LineSpacing

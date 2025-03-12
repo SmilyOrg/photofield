@@ -157,6 +157,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				var deps image.Dependencies
 				// Normal order
 				var extensions []string
+				if len(config.Collection.Extensions) > 0 {
+					extensions = config.Collection.Extensions
+				}
 				if strings.Contains(config.Layout.Tweaks, "imageonly") {
 					extensions = imageSource.Images.Extensions
 				}

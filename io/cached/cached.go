@@ -55,7 +55,8 @@ func (c *Cached) Exists(ctx context.Context, id io.ImageId, path string) bool {
 }
 
 func (c *Cached) Get(ctx context.Context, id io.ImageId, path string) io.Result {
-	r := c.Cache.GetWithName(ctx, id, c.Source.Name())
+	// r := c.Cache.GetWithName(ctx, id, c.Source.Name())
+	r := c.Cache.GetWithPath(ctx, path)
 	// fmt.Printf("%v %v %v\n", id, c.Source.Name(), r.Error)
 	if r.Image != nil || r.Error != nil {
 		// fmt.Printf("%v %v cache found\n", id, c.Source.Name())
@@ -82,13 +83,15 @@ func (c *Cached) Reader(ctx context.Context, id io.ImageId, path string, fn func
 }
 
 func (c *Cached) load(ctx context.Context, id io.ImageId, path string) io.Result {
-	key := fmt.Sprintf("%d", id)
+	// key := fmt.Sprintf("%d", id)
+	key := path
 	// fmt.Printf("%v cache load begin %v\n", id, key)
 	ri, _, _ := c.loading.Do(key, func() (interface{}, error) {
 		// fmt.Printf("%p %v %s %v cache get begin\n", c, c.Source, c.Source.Name(), id)
 		r := c.Source.Get(ctx, id, path)
 		// fmt.Printf("%p %v %s %v cache get end\n", c, c.Source, c.Source.Name(), id)
-		c.Cache.SetWithName(ctx, id, c.Source.Name(), r)
+		// c.Cache.SetWithName(ctx, id, c.Source.Name(), r)
+		c.Cache.SetWithPath(ctx, path, r)
 		// fmt.Printf("%v cache set\n", id)
 		return r, nil
 	})

@@ -583,6 +583,8 @@ paths:
                   $ref: "#/components/schemas/TaskType"
                 collection_id:
                   $ref: "#/components/schemas/CollectionId"
+                file_id:
+                  $ref: "#/components/schemas/FileId"
       responses:
         "202":
           description: Accepted, it might take some time for the task to finish.
@@ -969,6 +971,7 @@ components:
         - INDEX_CONTENTS
         - INDEX_CONTENTS_COLOR
         - INDEX_CONTENTS_AI
+        - EMBED_VIDEO
     
     CollectionId:
       type: string

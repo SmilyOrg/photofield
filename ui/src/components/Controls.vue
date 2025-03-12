@@ -25,6 +25,14 @@
         tag
       </ui-icon>
       <ui-icon
+        light
+        class="icon"
+        size="32"
+        @click="embedVideo"
+      >
+        video_library
+      </ui-icon>
+      <ui-icon
         v-if="tagsSupported"
         light
         class="icon"
@@ -48,7 +56,7 @@
 import { onKeyStroke, useIdle } from '@vueuse/core';
 import Tags from './Tags.vue';
 import { computed, ref, toRefs } from 'vue';
-import { useApi } from '../api';
+import { createTask, useApi } from '../api';
 import { useRegion, useRegionTags } from '../use';
 
 const props = defineProps({
@@ -92,6 +100,12 @@ const showTags = ref(false);
 const favoriteTag = computed(() => {
   return tags.value?.find(tag => tag.name == "fav");
 })
+
+function embedVideo() {
+  createTask("EMBED_VIDEO", {
+    file_id: region.value.data.id,
+  });
+}
 
 const left = () => {
   emit("navigate", -1);

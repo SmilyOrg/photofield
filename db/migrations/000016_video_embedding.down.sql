@@ -1,0 +1,1 @@
+ALTER TABLE clip_emb DROP COLUMN timestamp_sec;

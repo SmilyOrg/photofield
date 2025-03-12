@@ -588,15 +588,14 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	collection := getCollectionById(string(data.CollectionId))
-	if collection == nil {
-		problem(w, r, http.StatusBadRequest, "Collection not found")
-		return
-	}
-
 	switch data.Type {
 
 	case openapi.TaskTypeINDEXFILES:
+		collection := getCollectionById(string(data.CollectionId))
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection not found")
+			return
+		}
 		task, existing := indexCollection(collection)
 		if existing {
 			respond(w, r, http.StatusConflict, task)
@@ -605,6 +604,11 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case openapi.TaskTypeINDEXMETADATA:
+		collection := getCollectionById(string(data.CollectionId))
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection not found")
+			return
+		}
 		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{
 			Metadata: true,
 		})
@@ -613,6 +617,12 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTS:
+		collection := getCollectionById(string(data.CollectionId))
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection not found")
+			return
+		}
+
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Color:     true,
 			Embedding: true,
@@ -622,6 +632,12 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTSCOLOR:
+		collection := getCollectionById(string(data.CollectionId))
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection not found")
+			return
+		}
+
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Color: true,
 		})
@@ -630,12 +646,53 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		respond(w, r, http.StatusAccepted, task)
 
 	case openapi.TaskTypeINDEXCONTENTSAI:
+		collection := getCollectionById(string(data.CollectionId))
+		if collection == nil {
+			problem(w, r, http.StatusBadRequest, "Collection not found")
+			return
+		}
+
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
 			Embedding: true,
 		})
 		stored, _ := globalTasks.Load("index-contents")
 		task := stored.(*Task)
 		respond(w, r, http.StatusAccepted, task)
+
+	case openapi.TaskTypeEMBEDVIDEO:
+		if data.FileId == nil {
+			problem(w, r, http.StatusBadRequest, "file_id required")
+			return
+		}
+		id := image.ImageId(*data.FileId)
+		path, err := imageSource.GetImagePath(id)
+		if err != nil || path == "" {
+			problem(w, r, http.StatusBadRequest, "File not found")
+			return
+		}
+		frames, err := imageSource.EmbedVideo(path, 0.1)
+		if err != nil {
+			problem(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+		type frame struct {
+			Time       float64 `json:"time"`
+			Similarity float32 `json:"similarity"`
+		}
+
+		var results []frame
+		for f := range frames {
+
+			results = append(results, frame{
+				Time:       float64(f.TimestampSec),
+				Similarity: f.Similarity,
+			})
+		}
+		respond(w, r, http.StatusCreated, struct {
+			Items []frame `json:"items"`
+		}{
+			Items: results,
+		})
 
 	default:
 		problem(w, r, http.StatusBadRequest, "Unsupported task type")

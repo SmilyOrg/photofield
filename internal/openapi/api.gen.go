@@ -36,6 +36,8 @@ const (
 
 // Defines values for TaskType.
 const (
+	TaskTypeEMBEDVIDEO TaskType = "EMBED_VIDEO"
+
 	TaskTypeINDEXCONTENTS TaskType = "INDEX_CONTENTS"
 
 	TaskTypeINDEXCONTENTSAI TaskType = "INDEX_CONTENTS_AI"
@@ -379,6 +381,7 @@ type GetTasksParams struct {
 // PostTasksJSONBody defines parameters for PostTasks.
 type PostTasksJSONBody struct {
 	CollectionId CollectionId `json:"collection_id"`
+	FileId       *FileId      `json:"file_id,omitempty"`
 	Type         TaskType     `json:"type"`
 }
 

@@ -24,6 +24,13 @@ func (source *Source) indexContents(in <-chan interface{}) {
 		id := io.ImageId(m.Id)
 		path := m.Path
 
+		if source.IsSupportedVideo(path) {
+			fmt.Printf("index contents %6d %s %v\n", id, path, source.IsSupportedVideo(path))
+			source.indexVideo(ctx, id, path)
+		}
+
+		continue
+
 		done := false
 		for _, src := range source.thumbnailSources {
 			src.Reader(ctx, id, path, func(rs goio.ReadSeeker, err error) {
@@ -42,7 +49,7 @@ func (source *Source) indexContents(in <-chan interface{}) {
 
 		// Generate thumbnail if none loaded
 		if !done {
-			// log.Printf("index contents generate %s\n", path)
+			log.Printf("index contents generate %s\n", path)
 			img, rs, err := source.indexContentsGenerate(ctx, id, path)
 			if err != nil {
 				log.Println("Unable to generate image thumbnail", err)
@@ -133,4 +140,29 @@ func (source *Source) indexContentsDecode(ctx context.Context, d io.Decoder, rs 
 		return nil, fmt.Errorf("unable to seek to start %w", err)
 	}
 	return r.Image, nil
+}
+
+func (source *Source) indexVideo(ctx context.Context, id io.ImageId, path string) {
+	for _, gen := range source.thumbnailGenerators {
+		fs, ok := gen.(io.FrameStreamer)
+		if !ok {
+			continue
+		}
+
+		// Stream frames
+		opts := io.StreamOptions{Threshold: 0.05}
+		frames := fs.StreamFrames(ctx, path, opts)
+
+		source.thumbnailSink.DeleteFrames(ctx, id)
+
+		// Process frames
+		for frame := range frames {
+			fmt.Printf("frame %9d %d %d %s\n", id, frame.FrameNumber, frame.TimestampSec, frame.Type)
+			if frame.Error != nil {
+				log.Println("Unable to stream video frames:", frame.Error)
+				break
+			}
+			source.thumbnailSink.SetFrame(ctx, id, frame)
+		}
+	}
 }
