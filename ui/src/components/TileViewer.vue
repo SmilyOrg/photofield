@@ -7,6 +7,13 @@
     tabindex="1"
   >
     <div class="tileViewer" ref="map"></div>
+    <RectDebug
+      class="rect-debug"
+      v-if="debugRectangles"
+      :rectangles="debugRectangles"
+      :width="debugRectSize.width"
+      :height="debugRectSize.height"
+    ></RectDebug>
     <photo-skeleton
       v-if="loading"
       class="skeleton"
@@ -34,7 +41,7 @@ import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/exten
 import equal from 'fast-deep-equal';
 import CrossDragPan from './openlayers/CrossDragPan';
 import Geoview from './openlayers/geoview.js';
-
+import RectDebug from './RectDebug.vue';
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
@@ -42,6 +49,8 @@ import { getFeaturesUrl, getTileUrl } from '../api';
 import { useColorMode } from '@vueuse/core';
 import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTile from 'ol/source/VectorTile';
+import TileDebug from 'ol/source/TileDebug';
+import TileState from 'ol/TileState';
 import Style from 'ol/style/Style';
 import Fill from 'ol/style/Fill';
 
@@ -64,6 +73,7 @@ export default {
 
   components: {
     PhotoSkeleton,
+    RectDebug,
   },
   
   props: {
@@ -77,6 +87,8 @@ export default {
     tileSize: Number,
     imageHeight: Number,
     preloadYDelta: Number,
+    preloadView: Object,
+    preloadLowRes: Boolean,
     view: Object,
     clipview: Object,
     crossNav: Boolean,
@@ -108,12 +120,16 @@ export default {
       viewer: null,
       maxZoom: 30,
       focusZoom: 1,
+      debugRectangles: null,
+      debugRectSize: { width: 20, height: 20 },
     }
   },
   async mounted() {
     this.latestView = null;
     this.lastAnimationTime = 0;
     this.loadingVectorTiles = 0;
+    this.loadingMainTiles = 0;
+    this.preloadedView = null;
     this.reset();
   },
   setup() {
@@ -215,6 +231,19 @@ export default {
       this.reload();
     },
 
+    preloadView() {
+      if (this.loadingMainTiles == 0) {
+        this.preloadTiles();
+      }
+    },
+
+    preloadLowRes() {
+      this.map.setPreload(
+        this.geo ? 2 :
+          this.preloadLowRes ? 6 : 0
+      );
+    },
+
   },
   computed: {
     pointerTarget() {
@@ -260,9 +289,67 @@ export default {
     },
     containerBackgroundColor() {
       return this.focus && this.focusZoom > 0.99 ? "black" : null;
-    }
+    },
+
   },
   methods: {
+
+    updateDebugRectangles() {
+      const main = this.map.getLayers().getArray().find(l => l.get("main"));
+      if (!main) return;
+
+      const source = main.getSource();
+      if (!source) return;
+
+      const grid = source.getTileGrid();
+      const projection = source.getProjection();
+      const visibleExtent = this.v.calculateExtent(this.map.getSize());
+      const view = this.viewFromExtent(visibleExtent);
+      const rectangles = [];
+      const zoom = Math.floor(this.zoomFromView(view)) + 1;
+      let minx = Number.MAX_SAFE_INTEGER;
+      let miny = Number.MAX_SAFE_INTEGER;
+      let maxx = Number.MIN_SAFE_INTEGER;
+      let maxy = Number.MIN_SAFE_INTEGER;
+      const expansionFactor = 4;
+      const expandedExtent = [
+        visibleExtent[0] - expansionFactor * (visibleExtent[2] - visibleExtent[0]),
+        visibleExtent[1] - expansionFactor * (visibleExtent[3] - visibleExtent[1]),
+        visibleExtent[2] + expansionFactor * (visibleExtent[2] - visibleExtent[0]),
+        visibleExtent[3] + expansionFactor * (visibleExtent[3] - visibleExtent[1]),
+      ];
+      grid.forEachTileCoord(expandedExtent, zoom, tileCoord => {
+        const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
+        const color =
+          tile.state == TileState.IDLE ? "#90EE90" :    // Light pastel green
+          tile.state == TileState.LOADING ? "#FFA07A" : // Light salmon
+          tile.state == TileState.LOADED ? "#87CEFA" :  // Light sky blue
+          tile.state == TileState.ERROR ? "#E6A8D7" :   // Light orchid
+          "#EEEEEE";                                    // Light gray default
+        const x = tileCoord[1];
+        const y = tileCoord[2];
+        minx = Math.min(minx, x);
+        miny = Math.min(miny, y);
+        maxx = Math.max(maxx, x);
+        maxy = Math.max(maxy, y);
+        rectangles.push({
+          x,
+          y,
+          w: 1,
+          h: 1,
+          color,
+        });
+      });
+      const cx = Math.floor((minx + maxx) / 2 - this.debugRectSize.width / 2);
+      const cy = Math.floor((miny + maxy) / 2 - this.debugRectSize.height / 2);
+      this.debugRectangles = rectangles.map(rect => {
+        return {
+          ...rect,
+          x: rect.x - cx,
+          y: rect.y - cy,
+        }
+      });
+    },
 
     getTiledImageSizeAtZoom(zoom) {
       const tileSize = this.tileSize;
@@ -292,19 +379,25 @@ export default {
     },
 
     createMainLayer() {
+      const source = new XYZ({
+        tileUrlFunction: this.tileUrlFunction,
+        crossOrigin: "Anonymous",
+        projection: this.projection,
+        tileSize: this.tileSize,
+        opaque: false,
+        transition: 100,
+      });
+      source.on("tileloadstart", this.onMainTileLoadStart);
+      source.on("tileloadend", this.onMainTileLoadEnd);
+      source.on("tileloaderror", this.onMainTileLoadError);
+      source.on("change", this.onMainSourceChange);
+
       const main = new TileLayer({
         properties: {
           main: true,
         },
         preload: this.geo ? 2 : 0,
-        source: new XYZ({
-          tileUrlFunction: this.tileUrlFunction,
-          crossOrigin: "Anonymous",
-          projection: this.projection,
-          tileSize: this.tileSize,
-          opaque: false,
-          transition: 100,
-        }),
+        source,
       });
 
       if (this.geo) {
@@ -370,7 +463,7 @@ export default {
 
         this.map.render();
       });
-      
+
       return main;
     },
 
@@ -487,6 +580,7 @@ export default {
           source: vectorSource,
           declutter: false,
           style: this.styleFunction,
+          // renderMode: 'hybrid',
         })
         vectorSource.on('tileloadstart', this.onVectorTileLoadStart);
         vectorSource.on('tileloadend', this.onVectorTileLoadEnd);
@@ -495,6 +589,12 @@ export default {
         return [
           vector,
           main,
+          // new TileLayer({
+          //   source: new TileDebug({
+          //     projection: this.projection,
+          //     tileGrid: main.getSource().getTileGrid(),
+          //   }),
+          // }),
         ];
       }
     },
@@ -514,6 +614,21 @@ export default {
       this.loadingVectorTiles = Math.max(0, this.loadingVectorTiles - 1);
     },
 
+    onMainTileLoadStart(event) {
+      this.loadingMainTiles++;
+    },
+
+    onMainTileLoadEnd(event) {
+      this.loadingMainTiles = Math.max(0, this.loadingMainTiles - 1);
+      if (this.loadingMainTiles == 0) {
+        this.preloadTiles();
+      }
+    },
+
+    onMainTileLoadError(event) {
+      this.loadingMainTiles = Math.max(0, this.loadingMainTiles - 1);
+    },
+
     loadAdjacentTiles(zoom, deltaY) {
       if (!this.map || !this.v) return;
       if (deltaY === undefined) deltaY = 2;
@@ -531,6 +646,40 @@ export default {
       view.y -= preloadDist * 0.5;
       const preloadExtent = this.extentFromView(view);
       grid.forEachTileCoord(preloadExtent, zoom, tileCoord => {
+        const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
+        tile.load();
+      });
+    },
+
+    preloadTiles() {
+      if (!this.map || !this.v) return;
+      const layer = this.map.getLayers().getArray().find(l => l.get("main"));
+      if (!layer) return;
+      const source = layer.getSource();
+      if (!source) return;
+      const grid = source.getTileGrid();
+      const projection = source.getProjection();
+      const view = this.preloadView;
+      if (!view) return;
+      if (
+        this.preloadedView &&
+        this.preloadedView.x == view.x &&
+        this.preloadedView.y == view.y &&
+        this.preloadedView.w == view.w &&
+        this.preloadedView.h == view.h
+      ) {
+        return;
+      }
+      this.preloadedView = view;
+      const preloadExtent = this.extentFromView(view);
+      const zoom = Math.floor(this.zoomFromView(view));
+      // console.log("preload view", view);
+      let maxZoom = 0;
+      source.tileCache.forEach(tile => {
+        maxZoom = Math.max(maxZoom, tile.tileCoord[0]);
+      });
+      grid.forEachTileCoord(preloadExtent, maxZoom, tileCoord => {
+        // console.log("preload tile", tileCoord);
         const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
         tile.load();
       });
@@ -1124,6 +1273,13 @@ export default {
 
 .container.focus {
   background: black;
+}
+
+.rect-debug {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .interactive {

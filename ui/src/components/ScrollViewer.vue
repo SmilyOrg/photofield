@@ -11,6 +11,8 @@
       :debug="debug"
       :tileSize="512"
       :preloadYDelta="preloadYDelta"
+      :preloadView="preloadView"
+      :preloadLowRes="!!region"
       :imageHeight="imageHeight"
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
@@ -76,7 +78,7 @@
 import { useEventBus, watchDebounced } from '@vueuse/core';
 import { computed, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { getRegion, getRegions, useScene, useApi, getRegionClosestTo } from '../api';
-import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimestamps, useTimestampsDate } from '../use.js';
+import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimestamps, useTimestampsDate, useRegion } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
@@ -131,6 +133,7 @@ const {
 const viewer = ref(null);
 const viewport = useViewport(viewer);
 
+const preloadRegionId = ref(null);
 const lastView = ref(null);
 const lastNonNativeView = ref(null);
 let lastLoadedScene = null;
@@ -201,6 +204,12 @@ const {
   collectionId,
   regionId,
 })
+
+const { region: preloadRegion } = useRegion({ scene, id: preloadRegionId });
+const preloadView = computed(() => {
+  if (!preloadRegion.value) return null;
+  return preloadRegion.value.bounds;
+});
 
 const regionTransition = ref(false);
 watch(region, async (newRegion, oldRegion) => {
@@ -335,8 +344,14 @@ function onWindowScroll() {
   nativeScrollY.value = window.scrollY;
 }
 
-watch(regionId, (value) => {
-  document.documentElement.classList.toggle("no-scroll", !!value);
+watch(regionId, (newId, oldId) => {
+  document.documentElement.classList.toggle("no-scroll", !!newId);
+  if (newId !== oldId && newId !== undefined && oldId !== undefined) {
+    const nid = parseInt(newId, 10);
+    const oid = parseInt(oldId, 10);
+    const delta = nid - oid;
+    preloadRegionId.value = nid + delta;
+  }
 }, { immediate: true });
 
 onMounted(() => {
