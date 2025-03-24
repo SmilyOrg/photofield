@@ -363,7 +363,7 @@ const scrollRatio = computed(() => {
 });
 
 const preloadYDelta = computed(() => {
-  return scrollSpeed.value * 1;
+  return scrollDelta.value;
 });
 
 let lastScrollTime = 0;
