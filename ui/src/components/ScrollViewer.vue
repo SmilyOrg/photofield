@@ -15,7 +15,7 @@
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
       :zoomable="!nativeScroll && interactive"
-      :zoom-transition="regionTransition"
+      :zoom-transition="true"
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
@@ -202,9 +202,7 @@ const {
   regionId,
 })
 
-const regionTransition = ref(false);
-watch(region, async (newRegion, oldRegion) => {
-  regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+watch(region, async newRegion => {
   emit("region", newRegion);
 }, { immediate: true });
 

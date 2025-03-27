@@ -931,7 +931,7 @@ export default {
         const zoom = Geoview.fromView(view, this.scene.bounds)[2];
         const zoomDiff = Math.abs(zoom - prevZoom);
 
-        if (zoomDiff > 1e-4 && !options) {
+        if (zoomDiff > 0.01 && !options) {
           const t = Math.max(0.3, Math.pow(zoomDiff, 0.8) * 0.1);
           options = { animationTime: t }
         }
