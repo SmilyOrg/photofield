@@ -22,7 +22,7 @@
       placeholder="Search your photos"
       outlined
       :modelValue="modelValue"
-      @input="inputValue = $event.target.value"
+      @input="onInput"
       @blur="onBlur"
       @keyup.escape="inputValue = ''; onBlur($event)"
     >
@@ -77,12 +77,20 @@ const toggle = async () => {
   }
 }
 
+const onInput = (event) => {
+  inputValue.value = event.target.value;
+}
+
 watch(modelValue, value => {
-  if (value === undefined) {
-    return;
+  if (value !== undefined) {
+    active.value = true;
+    inputValue.value = value;
+  } else if (value === undefined && inputValue.value) {
+    // Only deactivate search automatically if the value is cleared
+    // via non-input means (e.g. via navigation). Otherwise we would
+    // be deactivating the search field when the user is typing.
+    active.value = false;
   }
-  active.value = !!value;
-  inputValue.value = value;
 }, {
   immediate: true,
 })

@@ -32,7 +32,7 @@
 
 Run both the API server and the UI server in separate terminals. They are set
 up to work with each other by default with the API server running at port `8080`
-and the UI server on port `3000`.
+and the UI server on port `5173`.
 
 `just` is [just] as defined in the [prerequisites](#prerequisites).
 
@@ -46,7 +46,7 @@ and the UI server on port `3000`.
     cd ui
     npm run dev
     ```
-3. Open http://localhost:3000
+3. Open http://localhost:5173
 
 [Go]: https://golang.org/
 [Node.js]: https://nodejs.org/

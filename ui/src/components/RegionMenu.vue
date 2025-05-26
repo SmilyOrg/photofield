@@ -33,22 +33,24 @@
         >
           Open Image in New Tab
         </ui-nav-item>
-        <ui-nav-item
-          v-if="albumUrl"
-          :href="albumUrl"
-          target="_blank"
-          @click="$emit('close')"
-        >
-          Open Image in Album
-        </ui-nav-item>
+        <ui-item v-if="albumUrl" @click="$emit('close')">
+          <router-link
+            :to="albumLocation"
+            target="_blank"
+          >
+            Open Image in Album
+          </router-link>
+        </ui-item>
         <ui-item @click="copyImage()">
           Copy Image
         </ui-item>
         <ui-item @click="copyImageLink()">
           Copy Image Link
         </ui-item>
-        <ui-item @click="findSimilar()">
-          Find Similar Images
+        <ui-item @click="$emit('close')">
+          <router-link :to="findSimilarLocation">
+            Find Similar Images
+          </router-link>
         </ui-item>
       </ui-nav>
       <div v-if="expanded" class="thumbnails">
@@ -79,7 +81,7 @@ import ExpandButton from './ExpandButton.vue';
 import { getFileUrl, getThumbnailUrl } from '../api';
 import { computed, ref } from 'vue';
 import { useViewport } from '../use';
-import { useRoute } from 'vue-router';
+import { useLink, useRoute } from 'vue-router';
 
 export default {
   props: ["region", "scene", "flip", "tileSize"],
@@ -105,10 +107,39 @@ export default {
       url.pathname = url.pathname.replace(/(.*\/collections\/[^/]+)\/.*$/, "$1");
       return url.toString();
     });
+
+    const albumLocation = computed(() => {
+      const fileId = props.region?.data?.id;
+      if (!fileId) return null;
+      return {
+        name: "collection",
+        query: {
+          ...route.query,
+          f: fileId,
+          layout: "ALBUM",
+          search: undefined,
+        },
+      }
+    });
+
+    const findSimilarLocation = computed(() => {
+      const fileId = props.region?.data?.id;
+      if (!fileId) return null;
+      return {
+        name: "collection",
+        query: {
+          ...route.query,
+          search: `img:${fileId}`,
+          f: undefined,
+        },
+      }
+    });
     return {
       viewer,
       viewport,
       albumUrl,
+      albumLocation,
+      findSimilarLocation,
     }
   },
   computed: {

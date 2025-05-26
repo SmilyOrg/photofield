@@ -15,12 +15,13 @@
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
       :zoomable="!nativeScroll && interactive"
-      :zoom-transition="true"
+      :kinetic="kinetic"
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
       :qualityPreset="qualityPreset"
       @click="onClick"
+      @pointerdown="onPointerDown"
       @view="onView"
       @nav="onNav"
       @wheel="onWheel"
@@ -67,7 +68,6 @@
       :region="contextRegion"
       :tileSize="512"
       @close="closeContextMenu()"
-      @search="emit('search', $event)"
     ></RegionMenu>
   </div>
 </template>
@@ -77,6 +77,7 @@ import { useEventBus, watchDebounced } from '@vueuse/core';
 import { computed, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { getRegion, getRegions, useScene, useApi, getRegionClosestTo } from '../api';
 import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimestamps, useTimestampsDate } from '../use.js';
+import Geoview from './openlayers/geoview.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
@@ -169,7 +170,6 @@ watch(scene, async (newScene) => {
     return;
   }
   if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
-    updateFocusFile(null);
     scrollToPixels(0);
   }
   lastLoadedScene = newScene;
@@ -184,6 +184,9 @@ const {
 );
 
 const focusRegion = computed(() => {
+  if (!focusFileId.value) {
+    return null;
+  }
   return focusRegions.value?.[0];
 });
 
@@ -202,12 +205,24 @@ const {
   regionId,
 })
 
-watch(region, async newRegion => {
-  emit("region", newRegion);
-}, { immediate: true });
+const regionZoomRatio = computed(() => {
+  if (!region.value) return 1;
+  if (!scene.value) return 1;
+  if (!lastView.value) return 1;
+  const viewZoom = Geoview.fromView(lastView.value, scene.value.bounds)[2];
+  const regionZoom = Geoview.fromView(region.value.bounds, scene.value.bounds)[2];
+  return viewZoom / regionZoom;
+});
 
 const exit = async () => {
+  if (regionZoomRatio.value > 1.1) {
+    await zoomOut();
+    return;
+  }
   await centerToBounds(lastNonNativeView.value);
+  viewer.value?.setView(scrollView.value, {
+    zoomAnimation: true,
+  });
   await regionExit();
 }
 
@@ -216,7 +231,7 @@ const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 
 const contextMenu = ref(null);
 const {
-  onContextMenu,
+  onContextMenu: openContextMenu,
   openEvent: contextEvent,
   close: closeContextMenu,
   region: contextRegion,
@@ -254,6 +269,7 @@ const nativeScroll = computed(() => {
 
 
 const centerToBounds = async (bounds) => {
+  if (!bounds) return;
   const by = bounds.y + bounds.h * 0.5;
   const vy = viewport.height.value * 0.5;
   await nextTick();
@@ -266,17 +282,13 @@ const onEscape = async () => {
     emit("selectTag", null);
     return;
   }
-  zoomOut();
-  if (lastView.value) {
-    const lastZoom = scene.value.bounds.w / lastView.value.w;
-    if (lastZoom > 1.1) {
-      return;
-    }
-  }
 }
 
 const zoomOut = () => {
-  viewer.value?.setView(view.value);
+  viewer.value?.setView(view.value, {
+    animationTime: 0.2,
+    ease: "out",
+  });
 }
 
 const nativeScrollY = ref(window.scrollY);
@@ -348,11 +360,11 @@ watch(regionId, (value) => {
 }, { immediate: true });
 
 onMounted(() => {
-  window.addEventListener("scroll", onWindowScroll);
+  window.addEventListener("scroll", onWindowScroll, { passive: true });
   document.documentElement.classList.add("hide-scrollbar");
 });
 onUnmounted(() => {
-  window.removeEventListener("scroll", onWindowScroll);
+  window.removeEventListener("scroll", onWindowScroll, { passive: true });
   document.documentElement.classList.remove("hide-scrollbar");
   document.documentElement.classList.remove("no-scroll");
 });
@@ -421,17 +433,27 @@ function updateFocusFile(id) {
 const timestamps = useTimestamps({ scene, height: viewport.height });
 const scrollDate = useTimestampsDate({ timestamps, ratio: scrollRatio });
 
-const view = computed(() => {
-  if (region.value) {
-    return region.value.bounds;
-  }
-
+const scrollView = computed(() => {
   return {
     x: 0,
     y: scrollY.value + scrollDelta.value * scrollDt.value,
     w: viewport.width.value,
     h: viewport.height.value,
   }
+});
+
+const view = computed(() => {
+  if (region.value) {
+    return region.value.bounds;
+  }
+  return scrollView.value;
+});
+
+const kinetic = computed(() => {
+  if (!regionId.value && !nativeScroll.value) {
+    return true;
+  }
+  return regionZoomRatio.value > 1.1;
 });
 
 watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
@@ -455,11 +477,28 @@ const {
   scene,
 });
 
+const contextMenuOpened = ref(false);
+const onPointerDown = () => {
+  contextMenuOpened.value = false;
+}
+
+const onContextMenu = (event) => {
+  openContextMenu(event);
+  contextMenuOpened.value = true;
+}
+
 const onClick = async (event) => {
   if (contextEvent.value) {
+    // Prevent click behavior if context menu was
+    // opened by long press
+    if (contextMenuOpened.value) {
+      contextMenuOpened.value = false;
+      return;
+    }
     closeContextMenu();
     return;
   }
+  contextMenuOpened.value = false;
   if (!event) return false;
   if (region.value) return false;
   const pos = viewer.value?.elementToViewportCoordinates(event);
@@ -476,10 +515,14 @@ const onClick = async (event) => {
   }
   const regions = await getRegions(scene.value?.id, pos.x, pos.y, 0, 0);
   if (regions && regions.length > 0) {
-    if (regions[0].id == region.value?.id) {
+    const r = regions[0];
+    if (r.id == region.value?.id) {
       return false;
     }
-    emit("region", regions[0]);
+    viewer.value?.setView(r.bounds, {
+      zoomAnimation: true,
+    });
+    emit("region", r);
     return true;
   }
   return false;

@@ -27,7 +27,6 @@
       @selectTag="onSelectTag"
       @region="onRegion"
       @scene="mapScene = $event"
-      @search="onSearch"
       @viewer="mapTileViewer = $event"
       @swipeUp="onSwipeUp"
     >
@@ -55,7 +54,6 @@
       @region="onRegion"
       @elementView="lastView = $event"
       @scene="scrollScene = $event"
-      @search="onSearch"
       @viewer="scrollTileViewer = $event"
       @swipeUp="onSwipeUp"
     >
@@ -147,10 +145,12 @@ const showDetails = computed(() => {
 const setDetails = (show) => {
   if (show) {
     router.push({
+      query: route.query,
       hash: "#details"
     });
   } else {
     router.replace({
+      query: route.query,
       hash: ""
     });
   }
@@ -229,7 +229,8 @@ async function onFocusFileId(id) {
     query: {
       ...route.query,
       f: id || undefined,
-    }
+    },
+    hash: route.hash,
   });
 }
 
@@ -255,8 +256,9 @@ const onSelectTag = async (tag) => {
   await router.replace({
     query: {
       ...route.query,
-      select_tag: tag.id,
-    }
+      select_tag: tag?.id,
+    },
+    hash: route.hash,
   });
   await selectTagMutate(() => tag);
 }
@@ -277,15 +279,6 @@ const imageHeight = computed(() => {
 const search = computed(() => {
   return route.query.search;
 })
-
-const onSearch = (search) => {
-  router.push({
-    query: {
-      ...route.query,
-      search,
-    }
-  });
-}
 
 const debug = computed(() => {
   const v = {};

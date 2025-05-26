@@ -13,14 +13,14 @@
       :interactive="interactive"
       :pannable="interactive"
       :zoomable="interactive"
-      :zoom-transition="regionTransition"
+      :kinetic="true"
       :focus="!!region"
       :crossNav="!!region"
-      :viewport="viewport"
+      :viewport="staticViewport"
       @nav="onNav"
       @view="onView"
       @contextmenu.prevent="onContextMenu"
-      @click.capture="onClick"
+      @click="onClick"
       @box-select="onBoxSelect"
       @viewer="emit('viewer', $event)"
     ></tile-viewer>
@@ -45,7 +45,6 @@
       :region="contextRegion"
       :tileSize="512"
       @close="closeContextMenu()"
-      @search="emit('search', $event)"
     ></RegionMenu>
   </div>
 </template>
@@ -55,7 +54,7 @@ import { debounce } from 'throttle-debounce';
 import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getRegions, useApi, useScene } from '../api';
-import { useContextMenu, useSeekableRegion, useTags, useViewport } from '../use.js';
+import { useContextMenu, useSeekableRegion, useTags } from '../use.js';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
@@ -103,9 +102,6 @@ const {
 } = toRefs(props);
 
 const viewer = ref(null);
-const viewport = useViewport(viewer);
-
-const regionTransition = ref(false);
 
 // Maps are always a square,
 // so the layout is viewport-independent
@@ -143,10 +139,6 @@ watch(scene, async (newScene, oldScene) => {
   emit("scene", newScene);
 });
 
-watch(region, async (newRegion, oldRegion) => {
-  regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
-}, { immediate: true });
-
 const { data: capabilities } = useApi(() => "/capabilities");
 const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 
@@ -161,8 +153,12 @@ const {
 const router = useRouter();
 const route = useRoute();
 
+const queryStr = computed(() => {
+  return route.query.p || null;
+})
+
 const geoview = computed(() => {
-  const p = route.query.p;
+  const p = queryStr.value;
   if (!p) return;
   let [latstr, lonstr, zstr] = p.split(",", 3);
   if (!latstr || !lonstr || !zstr) return;
@@ -196,9 +192,10 @@ const applyGeoview = async (geoview) => {
   const [lon, lat, z] = geoview;
   await router.replace({
     query: {
-      ...router.currentRoute.value.query,
+      ...route.query,
       p: `${lat.toFixed(7)},${lon.toFixed(7)},${z.toFixed(2)}z`,
-    }
+    },
+    hash: route.hash,
   });
 }
 
@@ -219,6 +216,15 @@ const onView = (view) => {
 
 const lastView = ref(null);
 
+const regionZoomRatio = computed(() => {
+  if (!region.value) return 1;
+  if (!scene.value) return 1;
+  if (!lastView.value) return 1;
+  const viewZoom = Geoview.fromView(lastView.value, scene.value.bounds)[2];
+  const regionZoom = Geoview.fromView(region.value.bounds, scene.value.bounds)[2];
+  return viewZoom / regionZoom;
+});
+
 const exit = async () => {
   if (selectTag.value) {
     emit("selectTag", null);
@@ -233,6 +239,10 @@ const exit = async () => {
 }
 
 const externalExit = async () => {
+  if (regionZoomRatio.value > 1.1) {
+    zoomOut();
+    return;
+  }
   if (!region.value) {
     return;
   }
@@ -242,11 +252,18 @@ const externalExit = async () => {
     g[1],
     Math.max(1, g[2] - 3),
   ])
+  viewer.value?.setView(geoviewView.value, {
+    animationTime: 0.3,
+    ease: "inAndOut",
+  });
   await regionExit();
 }
 
 const zoomOut = () => {
-  viewer.value?.setView(view.value);
+  viewer.value?.setView(view.value, {
+    animationTime: 0.2,
+    ease: "out",
+  });
 }
 
 const onNav = async (event) => {
@@ -303,8 +320,11 @@ const onClick = async (event) => {
   }
   const regions = await getRegions(scene.value?.id, pos.x, pos.y, 0, 0);
   if (regions && regions.length > 0) {
-    const region = regions[0];
-    emit("region", region);
+    const r = regions[0];
+    viewer.value?.setView(r.bounds, {
+      zoomAnimation: true,
+    });
+    emit("region", r);
     return true;
   }
   return false;

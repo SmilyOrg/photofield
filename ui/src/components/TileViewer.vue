@@ -145,7 +145,6 @@ export default {
     viewport: {
       handler(viewport) {
         if (!viewport) return;
-        if (!this.geo) return;
         this.reset();
       },
       deep: true,
@@ -563,6 +562,7 @@ export default {
       if (!coords) return;
       this.$emit("click", {
         ...coords,
+        ctrlKey: event.originalEvent.ctrlKey,
         originalEvent: event.originalEvent,
       });
     },
@@ -590,7 +590,6 @@ export default {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
-      this.latestView = view;
       this.$emit("view", view);
     },
 
@@ -598,7 +597,6 @@ export default {
       const visibleExtent = this.v.calculateExtent(this.map.getSize());
       const view = this.viewFromExtent(visibleExtent);
       if (!view) return;
-      this.latestView = view;
       this.$emit("view", view);
       if (this.focus) {
         const focuszoom = this.zoomFromView(this.view);
@@ -788,7 +786,9 @@ export default {
 
       const vw = view.w;
       const vh = view.h;
-      const [mw, mh] = this.map.getSize();
+      const size = this.map.getSize();
+      if (!size) return null;
+      const [mw, mh] = size;
       const zw = mw / vw;
       const zh = mh / vh;
       return Math.min(zw, zh);
@@ -831,7 +831,7 @@ export default {
     },
 
     viewFromCoordinate(coord) {
-      if (!this.scene) return null;
+      if (!this.scene?.bounds.w || !coord) return null;
       const fullExtent = this.projection.getExtent();
       const [xa, ya, xb, yb] = fullExtent;
       return {
@@ -917,6 +917,7 @@ export default {
 
       if (
         this.latestView && view &&
+        !options &&
         this.latestView.x == view.x &&
         this.latestView.y == view.y &&
         this.latestView.w == view.w &&
@@ -926,13 +927,13 @@ export default {
         return;
       }
 
-      if (this.zoomTransition && this.latestView) {
+      if (options?.zoomAnimation && this.latestView) {
         const prevZoom = Geoview.fromView(this.latestView, this.scene.bounds)[2];
         const zoom = Geoview.fromView(view, this.scene.bounds)[2];
         const zoomDiff = Math.abs(zoom - prevZoom);
 
-        if (zoomDiff > 0.01 && !options) {
-          const t = Math.max(0.3, Math.pow(zoomDiff, 0.8) * 0.1);
+        if (zoomDiff > 0.01) {
+          const t = Math.max(0.2, Math.pow(zoomDiff, 0.8) * 0.1);
           options = { animationTime: t }
         }
       }

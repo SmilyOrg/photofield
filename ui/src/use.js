@@ -114,7 +114,6 @@ export function useScrollbar(scrollbar, sleep) {
 }
 
 export function useRegion({ scene, id }) {
-  
   const valid = computed(() => {
     return !!(scene?.value?.id && !scene.value.loading && id.value);
   });
@@ -124,23 +123,22 @@ export function useRegion({ scene, id }) {
     `/scenes/${scene.value.id}/regions/${id.value}`
   );
 
-  const region = ref(null);
-
-  watchEffect(() => {
+  const lastRegion = ref(null);
+  const region = computed(() => {
     if (!id.value) {
-      region.value = null;
-      return;
+      lastRegion.value = null;
+      return null;
     }
     if (!valid.value) {
-      region.value = {
+      return {
         id: id.value,
         loading: true,
       }
-      return;
     }
-    if (isValidating.value) return;
-    region.value = data.value;
-  })
+    if (isValidating.value) return lastRegion.value;
+    lastRegion.value = data.value;
+    return data.value;
+  });
 
   return {
     region,
@@ -251,6 +249,7 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
         collectionId: collectionId.value,
       },
       query: route.query,
+      hash: "",
     });
   }
 

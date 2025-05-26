@@ -26,7 +26,13 @@
           @click="toggleFocus()"
         >
           <span v-if="selected">
-            {{ currentScene?.file_count }} file{{ currentScene?.file_count > 1 ? 's' : '' }} of
+            <span v-if="currentScene?.file_count">
+              {{ currentScene?.file_count }} file{{ currentScene?.file_count > 1 ? 's' : '' }} 
+            </span>
+            <span v-else>
+              Files
+            </span>
+            of
           </span>
           {{ collection.name }}
           <ui-icon class="inline">
@@ -65,9 +71,8 @@
 
         <search-input
           v-if="showSearch"
-          :hide="selected"
           :loading="query.search && scrollScene?.loading"
-          :modelValue="selected && !searchActive ? '' : query.search"
+          :modelValue="selected && !searchActive ? undefined : query.search"
           :error="scrollScene?.error"
           @active="searchActive = $event"
           @update:modelValue="onSearch"
@@ -235,23 +240,25 @@ export default {
     });
 
     const goBack = () => {
-      if (selected.value) {
-        router.push({
-          query: {
-            ...query.value,
-            search: undefined,
-          }
-        });
-      } else if (selecting.value) {
+      if (selecting.value) {
         router.push({
           query: {
             ...query.value,
             select_tag: undefined,
-          }
+          },
+          hash: route.hash,
+        });
+      } else if (selected.value) {
+        router.push({
+          query: {
+            ...query.value,
+            search: undefined,
+          },
+          hash: route.hash,
         });
       } else {
         router.replace({
-          path: "/",
+          name: "home",
         });
       }
     }
@@ -268,7 +275,7 @@ export default {
           }
         }
       }
-      router.push({ query });
+      router.push({ query, hash: route.hash });
     }
 
     const { items: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useApi(
@@ -412,7 +419,7 @@ export default {
           return;
         }
       }
-      this.setQuery({ search: query });
+      this.setQuery({ search: query, f: undefined });
     },
   }
 }
@@ -485,6 +492,14 @@ html .multiselect__input::placeholder {
 
 html .multiselect__spinner {
   background-color: var(--mdc-theme-surface);
+}
+
+/* RouterLink inside <ui-item> */
+  .mdc-deprecated-list-item > a {
+  width: 100%;
+  height: 100%;
+  align-content: center;
+  text-decoration: none;
 }
 
 </style>
