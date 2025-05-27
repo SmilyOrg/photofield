@@ -38,6 +38,15 @@ func FindPath() string {
 		return ""
 	}
 	log.Printf("djpeg found at %s\n", path)
+
+	// Run djpeg to check if it's libjpeg-turbo
+	cmd := exec.Command(path, "-version")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		if !bytes.Contains(output, []byte("libjpeg-turbo")) {
+			log.Println("djpeg warning: version is not libjpeg-turbo, performance may be suboptimal")
+		}
+	}
 	return path
 }
 
