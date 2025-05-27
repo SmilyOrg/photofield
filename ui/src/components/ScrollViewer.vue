@@ -4,7 +4,9 @@
     <tile-viewer
       class="viewer"
       ref="viewer"
-      :style="{ transform: `translate(0, ${nativeScrollY}px)` }"
+      :style="{
+        transform: `translate(0, ${nativeScrollY + scrollDelta * scrollDt}px)`
+      }"
       :scene="scene"
       :view="view"
       :selectTag="selectTag"
@@ -13,12 +15,12 @@
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
       :zoomable="!nativeScroll && interactive"
-      :zoom-transition="regionTransition"
+      :zoom-transition="true"
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
       :qualityPreset="qualityPreset"
-      @click.capture="onClick"
+      @click="onClick"
       @view="onView"
       @nav="onNav"
       @wheel="onWheel"
@@ -39,7 +41,7 @@
 
     <DateStrip
       class="date-strip"
-      :class="{ visible: scrollSpeed > viewport.height.value * 8 }"
+      :class="{ visible: Math.abs(scrollDelta) > viewport.height.value * 8 }"
       :date="scrollDate"
     ></DateStrip>
 
@@ -200,9 +202,7 @@ const {
   regionId,
 })
 
-const regionTransition = ref(false);
-watch(region, async (newRegion, oldRegion) => {
-  regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+watch(region, async newRegion => {
   emit("region", newRegion);
 }, { immediate: true });
 
@@ -305,7 +305,12 @@ function scrollToPixels(y) {
       nativeScrollTo(nativeScrollTarget);
     }
   }
+  const oldy = scrollY.value;
   scrollY.value = nativeScrollY.value + scrollOffset;
+  updateScrollDelta(scrollY.value, oldy);
+  // Scroll is treated as instantaneous and not native
+  // This prevents viewer native scroll offset rendering adjustment in CSS transform
+  scrollDt.value = 0;
 }
 
 function updateScrollFromNative(y) {
@@ -326,10 +331,15 @@ function updateScrollFromNative(y) {
     scrollOffset = ty;
     nativeScrollTo(nativeScrollTarget);
   }
+  const oldy = scrollY.value;
   scrollY.value = nativeScrollY.value + scrollOffset;
+  updateScrollDelta(scrollY.value, oldy);
 }
 
 function onWindowScroll() {
+  if (Math.abs(nativeScrollY.value - window.scrollY) < 1) {
+    return;
+  }
   nativeScrollY.value = window.scrollY;
 }
 
@@ -347,7 +357,8 @@ onUnmounted(() => {
   document.documentElement.classList.remove("no-scroll");
 });
 
-const scrollSpeed = ref(0);
+const scrollDelta = ref(0);
+const scrollDt = ref(0);
 
 const scrollMax = computed(() => {
   return Math.max(0, canvas.value.height - viewport.height.value);
@@ -358,28 +369,30 @@ const scrollRatio = computed(() => {
 });
 
 let lastScrollTime = 0;
-let scrollSpeedResetTimer = null;
-watch(scrollY, (y, oldy) => {
+let scrollDeltaResetTimer = null;
+
+function updateScrollDelta(y, oldy) {
   const now = Date.now();
-  const dt = now - lastScrollTime;
+  const dt = (now - lastScrollTime) * 1e-3;
   lastScrollTime = now;
-  if (dt == 0 || dt > 200) {
+  if (dt == 0 || dt > 0.2) {
     return;
   }
-  scrollSpeed.value = Math.abs(y - oldy) * 1000 / dt;
-  clearTimeout(scrollSpeedResetTimer);
-  scrollSpeedResetTimer = setTimeout(resetScrollSpeed, 100);
-});
-
-function resetScrollSpeed() {
-  scrollSpeed.value = 0;
+  scrollDelta.value = (y - oldy) / dt;
+  scrollDt.value = dt;
+  clearTimeout(scrollDeltaResetTimer);
+  scrollDeltaResetTimer = setTimeout(resetScrollDelta, 100);
 }
 
-watch(nativeScrollY, () => {
+function resetScrollDelta() {
+  scrollDelta.value = 0;
+}
+
+watch(nativeScrollY, y => {
   if (!nativeScroll.value) return;
   if (!canvas.value.height) return;
   if (!viewport.height.value) return;
-  updateScrollFromNative(scrollOffset + nativeScrollY.value);
+  updateScrollFromNative(scrollOffset + y);
 });
 
 watchDebounced(scrollY, async (sy) => {
@@ -415,7 +428,7 @@ const view = computed(() => {
 
   return {
     x: 0,
-    y: scrollY.value,
+    y: scrollY.value + scrollDelta.value * scrollDt.value,
     w: viewport.width.value,
     h: viewport.height.value,
   }

@@ -235,7 +235,7 @@ tasks:
   watch:
     desc: Run the API in watch mode
     cmds:
-      - task build:run -w
+      - watchexec --exts go -r task build:run
 
   build:run:
     desc: Build and run the API

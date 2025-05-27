@@ -687,6 +687,7 @@ html .multiselect__spinner {
 
 .small-spinner {
   --mdc-theme-primary: var(--mdc-theme-on-primary);
+  --mdc-theme-on-primary: var(--mdc-theme-text-primary-on-background);
 }
 
 .task-progress {

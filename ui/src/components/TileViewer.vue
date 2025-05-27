@@ -778,7 +778,8 @@ export default {
       if (!this.map) {
         return null;
       }
-      const coord = this.map.getEventCoordinate(eventOrPoint);
+      const event = eventOrPoint.originalEvent || eventOrPoint;
+      const coord = this.map.getEventCoordinate(event);
       return this.viewFromCoordinate(coord);
     },
 
@@ -924,19 +925,20 @@ export default {
         // View is already up to date, nothing to do.
         return;
       }
-      
+
       if (this.zoomTransition && this.latestView) {
         const prevZoom = Geoview.fromView(this.latestView, this.scene.bounds)[2];
         const zoom = Geoview.fromView(view, this.scene.bounds)[2];
         const zoomDiff = Math.abs(zoom - prevZoom);
 
-        if (zoomDiff > 1e-4 && !options) {
-          const t = Math.pow(zoomDiff, 0.8) * 0.1;
+        if (zoomDiff > 0.01 && !options) {
+          const t = Math.max(0.3, Math.pow(zoomDiff, 0.8) * 0.1);
           options = { animationTime: t }
         }
       }
 
       this.latestView = view;
+      
       if (this.pendingAnimationTime && !options) {
         options = { animationTime: this.pendingAnimationTime }
       }
