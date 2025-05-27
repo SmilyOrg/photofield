@@ -242,8 +242,13 @@ tasks:
       - task: build
       - task: run
 
+  run:dir:
+    dir: data
+    internal: true
+
   run:
     desc: Run the built API
+    deps: [run:dir]
     cmds:
       - ./photofield
 
