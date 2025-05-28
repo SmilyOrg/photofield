@@ -21,14 +21,22 @@ type ExifToolMostlyGeekLoader struct {
 	flags    []string
 }
 
-func NewExifToolMostlyGeekLoader(exifToolCount int) (*ExifToolMostlyGeekLoader, error) {
+func NewExifToolMostlyGeekLoader(exifToolCount int, exifToolPath string) (*ExifToolMostlyGeekLoader, error) {
 	if exifToolCount <= 0 {
 		return nil, errors.New("invalid exif tool count")
 	}
+
+	// Use provided path or fallback to "exiftool"
+	path := "exiftool"
+	if exifToolPath != "" {
+		path = exifToolPath
+	}
+
 	var err error
 	decoder := &ExifToolMostlyGeekLoader{}
 	decoder.exifTool, err = exiftool.NewPool(
-		"exiftool", exifToolCount,
+		path,
+		exifToolCount,
 		"-S", // Short tag names with no padding
 	)
 

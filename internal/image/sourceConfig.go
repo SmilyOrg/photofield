@@ -80,13 +80,14 @@ type ThumbnailConfig struct {
 
 // SourceEnvironment is the environment for creating sources
 type SourceEnvironment struct {
-	SourceTypes SourceTypeMap
-	DataDir     string
-	FFmpegPath  string
-	DjpegPath   string
-	Migrations  embed.FS
-	ImageCache  *ristretto.Ristretto
-	Databases   map[string]*sqlite.Source
+	SourceTypes  SourceTypeMap
+	DataDir      string
+	FFmpegPath   string
+	DjpegPath    string
+	ExifToolPath string
+	Migrations   embed.FS
+	ImageCache   *ristretto.Ristretto
+	Databases    map[string]*sqlite.Source
 }
 
 func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {

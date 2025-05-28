@@ -18,6 +18,7 @@ import (
 	"photofield/internal/queue"
 	"photofield/io"
 	"photofield/io/djpeg"
+	"photofield/io/exiftool"
 	"photofield/io/ffmpeg"
 	"photofield/io/ristretto"
 	"photofield/io/sqlite"
@@ -119,6 +120,11 @@ type Config struct {
 	AI        clip.AI
 	TagConfig tag.Config `json:"-"`
 
+	// Binary paths for external tools
+	FFmpegPath   string `json:"ffmpeg_path"`
+	DjpegPath    string `json:"djpeg_path"`
+	ExifToolPath string `json:"exif_tool_path"`
+
 	ExifToolCount        int  `json:"exif_tool_count"`
 	SkipLoadInfo         bool `json:"skip_load_info"`
 	SkipCollectionCounts bool `json:"skip_collection_counts"`
@@ -171,7 +177,6 @@ type Source struct {
 func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, geo *geo.Geo) *Source {
 	source := Source{}
 	source.Config = config
-	source.decoder = NewDecoder(config.ExifToolCount)
 	source.database = NewDatabase(filepath.Join(config.DataDir, "photofield.cache.db"), migrations)
 	source.imageInfoCache = newInfoCache()
 	source.pathCache = newPathCache()
@@ -202,13 +207,34 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 	)
 
 	source.imageCache = ristretto.New(config.Caches.Image.MaxSizeBytes())
+
+	// Use configured paths or fall back to automatic discovery
+	ffmpegPath := config.FFmpegPath
+	if ffmpegPath == "" {
+		ffmpegPath = ffmpeg.FindPath()
+	}
+
+	djpegPath := config.DjpegPath
+	if djpegPath == "" {
+		djpegPath = djpeg.FindPath()
+	}
+
+	exifToolPath := config.ExifToolPath
+	if exifToolPath == "" {
+		exifToolPath = exiftool.FindPath()
+	}
+
+	// Create decoder with configured exiftool path
+	source.decoder = NewDecoder(config.ExifToolCount, exifToolPath)
+
 	env := SourceEnvironment{
-		SourceTypes: config.SourceTypes,
-		FFmpegPath:  ffmpeg.FindPath(),
-		DjpegPath:   djpeg.FindPath(),
-		Migrations:  migrationsThumbs,
-		ImageCache:  source.imageCache,
-		DataDir:     config.DataDir,
+		SourceTypes:  config.SourceTypes,
+		FFmpegPath:   ffmpegPath,
+		DjpegPath:    djpegPath,
+		ExifToolPath: exifToolPath,
+		Migrations:   migrationsThumbs,
+		ImageCache:   source.imageCache,
+		DataDir:      config.DataDir,
 	}
 
 	// Sources used for rendering
