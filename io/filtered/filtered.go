@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"photofield/io"
+	"runtime/trace"
 	"strings"
 	"time"
 
@@ -65,6 +66,7 @@ func (f *Filtered) Exists(ctx context.Context, id io.ImageId, path string) bool 
 }
 
 func (f *Filtered) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+	defer trace.StartRegion(ctx, "filtered.Get").End()
 	if !f.SupportsExtension(path) {
 		return io.Result{Error: fmt.Errorf("extension not supported")}
 	}

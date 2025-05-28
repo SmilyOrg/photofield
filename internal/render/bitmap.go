@@ -1,10 +1,12 @@
 package render
 
 import (
+	"context"
 	goimage "image"
 	"image/color"
 	"math"
 	"photofield/internal/image"
+	"runtime/trace"
 
 	"github.com/tdewolff/canvas"
 	"golang.org/x/image/draw"
@@ -132,7 +134,9 @@ func cropRect(bitmap *Bitmap, bounds goimage.Rectangle) goimage.Rectangle {
 	return croprect
 }
 
-func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64, hq bool) {
+func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64, hq bool) {
+	defer trace.StartRegion(ctx, "bitmap.DrawImage").End()
+
 	bounds := img.Bounds()
 
 	arb := float64(bounds.Dx()) / float64(bounds.Dy())
@@ -166,10 +170,12 @@ func (bitmap *Bitmap) DrawImage(rimg draw.Image, img goimage.Image, c *canvas.Co
 	} else {
 		interp = draw.ApproxBiLinear
 	}
-	renderImage(rimg, img, m, croprect, interp)
+	renderImage(ctx, rimg, img, m, croprect, interp)
 }
 
-func renderImage(rimg draw.Image, img goimage.Image, m canvas.Matrix, crop goimage.Rectangle, interpolator draw.Interpolator) {
+func renderImage(ctx context.Context, rimg draw.Image, img goimage.Image, m canvas.Matrix, crop goimage.Rectangle, interpolator draw.Interpolator) {
+	defer trace.StartRegion(ctx, "renderImage").End()
+
 	bounds := img.Bounds()
 	origin := m.Dot(canvas.Point{X: 0, Y: float64(bounds.Size().Y)})
 	h := float64(rimg.Bounds().Size().Y)

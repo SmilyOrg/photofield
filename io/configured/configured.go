@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"photofield/io"
+	"runtime/trace"
 	"time"
 
 	goio "io"
@@ -96,6 +97,7 @@ func (c *Configured) Exists(ctx context.Context, id io.ImageId, path string) boo
 }
 
 func (c *Configured) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+	defer trace.StartRegion(ctx, "configured.Get").End()
 	return c.Source.Get(ctx, id, path)
 }
 

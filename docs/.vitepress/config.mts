@@ -32,6 +32,7 @@ export default defineConfig({
         text: 'Install',
         items: [
           { text: 'Quick Start', link: '/quick-start' },
+          { text: 'Dependencies', link: '/dependencies' },
         ]
       },
       {
@@ -51,6 +52,7 @@ export default defineConfig({
           { text: 'User Interface', link: '/user-interface' },
           { text: 'Configuration', link: '/configuration' },
           { text: 'Maintenance', link: '/maintenance' },
+          { text: 'Performance', link: '/performance' },
         ]
       },
       {

@@ -93,7 +93,7 @@ layouts.
 * **Flexible media/thumbnail system**. There are many different ways for images
   and thumbnails to be generated and stored. Uses FFmpeg for on-the-fly
   conversion, SQLite for caching, existing embedded JPEG thumbnails, Synology
-  Moments / Photo Station thumbnails, and more.
+  Moments / Photo Station thumbnails, and djpeg (libjpeg-turbo) for optimized JPEG processing.
 * **Single file binary**. Thanks to [Go] and [GoReleaser], all the dependencies
 are packed into a [single binary file](#binaries) for most major OSes.
 * **Read-only file system based collections**. Photofield never changes your
@@ -192,6 +192,7 @@ displayed as collections. 🎉
 * 📝 Create a `configuration.yaml` in the working dir to configure the app
 * 🕵️‍♀️ Install [exiftool] and add it to PATH for better metadata support
 (esp. for video)
+* ⚡ Install [djpeg (libjpeg-turbo)] for faster JPEG processing (optional but recommended)
 * ⚪ Set the `PHOTOFIELD_DATA_DIR` environment variable to change the path where
 the app looks for the `configuration.yaml` and cache database
 
@@ -241,6 +242,7 @@ collections:
 * [watchexec] - for auto-reloading the Go server
 * sh-like shell (e.g. sh, bash, busybox) - required by `just`
 * [exiftool] - for testing metadata extraction
+* **[djpeg (libjpeg-turbo)]** - for optimized JPEG decoding (optional but recommended for better performance)
 
 **[Scoop] (Windows)**: `scoop install busybox just exiftool watchexec`
 
@@ -329,3 +331,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [BalmUI]: https://next-material.balmjs.com/
 [photofield-ai]: https://github.com/smilyorg/photofield-ai
 [tinygpkg]: https://github.com/smilyorg/tinygpkg
+[djpeg (libjpeg-turbo)]: https://libjpeg-turbo.org/

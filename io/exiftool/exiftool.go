@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"log"
+	"os/exec"
 	"photofield/io"
 	"time"
 
@@ -18,12 +20,30 @@ type Exif struct {
 	exifTool *exiftool.Pool
 }
 
-func New(tag string) *Exif {
+// FindPath locates the exiftool binary in the system PATH
+func FindPath() string {
+	path, err := exec.LookPath("exiftool")
+	if err != nil {
+		log.Printf("exiftool not found: %s\n", err.Error())
+		return ""
+	}
+	log.Printf("exiftool found at %s\n", path)
+	return path
+}
+
+func New(tag string, exifToolPath string) *Exif {
 	e := Exif{
 		Tag: tag,
 	}
+
+	// Use provided path or fallback to "exiftool"
+	path := "exiftool"
+	if exifToolPath != "" {
+		path = exifToolPath
+	}
+
 	exifTool, err := exiftool.NewPool(
-		"exiftool", 4,
+		path, 4,
 		"-n", // Machine-readable values
 		"-S", // Short tag names with no padding
 	)

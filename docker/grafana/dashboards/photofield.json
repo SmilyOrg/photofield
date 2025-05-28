@@ -24,6 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "id": 1,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -41,7 +42,7 @@
       "dataFormat": "tsbuckets",
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -115,7 +116,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "sum(increase(pf_http_latency_bucket{path=\"$path\"}[10s])) by (le)",
@@ -158,7 +159,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -238,7 +239,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -255,7 +256,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -335,7 +336,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -352,7 +353,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "description": "",
       "fieldConfig": {
@@ -433,7 +434,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -450,7 +451,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -530,7 +531,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -547,7 +548,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -594,7 +595,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -614,7 +615,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -661,7 +662,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -681,7 +682,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -728,7 +729,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -748,7 +749,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -795,7 +796,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -813,7 +814,7 @@
       "type": "bargauge"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -821,413 +822,412 @@
         "y": 25
       },
       "id": 305,
-      "panels": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "RmeUbDMnz"
-          },
-          "gridPos": {
-            "h": 2,
-            "w": 4.8,
-            "x": 0,
-            "y": 26
-          },
-          "id": 411,
-          "maxPerRow": 12,
-          "options": {
-            "code": {
-              "language": "plaintext",
-              "showLineNumbers": false,
-              "showMiniMap": false
-            },
-            "content": "# ${source}",
-            "mode": "markdown"
-          },
-          "pluginVersion": "9.4.7",
-          "repeat": "source",
-          "repeatDirection": "h",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "RmeUbDMnz"
-              },
-              "editorMode": "code",
-              "exemplar": false,
-              "expr": "sum by(le) (rate(pf_source_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "legendFormat": "{{le}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "transparent": true,
-          "type": "text"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "RmeUbDMnz"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 4.8,
-            "x": 0,
-            "y": 28
-          },
-          "id": 349,
-          "maxPerRow": 12,
-          "options": {
-            "calculate": false,
-            "cellGap": 1,
-            "color": {
-              "exponent": 0.5,
-              "fill": "dark-orange",
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Oranges",
-              "steps": 64
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1e-9
-            },
-            "legend": {
-              "show": false
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "tooltip": {
-              "show": true,
-              "yHistogram": true
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "reverse": false,
-              "unit": "µs"
-            }
-          },
-          "pluginVersion": "9.4.7",
-          "repeat": "source",
-          "repeatDirection": "h",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "RmeUbDMnz"
-              },
-              "editorMode": "code",
-              "exemplar": false,
-              "expr": "sum by(le) (rate(pf_source_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "legendFormat": "{{le}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "$source - Latency",
-          "type": "heatmap"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "RmeUbDMnz"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 4.8,
-            "x": 0,
-            "y": 35
-          },
-          "id": 377,
-          "maxPerRow": 12,
-          "options": {
-            "calculate": false,
-            "cellGap": 1,
-            "color": {
-              "exponent": 0.5,
-              "fill": "dark-orange",
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Oranges",
-              "steps": 64
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1e-9
-            },
-            "legend": {
-              "show": false
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "tooltip": {
-              "show": true,
-              "yHistogram": true
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "reverse": false,
-              "unit": "µs"
-            }
-          },
-          "pluginVersion": "9.4.7",
-          "repeat": "source",
-          "repeatDirection": "h",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "RmeUbDMnz"
-              },
-              "editorMode": "builder",
-              "exemplar": false,
-              "expr": "sum by(le) (rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "legendFormat": "{{le}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "$source - Latency / Original MP",
-          "type": "heatmap"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "RmeUbDMnz"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 4.8,
-            "x": 0,
-            "y": 42
-          },
-          "id": 378,
-          "maxPerRow": 12,
-          "options": {
-            "calculate": false,
-            "cellGap": 1,
-            "color": {
-              "exponent": 0.5,
-              "fill": "dark-orange",
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Oranges",
-              "steps": 64
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1e-9
-            },
-            "legend": {
-              "show": false
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "tooltip": {
-              "show": true,
-              "yHistogram": true
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "reverse": false,
-              "unit": "µs"
-            }
-          },
-          "pluginVersion": "9.4.7",
-          "repeat": "source",
-          "repeatDirection": "h",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "RmeUbDMnz"
-              },
-              "editorMode": "builder",
-              "exemplar": false,
-              "expr": "sum by(le) (rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "legendFormat": "{{le}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "$source - Latency / Resized MP",
-          "type": "heatmap"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "RmeUbDMnz"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 4.8,
-            "x": 0,
-            "y": 49
-          },
-          "id": 379,
-          "maxPerRow": 12,
-          "options": {
-            "calculate": false,
-            "cellGap": 1,
-            "color": {
-              "exponent": 0.5,
-              "fill": "dark-orange",
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Oranges",
-              "steps": 64
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1e-9
-            },
-            "legend": {
-              "show": false
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "tooltip": {
-              "show": true,
-              "yHistogram": true
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "reverse": false,
-              "unit": "µs"
-            }
-          },
-          "pluginVersion": "9.4.7",
-          "repeat": "source",
-          "repeatDirection": "h",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "RmeUbDMnz"
-              },
-              "editorMode": "builder",
-              "exemplar": false,
-              "expr": "sum by(le) (rate(pf_source_latency_abs_diff_bucket{source=~\"$source\"}[$__rate_interval]))",
-              "format": "heatmap",
-              "instant": false,
-              "interval": "",
-              "legendFormat": "{{le}}",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "$source - Latency Diff vs. Predicted",
-          "type": "heatmap"
-        }
-      ],
+      "panels": [],
       "title": "Source Details",
       "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 4,
+        "x": 0,
+        "y": 26
+      },
+      "id": 411,
+      "maxPerRow": 12,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "# ${source}",
+        "mode": "markdown"
+      },
+      "pluginVersion": "9.4.7",
+      "repeat": "source",
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by(le) (rate(pf_source_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{le}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 0,
+        "y": 28
+      },
+      "id": 349,
+      "maxPerRow": 12,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": false
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "reverse": false,
+          "unit": "µs"
+        }
+      },
+      "pluginVersion": "9.4.7",
+      "repeat": "source",
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by(le) (rate(pf_source_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{le}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "$source - Latency",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 0,
+        "y": 35
+      },
+      "id": 377,
+      "maxPerRow": 12,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": false
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "reverse": false,
+          "unit": "µs"
+        }
+      },
+      "pluginVersion": "9.4.7",
+      "repeat": "source",
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "sum by(le) (rate(pf_source_per_original_megapixel_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{le}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "$source - Latency / Original MP",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 0,
+        "y": 42
+      },
+      "id": 378,
+      "maxPerRow": 12,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": false
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "reverse": false,
+          "unit": "µs"
+        }
+      },
+      "pluginVersion": "9.4.7",
+      "repeat": "source",
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "sum by(le) (rate(pf_source_per_resized_megapixel_latency_bucket{source=~\"$source\"}[$__rate_interval]))",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{le}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "$source - Latency / Resized MP",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 0,
+        "y": 49
+      },
+      "id": 379,
+      "maxPerRow": 12,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": false
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "tooltip": {
+          "show": true,
+          "yHistogram": true
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "reverse": false,
+          "unit": "µs"
+        }
+      },
+      "pluginVersion": "9.4.7",
+      "repeat": "source",
+      "repeatDirection": "h",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "sum by(le) (rate(pf_source_latency_abs_diff_bucket{source=~\"$source\"}[$__rate_interval]))",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{le}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "$source - Latency Diff vs. Predicted",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
       },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 56
       },
       "id": 143,
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "refId": "A"
         }
@@ -1238,7 +1238,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1267,7 +1267,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 57
       },
       "id": 93,
       "options": {
@@ -1291,7 +1291,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "label_replace({__name__=~\"pf_index_${indexer}_pending\"}, \"name\", \"$1\", \"__name__\", \"pf_index_(.*)_pending\")",
@@ -1308,7 +1308,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1333,7 +1333,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 27
+        "y": 57
       },
       "id": 109,
       "options": {
@@ -1356,7 +1356,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "rate(pf_index_metadata_done[10s])",
@@ -1373,7 +1373,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1398,7 +1398,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 27
+        "y": 57
       },
       "id": 126,
       "options": {
@@ -1421,7 +1421,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "rate(pf_index_contents_done[10s])",
@@ -1438,20 +1438,20 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 62
       },
       "id": 56,
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "refId": "A"
         }
@@ -1462,7 +1462,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1491,7 +1491,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 33
+        "y": 63
       },
       "id": 38,
       "options": {
@@ -1514,7 +1514,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "rate(process_cpu_seconds_total[2s])",
@@ -1529,7 +1529,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1558,7 +1558,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 33
+        "y": 63
       },
       "id": 25,
       "options": {
@@ -1581,7 +1581,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "go_memstats_alloc_bytes",
@@ -1596,7 +1596,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1621,7 +1621,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 33
+        "y": 63
       },
       "id": 33,
       "options": {
@@ -1644,7 +1644,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "rate(go_memstats_mallocs_total[10s])",
@@ -1656,7 +1656,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "rate(go_memstats_frees_total[10s])",
@@ -1672,7 +1672,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1701,7 +1701,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 38
+        "y": 68
       },
       "id": 37,
       "options": {
@@ -1724,7 +1724,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "go_goroutines",
@@ -1735,7 +1735,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "go_threads",
@@ -1751,7 +1751,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1780,7 +1780,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 38
+        "y": 68
       },
       "id": 35,
       "options": {
@@ -1803,7 +1803,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "go_gc_duration_seconds{quantile=~\"0.75|1\"}",
@@ -1820,7 +1820,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1851,7 +1851,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 73
       },
       "id": 75,
       "options": {
@@ -1874,7 +1874,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "label_replace({__name__=~\"pf_${cache}_cache_ratio\"}, \"name\", \"$1\", \"__name__\", \"pf_(.*)_cache_ratio\")",
@@ -1888,7 +1888,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "{__name__=~\"pf_${cache}_cache_cost_active\"}",
@@ -1906,7 +1906,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "fieldConfig": {
         "defaults": {
@@ -1932,7 +1932,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 73
       },
       "id": 92,
       "options": {
@@ -1955,7 +1955,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "exemplar": true,
           "expr": "label_replace({__name__=~\"pf_${cache}_cache_cost_active\"}, \"name\", \"$1\", \"__name__\", \"pf_(.*)_cache_cost_active\")",
@@ -1974,20 +1974,20 @@
       "collapsed": true,
       "datasource": {
         "type": "prometheus",
-        "uid": "RmeUbDMnz"
+        "uid": "PBFA97CFB590B2093"
       },
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 79
       },
       "id": 12,
       "panels": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "fieldConfig": {
             "defaults": {
@@ -2081,7 +2081,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "pf_${cache}_cache_ratio",
@@ -2093,7 +2093,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "pf_${cache}_cache_cost_active",
@@ -2110,7 +2110,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "fieldConfig": {
             "defaults": {
@@ -2183,7 +2183,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_sets_dropped[1m])",
@@ -2194,7 +2194,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_sets_rejected[1m])",
@@ -2206,7 +2206,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_gets_dropped[1m])",
@@ -2218,7 +2218,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_gets_kept[1m])",
@@ -2234,7 +2234,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "fieldConfig": {
             "defaults": {
@@ -2307,7 +2307,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_keys_added[1m])",
@@ -2318,7 +2318,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "-rate(pf_${cache}_cache_keys_evicted[1m])",
@@ -2330,7 +2330,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_keys_updated[1m])",
@@ -2346,7 +2346,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "fieldConfig": {
             "defaults": {
@@ -2445,7 +2445,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "rate(pf_${cache}_cache_cost_added[1m])",
@@ -2457,7 +2457,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "RmeUbDMnz"
+                "uid": "PBFA97CFB590B2093"
               },
               "exemplar": true,
               "expr": "-rate(pf_${cache}_cache_cost_evicted[1m])",
@@ -2478,7 +2478,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "RmeUbDMnz"
+            "uid": "PBFA97CFB590B2093"
           },
           "refId": "A"
         }
@@ -2584,13 +2584,13 @@
       },
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": "/scenes/{scene_id}/tiles",
           "value": "/scenes/{scene_id}/tiles"
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "RmeUbDMnz"
+          "uid": "PBFA97CFB590B2093"
         },
         "definition": "label_values(path)",
         "hide": 0,
@@ -2613,16 +2613,12 @@
         "allValue": "",
         "current": {
           "selected": false,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
-          "uid": "RmeUbDMnz"
+          "uid": "PBFA97CFB590B2093"
         },
         "definition": "label_values(source)",
         "hide": 0,
@@ -2664,7 +2660,7 @@
     ]
   },
   "time": {
-    "from": "now-2d",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -2686,6 +2682,6 @@
   "timezone": "",
   "title": "Photofield",
   "uid": "9sQ5hGGnk",
-  "version": 29,
+  "version": 2,
   "weekStart": ""
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/binary"
 	"encoding/hex"
@@ -19,6 +20,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"runtime/trace"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,7 +194,7 @@ func respond(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
 	chirender.Respond(w, r, v)
 }
 
-func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int, x int, y int) {
+func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *render.Scene, zoom int, x int, y int) {
 
 	tileSize := float64(r.TileSize)
 	zoomPower := 1 << zoom
@@ -229,7 +231,7 @@ func drawTile(c *canvas.Context, r *render.Render, scene *render.Scene, zoom int
 
 	c.SetFillColor(canvas.Black)
 
-	scene.Draw(r, c, scales, imageSource)
+	scene.Draw(ctx, r, c, scales, imageSource)
 }
 
 func getTilePool(config *render.Render) *sync.Pool {
@@ -345,12 +347,12 @@ func renderSample(config render.Render, scene *render.Scene) {
 	log.Println("rendering sample")
 	config.LogDraws = true
 
-	image, context := getTileImage(&config)
+	image, canvas := getTileImage(&config)
 	defer putTileImage(&config, image)
 	config.CanvasImage = image
 
 	drawFinished := metrics.ElapsedWithCount("draw", len(scene.Photos))
-	drawTile(context, &config, scene, 0, 0, 0)
+	drawTile(context.Background(), canvas, &config, scene, 0, 0, 0)
 	drawFinished()
 
 	f, err := os.Create("out.png")
@@ -725,6 +727,9 @@ func decodeColor(s string) (color.RGBA, error) {
 }
 
 func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdTilesParams) {
+	ctx, task := trace.NewTask(r.Context(), "GetScenesSceneIdTilesImpl")
+	defer task.End()
+
 	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
 	if scene == nil {
 		problem(w, r, http.StatusBadRequest, "Scene not found")
@@ -816,7 +821,9 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 
 	rn.CanvasImage = img
 	rn.Zoom = zoom
-	drawTile(context, &rn, scene, zoom, x, y)
+	trace.WithRegion(ctx, "drawTile", func() {
+		drawTile(ctx, context, &rn, scene, zoom, x, y)
+	})
 
 	if incomplete {
 		w.Header().Add("Cache-Control", "no-cache")
@@ -834,7 +841,9 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	if rn.QualityPreset == render.QualityPresetHigh {
 		quality = 100
 	}
-	codec.EncodeJpeg(w, img, quality)
+	trace.WithRegion(ctx, "jpeg.Encode", func() {
+		codec.EncodeJpeg(w, img, quality)
+	})
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
@@ -1196,9 +1205,9 @@ func addExampleScene() {
 	sceneConfig.Layout.ViewportWidth = 1920
 	sceneConfig.Layout.ViewportHeight = 1080
 	sceneConfig.Layout.ImageHeight = 300
-	sceneConfig.Layout.Type = layout.Map
+	sceneConfig.Layout.Type = layout.Flex
 	sceneConfig.Layout.Order = layout.DateAsc
-	sceneConfig.Collection = getCollectionById("geo")
+	sceneConfig.Collection = getCollectionById("vacation")
 	sceneSource.Add(sceneConfig, imageSource)
 }
 

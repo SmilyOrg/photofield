@@ -2,57 +2,94 @@
 
 ## Prerequisites
 
+### Core
+
 * [Go] - for the API server
 * [Node.js] - for the frontend
-* [just] - to conveniently run common commands
-* sh-like shell (e.g. sh, bash, busybox) - required by `just`
-* [watchexec] - to auto-reload the API server
-* [ExifTool] - for metadata extraction
-* [FFmpeg] - for format conversion
+* [Task] - for running common commands (replaces `just`)
 
-**[Scoop] (Windows)**: `scoop install busybox just exiftool watchexec`
+### Recommended
+
+* **[watchexec]** - auto-reloads the API server during development for faster iteration (required for `task watch`)
+* **[ExifTool]** - better metadata extraction, [goexif] is used otherwise
+* **[FFmpeg]** - for video thumbnail creation and extended image format support
+* **[djpeg (libjpeg-turbo)]** - optimized JPEG decoding for better performance
 
 ## Installation
 
-1. Clone the repo
+### Core
+
+1. **Install Go**: https://go.dev/doc/install
+2. **Install Node.js**: https://nodejs.org/en/download/
+3. **Install Task**: `go install github.com/go-task/task/v3/cmd/task@latest` or https://taskfile.dev/installation/
+
+### Recommended
+
+- **Windows (scoop)**: `scoop install watchexec exiftool ffmpeg libjpeg-turbo`
+- **macOS (brew)**: `brew install watchexec exiftool ffmpeg libjpeg-turbo`
+- **Ubuntu/Debian**: `sudo apt install watchexec-cli exiftool ffmpeg libjpeg-turbo-progs`
+- **CentOS/RHEL/Fedora**: `sudo dnf install exiftool ffmpeg libjpeg-turbo-utils` and [watchexec install](https://github.com/watchexec/watchexec#install)
+
+### Project Setup
+
+1. Clone the repository
    ```sh
    git clone https://github.com/smilyorg/photofield.git
+   cd photofield
    ```
-2. Install Go dependencies
+
+2. Install dependencies (geo data, ui, docs)
    ```sh
-   go get
-   ```
-3. Install NPM packages
-   ```sh
-   cd ui
-   npm install
+   task deps
    ```
 
 ## Running
 
-Run both the API server and the UI server in separate terminals. They are set
-up to work with each other by default with the API server running at port `8080`
-and the UI server on port `3000`.
+Both the API server and UI server run in development mode with hot reloading. The API server runs on port `8080` and the UI server on port `3000`.
 
-`just` is [just] as defined in the [prerequisites](#prerequisites).
+### Using Task (Recommended)
 
-1. Run the API and watch for changes
-    ```sh
-    just watch
-    ```
+1. Start the API server with auto-reload
+   ```sh
+   task watch
+   ```
 
-2. Run the UI server in a separate terminal and watch for changes
-    ```sh
-    cd ui
-    npm run dev
-    ```
+2. In a separate terminal, start the UI server
+   ```sh
+   task ui
+   ```
+
 3. Open http://localhost:3000
+
+### Manual Commands
+
+1. Start the API server
+   ```sh
+   go run .
+   ```
+
+2. In a separate terminal, start the UI server
+   ```sh
+   cd ui
+   npm run dev
+   ```
+
+3. Open http://localhost:3000
+
+### Migration from `just`
+
+If you were previously using `just`, replace:
+- `just watch` → `task watch`
+- `just build` → `task build`
+- `just ui` → `task ui`
+
+Run `task` to see all available commands.
 
 [Go]: https://golang.org/
 [Node.js]: https://nodejs.org/
-[just]: https://github.com/casey/just
+[Task]: https://taskfile.dev/
 [watchexec]: https://github.com/watchexec/watchexec
 [ExifTool]: https://exiftool.org/
 [FFmpeg]: https://ffmpeg.org/
-
-[Scoop]: https://scoop.sh/
+[djpeg (libjpeg-turbo)]: https://libjpeg-turbo.org/
+[goexif]: https://github.com/rwcarlsen/goexif

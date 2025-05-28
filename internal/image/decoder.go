@@ -22,12 +22,12 @@ type metadataLoader interface {
 	Close()
 }
 
-func NewDecoder(exifToolCount int) *Decoder {
+func NewDecoder(exifToolCount int, exifToolPath string) *Decoder {
 	decoder := Decoder{}
 	decoder.goexifLoader = NewGoExifRwcarlsenLoader()
 	if exifToolCount > 0 {
 		var err error
-		decoder.loader, err = NewExifToolMostlyGeekLoader(exifToolCount)
+		decoder.loader, err = NewExifToolMostlyGeekLoader(exifToolCount, exifToolPath)
 		if err != nil {
 			log.Printf("unable to use exiftool, defaulting to goexif - no video metadata support (%v)\n", err.Error())
 			decoder.loader = decoder.goexifLoader

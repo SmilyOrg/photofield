@@ -1,5 +1,5 @@
 FROM --platform=$BUILDPLATFORM alpine:latest
-RUN apk add --no-cache exiftool ffmpeg
+RUN apk add --no-cache exiftool ffmpeg libjpeg-turbo-utils
 
 ARG TARGETOS
 ARG TARGETARCH
