@@ -7,9 +7,7 @@
 3. Open http://localhost:8080 and you should see folders in the directory displayed as collections.
 5. You're done 🥳
 
-Check out [Usage](/usage) for more details.
-
-[Download and unpack a release]: https://github.com/SmilyOrg/photofield/releases
+Check out [Dependencies](/dependencies) that can enhance your experience and [Usage](/usage) for more details.
 
 ## Docker
 

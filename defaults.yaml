@@ -111,6 +111,12 @@ media:
   # This can speed up startup time for large collections
   skip_collection_counts: false
   
+  # Custom paths for external binaries (optional)
+  # If not specified, binaries are automatically discovered via PATH
+  # ffmpeg_path: /path/to/ffmpeg
+  # djpeg_path: /path/to/djpeg
+  # exif_tool_path: /path/to/exiftool
+  
   caches:
     image:
       # Size of the image cache used while rendering images
@@ -233,7 +239,9 @@ media:
       fit: "INSIDE"
       cost:
         time_per_original_megapixel: 220ms
-      
+
+    djpeg:
+      extensions: [".jpg", ".jpeg"]
 
   sources:
     
@@ -246,6 +254,48 @@ media:
     
     # Native image decoding
     - type: image
+
+    # libjpeg-turbo or compatible djpeg decoding
+    - type: djpeg
+      scale: 8/8
+      cost:
+        time_per_original_megapixel: 34ms
+
+    - type: djpeg
+      scale: 7/8
+      cost:
+        time_per_original_megapixel: 27ms
+
+    - type: djpeg
+      scale: 6/8
+      cost:
+        time_per_original_megapixel: 23ms
+
+    - type: djpeg
+      scale: 5/8
+      cost:
+        time_per_original_megapixel: 20ms
+
+
+    - type: djpeg
+      scale: 4/8
+      cost:
+        time_per_original_megapixel: 19ms
+
+    - type: djpeg
+      scale: 3/8
+      cost:
+        time_per_original_megapixel: 16ms
+
+    - type: djpeg
+      scale: 2/8
+      cost:
+        time_per_original_megapixel: 15ms
+
+    - type: djpeg
+      scale: 1/8
+      cost:
+        time_per_original_megapixel: 7ms
 
     # 
     # Synology Moments / Photo Station thumbnails
