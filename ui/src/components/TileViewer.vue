@@ -33,7 +33,6 @@ import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/exten
 import equal from 'fast-deep-equal';
 import CrossDragPan from './openlayers/CrossDragPan';
 import Geoview from './openlayers/geoview.js';
-
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
@@ -70,6 +69,7 @@ export default {
     zoomTransition: Boolean,
     kinetic: Boolean,
     tileSize: Number,
+    preloadView: Object,
     view: Object,
     clipview: Object,
     crossNav: Boolean,
@@ -106,6 +106,8 @@ export default {
   async mounted() {
     this.latestView = null;
     this.lastAnimationTime = 0;
+    this.loadingMainTiles = 0;
+    this.preloadedView = null;
     this.reset();
   },
   setup() {
@@ -207,6 +209,12 @@ export default {
       this.reload();
     },
 
+    preloadView() {
+      if (this.loadingMainTiles == 0) {
+        this.preloadTiles();
+      }
+    },
+
   },
   computed: {
     pointerTarget() {
@@ -252,10 +260,11 @@ export default {
     },
     containerBackgroundColor() {
       return this.focus && this.focusZoom > 0.99 ? "black" : null;
-    }
+    },
+
   },
   methods: {
-
+  
     getTiledImageSizeAtZoom(zoom) {
       const tileSize = this.tileSize;
       const power = 1 << zoom;
@@ -284,19 +293,24 @@ export default {
     },
 
     createMainLayer() {
+      const source = new XYZ({
+        tileUrlFunction: this.tileUrlFunction,
+        crossOrigin: "Anonymous",
+        projection: this.projection,
+        tileSize: this.tileSize,
+        opaque: false,
+        transition: 100,
+      });
+      source.on("tileloadstart", this.onMainTileLoadStart);
+      source.on("tileloadend", this.onMainTileLoadEnd);
+      source.on("tileloaderror", this.onMainTileLoadError);
+
       const main = new TileLayer({
         properties: {
           main: true,
         },
         preload: this.geo ? 2 : Infinity,
-        source: new XYZ({
-          tileUrlFunction: this.tileUrlFunction,
-          crossOrigin: "Anonymous",
-          projection: this.projection,
-          tileSize: [this.tileSize, this.tileSize],
-          opaque: false,
-          transition: 100,
-        }),
+        source,
       });
       
       if (this.geo) {
@@ -362,7 +376,7 @@ export default {
 
         this.map.render();
       });
-      
+
       return main;
     },
 
@@ -422,6 +436,52 @@ export default {
           main,
         ];
       }
+    },
+
+    onMainTileLoadStart(event) {
+      this.loadingMainTiles++;
+    },
+
+    onMainTileLoadEnd(event) {
+      this.loadingMainTiles = Math.max(0, this.loadingMainTiles - 1);
+      if (this.loadingMainTiles == 0) {
+        this.preloadTiles();
+      }
+    },
+
+    onMainTileLoadError(event) {
+      this.loadingMainTiles = Math.max(0, this.loadingMainTiles - 1);
+    },
+
+    preloadTiles() {
+      if (!this.map || !this.v) return;
+      const layer = this.map.getLayers().getArray().find(l => l.get("main"));
+      if (!layer) return;
+      const source = layer.getSource();
+      if (!source) return;
+      const grid = source.getTileGrid();
+      const projection = source.getProjection();
+      const view = this.preloadView;
+      if (!view) return;
+      if (
+        this.preloadedView &&
+        this.preloadedView.x == view.x &&
+        this.preloadedView.y == view.y &&
+        this.preloadedView.w == view.w &&
+        this.preloadedView.h == view.h
+      ) {
+        return;
+      }
+      this.preloadedView = view;
+      const preloadExtent = this.extentFromView(view);
+      let maxZoom = 0;
+      source.tileCache.forEach(tile => {
+        maxZoom = Math.max(maxZoom, tile.tileCoord[0]);
+      });
+      grid.forEachTileCoord(preloadExtent, maxZoom, tileCoord => {
+        const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
+        tile.load();
+      });
     },
 
     initOpenLayers(element) {
@@ -930,8 +990,8 @@ export default {
         const prevZoom = Geoview.fromView(this.latestView, this.scene.bounds)[2];
         const zoom = Geoview.fromView(view, this.scene.bounds)[2];
         const zoomDiff = Math.abs(zoom - prevZoom);
-
-        if (zoomDiff > 0.01 && !options) {
+        
+        if (zoomDiff > 0.5 && !options) {
           const t = Math.max(0.3, Math.pow(zoomDiff, 0.8) * 0.1);
           options = { animationTime: t }
         }
