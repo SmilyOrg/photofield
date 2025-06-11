@@ -304,7 +304,6 @@ export default {
       source.on("tileloadstart", this.onMainTileLoadStart);
       source.on("tileloadend", this.onMainTileLoadEnd);
       source.on("tileloaderror", this.onMainTileLoadError);
-      source.on("change", this.onMainSourceChange);
 
       const main = new TileLayer({
         properties: {

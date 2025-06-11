@@ -13,7 +13,6 @@
       :debug="debug"
       :tileSize="512"
       :preloadView="preloadView"
-      :preloadLowRes="!!region"
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
       :zoomable="!nativeScroll && interactive"
