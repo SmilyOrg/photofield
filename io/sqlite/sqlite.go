@@ -82,7 +82,10 @@ func New(path string, migrations embed.FS) *Source {
 	}
 	conns := make([]*sqlite.Conn, poolSize)
 	for i := 0; i < poolSize; i++ {
-		conns[i] = source.pool.Get(context.Background())
+		conns[i], err = source.pool.Take(context.Background())
+		if err != nil {
+			panic(err)
+		}
 		setPragma(conns[i], "synchronous", "NORMAL")
 		assertPragma(conns[i], "synchronous", 1)
 	}
@@ -217,7 +220,11 @@ func (s *Source) Delete(id uint32) error {
 }
 
 func (s *Source) writePending() {
-	c := s.pool.Get(context.Background())
+	c, err := s.pool.Take(context.Background())
+	if err != nil {
+		log.Printf("database write unable to get connection from pool: %s", err)
+		return
+	}
 	defer s.pool.Put(c)
 
 	if c == nil {
@@ -305,7 +312,10 @@ func (s *Source) Exists(ctx context.Context, id io.ImageId, path string) bool {
 
 func (s *Source) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	defer trace.StartRegion(ctx, "sqlite.Get").End()
-	c := s.pool.Get(ctx)
+	c, err := s.pool.Take(ctx)
+	if err != nil {
+		return io.Result{Error: fmt.Errorf("unable to get connection from pool: %w", err)}
+	}
 	defer s.pool.Put(c)
 
 	stmt := c.Prep(`
@@ -329,7 +339,11 @@ func (s *Source) Get(ctx context.Context, id io.ImageId, path string) io.Result 
 }
 
 func (s *Source) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
-	c := s.pool.Get(ctx)
+	c, err := s.pool.Take(ctx)
+	if err != nil {
+		fn(nil, fmt.Errorf("unable to get connection from pool: %w", err))
+		return
+	}
 	defer s.pool.Put(c)
 
 	stmt := c.Prep(`
