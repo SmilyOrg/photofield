@@ -41,7 +41,8 @@ Feature: First User Experience
       | src                          | dst            |
       | ../docs/assets/logo-wide.jpg | vacation/a.jpg |
     
-    When the user opens the home page
+    When the user runs the app
+    And the user opens the home page
     Then the page shows "vacation"
 
     When the user adds the config "holiday.yaml"
@@ -50,13 +51,11 @@ Feature: First User Experience
     Then the page shows "holiday"
     And the page does not show "vacation"
 
-  Scenario: Add one photo in a dir
+  Scenario: Add Folder
     Given an empty working directory
     
     When the user runs the app
-    Then the app logs "app running"
-    
-    When the user opens the home page
+    And the user opens the home page
     Then the page shows "Photos"
     And the page shows "No collections"
 
@@ -65,7 +64,8 @@ Feature: First User Experience
       | src                          | dst          |
       | ../docs/assets/logo-wide.jpg | photos/a.jpg |
 
-    When the user clicks "Retry"
+    When the user waits a second
+    And clicks "Retry"
     Then the page does not show "No collections"
 
   Scenario: Preconfigured Basic
@@ -87,3 +87,14 @@ Feature: First User Experience
     And the page shows "test123"
     And the page shows "test456"
     And the page shows "test789"
+
+  Scenario: Collection One File
+    Given the following files:
+      | src                          | dst            |
+      | ../docs/assets/logo-wide.jpg | vacation/a.jpg |
+    
+    When the user runs the app
+    Then the app logs "app running"
+    
+    When the user opens "/collections/vacation"
+    Then the page shows "vacation"

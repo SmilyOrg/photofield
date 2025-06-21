@@ -14,7 +14,7 @@ import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 
 import "vue-multiselect/dist/vue-multiselect.css";
-import { createHead } from '@unhead/vue';
+import { createHead } from '@unhead/vue/client';
 
 const app = createApp(Root);
 

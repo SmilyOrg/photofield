@@ -1,0 +1,3 @@
+kind: Fixed
+body: Update development server port from 3000 to 5173 to align with Vite defaults
+time: 2025-06-21T20:45:08.51614616+02:00

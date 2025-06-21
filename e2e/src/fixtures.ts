@@ -19,7 +19,7 @@ export class App {
   proc?: ChildProcess;
   exitCode: number | null;
   uiLocal: boolean = true;
-  uiUrl: string = "http://localhost:3000";
+  uiUrl: string = "http://localhost:5173";
 
   constructor(
     public page: Page,
@@ -56,7 +56,7 @@ export class App {
     const env = {
       PHOTOFIELD_ADDRESS: this.listenHost || address,
       PHOTOFIELD_API_PREFIX: '/',
-      PHOTOFIELD_CORS_ALLOWED_ORIGINS: 'http://localhost:3000',
+      PHOTOFIELD_CORS_ALLOWED_ORIGINS: 'http://localhost:5173',
     };
 
     console.log("Running:", command, env);
@@ -78,7 +78,7 @@ export class App {
         console.log("API only mode, using local UI")
         if (!this.uiUrl) {
           this.uiLocal = true;
-          this.uiUrl = `http://localhost:3000`;
+          this.uiUrl = `http://localhost:5173`;
         }
       }
       const match = msg.match(LISTEN_REGEX);
@@ -104,7 +104,7 @@ export class App {
         {
           name: 'photofield-api-host',
           value: "http://" + (this.listenHost || "localhost:99999"),
-          url: this.uiUrl || "http://localhost:3000",
+          url: this.uiUrl || "http://localhost:5173",
         }
       ]);
       console.log(await this.context.cookies())

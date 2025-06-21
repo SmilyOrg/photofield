@@ -11,10 +11,13 @@ export default defineConfig({
   ],
   resolve: {
     dedupe: ["vue"],
+    alias: {
+      'Quill': './src/mocks/quill.js'
+    }
   },
   build: {
     commonjsOptions: {
       transformMixedEsModules: true,
-    },
+    }
   },
 })

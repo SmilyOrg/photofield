@@ -45,7 +45,9 @@
 
 ## Running
 
-Both the API server and UI server run in development mode with hot reloading. The API server runs on port `8080` and the UI server on port `3000`.
+Run both the API server and the UI server in separate terminals. They are set
+up to work with each other by default with the API server running at port `8080`
+and the UI server on port `5173`.
 
 ### Using Task (Recommended)
 
@@ -74,7 +76,7 @@ Both the API server and UI server run in development mode with hot reloading. Th
    npm run dev
    ```
 
-3. Open http://localhost:3000
+3. Open http://localhost:5173
 
 ### Migration from `just`
 
