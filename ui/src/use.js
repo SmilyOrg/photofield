@@ -1,4 +1,4 @@
-import { computed, ref, watch, watchEffect } from "vue";
+import { computed, ref, watch } from "vue";
 import { refDebounced, useElementSize } from '@vueuse/core';
 import { useTask, timeout } from "vue-concurrency";
 import { useRoute, useRouter } from "vue-router";
@@ -70,7 +70,7 @@ export function useScrollbar(scrollbar, sleep) {
     onScroll();
   }
 
-  watchEffect(() => {
+  watch([scrollbar, attached], () => {
     if (attached.value) {
       attached.value.options({
         callbacks: {
@@ -91,7 +91,7 @@ export function useScrollbar(scrollbar, sleep) {
     });
   });
 
-  watchEffect(() => {
+  watch([scrollbar, sleep], () => {
     const el = scrollbar.value?.getElements().scrollbarVertical.scrollbar;
     if (sleep.value) {
       if (el) el.style.opacity = 0;
@@ -126,7 +126,7 @@ export function useRegion({ scene, id }) {
 
   const region = ref(null);
 
-  watchEffect(() => {
+  watch([id, valid, isValidating], () => {
     if (!id.value) {
       region.value = null;
       return;
