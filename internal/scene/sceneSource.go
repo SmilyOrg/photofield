@@ -196,6 +196,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				Source: imageSource,
 			}
 		}
+		finishedIndex := metrics.Elapsed("scene load " + config.Collection.Id)
+		scene.BuildIndex()
+		finishedIndex()
 		scene.Dependencies = append(scene.Dependencies, config.Collection)
 		scene.FileCount = len(scene.Photos)
 		scene.Loading = false

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"path/filepath"
 	"strings"
 	"time"
@@ -573,4 +574,48 @@ func (source *Source) GetOrCreateTagFromName(name string) (tag.Tag, error) {
 
 func (source *Source) GetTagImageIds(id tag.Id) Ids {
 	return source.database.GetTagImageIds(id)
+}
+
+// WriteDummyFiles creates dummy database entries for testing purposes
+func (source *Source) WriteDummyFiles(count int, seed int64) error {
+	rng := rand.New(rand.NewSource(seed))
+
+	for i := 0; i < count; i++ {
+		// Generate dummy file path
+		path := fmt.Sprintf("/dummy/images/image_%09d.jpg", i)
+
+		// Generate random dummy info
+		info := Info{
+			Width:       rng.Intn(4000) + 800,                                         // 800-4800px
+			Height:      rng.Intn(3000) + 600,                                         // 600-3600px
+			DateTime:    time.Now().Add(-time.Duration(rng.Intn(365*24)) * time.Hour), // Random time in last year
+			Color:       uint32(rng.Intn(0xFFFFFF)),                                   // Random RGB color as uint32
+			Orientation: Orientation(-1),
+			LatLng:      NaNLatLng(), // Use NaN LatLng for dummy data
+		}
+
+		if err := source.database.Write(path, Info{}, AppendPath); err != nil {
+			return fmt.Errorf("failed to write dummy path %d: %v", i, err)
+		}
+
+		// Write to database
+		if err := source.database.Write(path, info, UpdateMeta); err != nil {
+			return fmt.Errorf("failed to write dummy meta %d: %v", i, err)
+		}
+
+		// Progress reporting every 10k entries
+		if (i+1)%10000 == 0 || i+1 == count {
+			log.Printf("created %d/%d dummy entries", i+1, count)
+		}
+	}
+
+	// Wait for any pending database operations to drain
+	for len(source.database.pending) > 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	source.database.WaitForCommit()
+	source.database.Close()
+
+	return nil
 }

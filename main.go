@@ -1397,6 +1397,21 @@ func listenForShutdown() {
 	}()
 }
 
+func createDummyEntries(count int, seed int64) {
+	log.Printf("Starting dummy data generation...")
+	start := time.Now()
+
+	// Use the new WriteDummyFiles method
+	err := imageSource.WriteDummyFiles(count, seed)
+	if err != nil {
+		log.Printf("Error generating dummy data: %v", err)
+		return
+	}
+
+	elapsed := time.Since(start)
+	log.Printf("Dummy data generation completed in %v (%.1f entries/sec)", elapsed, float64(count)/elapsed.Seconds())
+}
+
 func main() {
 	var err error
 
@@ -1413,6 +1428,9 @@ func main() {
 	benchCollectionId := flag.String("bench.collection", "vacation-photos", "id of the collection to benchmark")
 	benchSeed := flag.Int64("bench.seed", 123, "seed for random number generator")
 	benchSample := flag.Int("bench.sample", 10000, "number of images from the collection to use as a sample")
+	dummyFlag := flag.Bool("dummy", false, "create dummy database entries and exit")
+	dummyCount := flag.Int("dummy.count", 100000, "number of dummy entries to create")
+	dummySeed := flag.Int64("dummy.seed", 42, "seed for random dummy data generation")
 
 	flag.Parse()
 
@@ -1514,6 +1532,12 @@ func main() {
 			panic(fmt.Errorf("collection %v not found", *benchCollectionId))
 		}
 		benchmarkSources(c, *benchSeed, *benchSample, int(count))
+		return
+	}
+
+	if *dummyFlag {
+		log.Printf("creating %d dummy database entries with seed %d", *dummyCount, *dummySeed)
+		createDummyEntries(*dummyCount, *dummySeed)
 		return
 	}
 

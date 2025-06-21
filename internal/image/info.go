@@ -103,6 +103,7 @@ const (
 	Rotate90                  Orientation = 6
 	MirrorHorizontalRotate90  Orientation = 7
 	Rotate270                 Orientation = 8
+	DummyOrientation          Orientation = -1 // Used for testing, not a valid orientation
 )
 
 func (orientation Orientation) IsZero() bool {

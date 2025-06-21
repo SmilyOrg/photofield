@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/peterstace/simplefeatures/rtree"
 	"github.com/tdewolff/canvas"
 	"golang.org/x/image/draw"
 
@@ -98,12 +99,29 @@ type Scene struct {
 	Fonts           Fonts          `json:"-"`
 	Bounds          Rect           `json:"bounds"`
 	Photos          []Photo        `json:"-"`
+	PhotoIndex      *rtree.RTree   `json:"-"`
 	FileCount       int            `json:"file_count"`
 	Solids          []Solid        `json:"-"`
 	Texts           []Text         `json:"-"`
 	RegionSource    RegionSource   `json:"-"`
 	Stale           bool           `json:"stale"`
 	Dependencies    []Dependency   `json:"-"`
+}
+
+func (scene *Scene) BuildIndex() {
+	bulkItems := make([]rtree.BulkItem, len(scene.Photos))
+	for i, photo := range scene.Photos {
+		bulkItems[i] = rtree.BulkItem{
+			RecordID: i,
+			Box: rtree.Box{
+				MinX: photo.Sprite.Rect.X,
+				MinY: photo.Sprite.Rect.Y,
+				MaxX: photo.Sprite.Rect.X + photo.Sprite.Rect.W,
+				MaxY: photo.Sprite.Rect.Y + photo.Sprite.Rect.H,
+			},
+		}
+	}
+	scene.PhotoIndex = rtree.BulkLoad(bulkItems)
 }
 
 func (scene *Scene) UpdateStaleness() {
@@ -256,17 +274,41 @@ func (scene *Scene) GetVisiblePhotoRefs(ctx context.Context, view Rect, maxCount
 		if maxCount == 0 {
 			maxCount = len(scene.Photos)
 		}
-		for i := range scene.Photos {
-			photo := &scene.Photos[i]
-			if photo.Sprite.Rect.IsVisible(view) {
+		box := rtree.Box{
+			MinX: view.X,
+			MinY: view.Y,
+			MaxX: view.X + view.W,
+			MaxY: view.Y + view.H,
+		}
+		if scene.PhotoIndex == nil {
+			for i := range scene.Photos {
+				photo := &scene.Photos[i]
+				if photo.Sprite.Rect.IsVisible(view) {
+					out <- PhotoRef{
+						Index: i,
+						Photo: photo,
+					}
+					count++
+					if count >= maxCount {
+						break
+					}
+				}
+			}
+		} else {
+			err := scene.PhotoIndex.RangeSearch(box, func(id int) error {
+				photo := &scene.Photos[id]
 				out <- PhotoRef{
-					Index: i,
+					Index: id,
 					Photo: photo,
 				}
 				count++
 				if count >= maxCount {
-					break
+					return rtree.Stop
 				}
+				return nil
+			})
+			if err != nil && err != rtree.Stop {
+				panic(err)
 			}
 		}
 		close(out)

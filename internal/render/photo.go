@@ -85,6 +85,19 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 	path := photo.GetPath(source)
 
 	info := source.GetInfo(photo.Id)
+	if info.Orientation == image.DummyOrientation {
+		// Render as a random fill color based on the photo ID hash
+		style := c.Style
+		style.FillColor = color.RGBA{
+			R: uint8(20 + photo.Id%220),
+			G: uint8(20 + (photo.Id/220)%220),
+			B: uint8(20 + (photo.Id/220/220)%220),
+			A: 0xFF,
+		}
+		photo.Sprite.DrawWithStyle(c, style)
+		return
+	}
+
 	size := info.Size()
 	rsize := photo.Sprite.Rect.RenderedSize(c, size)
 
