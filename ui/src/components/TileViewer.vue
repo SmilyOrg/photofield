@@ -336,7 +336,10 @@ export default {
 
         const size = this.map.getSize();
         const corners = this.pixelCornersFromView(view);
-        const pixelRatio = window.devicePixelRatio;
+
+        // Need to use the internal pixel ratio as it may be different
+        // from the current window pixel ratio if it changed after the map was created
+        const pixelRatio = this.map.pixelRatio_;
         const mapw = size[0] * pixelRatio;
         const maph = size[1] * pixelRatio;
         corners.tl[0] *= pixelRatio;
@@ -359,7 +362,6 @@ export default {
         const e = 1;
         
         ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
-        ctx.strokeStyle = "green";
         ctx.lineWidth = 20;
         ctx.beginPath();
         ctx.rect(0, 0, mapw, maph);
