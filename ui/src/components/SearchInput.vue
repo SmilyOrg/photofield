@@ -140,4 +140,8 @@ watchDebounced(
   left: 12px;
 }
 
+.helper :deep(.mdc-text-field-helper-text) {
+  color: var(--mdc-theme-text-secondary-on-background) !important;
+}
+
 </style>
