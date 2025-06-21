@@ -48,6 +48,9 @@ When('the user adds the following files:', async ({ app }, dataTable: DataTable)
 
 When('the user runs the app', async ({ app }) => {
   await app.run();
+  await expect(async () => {
+    expect(app.stderr).toContain("app running");
+  }).toPass();
 });
 
 Given('a running app', async ({ app }) => {
@@ -88,7 +91,7 @@ When('the user waits for {int} seconds', async ({ page }, sec: number) => {
   await page.waitForTimeout(sec * 1000);
 });
 
-When('waits a second', async ({ page }) => { 
+When('(the user )waits a second', async ({ page }) => { 
   await page.waitForTimeout(1000);
 });
 
@@ -125,18 +128,13 @@ When('the user switches away and back to the page', async ({ page }) => {
   })
 });
 
-When('the user clicks {string}', async ({ page }, text: string) => {
+When('(the user )clicks {string}', async ({ page }, text: string) => {
   await page.getByText(text).first().click();
 });
 
 When('the user adds a folder {string}', async ({ app }, name: string) => {
   await app.addDir(name);
 });
-
-When('the user clicks "Retry', async ({ page }) => {
-  await page.getByRole('button', { name: 'Retry' }).click();
-});
-
 
 Then('the file {string} exists', async ({ app }, filePath: string) => {
   await fs.stat(app.path(filePath));
