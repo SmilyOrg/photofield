@@ -307,7 +307,7 @@ func (scene *Scene) GetVisiblePhotoRefs(ctx context.Context, view Rect, maxCount
 				}
 				return nil
 			})
-			if err != nil {
+			if err != nil && err != rtree.Stop {
 				panic(err)
 			}
 		}
