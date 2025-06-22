@@ -333,6 +333,7 @@ export default {
         const ctx = event.context;
         const view = this.view;
         if (!view) return;
+        if (!this.map) return;
 
         const size = this.map.getSize();
         const corners = this.pixelCornersFromView(view);
