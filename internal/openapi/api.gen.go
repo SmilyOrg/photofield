@@ -133,6 +133,13 @@ type RegionData map[string]interface{}
 // RegionId defines model for RegionId.
 type RegionId int
 
+// Minimal region representation for optimized bulk fetching.
+// Contains only essential fields for navigation and caching.
+type RegionMinimal struct {
+	Bounds Bounds   `json:"bounds"`
+	Id     RegionId `json:"id"`
+}
+
 // Scene defines model for Scene.
 type Scene struct {
 	Bounds *Bounds `json:"bounds,omitempty"`
@@ -281,7 +288,21 @@ type GetScenesSceneIdRegionsParams struct {
 	// The `w` and `h` parameters are ignored in this case.
 	Closest *bool  `json:"closest,omitempty"`
 	Limit   *Limit `json:"limit,omitempty"`
+
+	// Range of region IDs to fetch in format "start:end" (inclusive).
+	// When specified, other spatial parameters are ignored.
+	// Use this for efficient sequential region fetching.
+	// Must be used with fields parameter set to "(id,bounds)".
+	IdRange *string `json:"id_range,omitempty"`
+
+	// Field selection for the response.
+	// If omitted: Returns full region objects with all data (default)
+	// If "(id,bounds)": Returns minimal response with only id and bounds for fast navigation
+	Fields *GetScenesSceneIdRegionsParamsFields `json:"fields,omitempty"`
 }
+
+// GetScenesSceneIdRegionsParamsFields defines parameters for GetScenesSceneIdRegions.
+type GetScenesSceneIdRegionsParamsFields string
 
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
 type GetScenesSceneIdTilesParams struct {
@@ -871,6 +892,28 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdRegions(w http.ResponseWriter
 	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter limit: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "id_range" -------------
+	if paramValue := r.URL.Query().Get("id_range"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "id_range", r.URL.Query(), &params.IdRange)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id_range: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "fields" -------------
+	if paramValue := r.URL.Query().Get("fields"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "fields", r.URL.Query(), &params.Fields)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter fields: %s", err), http.StatusBadRequest)
 		return
 	}
 

@@ -350,10 +350,36 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/Limit"
+
+        - name: id_range
+          in: query
+          description: |
+            Range of region IDs to fetch in format "start:end" (inclusive).
+            When specified, other spatial parameters are ignored.
+            Use this for efficient sequential region fetching.
+            Must be used with fields parameter set to "(id,bounds)".
+          schema:
+            type: string
+            pattern: '^\d+:\d+$'
+            example: "100:120"
+
+        - name: fields
+          in: query
+          description: |
+            Field selection for the response.
+            If omitted: Returns full region objects with all data (default)
+            If "(id,bounds)": Returns minimal response with only id and bounds for fast navigation
+          schema:
+            type: string
+            enum: ["(id,bounds)"]
+            example: "(id,bounds)"
     
       responses:
         "200":
-          description: Region list
+          description: |
+            Region list. The response format depends on the 'fields' parameter:
+            - If fields is omitted: Returns full region objects with all data (default)
+            - If fields is "(id,bounds)": Returns minimal region objects with only id and bounds
           content:
             "application/json":
               schema:
@@ -362,7 +388,9 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: "#/components/schemas/Region"
+                      oneOf:
+                        - $ref: "#/components/schemas/Region"
+                        - $ref: "#/components/schemas/RegionMinimal"
 
 
   /scenes/{scene_id}/regions/{id}:
@@ -784,6 +812,20 @@ components:
           $ref: "#/components/schemas/Bounds"
         data:
           $ref: "#/components/schemas/RegionData"
+
+    RegionMinimal:
+      type: object
+      description: |
+        Minimal region representation for optimized bulk fetching.
+        Contains only essential fields for navigation and caching.
+      required:
+        - id
+        - bounds
+      properties:
+        id:
+          $ref: "#/components/schemas/RegionId"
+        bounds:
+          $ref: "#/components/schemas/Bounds"
 
     RegionData:
       type: object

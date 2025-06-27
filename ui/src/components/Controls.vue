@@ -93,11 +93,13 @@ const favoriteTag = computed(() => {
   return tags.value?.find(tag => tag.name == "fav");
 })
 
-const left = () => {
+const left = e => {
+  if (e.altKey) return;
   emit("navigate", -1);
 }
 
-const right = () => {
+const right = e => {
+  if (e.altKey) return;
   emit("navigate", 1);
 }
 

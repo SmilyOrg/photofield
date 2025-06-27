@@ -124,6 +124,16 @@ func longestLine(s string) int {
 
 func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.Photo, scene *render.Scene, regionConfig render.RegionConfig) render.Region {
 
+	// For minimal responses, only populate id and bounds
+	if regionConfig.Minimal {
+		return render.Region{
+			Id:     id,
+			Bounds: photo.Sprite.Rect,
+			Data:   nil, // No data for minimal response
+		}
+	}
+
+	// Full response with all data
 	source := regionSource.Source
 
 	originalPath := photo.GetPath(source)

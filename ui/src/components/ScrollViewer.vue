@@ -16,7 +16,7 @@
       :interactive="interactive"
       :pannable="!nativeScroll && interactive"
       :zoomable="!nativeScroll && interactive"
-      :zoom-transition="true"
+      :zoom-transition="!isSeeking"
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
@@ -198,6 +198,7 @@ const {
   region,
   navigate,
   exit: regionExit,
+  isSeeking,
 } = useSeekableRegion({
   scene,
   collectionId,
@@ -211,6 +212,7 @@ const preloadView = computed(() => {
 });
 
 watch(region, async newRegion => {
+  if (newRegion?.minimal) return;
   emit("region", newRegion);
 }, { immediate: true });
 
@@ -357,7 +359,7 @@ watch(regionId, (newId, oldId) => {
     const nid = parseInt(newId, 10);
     const oid = parseInt(oldId, 10);
     const delta = nid - oid;
-    preloadRegionId.value = nid + delta;
+    preloadRegionId.value = nid + (delta > 0 ? 1 : -1);
   }
 }, { immediate: true });
 
@@ -435,9 +437,23 @@ function updateFocusFile(id) {
 const timestamps = useTimestamps({ scene, height: viewport.height });
 const scrollDate = useTimestampsDate({ timestamps, ratio: scrollRatio });
 
-const view = computed(() => {
-  if (region.value) {
-    return region.value.bounds;
+// Required for proper caching to avoid redundant updates
+const regionBounds = computed(oldBounds => {
+  const newBounds = region.value?.bounds;
+  if (oldBounds && newBounds &&
+      oldBounds.x == newBounds.x &&
+      oldBounds.y == newBounds.y &&
+      oldBounds.w == newBounds.w &&
+      oldBounds.h == newBounds.h
+  ) {
+    return oldBounds;
+  }
+  return newBounds || null;
+});
+
+const view = computed(oldRegion => {
+  if (regionBounds.value) {
+    return regionBounds.value;
   }
 
   return {

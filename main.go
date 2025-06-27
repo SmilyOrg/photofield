@@ -887,12 +887,22 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 		limit = int(*params.Limit)
 	}
 
-	if params.FileId != nil {
+	// Handle range-based region fetching
+	if params.IdRange != nil {
+		// Range requests must use minimal fields
+		if params.Fields == nil || string(*params.Fields) != "(id,bounds)" {
+			problem(w, r, http.StatusBadRequest, "id_range requires fields parameter to be '(id,bounds)'")
+			return
+		}
+		regions = handleRegionsByRange(scene, *params.IdRange, limit)
+	} else if params.FileId != nil {
 		if params.X != nil || params.Y != nil || params.W != nil || params.H != nil {
 			problem(w, r, http.StatusBadRequest, "file_id and bounds are mutually exclusive")
 			return
 		}
-		regions = scene.GetRegionsByImageId(image.ImageId(*params.FileId), limit)
+		// Check if minimal response is requested
+		minimal := params.Fields != nil && string(*params.Fields) == "(id,bounds)"
+		regions = getRegionsByFileId(scene, *params.FileId, limit, minimal)
 	} else if params.Closest != nil && *params.Closest {
 		if params.X == nil || params.Y == nil {
 			problem(w, r, http.StatusBadRequest, "x and y required")
@@ -908,7 +918,9 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 			Y: float64(*params.Y),
 		}
 
-		region, ok := scene.GetRegionClosestTo(p)
+		// Check if minimal response is requested
+		minimal := params.Fields != nil && string(*params.Fields) == "(id,bounds)"
+		region, ok := getRegionClosestTo(scene, p, minimal)
 		if !ok {
 			regions = []render.Region{}
 		} else {
@@ -916,7 +928,7 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 		}
 	} else {
 		if params.X == nil || params.Y == nil || params.W == nil || params.H == nil {
-			problem(w, r, http.StatusBadRequest, "bounds or file_id required")
+			problem(w, r, http.StatusBadRequest, "bounds, file_id, or id_range required")
 			return
 		}
 
@@ -927,7 +939,15 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 			H: float64(*params.H),
 		}
 
-		regions = scene.GetRegions(bounds, limit)
+		// Check if minimal response is requested
+		minimal := params.Fields != nil && string(*params.Fields) == "(id,bounds)"
+		regions = getRegionsFromBounds(scene, bounds, limit, minimal)
+	}
+
+	if scene.Loading {
+		w.Header().Add("Cache-Control", "no-cache")
+	} else {
+		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	}
 
 	respond(w, r, http.StatusOK, struct {
@@ -935,6 +955,64 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 	}{
 		Items: regions,
 	})
+}
+
+func handleRegionsByRange(scene *render.Scene, rangeStr string, limit int) []render.Region {
+	if rangeStr == "" {
+		return []render.Region{}
+	}
+
+	// Parse range in format "start:end"
+	parts := strings.Split(rangeStr, ":")
+	if len(parts) != 2 {
+		return []render.Region{}
+	}
+
+	startId, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+	endId, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+
+	if err1 != nil || err2 != nil || startId > endId {
+		return []render.Region{}
+	}
+
+	var regions []render.Region
+
+	for id := startId; id <= endId; id++ {
+		// Range requests always return minimal regions
+		region := scene.GetRegionMinimal(id)
+
+		if region.Id != 0 { // Assuming 0 means not found
+			regions = append(regions, region)
+		}
+
+		// Apply limit if specified
+		if limit > 0 && len(regions) >= limit {
+			break
+		}
+	}
+
+	return regions
+}
+
+func getRegionsByFileId(scene *render.Scene, fileId openapi.FileId, limit int, minimal bool) []render.Region {
+	if minimal {
+		return scene.GetRegionsByImageIdMinimal(image.ImageId(fileId), limit)
+	}
+	return scene.GetRegionsByImageId(image.ImageId(fileId), limit)
+}
+
+func getRegionClosestTo(scene *render.Scene, point render.Point, minimal bool) (render.Region, bool) {
+	if minimal {
+		return scene.GetRegionClosestToMinimal(point)
+	}
+	return scene.GetRegionClosestTo(point)
+}
+
+func getRegionsFromBounds(scene *render.Scene, bounds render.Rect, limit int, minimal bool) []render.Region {
+	if minimal {
+		return scene.GetRegionsMinimal(bounds, limit)
+	}
+	return scene.GetRegions(bounds, limit)
 }
 
 func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, id openapi.RegionId) {

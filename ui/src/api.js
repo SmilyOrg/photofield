@@ -67,15 +67,17 @@ export async function post(endpoint, body, def) {
   return await response.json();
 }
 
-export async function getRegions(sceneId, x, y, w, h) {
+export async function getRegions(sceneId, x, y, w, h, minimal = false) {
   if (!sceneId) return null;
-  const response = await get(`/scenes/${sceneId}/regions?x=${x}&y=${y}&w=${w}&h=${h}`);
+  const fields = minimal ? '&fields=(id,bounds)' : '';
+  const response = await get(`/scenes/${sceneId}/regions?x=${x}&y=${y}&w=${w}&h=${h}${fields}`);
   return response.items;
 }
 
-export async function getRegionsWithFileId(sceneId, id) {
+export async function getRegionsWithFileId(sceneId, id, minimal = false) {
   if (!sceneId) return null;
-  const response = await get(`/scenes/${sceneId}/regions?file_id=${id}`);
+  const fields = minimal ? '&fields=(id,bounds)' : '';
+  const response = await get(`/scenes/${sceneId}/regions?file_id=${id}${fields}`);
   return response.items;
 }
 
@@ -88,6 +90,16 @@ export async function getRegionClosestTo(sceneId, x, y) {
 
 export async function getRegion(sceneId, id) {
   return get(`/scenes/${sceneId}/regions/${id}`);
+}
+
+export async function getRegionsRange(sceneId, startId, endId) {
+  if (!sceneId || startId == null || endId == null) return [];
+  
+  // Range requests always require minimal fields
+  const url = `/scenes/${sceneId}/regions?id_range=${startId}:${endId}&fields=(id,bounds)`;
+  
+  const response = await get(url);
+  return response.items || [];
 }
 
 export async function getCenterRegion(sceneId, x, y, w, h) {
