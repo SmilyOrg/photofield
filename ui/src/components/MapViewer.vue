@@ -10,6 +10,7 @@
       :selectTag="selectTag"
       :debug="debug"
       :tileSize="512"
+      :preloadView="preloadView"
       :interactive="interactive"
       :pannable="interactive"
       :zoomable="interactive"
@@ -17,10 +18,10 @@
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
-      @nav="onNav"
+      @click="onClick"
       @view="onView"
+      @nav="onNav"
       @contextmenu.prevent="onContextMenu"
-      @click.capture="onClick"
       @box-select="onBoxSelect"
       @viewer="emit('viewer', $event)"
     ></tile-viewer>
@@ -55,7 +56,7 @@ import { debounce } from 'throttle-debounce';
 import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getRegions, useApi, useScene } from '../api';
-import { useContextMenu, useSeekableRegion, useTags, useViewport } from '../use.js';
+import { useContextMenu, useRegion, useSeekableRegion, useTags, useViewport } from '../use.js';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
@@ -134,6 +135,15 @@ const {
   regionId,
 })
 
+const preloadRegionId = ref(null);
+const lastView = ref(null);
+
+const { region: preloadRegion } = useRegion({ scene, id: preloadRegionId });
+const preloadView = computed(() => {
+  if (!preloadRegion.value) return null;
+  return preloadRegion.value.bounds;
+});
+
 useEventBus("recreate-scene").on(scene => {
   if (scene?.name && scene?.name != "Map") return;
   recreateScene();
@@ -145,6 +155,15 @@ watch(scene, async (newScene, oldScene) => {
 
 watch(region, async (newRegion, oldRegion) => {
   regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+}, { immediate: true });
+
+watch(regionId, (newId, oldId) => {
+  if (newId !== oldId && newId !== undefined && oldId !== undefined) {
+    const nid = parseInt(newId, 10);
+    const oid = parseInt(oldId, 10);
+    const delta = nid - oid;
+    preloadRegionId.value = nid + (delta > 0 ? 1 : -1);
+  }
 }, { immediate: true });
 
 const { data: capabilities } = useApi(() => "/capabilities");
@@ -216,8 +235,6 @@ const onView = (view) => {
   debouncedApplyView(view);
   lastView.value = view;
 }
-
-const lastView = ref(null);
 
 const exit = async () => {
   if (selectTag.value) {
