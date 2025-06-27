@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, ref, toRefs, watchEffect } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import { get, postTagFiles, useApi, useScene } from '../api';
 import Tags from './Tags.vue';
 
@@ -136,7 +136,7 @@ const title = computed(() => {
   return `Select tags for ${fileCount.value} selected file${fileCount.value == 1 ? "" : "s"}`;
 });
 
-watchEffect(() => {
+watch(title, () => {
   emit("title", title.value);
 });
 

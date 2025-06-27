@@ -12,7 +12,7 @@
 </template>
 
 <script setup>
-import { computed, ref, toRefs, watchEffect } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import dateParseISO from 'date-fns/parseISO';
 import formatDistance from 'date-fns/formatDistance';
 
@@ -28,7 +28,7 @@ const emit = defineEmits([
 ]);
 
 const expand = ref(false);
-watchEffect(() => emit("expand", expand.value))
+watch(expand, () => emit("expand", expand.value));
 
 const {
   collection,

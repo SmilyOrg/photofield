@@ -63,7 +63,8 @@ type Region struct {
 }
 
 type RegionConfig struct {
-	Limit int
+	Limit   int
+	Minimal bool // When true, only populate essential fields (id, bounds)
 }
 
 type Fonts struct {
@@ -407,4 +408,53 @@ func (scene *Scene) GetRegion(id int) Region {
 		return Region{}
 	}
 	return scene.RegionSource.GetRegionById(id, scene, RegionConfig{})
+}
+
+func (scene *Scene) GetRegionMinimal(id int) Region {
+	if scene.RegionSource == nil {
+		return Region{}
+	}
+	// Use minimal region config to only populate essential fields
+	return scene.RegionSource.GetRegionById(id, scene, RegionConfig{
+		Minimal: true,
+	})
+}
+
+func (scene *Scene) GetRegionsByImageIdMinimal(id image.ImageId, limit int) []Region {
+	query := RegionConfig{
+		Minimal: true,
+		Limit:   100,
+	}
+	if limit > 0 {
+		query.Limit = limit
+	}
+	if scene.RegionSource == nil {
+		return []Region{}
+	}
+	return scene.RegionSource.GetRegionsFromImageId(id, scene, query)
+}
+
+func (scene *Scene) GetRegionClosestToMinimal(p Point) (region Region, ok bool) {
+	return scene.RegionSource.GetRegionClosestTo(p, scene, RegionConfig{
+		Minimal: true,
+	})
+}
+
+func (scene *Scene) GetRegionsMinimal(bounds Rect, limit int) []Region {
+	if scene.RegionSource == nil {
+		return []Region{}
+	}
+
+	query := RegionConfig{
+		Minimal: true,
+	}
+	if limit > 0 {
+		query.Limit = limit
+	}
+
+	return scene.RegionSource.GetRegionsFromBounds(
+		bounds,
+		scene,
+		query,
+	)
 }

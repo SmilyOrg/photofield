@@ -1,5 +1,5 @@
-import { computed, ref, watch, watchEffect } from "vue";
-import { refDebounced, useElementSize } from '@vueuse/core';
+import { computed, ref, watch } from "vue";
+import { refDebounced, useElementSize, useTimeout } from '@vueuse/core';
 import { useTask, timeout } from "vue-concurrency";
 import { useRoute, useRouter } from "vue-router";
 import { addTag, postTagFiles, useApi, useBufferApi } from "./api";
@@ -70,7 +70,7 @@ export function useScrollbar(scrollbar, sleep) {
     onScroll();
   }
 
-  watchEffect(() => {
+  watch([scrollbar, attached], () => {
     if (attached.value) {
       attached.value.options({
         callbacks: {
@@ -91,7 +91,7 @@ export function useScrollbar(scrollbar, sleep) {
     });
   });
 
-  watchEffect(() => {
+  watch([scrollbar, sleep], () => {
     const el = scrollbar.value?.getElements().scrollbarVertical.scrollbar;
     if (sleep.value) {
       if (el) el.style.opacity = 0;
@@ -124,23 +124,24 @@ export function useRegion({ scene, id }) {
     `/scenes/${scene.value.id}/regions/${id.value}`
   );
 
-  const region = ref(null);
-
-  watchEffect(() => {
+  const region = computed(() => {
     if (!id.value) {
-      region.value = null;
-      return;
+      return null;
     }
     if (!valid.value) {
-      region.value = {
+      return {
         id: id.value,
         loading: true,
-      }
-      return;
+      };
     }
-    if (isValidating.value) return;
-    region.value = data.value;
-  })
+    if (isValidating.value) {
+      return {
+        id: id.value,
+        loading: true,
+      };
+    }
+    return data.value;
+  });
 
   return {
     region,
@@ -160,90 +161,136 @@ export function useRegionsInBounds({ scene, bounds }) {
   return items;
 }
 
-export function useNavigation({ index, count, apply }) {
-  const seekIndex = ref(null);
-  const finalIndex = computed(() => {
-    if (seekIndex.value != null) {
-      return seekIndex.value;
+// Configurable range size
+const DEFAULT_RANGE_SIZE = 100;
+
+function useRangeUrl({ sceneId, regionId, rangeSize = DEFAULT_RANGE_SIZE, offset = 0 }) {
+  return computed(() => {
+    if (!sceneId.value || !regionId.value) return null;
+    
+    const id = regionId.value;
+    const rangeIndex = Math.floor((id - 1) / rangeSize) + offset;
+    
+    if (rangeIndex < 0) return null;
+    
+    const rangeStart = rangeIndex * rangeSize + 1;
+    const rangeEnd = rangeStart + rangeSize - 1;
+    
+    return `/scenes/${sceneId.value}/regions?id_range=${rangeStart}:${rangeEnd}&fields=(id,bounds)`;
+  });
+}
+
+export function useSeekableRegion({ scene, collectionId, regionId, rangeSize = DEFAULT_RANGE_SIZE }) {
+  const router = useRouter();
+  const route = useRoute();
+
+  const fileCount = computed(() => scene.value?.file_count || 0);
+
+  // Parse regionId to number for internal use
+  const currentRegionId = computed(() => {
+    if (typeof regionId.value === "string") {
+      const parsed = parseInt(regionId.value, 10);
+      return isNaN(parsed) ? null : parsed;
     }
-    if (typeof index.value == "string") {
-      const indexInt = parseInt(index.value, 10);
-      return isNaN(indexInt) ? 0 : indexInt;
-    }
-    return index.value;
+    return regionId.value;
   });
 
-  watch(index, () => {
-    seekIndex.value = null;
-  })
+  // Navigation state
+  const seekingId = ref(null);
+  const activeRegionId = computed(() => 
+    seekingId.value !== null ? seekingId.value : currentRegionId.value
+  );
 
+  // Reactive URLs for current, previous, and next ranges
+  const currentRangeUrl = useRangeUrl({ 
+    sceneId: computed(() => scene.value?.id), 
+    regionId: activeRegionId, 
+    rangeSize 
+  });
+  const previousRangeUrl = useRangeUrl({ 
+    sceneId: computed(() => scene.value?.id), 
+    regionId: activeRegionId, 
+    rangeSize, 
+    offset: -1 
+  });
+  const nextRangeUrl = useRangeUrl({ 
+    sceneId: computed(() => scene.value?.id), 
+    regionId: activeRegionId, 
+    rangeSize, 
+    offset: 1 
+  });
+
+  // Declarative API calls for current, previous, and next ranges
+  const currentRange = useApi(currentRangeUrl);
+  
+  // Prefetch previous and next ranges
+  useApi(previousRangeUrl);
+  useApi(nextRangeUrl);
+
+  // Full region API for upgrading (debounced)
+  const debouncedActiveRegionId = refDebounced(activeRegionId, 200);
+  const { data: fullRegionData, mutate } = useApi(() => 
+    scene.value?.id && debouncedActiveRegionId.value &&
+    `/scenes/${scene.value.id}/regions/${debouncedActiveRegionId.value}`
+  );
+
+  // Computed region that prioritizes full data over range data
+  const region = computed(() => {
+    const id = activeRegionId.value;
+    if (!id) return null;
+
+    // Prefer full region data if available and IDs match
+    if (fullRegionData.value && fullRegionData.value.id === id) {
+      return { ...fullRegionData.value, minimal: false };
+    }
+
+    // Fallback to range data
+    const rangeRegion = currentRange.data.value?.items?.find(item => item.id === id);
+    if (rangeRegion) {
+      return { ...rangeRegion, minimal: true };
+    }
+
+    // Loading state
+    return { id, loading: true };
+  });
+
+  const { ready: notSeeking, start: setSeeking } = useTimeout(200, { controls: true });
+
+  // Navigation function
   const navigate = (offsetOrRegion, offset) => {
-    let nextIndex;
-    if (typeof offsetOrRegion == "string") {
+    setSeeking();
+    
+    let nextId;
+    if (typeof offsetOrRegion === "string") {
       offsetOrRegion = parseInt(offsetOrRegion, 10);
     }
-    if (typeof offsetOrRegion == "number") {
-      nextIndex = finalIndex.value + offsetOrRegion;
-    } else if (typeof offsetOrRegion == "object" && offsetOrRegion.id) {
-      nextIndex = offsetOrRegion.id;
-      if (typeof offset == "number") {
-        nextIndex += offset;
+    if (typeof offsetOrRegion === "number") {
+      nextId = activeRegionId.value + offsetOrRegion;
+    } else if (typeof offsetOrRegion === "object" && offsetOrRegion.id) {
+      nextId = offsetOrRegion.id;
+      if (typeof offset === "number") {
+        nextId += offset;
       }
     } else {
       throw new Error("Unsupported parameter: " + offsetOrRegion);
     }
-    if (nextIndex <= 0 || nextIndex > count.value) {
+    
+    if (nextId <= 0 || nextId > fileCount.value) {
       return false;
     }
-    seekIndex.value = nextIndex;
-    debouncedSeek(nextIndex);
+    
+    seekingId.value = nextId;
     return true;
-  }
+  };
 
-  const debouncedSeek = debounce(1000, index => {
-    if (seekIndex.value === null) return;
-    apply(index);
+  // Reset seeking state when URL catches up
+  watch(regionId, (newRegionId) => {
+    if (seekingId.value !== null && 
+        parseInt(seekingId.value, 10) === parseInt(newRegionId, 10)) {
+      seekingId.value = null;
+    }
   });
 
-  return {
-    navigate,
-    index: finalIndex,
-  }
-}
-
-export function useSeekableRegion({ scene, collectionId, regionId }) {
-
-  const router = useRouter();
-  const route = useRoute();
-
-  const fileCount = computed(() => {
-    return scene.value?.file_count || 0;
-  });
-
-  const {
-    navigate,
-    index,
-  } = useNavigation({
-    index: regionId,
-    count: fileCount,
-    apply(index) {
-      router.push({
-        name: "region",
-        params: {
-          collectionId: collectionId.value,
-          regionId: index,
-        },
-        query: route.query,
-        hash: route.hash,
-      });
-    },
-  });
-
-  const { region, mutate } = useRegion({
-    scene,
-    id: index,
-  });
-  
   const exit = async () => {
     await router.push({
       name: "collection",
@@ -252,14 +299,19 @@ export function useSeekableRegion({ scene, collectionId, regionId }) {
       },
       query: route.query,
     });
-  }
+  };
 
   return {
     region,
     navigate,
     exit,
     mutate,
-  }
+    isSeeking: computed(() => !notSeeking.value),
+    isUpgrading: computed(() => 
+      region.value?.minimal && !!fullRegionData.value && 
+      fullRegionData.value.id === activeRegionId.value
+    ),
+  };
 }
 
 export function useViewport(element) {
