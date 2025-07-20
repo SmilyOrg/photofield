@@ -894,7 +894,12 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 			problem(w, r, http.StatusBadRequest, "id_range requires fields parameter to be '(id,bounds)'")
 			return
 		}
-		regions = handleRegionsByRange(scene, *params.IdRange, limit)
+		var err error
+		regions, err = handleRegionsByRange(scene, *params.IdRange, limit)
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
 	} else if params.FileId != nil {
 		if params.X != nil || params.Y != nil || params.W != nil || params.H != nil {
 			problem(w, r, http.StatusBadRequest, "file_id and bounds are mutually exclusive")
@@ -957,22 +962,28 @@ func (*Api) GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, scen
 	})
 }
 
-func handleRegionsByRange(scene *render.Scene, rangeStr string, limit int) []render.Region {
+func handleRegionsByRange(scene *render.Scene, rangeStr string, limit int) ([]render.Region, error) {
 	if rangeStr == "" {
-		return []render.Region{}
+		return []render.Region{}, nil
 	}
 
 	// Parse range in format "start:end"
 	parts := strings.Split(rangeStr, ":")
 	if len(parts) != 2 {
-		return []render.Region{}
+		return nil, fmt.Errorf("invalid range format, expected 'start:end'")
 	}
 
 	startId, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
 	endId, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
 
-	if err1 != nil || err2 != nil || startId > endId {
-		return []render.Region{}
+	if err1 != nil {
+		return nil, fmt.Errorf("invalid start ID: %v", err1)
+	}
+	if err2 != nil {
+		return nil, fmt.Errorf("invalid end ID: %v", err2)
+	}
+	if startId > endId {
+		return nil, fmt.Errorf("start ID cannot be greater than end ID")
 	}
 
 	var regions []render.Region
@@ -991,7 +1002,7 @@ func handleRegionsByRange(scene *render.Scene, rangeStr string, limit int) []ren
 		}
 	}
 
-	return regions
+	return regions, nil
 }
 
 func getRegionsByFileId(scene *render.Scene, fileId openapi.FileId, limit int, minimal bool) []render.Region {
