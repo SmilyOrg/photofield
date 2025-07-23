@@ -39,7 +39,11 @@ const (
 
 type Orientation int8
 
-// All rotations are counter-clockwise
+// All orientations are counter-clockwise, so to display the photo as intended,
+// you need to rotate it clockwise by the specified degrees.
+//
+// For mirror orientations, the image is flipped horizontally or vertically,
+// and then rotated by the specified degrees.
 const (
 	Normal                    Orientation = 1
 	MirrorHorizontal          Orientation = 2
@@ -51,6 +55,29 @@ const (
 	Rotate270                 Orientation = 8
 	SourceInfoOrientation     Orientation = 127
 )
+
+func (orientation Orientation) SwapsDimensions() bool {
+	switch orientation {
+	case Normal:
+		return false
+	case MirrorHorizontal:
+		return false
+	case Rotate180:
+		return false
+	case MirrorVertical:
+		return false
+	case MirrorHorizontalRotate270:
+		return true
+	case Rotate90:
+		return true
+	case MirrorHorizontalRotate90:
+		return true
+	case Rotate270:
+		return true
+	default:
+		return false
+	}
+}
 
 type ImageId uint32
 

@@ -63,6 +63,11 @@ func (o Image) Rotate() bool {
 func resize(img image.Image, maxWidth, maxHeight int) image.Image {
 	origW := img.Bounds().Size().X
 	origH := img.Bounds().Size().Y
+
+	if origW <= maxWidth && origH <= maxHeight {
+		return img
+	}
+
 	aspectRatio := float64(origW) / float64(origH)
 
 	desiredW := maxWidth

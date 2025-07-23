@@ -415,9 +415,6 @@ media:
         width: 240
         height: 240
       
-      # Embedded JPEG thumbnails
-      - type: goexif
-    
       # Synology Moments / Photo Station thumbnail
       - name: S
         type: thumb
@@ -431,17 +428,22 @@ media:
     # If a thumbnail is not found among the sources above,
     # it is generated with the first working generator.
     generators:
+
+      # libjpeg-turbo decoding (resized to 256px x 256px)
+      - type: djpeg
+        width: 256
+        height: 256
+
+      # Native decoding (resized to 256px x 256px)
+      - type: image
+        width: 256
+        height: 256
       
       # FFmpeg decoding
       - type: ffmpeg
         width: 256
         height: 256
         fit: INSIDE
-
-      # Native decoding (resized to 256px x 256px)
-      - type: image
-        width: 256
-        height: 256
 
     # The sink is used to save the generated thumbnail above
     # so that it persists and can be reused while rendering.

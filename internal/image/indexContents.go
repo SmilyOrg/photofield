@@ -101,6 +101,13 @@ func (source *Source) indexContentsGenerate(ctx context.Context, id io.ImageId, 
 			continue
 		}
 
+		if r.Orientation == io.SourceInfoOrientation {
+			info := source.GetInfo(ImageId(id))
+			if !info.Orientation.IsZero() {
+				r.Orientation = io.Orientation(info.Orientation)
+			}
+		}
+
 		// Save thumbnail
 		var b bytes.Buffer
 		ok := source.thumbnailSink.SetWithBuffer(ctx, id, path, &b, r)
