@@ -14,7 +14,7 @@ import (
 
 	goio "io"
 
-	pnm "github.com/jbuchbinder/gopnm"
+	"golang.org/x/image/bmp"
 	"golang.org/x/image/draw"
 )
 
@@ -104,6 +104,12 @@ func (o Djpeg) Rotate() bool {
 func resize(img image.Image, maxWidth, maxHeight int) image.Image {
 	origW := img.Bounds().Size().X
 	origH := img.Bounds().Size().Y
+
+	// Don't resize if already smaller than max dimensions
+	if origW <= maxWidth && origH <= maxHeight {
+		return img
+	}
+
 	aspectRatio := float64(origW) / float64(origH)
 
 	desiredW := maxWidth
@@ -122,6 +128,55 @@ func (o Djpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
 	return true
 }
 
+// getMinimalScale finds the smallest djpeg scale that produces an image
+// larger than the target dimensions in both width and height
+func getMinimalScale(origWidth, origHeight, targetWidth, targetHeight int) string {
+	if origWidth <= targetWidth && origHeight <= targetHeight {
+		return "8/8" // No scaling needed
+	}
+	for i := 1; i <= 8; i++ {
+		scaledWidth := origWidth * i / 8
+		scaledHeight := origHeight * i / 8
+		if scaledWidth >= targetWidth && scaledHeight >= targetHeight {
+			return fmt.Sprintf("%d/8", i)
+		}
+	}
+	return "8/8"
+}
+
+// run runs djpeg with the specified scale and returns the decoded image
+func (o Djpeg) run(ctx context.Context, path, scale string) (image.Image, error) {
+	cmd := exec.CommandContext(
+		ctx,
+		o.Path,
+		"-bmp",
+		"-scale", scale,
+		path,
+	)
+
+	trace.Log(ctx, "cmd", cmd.String())
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, formatErr(err, "djpeg")
+	}
+
+	img, err := bmp.Decode(stdout)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return nil, formatErr(err, "djpeg")
+	}
+
+	return img, nil
+}
+
 func (o Djpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	defer trace.StartRegion(ctx, "djpeg.Get").End()
 
@@ -132,33 +187,42 @@ func (o Djpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		o.Path,
-		"-pnm",
-		"-scale", o.Scale,
-		path,
-	)
+	scale := o.Scale
+	var img image.Image
+	var err error
 
-	trace.Log(ctx, "cmd", cmd.String())
+	// If Width/Height are specified but Scale is empty, use two-pass approach
+	if o.Resized() && scale == "" {
+		// First pass: try with 1/8 scale to get dimensions quickly
+		imgSmall, err := o.run(ctx, path, "1/8")
+		if err != nil {
+			return io.Result{Error: err}
+		}
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return io.Result{Error: err}
-	}
-	if err := cmd.Start(); err != nil {
-		return io.Result{Error: formatErr(err, "djpeg")}
-	}
+		// Check if 1/8 scale is sufficient for our target size
+		if imgSmall.Bounds().Dx() >= o.Width && imgSmall.Bounds().Dy() >= o.Height {
+			img = imgSmall
+		} else {
+			// Second pass: calculate optimal scale and decode again
 
-	pnmd := trace.StartRegion(ctx, "pnm decode")
-	img, err := pnm.Decode(stdout)
-	pnmd.End()
-	if err != nil {
-		return io.Result{Error: err}
-	}
-
-	if err := cmd.Wait(); err != nil {
-		return io.Result{Error: formatErr(err, "djpeg")}
+			// Calculate original dimensions from 1/8 scale image
+			origWidth := imgSmall.Bounds().Dx() * 8
+			origHeight := imgSmall.Bounds().Dy() * 8
+			optimalScale := getMinimalScale(origWidth, origHeight, o.Width, o.Height)
+			img, err = o.run(ctx, path, optimalScale)
+			if err != nil {
+				return io.Result{Error: err}
+			}
+		}
+	} else {
+		// Single pass: use specified scale or default
+		if scale == "" {
+			scale = "8/8"
+		}
+		img, err = o.run(ctx, path, scale)
+		if err != nil {
+			return io.Result{Error: err}
+		}
 	}
 
 	if o.Resized() {
@@ -167,7 +231,7 @@ func (o Djpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 
 	return io.Result{
 		Image:       img,
-		Error:       err,
+		Error:       nil,
 		Orientation: io.SourceInfoOrientation,
 	}
 }
@@ -190,6 +254,42 @@ func (o Djpeg) Reader(ctx context.Context, id io.ImageId, path string, fn func(r
 
 func (o Djpeg) Set(ctx context.Context, id io.ImageId, path string, r io.Result) bool {
 	return false
+}
+
+func (o Djpeg) GetWithSize(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
+	defer trace.StartRegion(ctx, "djpeg.GetWithSize").End()
+
+	if o.Path == "" {
+		return io.Result{Error: ErrMissingBinary}
+	}
+
+	// If either dimension is 0, fall back to Get
+	if original.X == 0 || original.Y == 0 {
+		return o.Get(ctx, id, path)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	scale := o.Scale
+	if o.Resized() && scale == "" {
+		scale = getMinimalScale(original.X, original.Y, o.Width, o.Height)
+	}
+
+	img, err := o.run(ctx, path, scale)
+	if err != nil {
+		return io.Result{Error: err}
+	}
+
+	if o.Resized() {
+		img = resize(img, o.Width, o.Height)
+	}
+
+	return io.Result{
+		Image:       img,
+		Error:       nil,
+		Orientation: io.SourceInfoOrientation,
+	}
 }
 
 func formatErr(err error, cmdName string) error {

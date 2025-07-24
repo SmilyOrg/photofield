@@ -1,6 +1,8 @@
 module photofield
 
-go 1.21
+go 1.23.0
+
+toolchain go1.24.5
 
 require (
 	github.com/EdlinOrg/prominentcolor v1.0.0
@@ -21,7 +23,6 @@ require (
 	github.com/grafana/pyroscope-go v1.2.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
 	github.com/imdario/mergo v0.3.13
-	github.com/jbuchbinder/gopnm v0.0.0-20220507095634-e31f54490ce0
 	github.com/joho/godotenv v1.3.0
 	github.com/karrick/godirwalk v1.15.6
 	github.com/kelindar/intmap v1.1.0
@@ -39,9 +40,10 @@ require (
 	github.com/smilyorg/tinygpkg v0.2.1
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	github.com/x448/float16 v0.8.4
+	github.com/zelenko/go v0.0.0-20210326203833-2c97fc39fc36
 	golang.org/x/exp v0.0.0-20231108232855-2478ac86f678
-	golang.org/x/image v0.0.0-20191214001246-9130b4cfad52
-	golang.org/x/sync v0.6.0
+	golang.org/x/image v0.29.0
+	golang.org/x/sync v0.16.0
 	modernc.org/sqlite v1.34.5
 	zombiezen.com/go/sqlite v1.4.0
 )
@@ -85,7 +87,7 @@ require (
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect

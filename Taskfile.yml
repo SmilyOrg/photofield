@@ -141,6 +141,13 @@ tasks:
   tidy: go mod tidy
   gen: go generate -x
 
+  struct:
+    desc: Analyze struct layout for a given struct name
+    vars:
+      COMMIT: a36776054d7900fa9b0c2eb334dc64b55aa0723c
+    cmds:
+      - go run honnef.co/go/tools/cmd/structlayout@{{.COMMIT}} -json {{.CLI_ARGS}} | go run honnef.co/go/tools/cmd/structlayout-pretty@{{.COMMIT}}
+
   deps:
     deps:
       - assets

@@ -8,7 +8,9 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"photofield/internal/test"
 	"photofield/io"
+	"photofield/io/djpeg"
 	"photofield/io/ffmpeg"
 	"photofield/io/goexif"
 	"photofield/io/goimage"
@@ -29,7 +31,7 @@ var files = []struct {
 	name string
 	path string
 }{
-	{name: "P1110220", path: "test/P1110220.JPG"},
+	{name: "P1110220", path: "Test/2023-02-03 09.25.08.jpg"},
 
 	// {name: "logo", path: "formats/logo.png"},
 	// {name: "P1110220", path: "formats/P1110220.jpg"},
@@ -114,7 +116,7 @@ func createTestSources() io.Sources {
 }
 
 func BenchmarkSources(b *testing.B) {
-	var cache = ristretto.New()
+	var cache = ristretto.New(1024 * 1024 * 1024)
 	var goimg goimage.Image
 	sources := createTestSources()
 	ctx := context.Background()
@@ -250,6 +252,277 @@ func BenchmarkFile(b *testing.B) {
 		_, err := os.ReadFile(path)
 		if err != nil {
 			b.Error(err)
+		}
+	}
+}
+
+// Convert width, height, and max side length to a thumbnail size
+func fitToSize(width, height, maxSide int) (int, int) {
+	if width <= 0 || height <= 0 || maxSide <= 0 {
+		return 0, 0
+	}
+
+	if width > height {
+		if width > maxSide {
+			height = (height * maxSide) / width
+			width = maxSide
+		}
+	} else {
+		if height > maxSide {
+			width = (width * maxSide) / height
+			height = maxSide
+		}
+	}
+	return width, height
+}
+
+func TestThumbnailGeneration(t *testing.T) {
+	dataset := test.TestDataset{
+		Name:    "thumbs",
+		Seed:    12345,
+		Samples: 10,
+		Images: []test.ImageSpec{
+			{Width: 5472, Height: 3648},
+			{Width: 4032, Height: 3024},
+			{Width: 1920, Height: 1080},
+			{Width: 1280, Height: 720},
+			{Width: 800, Height: 600},
+			{Width: 640, Height: 480},
+			{Width: 320, Height: 240},
+			{Width: 256, Height: 256},
+			{Width: 200, Height: 100},
+			{Width: 64, Height: 64},
+			{Width: 32, Height: 32},
+			{Width: 3648, Height: 5472},
+			{Width: 3024, Height: 4032},
+			{Width: 1080, Height: 1920},
+			{Width: 240, Height: 320},
+		},
+	}
+	images, err := test.GenerateTestDataset("testdata", dataset)
+	if err != nil {
+		t.Fatalf("failed to generate test dataset: %v", err)
+	}
+	thumbSize := 256
+	ffmpegPath := ffmpeg.FindPath()
+	djpegPath := djpeg.FindPath()
+	sources := io.Sources{
+		goimage.Image{Width: thumbSize, Height: thumbSize},
+		ffmpeg.FFmpeg{Width: thumbSize, Height: thumbSize, Path: ffmpegPath, Fit: io.FitInside},
+		djpeg.Djpeg{Width: thumbSize, Height: thumbSize, Path: djpegPath},
+	}
+	for _, src := range sources {
+		t.Run(src.Name(), func(t *testing.T) {
+			for _, img := range images {
+				img := img // capture loop variable
+				t.Run(img.Name, func(t *testing.T) {
+					t.Parallel()
+					ctx := context.Background()
+					id := io.ImageId(0)
+					r := src.Get(ctx, id, img.Path)
+					if r.Error != nil {
+						t.Errorf("failed to load image %s: %v", img.Path, r.Error)
+						return
+					}
+					if r.Image == nil {
+						t.Errorf("image not found: %s", img.Path)
+						return
+					}
+					w, h := r.Image.Bounds().Dx(), r.Image.Bounds().Dy()
+					// fmt.Printf("Image %s: %dx%d\n", img.Path, w, h)
+					desiredW, desiredH := fitToSize(w, h, thumbSize)
+					if img.Spec.Width <= thumbSize && img.Spec.Height <= thumbSize {
+						desiredW, desiredH = img.Spec.Width, img.Spec.Height
+					}
+					if w != desiredW || h != desiredH {
+						t.Errorf("unexpected thumbnail size for %s: got %dx%d, want %dx%d", img.Path, w, h, desiredW, desiredH)
+						return
+					}
+				})
+			}
+		})
+	}
+}
+
+// The thumbnails should be generated with the correct baked-in orientation
+// based on the EXIF orientation tag.
+func TestThumbnailGenerationOrientation(t *testing.T) {
+	dataset := test.TestDataset{
+		Name:    "thumbs-orientation",
+		Seed:    12345,
+		Samples: 1,
+		Images: []test.ImageSpec{
+			{Width: 60, Height: 30}, // No tag
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Horizontal (normal)"}},
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Mirror horizontal"}},
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Rotate 180"}},
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Mirror vertical"}},
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Mirror horizontal and rotate 270 CW"}},
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Rotate 90 CW"}},
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Mirror horizontal and rotate 90 CW"}},
+			{Width: 60, Height: 30, ExifTags: map[string]string{"Orientation": "Rotate 270 CW"}},
+		},
+	}
+	images, err := test.GenerateTestDataset("testdata", dataset)
+	if err != nil {
+		t.Fatalf("failed to generate test dataset: %v", err)
+	}
+	thumbSize := 256
+	ffmpegPath := ffmpeg.FindPath()
+	djpegPath := djpeg.FindPath()
+	sources := io.Sources{
+		goimage.Image{Width: thumbSize, Height: thumbSize},
+		ffmpeg.FFmpeg{Width: thumbSize, Height: thumbSize, Path: ffmpegPath, Fit: io.FitInside},
+		djpeg.Djpeg{Width: thumbSize, Height: thumbSize, Path: djpegPath},
+	}
+	for _, src := range sources {
+		t.Run(src.Name(), func(t *testing.T) {
+			for _, img := range images {
+				img := img // capture loop variable
+				t.Run(img.Name, func(t *testing.T) {
+					t.Parallel()
+					ctx := context.Background()
+					id := io.ImageId(0)
+					r := src.Get(ctx, id, img.Path)
+					if r.Error != nil {
+						t.Errorf("failed to load image %s: %v", img.Path, r.Error)
+						return
+					}
+					if r.Image == nil {
+						t.Errorf("image not found: %s", img.Path)
+						return
+					}
+					// Check that the image has the correct orientation
+					// or that the returned orientation is set to SourceInfoOrientation
+					if r.Orientation == io.Normal || r.Orientation == io.SourceInfoOrientation {
+						// Load the original image to compare orientation
+						origSrc := goimage.Image{}
+						origR := origSrc.Get(context.Background(), id, img.Path)
+						if origR.Error != nil {
+							t.Errorf("failed to load original image %s: %v", img.Path, origR.Error)
+							return
+						}
+
+						// Check if dimensions match expected orientation
+						thumbW, thumbH := r.Image.Bounds().Dx(), r.Image.Bounds().Dy()
+						origW, origH := origR.Image.Bounds().Dx(), origR.Image.Bounds().Dy()
+
+						// Sample a few pixels to verify the transformation was applied
+						origBounds := origR.Image.Bounds()
+						thumbBounds := r.Image.Bounds()
+
+						// Check corner pixels to verify orientation
+						origTopLeft := origR.Image.At(origBounds.Min.X, origBounds.Min.Y)
+						origTopRight := origR.Image.At(origBounds.Max.X-1, origBounds.Min.Y)
+						origBottomLeft := origR.Image.At(origBounds.Min.X, origBounds.Max.Y-1)
+						origBottomRight := origR.Image.At(origBounds.Max.X-1, origBounds.Max.Y-1)
+
+						thumbTopLeft := r.Image.At(thumbBounds.Min.X, thumbBounds.Min.Y)
+						thumbTopRight := r.Image.At(thumbBounds.Max.X-1, thumbBounds.Min.Y)
+						thumbBottomLeft := r.Image.At(thumbBounds.Min.X, thumbBounds.Max.Y-1)
+						thumbBottomRight := r.Image.At(thumbBounds.Max.X-1, thumbBounds.Max.Y-1)
+
+						// For rotated images (90/270 degrees), dimensions should be swapped
+						orientation := img.Spec.ExifTags["Orientation"]
+
+						tl, tr, bl, br := origTopLeft, origTopRight, origBottomLeft, origBottomRight
+						if r.Orientation == io.Normal {
+							shouldBeRotated := orientation == "Rotate 90 CW" || orientation == "Rotate 270 CW" ||
+								orientation == "Mirror horizontal and rotate 270 CW" || orientation == "Mirror horizontal and rotate 90 CW"
+
+							if shouldBeRotated {
+								if (thumbW > thumbH) == (origW > origH) {
+									t.Errorf("image %s appears not to be rotated: thumb=%dx%d, orig=%dx%d, orientation=%s",
+										img.Path, thumbW, thumbH, origW, origH, orientation)
+								}
+							} else {
+								if (thumbW > thumbH) != (origW > origH) {
+									t.Errorf("image %s appears incorrectly rotated: thumb=%dx%d, orig=%dx%d, orientation=%s",
+										img.Path, thumbW, thumbH, origW, origH, orientation)
+								}
+							}
+
+							tl, tr, bl, br = test.TransformCornersByName(
+								origTopLeft, origTopRight, origBottomLeft, origBottomRight,
+								orientation,
+							)
+						}
+
+						if !test.ColorsSimilar(thumbTopLeft, tl, 4) || !test.ColorsSimilar(thumbTopRight, tr, 4) ||
+							!test.ColorsSimilar(thumbBottomLeft, bl, 4) || !test.ColorsSimilar(thumbBottomRight, br, 4) {
+							t.Errorf("thumbnail %s has incorrect %s orientation", img.Path, orientation)
+						}
+					} else {
+						t.Errorf("unexpected orientation for %s: got %d, want %d", img.Path, r.Orientation, io.SourceInfoOrientation)
+						return
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkThumbs(b *testing.B) {
+	dataset := test.TestDataset{
+		Name:    "thumbs-bench",
+		Seed:    12345,
+		Samples: 1,
+		Images: []test.ImageSpec{
+			{Width: 5472, Height: 3648},
+			{Width: 1920, Height: 1080},
+			{Width: 640, Height: 480},
+			{Width: 256, Height: 256},
+			{Width: 64, Height: 64},
+		},
+	}
+	images, err := test.GenerateTestDataset("testdata", dataset)
+	if err != nil {
+		b.Fatalf("failed to generate test dataset: %v", err)
+	}
+	thumbSize := 256
+	ffmpegPath := ffmpeg.FindPath()
+	djpegPath := djpeg.FindPath()
+	sources := io.Sources{
+		goimage.Image{Width: thumbSize, Height: thumbSize},
+		ffmpeg.FFmpeg{Width: thumbSize, Height: thumbSize, Path: ffmpegPath, Fit: io.FitInside},
+		djpeg.Djpeg{Width: thumbSize, Height: thumbSize, Path: djpegPath},
+	}
+	ctx := context.Background()
+	for _, src := range sources {
+		b.Run(fmt.Sprintf("source=%s/fun=Get", src.Name()), func(b *testing.B) {
+			for _, img := range images {
+				id := io.ImageId(0)
+				b.Run(fmt.Sprintf("width=%d/height=%d", img.Spec.Width, img.Spec.Height), func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						r := src.Get(ctx, id, img.Path)
+						if r.Error != nil {
+							b.Errorf("failed to load image %s: %v", img.Path, r.Error)
+						}
+						if r.Image == nil {
+							b.Errorf("image not found: %s", img.Path)
+						}
+					}
+				})
+			}
+		})
+		if srcs, ok := src.(io.GetterWithSize); ok {
+			b.Run(fmt.Sprintf("source=%s/fun=GetWithSize", src.Name()), func(b *testing.B) {
+				for _, img := range images {
+					id := io.ImageId(0)
+					b.Run(fmt.Sprintf("width=%d/height=%d", img.Spec.Width, img.Spec.Height), func(b *testing.B) {
+						size := io.Size{X: img.Spec.Width, Y: img.Spec.Height}
+						for i := 0; i < b.N; i++ {
+							r := srcs.GetWithSize(ctx, id, img.Path, size)
+							if r.Error != nil {
+								b.Errorf("failed to load image %s: %v", img.Path, r.Error)
+							}
+							if r.Image == nil {
+								b.Errorf("image not found: %s", img.Path)
+							}
+						}
+					})
+				}
+			})
 		}
 	}
 }

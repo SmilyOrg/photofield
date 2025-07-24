@@ -6,7 +6,9 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"image"
 	"image/jpeg"
+	"image/png"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -23,6 +25,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
 	"github.com/golang-migrate/migrate/v4/source/httpfs"
+	"github.com/zelenko/go/54_rotate_image/rotate"
 )
 
 var (
@@ -30,10 +33,11 @@ var (
 )
 
 type Source struct {
-	path    string
-	pool    *sqlitex.Pool
-	pending chan Thumb
-	closed  bool
+	path      string
+	pool      *sqlitex.Pool
+	pending   chan Thumb
+	closed    bool
+	encodePng bool
 }
 
 type Thumb struct {
@@ -391,18 +395,60 @@ func (s *Source) SetWithBuffer(ctx context.Context, id io.ImageId, path string, 
 	return true
 }
 
+func rotateImageIfNeeded(img image.Image, orientation io.Orientation) image.Image {
+	switch orientation {
+	case io.MirrorHorizontal:
+		return rotate.FlipH(img)
+
+	case io.Rotate180:
+		return rotate.Rotate180(img)
+
+	case io.MirrorVertical:
+		return rotate.FlipV(img)
+
+	case io.MirrorHorizontalRotate270:
+		return rotate.Rotate90(rotate.FlipH(img))
+
+	case io.Rotate90:
+		return rotate.Rotate270(img)
+
+	case io.MirrorHorizontalRotate90:
+		return rotate.Rotate270(rotate.FlipH(img))
+
+	case io.Rotate270:
+		return rotate.Rotate90(img)
+
+	}
+	// Default case, return original image
+	return img
+}
+
 func (s *Source) Encode(ctx context.Context, r io.Result, w goio.Writer) bool {
 	if r.Image == nil || r.Error != nil {
 		return false
 	}
-	bounds := r.Image.Bounds()
+
+	img := rotateImageIfNeeded(r.Image, r.Orientation)
+	bounds := img.Bounds()
 	if bounds.Dx() > 256 || bounds.Dy() > 256 {
 		return false
 	}
 
-	jpeg.Encode(w, r.Image, &jpeg.Options{
+	if s.encodePng {
+		err := png.Encode(w, img)
+		if err != nil {
+			log.Printf("unable to encode image as PNG: %v", err)
+			return false
+		}
+		return true
+	}
+	err := jpeg.Encode(w, img, &jpeg.Options{
 		Quality: 70,
 	})
+	if err != nil {
+		log.Printf("unable to encode image as JPEG: %v", err)
+		return false
+	}
 	return true
 }
 

@@ -73,6 +73,17 @@ func (f *Filtered) Get(ctx context.Context, id io.ImageId, path string) io.Resul
 	return f.Source.Get(ctx, id, path)
 }
 
+func (f *Filtered) GetWithSize(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
+	defer trace.StartRegion(ctx, "filtered.GetWithSize").End()
+	if !f.SupportsExtension(path) {
+		return io.Result{Error: fmt.Errorf("extension not supported")}
+	}
+	if r, ok := f.Source.(io.GetterWithSize); ok {
+		return r.GetWithSize(ctx, id, path, original)
+	}
+	return io.Result{Error: fmt.Errorf("GetWithSize not supported by %s", f.Source.Name())}
+}
+
 func (f *Filtered) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
 	if !f.SupportsExtension(path) {
 		fn(nil, fmt.Errorf("extension not supported"))

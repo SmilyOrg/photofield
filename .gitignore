@@ -20,3 +20,4 @@ node_modules/
 .task/
 .docker-image-id
 .task-release-changelog.md
+testdata/

@@ -177,7 +177,7 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 		Stride: 4 * pam.Width,
 		Rect:   image.Rect(0, 0, pam.Width, pam.Height),
 	}
-	return io.Result{Image: image.Image(&rgba)}
+	return io.Result{Image: image.Image(&rgba), Orientation: io.Normal}
 }
 
 func (f FFmpeg) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
