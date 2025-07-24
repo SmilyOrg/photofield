@@ -14,7 +14,7 @@ import (
 
 	goio "io"
 
-	"github.com/spakin/netpbm"
+	"golang.org/x/image/bmp"
 	"golang.org/x/image/draw"
 )
 
@@ -149,7 +149,7 @@ func (o Djpeg) run(ctx context.Context, path, scale string) (image.Image, error)
 	cmd := exec.CommandContext(
 		ctx,
 		o.Path,
-		"-pnm",
+		"-bmp",
 		"-scale", scale,
 		path,
 	)
@@ -164,9 +164,8 @@ func (o Djpeg) run(ctx context.Context, path, scale string) (image.Image, error)
 		return nil, formatErr(err, "djpeg")
 	}
 
-	pnmd := trace.StartRegion(ctx, "pnm decode")
-	img, err := netpbm.Decode(stdout, nil)
-	pnmd.End()
+	img, err := bmp.Decode(stdout)
+
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,6 @@ import (
 
 	drist "github.com/dgraph-io/ristretto"
 	"github.com/dgraph-io/ristretto/z"
-	"github.com/spakin/netpbm"
 )
 
 type Ristretto struct {
@@ -147,10 +146,6 @@ func cost(r io.Result) int64 {
 			int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
 
 	case *image.RGBA:
-		return int64(unsafe.Sizeof(*img)) +
-			int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
-
-	case *netpbm.RGBM:
 		return int64(unsafe.Sizeof(*img)) +
 			int64(cap(img.Pix))*int64(unsafe.Sizeof(img.Pix[0]))
 
