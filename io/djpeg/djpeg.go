@@ -131,6 +131,9 @@ func (o Djpeg) Exists(ctx context.Context, id io.ImageId, path string) bool {
 // getMinimalScale finds the smallest djpeg scale that produces an image
 // larger than the target dimensions in both width and height
 func getMinimalScale(origWidth, origHeight, targetWidth, targetHeight int) string {
+	if origWidth <= targetWidth && origHeight <= targetHeight {
+		return "8/8" // No scaling needed
+	}
 	for i := 1; i <= 8; i++ {
 		scaledWidth := origWidth * i / 8
 		scaledHeight := origHeight * i / 8
@@ -252,6 +255,42 @@ func (o Djpeg) Reader(ctx context.Context, id io.ImageId, path string, fn func(r
 
 func (o Djpeg) Set(ctx context.Context, id io.ImageId, path string, r io.Result) bool {
 	return false
+}
+
+func (o Djpeg) GetWithSize(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
+	defer trace.StartRegion(ctx, "djpeg.GetWithSize").End()
+
+	if o.Path == "" {
+		return io.Result{Error: ErrMissingBinary}
+	}
+
+	// If either dimension is 0, fall back to Get
+	if original.X == 0 || original.Y == 0 {
+		return o.Get(ctx, id, path)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	scale := o.Scale
+	if o.Resized() && scale == "" {
+		scale = getMinimalScale(original.X, original.Y, o.Width, o.Height)
+	}
+
+	img, err := o.run(ctx, path, scale)
+	if err != nil {
+		return io.Result{Error: err}
+	}
+
+	if o.Resized() {
+		img = resize(img, o.Width, o.Height)
+	}
+
+	return io.Result{
+		Image:       img,
+		Error:       nil,
+		Orientation: io.SourceInfoOrientation,
+	}
 }
 
 func formatErr(err error, cmdName string) error {

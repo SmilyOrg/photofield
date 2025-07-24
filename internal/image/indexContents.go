@@ -95,14 +95,21 @@ func (source *Source) indexContentsGenerate(ctx context.Context, id io.ImageId, 
 	errs := make([]error, 0)
 	for _, gen := range source.thumbnailGenerators {
 		// Generate thumbnail
-		r := gen.Get(ctx, id, path)
+		info := source.GetInfo(ImageId(id))
+
+		var r io.Result
+		if gens, ok := gen.(io.GetterWithSize); ok {
+			r = gens.GetWithSize(ctx, id, path, io.Size(info.Size()))
+		}
+		if r.Image == nil || r.Error != nil {
+			r = gen.Get(ctx, id, path)
+		}
 		if r.Image == nil || r.Error != nil {
 			errs = append(errs, r.Error)
 			continue
 		}
 
 		if r.Orientation == io.SourceInfoOrientation {
-			info := source.GetInfo(ImageId(id))
 			if !info.Orientation.IsZero() {
 				r.Orientation = io.Orientation(info.Orientation)
 			}

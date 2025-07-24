@@ -101,6 +101,14 @@ func (c *Configured) Get(ctx context.Context, id io.ImageId, path string) io.Res
 	return c.Source.Get(ctx, id, path)
 }
 
+func (c *Configured) GetWithSize(ctx context.Context, id io.ImageId, path string, original io.Size) io.Result {
+	defer trace.StartRegion(ctx, "configured.GetWithSize").End()
+	if r, ok := c.Source.(io.GetterWithSize); ok {
+		return r.GetWithSize(ctx, id, path, original)
+	}
+	return io.Result{Error: fmt.Errorf("GetWithSize not supported by %s", c.Source.Name())}
+}
+
 func (c *Configured) Reader(ctx context.Context, id io.ImageId, path string, fn func(r goio.ReadSeeker, err error)) {
 	r, ok := c.Source.(io.Reader)
 	if !ok {

@@ -489,7 +489,7 @@ func BenchmarkThumbs(b *testing.B) {
 	}
 	ctx := context.Background()
 	for _, src := range sources {
-		b.Run(fmt.Sprintf("source=%s", src.Name()), func(b *testing.B) {
+		b.Run(fmt.Sprintf("source=%s/fun=Get", src.Name()), func(b *testing.B) {
 			for _, img := range images {
 				id := io.ImageId(0)
 				b.Run(fmt.Sprintf("width=%d/height=%d", img.Spec.Width, img.Spec.Height), func(b *testing.B) {
@@ -505,6 +505,25 @@ func BenchmarkThumbs(b *testing.B) {
 				})
 			}
 		})
+		if srcs, ok := src.(io.GetterWithSize); ok {
+			b.Run(fmt.Sprintf("source=%s/fun=GetWithSize", src.Name()), func(b *testing.B) {
+				for _, img := range images {
+					id := io.ImageId(0)
+					b.Run(fmt.Sprintf("width=%d/height=%d", img.Spec.Width, img.Spec.Height), func(b *testing.B) {
+						size := io.Size{X: img.Spec.Width, Y: img.Spec.Height}
+						for i := 0; i < b.N; i++ {
+							r := srcs.GetWithSize(ctx, id, img.Path, size)
+							if r.Error != nil {
+								b.Errorf("failed to load image %s: %v", img.Path, r.Error)
+							}
+							if r.Image == nil {
+								b.Errorf("image not found: %s", img.Path)
+							}
+						}
+					})
+				}
+			})
+		}
 	}
 }
 

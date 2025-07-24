@@ -138,6 +138,10 @@ type Source interface {
 	Close() error
 }
 
+type GetterWithSize interface {
+	GetWithSize(ctx context.Context, id ImageId, path string, original Size) Result
+}
+
 type Sink interface {
 	Set(ctx context.Context, id ImageId, path string, r Result) bool
 }
