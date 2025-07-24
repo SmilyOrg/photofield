@@ -1,0 +1,93 @@
+run:
+  timeout: 5m
+  skip-dirs:
+    - vendor
+    - ui/node_modules
+  skip-files:
+    - ".*\\.gen\\.go$"
+    - "embed-.*\\.go$"
+
+linters-config:
+  govet:
+    check-shadowing: true
+    enable:
+      - assign
+      - atomic
+      - bools
+      - buildtag
+      - cgocall
+      - composites
+      - copylocks
+      - errorsas
+      - httpresponse
+      - loopclosure
+      - lostcancel
+      - nilfunc
+      - printf
+      - shift
+      - stdmethods
+      - structtag
+      - tests
+      - unmarshal
+      - unreachable
+      - unsafeptr
+      - unusedresult
+  
+  gocyclo:
+    min-complexity: 15
+  
+  dupl:
+    threshold: 100
+  
+  misspell:
+    locale: US
+  
+  staticcheck:
+    go: "1.23"
+    checks: ["all"]
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+    - gocyclo
+    - dupl
+    - errcheck
+    - gosimple
+    - typecheck
+    - unconvert
+    - unparam
+    - whitespace
+  
+  disable:
+    - golint  # deprecated
+    - maligned  # deprecated
+    - interfacer  # deprecated
+    - scopelint  # deprecated
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+    
+    # Ignore long lines in generated files
+    - path: ".*\\.gen\\.go"
+      linters:
+        - lll
+    
+    # TODO context issues - allow for now but should be fixed
+    - text: "context.TODO"
+      linters:
+        - staticcheck
+  
+  max-issues-per-linter: 0
+  max-same-issues: 0
