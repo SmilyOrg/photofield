@@ -1,3 +1,0 @@
-kind: Added
-body: Make use of djpeg / libjpeg-turbo if installed to make image loading faster in the absence of better thumbnails. libjpeg-turbo can partially decode smaller resolutions of JPEGs, which can be many times faster than loading the full resolution and then resizing.
-time: 2025-05-27T23:13:37.777811134+02:00
