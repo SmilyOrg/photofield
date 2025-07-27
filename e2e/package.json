@@ -10,7 +10,7 @@
     "bddgen": "bddgen",
     "test": "npx bddgen && npx playwright test",
     "watch:bdd": "nodemon -w ./tests -e feature,js,ts --exec npx bddgen",
-    "watch:pw": "playwright test --ui",
+    "watch:pw": "playwright test",
     "watch": "run-p watch:*",
     "report": "npx playwright show-report",
     "steps": "npx bddgen export"

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	gio "io"
+	"io/fs"
 	"math/rand"
 	"os"
 	"path"
@@ -39,12 +40,13 @@ var files = []struct {
 	// {name: "cow", path: "formats/cow.avif"},
 }
 
-func createTestSources() io.Sources {
+func createTestSources(t testing.TB) io.Sources {
 	var goimg goimage.Image
 	var ffmpegPath = ffmpeg.FindPath()
+	dbPath := path.Join(t.TempDir(), "photofield.thumbs.db")
 	return io.Sources{
 		// cache,
-		sqlite.New(path.Join(dir, "../data/photofield.thumbs.db"), embed.FS{}),
+		sqlite.New(dbPath, nil),
 		goexif.Exif{},
 		thumb.New(
 			"S",
@@ -118,7 +120,7 @@ func createTestSources() io.Sources {
 func BenchmarkSources(b *testing.B) {
 	var cache = ristretto.New(1024 * 1024 * 1024)
 	var goimg goimage.Image
-	sources := createTestSources()
+	sources := createTestSources(b)
 	ctx := context.Background()
 	for _, bm := range files {
 		bm := bm
@@ -165,7 +167,7 @@ func BenchmarkSources(b *testing.B) {
 }
 
 func TestCost(t *testing.T) {
-	sources := createTestSources()
+	sources := createTestSources(t)
 	cases := []struct {
 		zoom int
 		o    io.Size
@@ -198,7 +200,7 @@ func TestCost(t *testing.T) {
 }
 
 func TestCostSmallest(t *testing.T) {
-	sources := createTestSources()
+	sources := createTestSources(t)
 	costs := sources.EstimateCost(io.Size{X: 5472, Y: 3648}, io.Size{X: 1, Y: 1})
 	costs.Sort()
 	for i, c := range costs {

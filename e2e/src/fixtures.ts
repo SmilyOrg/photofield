@@ -2,10 +2,12 @@
 import { test as base } from 'playwright-bdd';
 import fs from 'fs/promises';
 import { join } from 'path';
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, exec } from 'child_process';
 import { BrowserContext, Page } from '@playwright/test';
 
 const LISTEN_REGEX = /local\s+http:\/\/(\S+)/;
+
+let photogenDone = false;
 
 export class App {
 
@@ -25,6 +27,27 @@ export class App {
     public page: Page,
     public context: BrowserContext,
   ) {}
+
+  async photogen() {
+    if (photogenDone) {
+      return;
+    }
+    return new Promise<void>((resolve, reject) => {
+      console.log("Running photogen...");
+      const p = exec('go run testdata/generate_temp.go', {
+        cwd: '..',
+      }, (err, stdout, stderr) => {
+        if (err) {
+          console.error(err);
+          return reject(err);
+        }
+        console.log(stdout);
+        console.error(stderr);
+        photogenDone = true;
+        resolve();
+      });
+    });
+  }
 
   async useTempDir() {
     const tmpDir = 'test-tmp/'
@@ -133,6 +156,7 @@ export class App {
 export const test = base.extend<{ app: App }>({
   app: async ({ page, context }, use) => {
     const app = new App(page, context);
+    await app.photogen();
     await use(app);
     await app.cleanup();
   }

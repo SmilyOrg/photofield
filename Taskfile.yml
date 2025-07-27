@@ -328,6 +328,11 @@ tasks:
       - go test -v '-run=^TestReloadLeaks$' photofield
       - go tool pprof -http ':' -diff_base profiles/reload-before.pprof profiles/reload-after.pprof
 
+  test:
+    desc: Run all go tests
+    cmds:
+      - go test -v -race -cover ./...
+
   docs:
     desc: Run the docs frontend in development mode
     dir: docs
@@ -339,6 +344,12 @@ tasks:
     dir: e2e
     cmds:
       - npm run watch
+
+  e2e:install_browsers:
+    desc: Install Playwright browsers
+    dir: e2e
+    cmds:
+      - npx playwright install --with-deps
 
   build:release:
     desc: Build the release binary for GOOS and GOARCH (current platform by default)

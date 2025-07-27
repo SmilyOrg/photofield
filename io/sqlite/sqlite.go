@@ -70,14 +70,20 @@ func (s *Source) Size(size io.Size) io.Size {
 	return io.Size{X: 256, Y: 256}.Fit(size, io.FitInside)
 }
 
-func New(path string, migrations embed.FS) *Source {
+//go:embed migrations/*.sql
+var migrations embed.FS
+
+func New(path string, newMigrations embed.FS) *Source {
 
 	var err error
 
 	source := Source{
 		path: path,
 	}
-	source.migrate(migrations)
+	if newMigrations != nil {
+		migrations = newMigrations
+	}
+	source.migrate()
 
 	poolSize := 10
 	source.pool, err = sqlitex.Open(source.path, 0, poolSize)
@@ -162,8 +168,8 @@ func (s *Source) init() {
 	}
 }
 
-func (s *Source) migrate(migrations embed.FS) {
-	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations-thumbs")
+func (s *Source) migrate() {
+	dbsource, err := httpfs.New(http.FS(migrations), "migrations")
 	if err != nil {
 		log.Printf("migrations not found, skipping: %v", err)
 		return
@@ -191,7 +197,9 @@ func (s *Source) migrate(migrations embed.FS) {
 	if dirty {
 		dirtystr = " (dirty)"
 	}
-	log.Printf("thumbs database version %v%s, migrating if needed", version, dirtystr)
+	if version > 0 {
+		log.Printf("thumbs database version %v%s, migrating if needed", version, dirtystr)
+	}
 
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {

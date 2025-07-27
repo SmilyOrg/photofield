@@ -26,8 +26,8 @@ Feature: First User Experience
 
   Scenario: One Folder
     Given the following files:
-      | src                          | dst            |
-      | ../docs/assets/logo-wide.jpg | vacation/a.jpg |
+      | src                                               | dst            |
+      | ../images/e2e/img_256x170_29241964_000_000.jpg | vacation/a.jpg |
     
     When the user runs the app
     Then the app logs "app running"
@@ -38,8 +38,8 @@ Feature: First User Experience
 
   Scenario: One Folder + Add Config
     Given the following files:
-      | src                          | dst            |
-      | ../docs/assets/logo-wide.jpg | vacation/a.jpg |
+      | src                                               | dst            |
+      | ../images/e2e/img_256x170_29241964_000_000.jpg | vacation/a.jpg |
     
     When the user runs the app
     And the user opens the home page
@@ -61,8 +61,8 @@ Feature: First User Experience
 
     When the user adds a folder "photos"
     And the user adds the following files:
-      | src                          | dst          |
-      | ../docs/assets/logo-wide.jpg | photos/a.jpg |
+      | src                                               | dst          |
+      | ../images/e2e/img_256x170_29241964_000_000.jpg | photos/a.jpg |
 
     When the user waits a second
     And clicks "Retry"
@@ -90,8 +90,8 @@ Feature: First User Experience
 
   Scenario: Collection One File
     Given the following files:
-      | src                          | dst            |
-      | ../docs/assets/logo-wide.jpg | vacation/a.jpg |
+      | src                                               | dst            |
+      | ../images/e2e/img_256x170_29241964_000_000.jpg | vacation/a.jpg |
     
     When the user runs the app
     Then the app logs "app running"

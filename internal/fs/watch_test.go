@@ -117,6 +117,8 @@ func TestWatcher(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
+	time.Sleep(100 * time.Millisecond)
+
 	// select {
 	// case e := <-w.Events:
 	// 	if e.Path != dir2 || e.Op != Remove {

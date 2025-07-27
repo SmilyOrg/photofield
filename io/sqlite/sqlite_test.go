@@ -16,16 +16,33 @@ import (
 	"testing"
 )
 
-var dir = "../../../photos/"
-
 func TestRoundtrip(t *testing.T) {
-	p := path.Join(dir, "test/P1110220-ffmpeg-256-cjpeg-70.jpg")
+	dataset := test.TestDataset{
+		Name:    "sqlite-roundtrip",
+		Seed:    456,
+		Samples: 1,
+		Images: []test.ImageSpec{
+			{Width: 256, Height: 171},
+		},
+	}
+	images, err := test.GenerateTestDataset("../../testdata", dataset)
+	if err != nil {
+		t.Fatalf("failed to generate test dataset: %v", err)
+	}
+	if len(images) != 1 {
+		t.Fatalf("expected 1 image, got %d", len(images))
+	}
+	image := images[0]
+
+	p := image.Path
 	bytes, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	s := New(path.Join(dir, "test/photofield.thumbs.db"), embed.FS{})
+	dbPath := path.Join(os.TempDir(), "photofield.thumbs.db")
+	defer os.Remove(dbPath)
+	s := New(dbPath, embed.FS{})
 
 	id := uint32(1)
 

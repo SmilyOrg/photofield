@@ -56,6 +56,14 @@ jobs:
       - name: Build/download dependencies
         run: task deps
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+        working-directory: ./e2e
+
+      - name: Run e2e tests
+        if: github.event_name == 'pull_request'
+        run: task e2e
+
       - name: Build one platform
         run: |
           task build:release OUTPUT=./photofield
