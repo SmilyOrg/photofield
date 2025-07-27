@@ -73,15 +73,12 @@ func (s *Source) Size(size io.Size) io.Size {
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-func New(path string, newMigrations embed.FS) *Source {
+func New(path string) *Source {
 
 	var err error
 
 	source := Source{
 		path: path,
-	}
-	if newMigrations != nil {
-		migrations = newMigrations
 	}
 	source.migrate()
 

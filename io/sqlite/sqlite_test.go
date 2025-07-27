@@ -3,7 +3,6 @@ package sqlite
 import (
 	"bytes"
 	"context"
-	"embed"
 	"image"
 	"image/color"
 	"image/png"
@@ -42,7 +41,7 @@ func TestRoundtrip(t *testing.T) {
 
 	dbPath := path.Join(os.TempDir(), "photofield.thumbs.db")
 	defer os.Remove(dbPath)
-	s := New(dbPath, embed.FS{})
+	s := New(dbPath)
 
 	id := uint32(1)
 

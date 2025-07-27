@@ -80,9 +80,6 @@ var tagsEnabled bool
 //go:embed db/migrations
 var migrations embed.FS
 
-//go:embed db/migrations-thumbs
-var migrationsThumbs embed.FS
-
 //go:embed fonts/Roboto/Roboto-Regular.ttf
 var robotoRegular []byte
 
@@ -1443,7 +1440,7 @@ func applyConfig(appConfig *AppConfig) {
 		log.Printf("%v", globalGeo.String())
 	}
 
-	imageSource = image.NewSource(appConfig.Media, migrations, migrationsThumbs, globalGeo)
+	imageSource = image.NewSource(appConfig.Media, migrations, globalGeo)
 	imageSource.HandleDirUpdates(invalidateDirs)
 	if tileRequestConfig.Concurrency > 0 {
 		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)

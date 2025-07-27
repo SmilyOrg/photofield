@@ -175,7 +175,7 @@ type Source struct {
 	Geo  *geo.Geo
 }
 
-func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, geo *geo.Geo) *Source {
+func NewSource(config Config, migrations embed.FS, geo *geo.Geo) *Source {
 	source := Source{}
 	source.Config = config
 	source.database = NewDatabase(filepath.Join(config.DataDir, "photofield.cache.db"), migrations)
@@ -233,7 +233,6 @@ func NewSource(config Config, migrations embed.FS, migrationsThumbs embed.FS, ge
 		FFmpegPath:   ffmpegPath,
 		DjpegPath:    djpegPath,
 		ExifToolPath: exifToolPath,
-		Migrations:   migrationsThumbs,
 		ImageCache:   source.imageCache,
 		DataDir:      config.DataDir,
 	}
