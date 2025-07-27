@@ -7,8 +7,6 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
-	gio "io"
-	"math/rand"
 	"os"
 	"os/exec"
 	"path"
@@ -28,7 +26,6 @@ import (
 	"time"
 
 	"golang.org/x/image/draw"
-	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 func createTestSources(t testing.TB) io.Sources {
@@ -38,7 +35,11 @@ func createTestSources(t testing.TB) io.Sources {
 	return io.Sources{
 		// cache,
 		sqlite.New(dbPath),
-		goexif.Exif{},
+		goexif.Exif{
+			Width:  256,
+			Height: 256,
+			Fit:    io.FitInside,
+		},
 		thumb.New(
 			"S",
 			"{{.Dir}}@eaDir/{{.Filename}}/SYNOPHOTO_THUMB_S.jpg",
@@ -427,9 +428,9 @@ func TestCost(t *testing.T) {
 		{zoom: 3, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 960, Y: 640}, name: "thumb-1280x1280-XL"},
 		{zoom: 4, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 1920, Y: 1280}, name: "thumb-1280x1280-XL"},
 		{zoom: 5, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 3840, Y: 2560}, name: "ffmpeg-4096x4096-in"},
-		{zoom: 6, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 7680, Y: 5120}, name: "image"},
-		{zoom: 7, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 15360, Y: 10240}, name: "image"},
-		{zoom: 8, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 30720, Y: 20480}, name: "image"},
+		{zoom: 6, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 7680, Y: 5120}, name: "original"},
+		{zoom: 7, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 15360, Y: 10240}, name: "original"},
+		{zoom: 8, o: io.Size{X: 5472, Y: 3648}, size: io.Size{X: 30720, Y: 20480}, name: "original"},
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%dx%d-%d", c.o.X, c.o.Y, c.zoom), func(t *testing.T) {
@@ -439,7 +440,7 @@ func TestCost(t *testing.T) {
 				t.Logf("%4d %6.0f %s\n", i, c.Cost, c.Name())
 			}
 			if costs[0].Name() != c.name {
-				t.Errorf("unexpected smallest source %s", costs[0].Name())
+				t.Errorf("unexpected best source %s", costs[0].Name())
 			}
 		})
 	}
@@ -454,62 +455,6 @@ func TestCostSmallest(t *testing.T) {
 	}
 	if costs[0].Name() != "thumb-120x120-S" {
 		t.Errorf("unexpected smallest source %s", costs[0].Name())
-	}
-}
-
-func BenchmarkSqlite(b *testing.B) {
-	dir := b.TempDir()
-
-	// Create the test subdirectory
-	testDir := path.Join(dir, "test")
-	err := os.MkdirAll(testDir, 0755)
-	if err != nil {
-		panic(err)
-	}
-
-	pool, err := sqlitex.Open(path.Join(testDir, "photofield.thumbs.db"), 0, 10)
-	if err != nil {
-		panic(err)
-	}
-	c := pool.Get(context.Background())
-	defer pool.Put(c)
-
-	stmt := c.Prep(`
-		SELECT data
-		FROM thumb256
-		WHERE id == ?;`)
-	defer stmt.Reset()
-
-	maxid := int64(1000000)
-
-	for i := 0; i < b.N; i++ {
-		id := 1 + rand.Int63n(maxid)
-		stmt.BindInt64(1, id)
-		exists, err := stmt.Step()
-		if err != nil {
-			b.Error(err)
-		}
-		if !exists {
-			b.Errorf("id not found: %d", id)
-		}
-		r := stmt.ColumnReader(1)
-		gio.ReadAll(r)
-		stmt.Reset()
-	}
-}
-
-func BenchmarkFile(b *testing.B) {
-	dir := b.TempDir()
-
-	maxid := int64(1000000)
-
-	for i := 0; i < b.N; i++ {
-		id := 1 + rand.Int63n(maxid)
-		path := path.Join(dir, fmt.Sprintf("test/thumb/%d.jpg", id))
-		_, err := os.ReadFile(path)
-		if err != nil {
-			b.Error(err)
-		}
 	}
 }
 
@@ -783,27 +728,3 @@ func BenchmarkThumbs(b *testing.B) {
 		}
 	}
 }
-
-// func BenchmarkThumbs(b *testing.B) {
-// 	l := GoImage{}
-// 	ctx := context.Background()
-// 	for _, bc := range files {
-// 		bc := bc // capture range variable
-// 		b.
-// 		// t.Run(tc.Name, func(t *testing.T) {
-// 		//     t.Parallel()
-// 		//     ...
-// 		// })
-// 	}
-// 	// for i := 0; i < b.N; i++ {
-// 	// 	// l.Load(ctx, "photos/formats/logo.png")
-// 	// 	// l.Load(ctx, "P1110220.JPG")
-// 	// 	// _, err := l.Load(ctx, "C:/w/photofield/photos/formats/carina-nebula-high-resolution_52259221868_o.png")
-// 	// 	_, err := l.Load(ctx, "C:/w/photofield/photos/formats/logo.png")
-// 	// 	// _, err := l.Load(ctx, "C:/w/photofield/photos/formats/P1110220.jpg")
-// 	// 	if err != nil {
-// 	// 		b.Error(err)
-// 	// 	}
-// 	// 	// time.Sleep(100 * time.Millisecond)
-// 	// }
-// }
