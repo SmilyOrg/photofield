@@ -115,6 +115,23 @@ func (s *Source) Close() error {
 	return s.pool.Close()
 }
 
+// Flush waits for all pending writes to complete
+func (s *Source) Flush() {
+	if s == nil || s.closed {
+		return
+	}
+	// Send a marker to know when we've processed all pending items
+	done := make(chan struct{})
+	go func() {
+		// Wait until the pending channel is empty
+		for len(s.pending) > 0 {
+			time.Sleep(time.Millisecond)
+		}
+		close(done)
+	}()
+	<-done
+}
+
 func setPragma(conn *sqlite.Conn, name string, value interface{}) error {
 	sql := fmt.Sprintf("PRAGMA %s = %v;", name, value)
 	return sqlitex.ExecuteTransient(conn, sql, &sqlitex.ExecOptions{})

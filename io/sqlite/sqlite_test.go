@@ -46,6 +46,7 @@ func TestRoundtrip(t *testing.T) {
 	id := uint32(1)
 
 	s.Write(id, bytes)
+	s.Flush() // Wait for the write to complete
 	r := s.Get(context.Background(), io.ImageId(id), p)
 	if r.Error != nil {
 		t.Fatal(r.Error)
