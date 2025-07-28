@@ -1,7 +1,0 @@
-name=e2e
-seed=123
-specs=2
-samples=1
-images=2
-image=img_256x170_29241964_000_000,256x170,Orientation#=1
-image=img_170x256_0267b147_001_000,170x256,Orientation#=6

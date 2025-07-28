@@ -38,6 +38,14 @@ export default defineConfig({
     headless: true,
   },
 
+  webServer: {
+    command: 'npm run dev',
+    cwd: '../ui',
+    url: 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+    name: 'ui',
+  },
+
   // globalTeardown: require.resolve('./tests/teardown.ts'),
 
   /* Configure projects for major browsers */
