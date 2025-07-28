@@ -437,7 +437,7 @@ func TestCost(t *testing.T) {
 			costs := sources.EstimateCost(c.o, c.size)
 			costs.Sort()
 			for i, c := range costs {
-				t.Logf("%4d %6.0f %s\n", i, c.Cost, c.Name())
+				t.Logf("%4d %6.0f %s", i, c.Cost, c.Name())
 			}
 			if costs[0].Name() != c.name {
 				t.Errorf("unexpected best source %s", costs[0].Name())
