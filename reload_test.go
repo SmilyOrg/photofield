@@ -11,12 +11,26 @@ import (
 func TestReloadLeaks(t *testing.T) {
 	n := 10
 	maxObjectsDiff := int64(1000)
-	dataDir := "./data"
+
+	// Create a temporary directory with example config
+	tempDir := t.TempDir()
+
+	// Write sample config to temp directory
+	configContent := `
+collections:
+  - name: test
+    dirs: ["./dummy-dir"]
+	`
+
+	configPath := tempDir + "/configuration.yaml"
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("unable to write config file: %v", err)
+	}
+
 	initDefaults()
-	appConfig, err := loadConfig(dataDir)
+	appConfig, err := loadConfig(tempDir)
 	if err != nil {
-		log.Printf("unable to load configuration: %v", err)
-		return
+		t.Fatalf("unable to load configuration: %v", err)
 	}
 
 	applyConfig(appConfig)

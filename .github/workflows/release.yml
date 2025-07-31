@@ -56,6 +56,11 @@ jobs:
       - name: Build/download dependencies
         run: task deps
 
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: exiftool ffmpeg libjpeg-turbo-progs
+          version: 1.0
+
       - name: Run unit tests
         run: task test
 
