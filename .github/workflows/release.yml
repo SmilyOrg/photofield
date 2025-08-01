@@ -57,10 +57,9 @@ jobs:
         run: task deps
 
       - name: Install test dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: exiftool ffmpeg libjpeg-turbo-progs
-          version: 1.0
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y exiftool ffmpeg libjpeg-turbo-progs
 
       - name: Run unit tests
         run: task test
