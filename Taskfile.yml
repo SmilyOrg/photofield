@@ -345,10 +345,11 @@ tasks:
     cmds:
       - npm run watch
 
-  e2e:install_browsers:
+  e2e:install:
     desc: Install Playwright browsers
     dir: e2e
     cmds:
+      - npm install
       - npx playwright install --with-deps
 
   e2e:ci:

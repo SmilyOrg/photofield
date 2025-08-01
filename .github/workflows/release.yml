@@ -72,7 +72,7 @@ jobs:
         run: task test
 
       - name: Install Playwright browsers
-        run: task e2e:install_browsers
+        run: task e2e:install
 
       - name: Run e2e tests
         run: task e2e:ci
