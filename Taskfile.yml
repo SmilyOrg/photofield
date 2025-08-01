@@ -355,7 +355,7 @@ tasks:
     desc: Run end-to-end tests on CI
     dir: e2e
     cmds:
-      - npm run bddgen
+      - npx bddgen
       - npx playwright test --reporter=github
 
   build:release:
