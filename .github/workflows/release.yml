@@ -61,9 +61,9 @@ jobs:
           # Exclude documentation files to reduce image size
           # See https://github.com/actions/runner-images/issues/10977
           sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
-            path-exclude /usr/share/doc/*
-            path-exclude /usr/share/man/*
-            path-exclude /usr/share/info/*
+          path-exclude /usr/share/doc/*
+          path-exclude /usr/share/man/*
+          path-exclude /usr/share/info/*
           EOF
           sudo apt-get update
           sudo apt-get install -y exiftool ffmpeg libjpeg-turbo-progs
