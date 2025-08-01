@@ -56,7 +56,8 @@ jobs:
       - name: Build/download dependencies
         run: task deps
 
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - name: Install test dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: exiftool ffmpeg libjpeg-turbo-progs
           version: 1.0
@@ -65,12 +66,10 @@ jobs:
         run: task test
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-        working-directory: ./e2e
+        run: task e2e:install_browsers
 
       - name: Run e2e tests
-        if: github.event_name == 'pull_request'
-        run: task e2e
+        run: task e2e:ci
 
       - name: Build one platform
         run: |

@@ -351,6 +351,13 @@ tasks:
     cmds:
       - npx playwright install --with-deps
 
+  e2e:ci:
+    desc: Run end-to-end tests on CI
+    dir: e2e
+    cmds:
+      - npm run bddgen
+      - npx playwright test --reporter=github
+
   build:release:
     desc: Build the release binary for GOOS and GOARCH (current platform by default)
     vars:
