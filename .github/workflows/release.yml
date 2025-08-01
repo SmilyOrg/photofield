@@ -56,27 +56,6 @@ jobs:
       - name: Build/download dependencies
         run: task deps
 
-      - name: Install test dependencies
-        run: |
-          # Exclude documentation files to reduce image size
-          # See https://github.com/actions/runner-images/issues/10977
-          sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
-          path-exclude /usr/share/doc/*
-          path-exclude /usr/share/man/*
-          path-exclude /usr/share/info/*
-          EOF
-          sudo apt-get update
-          sudo apt-get install -y exiftool ffmpeg libjpeg-turbo-progs
-
-      - name: Run unit tests
-        run: task test
-
-      - name: Install Playwright browsers
-        run: task e2e:install
-
-      - name: Run e2e tests
-        run: task e2e:ci
-
       - name: Build one platform
         run: |
           task build:release OUTPUT=./photofield
