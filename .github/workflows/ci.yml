@@ -153,6 +153,14 @@ jobs:
       - name: Run e2e tests
         run: task e2e:ci
 
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 30
+
   release:
     needs: [unit-tests, e2e-tests, build]
     runs-on: ubuntu-latest
