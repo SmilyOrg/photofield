@@ -82,9 +82,6 @@ jobs:
       - name: Install taskfile
         run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
-      - name: Check dependencies & generated files
-        run: task check
-
       - name: Build/download dependencies
         run: task deps
 
@@ -135,12 +132,6 @@ jobs:
       - name: Install taskfile
         run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
-      - name: Check dependencies & generated files
-        run: task check
-
-      - name: Build/download dependencies
-        run: task deps
-
       - name: Install test dependencies
         run: |
           # Exclude documentation files to reduce image size
@@ -152,6 +143,9 @@ jobs:
           EOF
           sudo apt-get update
           sudo apt-get install -y exiftool ffmpeg libjpeg-turbo-progs
+
+      - name: Build UI
+        run: task build:ui
 
       - name: Install Playwright browsers
         run: task e2e:install

@@ -54,6 +54,7 @@ export class App {
     const address = `${this.host}:${this.port}`;
 
     const env = {
+      PATH: process.env.PATH,
       PHOTOFIELD_ADDRESS: this.listenHost || address,
       PHOTOFIELD_API_PREFIX: '/',
       PHOTOFIELD_CORS_ALLOWED_ORIGINS: 'http://localhost:5173',
