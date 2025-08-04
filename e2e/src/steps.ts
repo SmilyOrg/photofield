@@ -90,7 +90,7 @@ Then('the app logs {string}', async ({ app }, log: string) => {
   }).toPass();
 });
 
-When('the user waits for {int} seconds', async ({ page }, sec: number) => { 
+When('the user waits for {int} second(s)', async ({ page }, sec: number) => { 
   await page.waitForTimeout(sec * 1000);
 });
 

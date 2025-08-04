@@ -19,6 +19,7 @@ Feature: Connection Error Message
     And the user waits for 5 seconds
     Then the page shows "Connection error"
     When the API comes back up
+    And the user waits for 1 second
     Then the page shows "Photos"
     When the user clicks "Retry"
     Then the page does not show "Connecting..."
