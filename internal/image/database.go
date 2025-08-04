@@ -551,8 +551,8 @@ func (source *Database) writePendingInfosSqlite() {
 
 		case imageInfo, ok := <-source.pending:
 			if !ok {
-				log.Println("database closing")
 				commit()
+				log.Println("database closed")
 				return
 			}
 

@@ -75,6 +75,9 @@ When('the user stops the app', async ({ app }) => {
 
 When('the API comes back up', async ({ app }) => {
   await app.run();
+  await expect(async () => {
+    expect(app.stderr).toContain("app running");
+  }).toPass();
 });
 
 Then('debug wait {int}', async ({}, ms: number) => {
