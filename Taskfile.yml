@@ -355,9 +355,10 @@ tasks:
   e2e:ci:
     desc: Run end-to-end tests on CI
     dir: e2e
+    env:
+      CI: "true"
     cmds:
-      - npx bddgen
-      - npx playwright test --reporter=github
+      - npm run test
 
   build:release:
     desc: Build the release binary for GOOS and GOARCH (current platform by default)
