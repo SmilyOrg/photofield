@@ -236,6 +236,17 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') != true
         run: git clean -fd .changes; git checkout -- .changes
 
+      - name: Upload build artifacts (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            .task-release-changelog.md
+            dist/archives/*.zip
+            dist/archives/checksums.txt
+          retention-days: 30
+
       - name: Attest release artifacts
         if: github.event_name == 'push'
         uses: actions/attest-build-provenance@v2
@@ -243,6 +254,7 @@ jobs:
           subject-checksums: dist/archives/checksums.txt
 
       - name: Create GitHub Release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v1
         with:
           draft: true
