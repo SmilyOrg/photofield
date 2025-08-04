@@ -146,7 +146,7 @@ Then('the file {string} does not exist', async ({ app }, filePath: string) => {
     throw new Error("File exists");
   } catch (error) {
     console.log("Error:", error);
-    expect(error.code).toBe('ENOENT');
+    expect(error.code === 'ENOENT' || error.message.includes('no such file or directory')).toBe(true);
   }
 });
 
