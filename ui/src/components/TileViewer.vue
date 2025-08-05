@@ -25,7 +25,6 @@ import Projection from 'ol/proj/Projection';
 import { easeIn, easeOut, linear } from 'ol/easing';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
-import { MAC } from 'ol/has';
 import Kinetic from 'ol/Kinetic';
 import { get as getProjection } from 'ol/proj';
 import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
@@ -39,6 +38,8 @@ import "ol/ol.css";
 import { getTileUrl } from '../api';
 import { useColorMode } from '@vueuse/core';
 
+// Detect Mac platform (replaces the removed ol/has MAC constant)
+const MAC = navigator.platform.indexOf('Mac') > -1;
 
 function ctrlWithMaybeShift(mapBrowserEvent) {
   const originalEvent = /** @type {KeyboardEvent|MouseEvent|TouchEvent} */ (
@@ -477,11 +478,9 @@ export default {
       }
       this.preloadedView = view;
       const preloadExtent = this.extentFromView(view);
-      let maxZoom = 0;
-      source.tileCache.forEach(tile => {
-        maxZoom = Math.max(maxZoom, tile.tileCoord[0]);
-      });
-      grid.forEachTileCoord(preloadExtent, maxZoom, tileCoord => {
+      const resolution = this.map.getView().getResolution();
+      const z = grid.getZForResolution(resolution);
+      grid.forEachTileCoord(preloadExtent, z, tileCoord => {
         const tile = source.getTile(tileCoord[0], tileCoord[1], tileCoord[2], 1, projection);
         tile.load();
       });
