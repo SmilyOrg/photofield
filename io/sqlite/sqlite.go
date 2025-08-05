@@ -337,10 +337,13 @@ func (s *Source) writePending() {
 
 		case flushDone := <-s.flushCh:
 			// Process any remaining pending writes first
-			for len(s.pending) > 0 {
+		flushLoop:
+			for {
 				select {
 				case t := <-s.pending:
 					processPendingWrite(t)
+				default:
+					break flushLoop
 				}
 			}
 			// Commit any pending transaction
