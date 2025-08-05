@@ -1,7 +1,6 @@
 package image
 
 import (
-	"embed"
 	"fmt"
 	"path/filepath"
 	"photofield/io"
@@ -85,7 +84,6 @@ type SourceEnvironment struct {
 	FFmpegPath   string
 	DjpegPath    string
 	ExifToolPath string
-	Migrations   embed.FS
 	ImageCache   *ristretto.Ristretto
 	Databases    map[string]*sqlite.Source
 }
@@ -114,7 +112,6 @@ func (c SourceConfig) NewSource(env *SourceEnvironment) (io.Source, error) {
 		}
 		sq := sqlite.New(
 			filepath.Join(env.DataDir, c.Path),
-			env.Migrations,
 		)
 		if env.Databases == nil {
 			env.Databases = make(map[string]*sqlite.Source)

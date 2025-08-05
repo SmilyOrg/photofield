@@ -2,7 +2,7 @@
 import { test as base } from 'playwright-bdd';
 import fs from 'fs/promises';
 import { join } from 'path';
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, exec } from 'child_process';
 import { BrowserContext, Page } from '@playwright/test';
 
 const LISTEN_REGEX = /local\s+http:\/\/(\S+)/;
@@ -35,12 +35,12 @@ export class App {
     const suffix = Math.random().toString(36).substring(2, 8);  
     const dirName = `test-${datetime}-${suffix}`;
     this.cwd = join(process.cwd(), tmpDir, dirName);
-    await fs.mkdir(this.cwd);
+    await fs.mkdir(this.cwd, { recursive: true });
   }
 
   async addDir(dir: string) {
     console.log("Adding dir:", dir);
-    await fs.mkdir(join(this.cwd, dir));
+    await fs.mkdir(join(this.cwd, dir), { recursive: true });
   }
 
   path(path: string) {
@@ -54,6 +54,7 @@ export class App {
     const address = `${this.host}:${this.port}`;
 
     const env = {
+      PATH: process.env.PATH,
       PHOTOFIELD_ADDRESS: this.listenHost || address,
       PHOTOFIELD_API_PREFIX: '/',
       PHOTOFIELD_CORS_ALLOWED_ORIGINS: 'http://localhost:5173',

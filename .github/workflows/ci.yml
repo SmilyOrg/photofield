@@ -1,0 +1,298 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+  pull_request:
+    types: [opened, synchronize]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install taskfile
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Check dependencies & generated files
+        run: task check
+
+      - name: Build/download dependencies
+        run: task deps
+
+      - name: Build application
+        run: |
+          task build:release OUTPUT=./photofield
+          ./photofield -version
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: photofield-binary
+          path: ./photofield
+          retention-days: 1
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install taskfile
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Build/download dependencies
+        run: task deps
+
+      - name: Install test dependencies
+        run: |
+          # Exclude documentation files to reduce image size
+          # See https://github.com/actions/runner-images/issues/10977
+          sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
+          path-exclude /usr/share/doc/*
+          path-exclude /usr/share/man/*
+          path-exclude /usr/share/info/*
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y exiftool ffmpeg libjpeg-turbo-progs
+
+      - name: Run unit tests
+        run: task test
+
+  e2e-tests:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: photofield-binary
+          path: ./
+
+      - name: Make binary executable
+        run: chmod +x ./photofield
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install taskfile
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install test dependencies
+        run: |
+          # Exclude documentation files to reduce image size
+          # See https://github.com/actions/runner-images/issues/10977
+          sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
+          path-exclude /usr/share/doc/*
+          path-exclude /usr/share/man/*
+          path-exclude /usr/share/info/*
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y exiftool ffmpeg libjpeg-turbo-progs
+
+      - name: Build UI
+        run: task build:ui
+
+      - name: Install Playwright browsers
+        run: task e2e:install
+
+      - name: Run e2e tests
+        run: task e2e:ci
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 30
+
+  release:
+    needs: [unit-tests, e2e-tests, build]
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: photofield-binary
+          path: ./
+
+      - name: Make binary executable
+        run: chmod +x ./photofield
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install taskfile
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install changie
+        env:
+          CHANGIE_VERSION: "1.21.1"
+        run: >-
+            curl -sL https://github.com/miniscruff/changie/releases/download/v${CHANGIE_VERSION}/changie_${CHANGIE_VERSION}_$(go env GOOS)_$(go env GOARCH).tar.gz
+            | tar xz -C /usr/local/bin changie
+            && chmod +x /usr/local/bin/changie
+
+      - name: Check dependencies & generated files
+        run: task check
+
+      - name: Build/download dependencies
+        run: task deps
+
+      - name: Test built binary
+        run: ./photofield -version
+
+      - name: Build & package for reduced set of platforms
+        if: github.event_name == 'pull_request'
+        run: |
+          task package BUILD_OS_ARCH=windows/amd64,linux/amd64,linux/arm64,darwin/arm64
+
+      - name: Build & package all platforms
+        if: github.event_name == 'push'
+        run: |
+          task package
+
+      - name: Prepare temporary changelog
+        if: startsWith(github.ref, 'refs/tags/') != true
+        run: |
+          changie batch auto || (changie new -k Added -b 'Undocumented changes, use e.g. `task added` to document them' && changie batch auto)
+
+      - name: Extract release changelog & title (PR)
+        id: changelog
+        run: |
+          task release:changelog > .task-release-changelog.md
+          echo "TITLE=$(task release:title)" >> $GITHUB_OUTPUT
+          echo "VERSION=$(task release:version)" >> $GITHUB_OUTPUT
+
+      - name: Cleanup temporary changelog
+        if: startsWith(github.ref, 'refs/tags/') != true
+        run: git clean -fd .changes; git checkout -- .changes
+
+      - name: Upload build artifacts (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            .task-release-changelog.md
+            dist/archives/*.zip
+            dist/archives/checksums.txt
+          retention-days: 30
+
+      - name: Attest release artifacts
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-checksums: dist/archives/checksums.txt
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          name: ${{ steps.changelog.outputs.TITLE }}
+          body_path: .task-release-changelog.md
+          tag_name: ${{ steps.changelog.outputs.VERSION }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            dist/archives/*.zip
+            dist/archives/checksums.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+      - name: Log in to the Container registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker multiarch build
+        if: github.event_name == 'push'
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+
+      - name: Build & push Docker images
+        if: github.event_name == 'push'
+        id: docker
+        run: |
+          task docker:multiarch:push
+          echo "DIGEST=$(cat ./.docker-image-id)" >> $GITHUB_OUTPUT
+
+      - name: Attest Docker image
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-digest: ${{ steps.docker.outputs.DIGEST }}
+          push-to-registry: true

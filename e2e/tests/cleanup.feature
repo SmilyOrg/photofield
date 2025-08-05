@@ -13,6 +13,8 @@ Feature: Cleanup
     And the file "photofield.thumbs.db-wal" exists
 
     When the user stops the app
+    Then the app logs "shutdown requested"
+    Then the app logs "database closed"
     Then the file "photofield.cache.db" exists
     And the file "photofield.cache.db-shm" does not exist
     And the file "photofield.cache.db-wal" does not exist

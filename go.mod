@@ -41,11 +41,11 @@ require (
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	github.com/x448/float16 v0.8.4
 	github.com/zelenko/go v0.0.0-20210326203833-2c97fc39fc36
-	golang.org/x/exp v0.0.0-20231108232855-2478ac86f678
+	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/image v0.29.0
 	golang.org/x/sync v0.16.0
-	modernc.org/sqlite v1.34.5
-	zombiezen.com/go/sqlite v1.4.0
+	modernc.org/sqlite v1.38.2
+	zombiezen.com/go/sqlite v1.4.2
 )
 
 require (
@@ -62,7 +62,7 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/pprof v0.0.0-20240409012703-83162a5b38cd // indirect
+	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gosimple/unidecode v1.0.0 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.8 // indirect
@@ -86,12 +86,12 @@ require (
 	github.com/tdewolff/parse/v2 v2.4.2 // indirect
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
-	modernc.org/libc v1.55.3 // indirect
-	modernc.org/mathutil v1.6.0 // indirect
-	modernc.org/memory v1.8.0 // indirect
+	modernc.org/libc v1.66.3 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.11.0 // indirect
 )

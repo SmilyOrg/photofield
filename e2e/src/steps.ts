@@ -75,6 +75,9 @@ When('the user stops the app', async ({ app }) => {
 
 When('the API comes back up', async ({ app }) => {
   await app.run();
+  await expect(async () => {
+    expect(app.stderr).toContain("app running");
+  }).toPass();
 });
 
 Then('debug wait {int}', async ({}, ms: number) => {
@@ -87,7 +90,7 @@ Then('the app logs {string}', async ({ app }, log: string) => {
   }).toPass();
 });
 
-When('the user waits for {int} seconds', async ({ page }, sec: number) => { 
+When('the user waits for {int} second(s)', async ({ page }, sec: number) => { 
   await page.waitForTimeout(sec * 1000);
 });
 
@@ -146,7 +149,7 @@ Then('the file {string} does not exist', async ({ app }, filePath: string) => {
     throw new Error("File exists");
   } catch (error) {
     console.log("Error:", error);
-    expect(error.code).toBe('ENOENT');
+    expect(error.code === 'ENOENT' || error.message.includes('no such file or directory')).toBe(true);
   }
 });
 

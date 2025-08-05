@@ -38,6 +38,7 @@ type Source struct {
 	pending   chan Thumb
 	closed    bool
 	encodePng bool
+	flushCh   chan chan struct{}
 }
 
 type Thumb struct {
@@ -70,14 +71,17 @@ func (s *Source) Size(size io.Size) io.Size {
 	return io.Size{X: 256, Y: 256}.Fit(size, io.FitInside)
 }
 
-func New(path string, migrations embed.FS) *Source {
+//go:embed migrations/*.sql
+var migrations embed.FS
+
+func New(path string) *Source {
 
 	var err error
 
 	source := Source{
 		path: path,
 	}
-	source.migrate(migrations)
+	source.migrate()
 
 	poolSize := 10
 	source.pool, err = sqlitex.Open(source.path, 0, poolSize)
@@ -98,6 +102,7 @@ func New(path string, migrations embed.FS) *Source {
 	}
 
 	source.pending = make(chan Thumb, 100)
+	source.flushCh = make(chan chan struct{}, 10)
 	go source.writePending()
 
 	return &source
@@ -109,7 +114,19 @@ func (s *Source) Close() error {
 	}
 	s.closed = true
 	close(s.pending)
+	close(s.flushCh)
 	return s.pool.Close()
+}
+
+// Flush waits for all pending writes to complete
+func (s *Source) Flush() {
+	if s == nil || s.closed {
+		return
+	}
+	// Send a flush request and wait for it to complete
+	done := make(chan struct{})
+	s.flushCh <- done
+	<-done
 }
 
 func setPragma(conn *sqlite.Conn, name string, value interface{}) error {
@@ -162,8 +179,8 @@ func (s *Source) init() {
 	}
 }
 
-func (s *Source) migrate(migrations embed.FS) {
-	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations-thumbs")
+func (s *Source) migrate() {
+	dbsource, err := httpfs.New(http.FS(migrations), "migrations")
 	if err != nil {
 		log.Printf("migrations not found, skipping: %v", err)
 		return
@@ -191,7 +208,9 @@ func (s *Source) migrate(migrations embed.FS) {
 	if dirty {
 		dirtystr = " (dirty)"
 	}
-	log.Printf("thumbs database version %v%s, migrating if needed", version, dirtystr)
+	if version > 0 {
+		log.Printf("thumbs database version %v%s, migrating if needed", version, dirtystr)
+	}
 
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
@@ -249,9 +268,19 @@ func (s *Source) writePending() {
 	lastOptimize := time.Time{}
 	inTransaction := false
 
-	for t := range s.pending {
+	commit := func() {
+		if inTransaction {
+			err := sqlitex.Execute(c, "COMMIT;", nil)
+			lastCommit = time.Now()
+			if err != nil {
+				panic(err)
+			}
+			inTransaction = false
+		}
+	}
+
+	processPendingWrite := func(t Thumb) {
 		if !inTransaction {
-			// s.transactionMutex.Lock()
 			err := sqlitex.Execute(c, "BEGIN TRANSACTION;", nil)
 			if err != nil {
 				panic(err)
@@ -278,28 +307,49 @@ func (s *Source) writePending() {
 			}
 			insert.Reset()
 		}
+	}
 
-		sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
-		if inTransaction && (sinceLastCommitSeconds >= 10 || len(s.pending) == 0) {
-			err := sqlitex.Execute(c, "COMMIT;", nil)
-			lastCommit = time.Now()
-			if err != nil {
-				panic(err)
+	for {
+		select {
+		case t, ok := <-s.pending:
+			if !ok {
+				commit()
+				return
 			}
 
-			if time.Since(lastOptimize).Hours() >= 1 {
-				lastOptimize = time.Now()
-				log.Println("database optimizing")
-				optimizeDone := metrics.Elapsed("database optimize")
-				err = sqlitex.Execute(c, "PRAGMA optimize;", nil)
-				if err != nil {
-					panic(err)
+			processPendingWrite(t)
+
+			sinceLastCommitSeconds := time.Since(lastCommit).Seconds()
+			if inTransaction && (sinceLastCommitSeconds >= 10 || len(s.pending) == 0) {
+				commit()
+
+				if time.Since(lastOptimize).Hours() >= 1 {
+					lastOptimize = time.Now()
+					log.Println("database optimizing")
+					optimizeDone := metrics.Elapsed("database optimize")
+					err = sqlitex.Execute(c, "PRAGMA optimize;", nil)
+					if err != nil {
+						panic(err)
+					}
+					optimizeDone()
 				}
-				optimizeDone()
 			}
 
-			// s.transactionMutex.Unlock()
-			inTransaction = false
+		case flushDone := <-s.flushCh:
+			// Process any remaining pending writes first
+		flushLoop:
+			for {
+				select {
+				case t := <-s.pending:
+					processPendingWrite(t)
+				default:
+					break flushLoop
+				}
+			}
+			// Commit any pending transaction
+			commit()
+			// Signal that flush is complete
+			close(flushDone)
 		}
 	}
 }
@@ -451,73 +501,3 @@ func (s *Source) Encode(ctx context.Context, r io.Result, w goio.Writer) bool {
 	}
 	return true
 }
-
-// func (s *Source) migrate(migrations embed.FS) {
-// 	dbsource, err := httpfs.New(http.FS(migrations), "db/migrations")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	url := fmt.Sprintf("sqlite://%v", filepath.ToSlash(s.path))
-// 	m, err := migrate.NewWithSourceInstance(
-// 		"migrations",
-// 		dbsource,
-// 		url,
-// 	)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	version, dirty, err := m.Version()
-// 	if err != nil && err != migrate.ErrNilVersion {
-// 		panic(err)
-// 	}
-
-// 	dirtystr := ""
-// 	if dirty {
-// 		dirtystr = " (dirty)"
-// 	}
-// 	log.Printf("database version %v%s, migrating if needed", version, dirtystr)
-
-// 	err = m.Up()
-// 	if err != nil && err != migrate.ErrNoChange {
-// 		panic(err)
-// 	}
-
-// 	serr, derr := m.Close()
-// 	if serr != nil {
-// 		panic(serr)
-// 	}
-// 	if derr != nil {
-// 		panic(derr)
-// 	}
-// }
-
-// pool, err := sqlitex.Open(path.Join(dir, "test/photofield.thumbs.db"), 0, 10)
-// if err != nil {
-// 	panic(err)
-// }
-// c := pool.Get(context.Background())
-// defer pool.Put(c)
-
-// stmt := c.Prep(`
-// 	SELECT data
-// 	FROM thumb256
-// 	WHERE id == ?;`)
-// defer stmt.Reset()
-
-// maxid := int64(1000000)
-
-// for i := 0; i < b.N; i++ {
-// 	id := 1 + rand.Int63n(maxid)
-// 	stmt.BindInt64(1, id)
-// 	exists, err := stmt.Step()
-// 	if err != nil {
-// 		b.Error(err)
-// 	}
-// 	if !exists {
-// 		b.Errorf("id not found: %d", id)
-// 	}
-// 	r := stmt.ColumnReader(1)
-// 	io.ReadAll(r)
-// 	stmt.Reset()
-// }
