@@ -28,6 +28,7 @@ require (
 	github.com/kelindar/intmap v1.1.0
 	github.com/lpar/gzipped v1.1.0
 	github.com/matoous/go-nanoid/v2 v2.0.0
+	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
 	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9
 	github.com/peterstace/simplefeatures v0.44.0
