@@ -13,10 +13,6 @@ vars:
   BUILD_OS_ARCH:
     - darwin/amd64
     - darwin/arm64
-    - freebsd/386
-    - freebsd/amd64
-    - freebsd/arm
-    - freebsd/arm64
     - linux/386
     - linux/amd64
     - linux/arm
@@ -52,6 +48,18 @@ tasks:
       - "echo '  task docs: Run the docs frontend in development mode'"
       - "echo '  task e2e: Run end-to-end tests in watch mode'"
       - "echo '  task release:local: Build, package, and create a local Docker image'"
+    silent: true
+
+  commit:analyze:
+    desc: Analyze git state for LLM commit assistant (current branch and staged changes)
+    cmds:
+      - echo "Current branch:" $(git branch --show-current)
+      - echo ""
+      - echo "=== STAGED FILES ==="
+      - git diff --cached --stat || echo "No staged changes"
+      - echo ""
+      - echo "=== STAGED CHANGES ==="
+      - git diff --cached || echo "No staged changes"
     silent: true
 
   added: 

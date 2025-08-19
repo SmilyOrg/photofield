@@ -147,10 +147,12 @@ const showDetails = computed(() => {
 const setDetails = (show) => {
   if (show) {
     router.push({
+      query: route.query,
       hash: "#details"
     });
   } else {
     router.replace({
+      query: route.query,
       hash: ""
     });
   }
