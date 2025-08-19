@@ -50,6 +50,18 @@ tasks:
       - "echo '  task release:local: Build, package, and create a local Docker image'"
     silent: true
 
+  commit:analyze:
+    desc: Analyze git state for LLM commit assistant (current branch and staged changes)
+    cmds:
+      - echo "Current branch:" $(git branch --show-current)
+      - echo ""
+      - echo "=== STAGED FILES ==="
+      - git diff --cached --stat || echo "No staged changes"
+      - echo ""
+      - echo "=== STAGED CHANGES ==="
+      - git diff --cached || echo "No staged changes"
+    silent: true
+
   added: 
     desc: Create a new changelog entry for added features
     cmds: [changie new -k Added -e] 
