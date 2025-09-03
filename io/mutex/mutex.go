@@ -13,7 +13,7 @@ type Mutex struct {
 	loading sync.Map
 }
 
-func (m Mutex) Close() error {
+func (m *Mutex) Close() error {
 	return m.Source.Close()
 }
 
@@ -22,23 +22,23 @@ type loadingResult struct {
 	loaded chan struct{}
 }
 
-func (m Mutex) Name() string {
+func (m *Mutex) Name() string {
 	return fmt.Sprintf("%s (mutex)", m.Source.Name())
 }
 
-func (m Mutex) Size(size io.Size) io.Size {
+func (m *Mutex) Size(size io.Size) io.Size {
 	return m.Source.Size(size)
 }
 
-func (m Mutex) GetDurationEstimate(size io.Size) time.Duration {
+func (m *Mutex) GetDurationEstimate(size io.Size) time.Duration {
 	return m.Source.GetDurationEstimate(size)
 }
 
-func (m Mutex) Rotate() bool {
+func (m *Mutex) Rotate() bool {
 	return false
 }
 
-func (m Mutex) Get(ctx context.Context, id io.ImageId, path string) io.Result {
+func (m *Mutex) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	loading := &loadingResult{}
 	loading.loaded = make(chan struct{})
 	key := id
@@ -58,6 +58,6 @@ func (m Mutex) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 	return loading.result
 }
 
-func (m Mutex) Set(ctx context.Context, id io.ImageId, path string, r io.Result) bool {
+func (m *Mutex) Set(ctx context.Context, id io.ImageId, path string, r io.Result) bool {
 	return false
 }
