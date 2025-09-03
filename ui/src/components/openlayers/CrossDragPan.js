@@ -43,8 +43,8 @@ class CrossDragPan extends PointerInteraction {
         
         const base = this.centroid;
         const delta = [
-          centroid[0] - base[0],
-          centroid[1] - base[1],
+          centroid.clientX - base.clientX,
+          centroid.clientY - base.clientY,
         ];
         this.delta = delta.slice();
         
@@ -52,8 +52,8 @@ class CrossDragPan extends PointerInteraction {
         if (this.lastEventTime) {
           const dt = time - this.lastEventTime;
           this.velocity = [
-            (centroid[0] - this.lastCentroid[0]) / dt,
-            (centroid[1] - this.lastCentroid[1]) / dt,
+            (centroid.clientX - this.lastCentroid.clientX) / dt,
+            (centroid.clientY - this.lastCentroid.clientY) / dt,
           ];
         }
 
