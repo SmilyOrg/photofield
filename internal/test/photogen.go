@@ -407,8 +407,16 @@ func (g *TestImageGenerator) generateMetadata(dataset TestDataset) string {
 		for j := 0; j < dataset.Samples; j++ {
 			imageName := generateImageName(spec, i, j)
 			metadata += fmt.Sprintf("image=%s,%dx%d", imageName, spec.Width, spec.Height)
-			for key, value := range spec.ExifTags {
-				metadata += fmt.Sprintf(",%s=%s", key, value)
+			// Write EXIF tags in sorted order for deterministic metadata
+			if len(spec.ExifTags) > 0 {
+				keys := make([]string, 0, len(spec.ExifTags))
+				for key := range spec.ExifTags {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					metadata += fmt.Sprintf(",%s=%s", key, spec.ExifTags[key])
+				}
 			}
 			metadata += "\n"
 		}

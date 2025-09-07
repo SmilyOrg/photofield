@@ -64,6 +64,7 @@ import (
 	"photofield/internal/openapi"
 	"photofield/internal/render"
 	"photofield/internal/scene"
+	"photofield/internal/test"
 	pfio "photofield/io"
 	"photofield/io/bench"
 	"photofield/tag"
@@ -1498,6 +1499,74 @@ func createDummyEntries(count int, seed int64) {
 	log.Printf("Dummy data generation completed in %v (%.1f entries/sec)", elapsed, float64(count)/elapsed.Seconds())
 }
 
+// generateTestPhotos creates test images using the internal test package
+func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr, heightsStr string) error {
+	// Parse widths and heights from comma-separated strings
+	widths, err := parseIntList(widthsStr)
+	if err != nil {
+		return fmt.Errorf("invalid widths: %w", err)
+	}
+
+	heights, err := parseIntList(heightsStr)
+	if err != nil {
+		return fmt.Errorf("invalid heights: %w", err)
+	}
+
+	// Create image specs with different combinations of widths and heights
+	specs := make([]test.ImageSpec, count)
+	for i := 0; i < count; i++ {
+		width := widths[i%len(widths)]
+		height := heights[i%len(heights)]
+
+		specs[i] = test.ImageSpec{
+			Width:  width,
+			Height: height,
+			ExifTags: map[string]string{
+				"ImageDescription": fmt.Sprintf("Test image %d", i+1),
+				"Software":         "Photofield E2E Test Generator",
+				"Artist":           "Test Suite",
+			},
+		}
+	}
+
+	// Create dataset
+	dataset := test.TestDataset{
+		Name:    name,
+		Seed:    seed,
+		Samples: 1, // One sample per spec
+		Images:  specs,
+	}
+
+	// Generate the images
+	images, err := test.GenerateTestDataset(outputDir, dataset)
+	if err != nil {
+		return fmt.Errorf("failed to generate test dataset: %w", err)
+	}
+
+	log.Printf("Generated %d test images in %s", len(images), outputDir)
+	for _, img := range images {
+		log.Printf("- %s (%dx%d)", img.Name, img.Spec.Width, img.Spec.Height)
+	}
+
+	return nil
+}
+
+// parseIntList parses a comma-separated string of integers
+func parseIntList(s string) ([]int, error) {
+	parts := strings.Split(s, ",")
+	result := make([]int, len(parts))
+
+	for i, part := range parts {
+		val, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer '%s': %w", part, err)
+		}
+		result[i] = val
+	}
+
+	return result, nil
+}
+
 func main() {
 	var err error
 
@@ -1518,6 +1587,15 @@ func main() {
 	dummyCount := flag.Int("dummy.count", 100000, "number of dummy entries to create")
 	dummySeed := flag.Int64("dummy.seed", 42, "seed for random dummy data generation")
 
+	// Photo generation flags
+	genPhotosFlag := flag.Bool("gen-photos", false, "generate test photos and exit")
+	genPhotosCount := flag.Int("gen-photos.count", 10, "number of test photos to generate")
+	genPhotosOutput := flag.String("gen-photos.output", "testdata/e2e-photos", "output directory for generated photos")
+	genPhotosSeed := flag.Int64("gen-photos.seed", 12345, "seed for random photo generation")
+	genPhotosName := flag.String("gen-photos.name", "e2e-test", "dataset name for generated photos")
+	genPhotosWidths := flag.String("gen-photos.widths", "400,600,800", "comma-separated list of image widths")
+	genPhotosHeights := flag.String("gen-photos.heights", "300,450", "comma-separated list of image heights")
+
 	flag.Parse()
 
 	if *benchFlag {
@@ -1526,6 +1604,15 @@ func main() {
 
 	if *versionFlag {
 		fmt.Printf("photofield %s, commit %s, built on %s by %s\n", version, commit, date, builtBy)
+		return
+	}
+
+	if *genPhotosFlag {
+		log.Printf("generating %d test photos", *genPhotosCount)
+		err := generateTestPhotos(*genPhotosCount, *genPhotosOutput, *genPhotosSeed, *genPhotosName, *genPhotosWidths, *genPhotosHeights)
+		if err != nil {
+			log.Fatalf("failed to generate test photos: %v", err)
+		}
 		return
 	}
 

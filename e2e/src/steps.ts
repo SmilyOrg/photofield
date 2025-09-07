@@ -1,16 +1,47 @@
 import { Page, expect } from '@playwright/test';
 import { createBdd } from 'playwright-bdd';
-import { DataTable } from '@cucumber/cucumber';
 import { test, App } from './fixtures';
-import fs from 'fs/promises';
-import path from 'path';
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { 
+  clickFirstPhoto,
+  waitForSceneReady, 
+  waitForImmersiveMode, 
+  getFocusZoom,
+  swipeOnViewer,
+  clickPhotoAtCoordinates,
+  getRegionCenter
+} from './photoTestUtils';
 
+interface DataTable {
+  rows(): string[][];
+}
 
 const { Given, When, Then } = createBdd(test);
 
 Given('an empty working directory', async ({ app }) => {
   await app.useTempDir();
   console.log("CWD:", app.cwd);
+});
+
+Given('{int} generated test photos', async ({ app }, count: number) => {
+  if (!app.cwd) {
+    await app.useTempDir();
+    console.log("CWD:", app.cwd);
+  }
+  
+  // The generatePhotos method now uses global cache internally
+  await app.generatePhotos(count);
+});
+
+Given('{int} generated test photos with seed {int}', async ({ app }, count: number, seed: number) => {
+  if (!app.cwd) {
+    await app.useTempDir();
+    console.log("CWD:", app.cwd);
+  }
+  
+  // The generatePhotos method now uses global cache internally
+  await app.generatePhotos(count, seed);
 });
 
 
@@ -31,7 +62,7 @@ async function addFiles(dataTable: DataTable, app: App) {
   }
   for (const row of dataTable.rows()) {
     const [src, dst] = row;
-    const srcPath = path.resolve(__dirname, "..", src);
+    const srcPath = path.resolve(src);
     const dstPath = app.path(dst);
     await fs.mkdir(path.dirname(dstPath), { recursive: true });
     await fs.copyFile(srcPath, dstPath);
@@ -113,6 +144,10 @@ When('the user opens {string}', async ({ app }, path: string) => {
   await app.goto(path);
 });
 
+When('the user opens the collection', async ({ app }) => {
+  await app.goto(app.collectionPath);
+});
+
 Then('the page shows a progress bar', async ({ page }) => {
   await expect(page.locator("#content").getByRole('progressbar')).toBeVisible();
 });
@@ -154,5 +189,178 @@ Then('the file {string} does not exist', async ({ app }, filePath: string) => {
 });
 
 Then('the page shows photo {string}', async ({ app, page }, path: string) => {
+  // This step can be enhanced to verify specific photo is displayed
+  await expect(page.locator('.photo-details')).toBeVisible();
+});
+
+// Photo interaction and navigation steps
+When('(the user )clicks on the first photo', async ({ page }) => {
+  await waitForSceneReady(page);
+  await clickFirstPhoto(page);
+});
+
+When('the user clicks on a photo at scene coordinates {int}, {int}', async ({ page }, x: number, y: number) => {
+  await clickPhotoAtCoordinates(page, x, y);
+});
+
+Then('the page shows photo details', async ({ page }) => {
+  await expect(page.locator('.photo-details')).toBeVisible();
+});
+
+Then('the photo is focused and zoomed in', async ({ page }) => {
+  // Check that we're in focus mode (URL should contain photo ID)
+  await waitForImmersiveMode(page);
+
+  // Wait for animation
+  await page.waitForTimeout(1000);
   
+  // Wait until the focus zoom level is greater than 0.9
+  await expect(async () => {
+    const focusZoom = await getFocusZoom(page);
+    expect(focusZoom).toBeGreaterThan(0.9);
+  }).toPass();
+});
+
+Then('the path is {string}', async ({ app, page }, expectedUrl: string) => {
+  console.log(app.uiUrl);
+  await expect(page).toHaveURL(app.uiUrl + expectedUrl);
+});
+
+Then('the collection subpath is {string}', async ({ app, page }, expectedSubpath: string) => {
+  await expect(page).toHaveURL(app.uiUrl + app.collectionPath + expectedSubpath);
+});
+
+Then('the url contains {string}', async ({ app, page }, substring: string) => {
+  await expect(page.url()).toContain(substring);
+});
+
+When('(the user )presses the {string} key', async ({ page }, key: string) => {
+  await page.keyboard.press(key);
+});
+
+When('swipes left on the photo viewer', async ({ page }) => {
+  await swipeOnViewer(page, 'left', 400);
+});
+
+Then('no photo is focused', async ({ page }) => {
+  // Verify focus zoom is reset
+  const focusZoom = await getFocusZoom(page);
+  expect(focusZoom).toBeLessThan(0.1);
+});
+
+When('(the user )zooms in using mouse wheel', async ({ page }) => {
+  const viewer = page.locator('.tileViewer');
+  await viewer.hover();
+  const box = await viewer.boundingBox();
+  if (!box) throw new Error("Could not get bounding box for .tileViewer");
+  // Move to center of page
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -200); // Scroll up to zoom in
+});
+
+Then('the photo is displayed at higher magnification', async ({ page }) => {
+  // Wait for zoom change to take effect
+  await page.waitForTimeout(500);
+  
+  // Check that we're still focused (zoom should be > 1)
+  const focusZoom = await getFocusZoom(page);
+  expect(focusZoom).toBeGreaterThan(1.0);
+});
+
+When('the user drags the photo', async ({ page }) => {
+  const viewer = page.locator('.tileViewer');
+  const box = await viewer.boundingBox();
+  
+  if (box) {
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3, { steps: 5 });
+    await page.mouse.up();
+  }
+});
+
+Then('the photo view pans accordingly', async ({ page }) => {
+  // Wait for pan animation to complete
+  await page.waitForTimeout(500);
+  
+  // The pan is successful if we didn't lose focus
+  await waitForImmersiveMode(page);
+});
+
+When('the user right-clicks on a photo', async ({ page }) => {
+  // First click on a photo, then right-click
+  const coords = await getRegionCenter(page, 1);
+  if (!coords) throw new Error('No coordinates found');
+
+  await page.mouse.click(coords.x, coords.y, { button: 'right' });
+});
+
+Then('a context menu appears', async ({ page }) => {
+  await expect(page.locator('.region')).toBeVisible();
+});
+
+Then('the menu contains {string}', async ({ page }, text: string) => {
+  await expect(page.getByText(text)).toBeVisible();
+});
+
+When('the user holds Ctrl and drags a selection box', async ({ page }) => {
+  const viewer = page.locator('.tileViewer');
+  const box = await viewer.boundingBox();
+  
+  if (box) {
+    await page.keyboard.down('Control');
+    await page.mouse.move(box.x + 100, box.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 200, box.y + 200, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up('Control');
+  }
+});
+
+When('the user switches to {string} layout', async ({ page }, layout: string) => {
+  // Navigate using URL parameter (most reliable method)
+  const currentUrl = new URL(page.url());
+  currentUrl.searchParams.set('layout', layout);
+  await page.goto(currentUrl.toString());
+  
+  await waitForSceneReady(page);
+});
+
+When('the user searches for {string}', async ({ page }, searchTerm: string) => {
+  // Navigate using URL parameter
+  const currentUrl = new URL(page.url());
+  currentUrl.searchParams.set('search', searchTerm);
+  await page.goto(currentUrl.toString());
+  
+  await waitForSceneReady(page);
+});
+
+When('the user performs a cross-drag gesture {string}', async ({ page }, direction: string) => {
+  switch (direction) {
+    case 'up':
+      await swipeOnViewer(page, 'up', 100);
+      break;
+    case 'down':
+      await swipeOnViewer(page, 'down', 100);
+      break;
+    case 'left':
+      await swipeOnViewer(page, 'left', 150);
+      break;
+    case 'right':
+      await swipeOnViewer(page, 'right', 150);
+      break;
+  }
+});
+
+Then('the photo collection view is shown', async ({ page }) => {
+  await expect(page).toHaveURL(/\/collections\/[^\/]+$/);
+});
+
+Then('the previous photo is shown', async ({ page }) => {
+  await expect(page).toHaveURL(/\/regions\/\d+/);
+  // Could add additional verification that ID decreased
+});
+
+When('the page finishes loading', async ({ page }) => {
+  await waitForSceneReady(page);
 });

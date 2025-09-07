@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import { join } from 'path';
 import { ChildProcess, spawn, exec } from 'child_process';
 import { BrowserContext, Page } from '@playwright/test';
+import { globalCache } from '@vitalets/global-cache';
 
 const LISTEN_REGEX = /local\s+http:\/\/(\S+)/;
 
@@ -16,10 +17,12 @@ export class App {
   public port: number = 0;
   public listenHost: string = '';
   public disableAutostart: boolean = true;
+  public dataDir: string = '.';
   proc?: ChildProcess;
   exitCode: number | null;
   uiLocal: boolean = true;
-  uiUrl: string = "http://localhost:5173";
+  public uiUrl: string = "http://localhost:5173";
+  public collectionPath: string = "";
 
   constructor(
     public page: Page,
@@ -47,6 +50,75 @@ export class App {
     return join(this.cwd, path);
   }
 
+  async generatePhotos(count: number, seed: number = 12345): Promise<void> {
+    // Use global cache to generate test data only once per run
+    const cacheKey = `test-photos-${count}-${seed}`;
+    
+    const { outputDir, collectionName } = await globalCache.get(cacheKey, async () => {
+      console.log(`Generating ${count} test photos with seed ${seed}...`);
+      
+      const exe = process.platform === 'win32' ? '.exe' : '';
+      const command = join(process.cwd(), '../photofield' + exe);
+      
+      // Use testdata as the output directory
+      const outputDir = join(process.cwd(), '..', 'testdata');
+      await fs.mkdir(outputDir, { recursive: true });
+
+      const collectionName = `e2e-test-${count}`;
+
+      const args = [
+        '-gen-photos',
+        '-gen-photos.count', count.toString(),
+        '-gen-photos.seed', seed.toString(),
+        '-gen-photos.name', collectionName,
+        '-gen-photos.output', outputDir
+      ];
+
+      console.log("Generating photos:", command, args);
+
+      return new Promise<{ outputDir: string; collectionName: string }>((resolve, reject) => {
+        const proc = spawn(command, args, {
+          cwd: outputDir,
+          stdio: 'pipe',
+          timeout: 30000,
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout!.on('data', (data) => {
+          const msg = data.toString();
+          console.log('Generate stdout:', msg);
+          stdout += msg;
+        });
+
+        proc.stderr!.on('data', (data) => {
+          const msg = data.toString();
+          console.error('Generate stderr:', msg);
+          stderr += msg;
+        });
+
+        proc.on('close', (code) => {
+          if (code === 0) {
+            console.log(`Generated ${count} test photos in ${outputDir}`);
+            resolve({ outputDir, collectionName });
+          } else {
+            reject(new Error(`Photo generation failed with code ${code}: ${stderr}`));
+          }
+        });
+
+        proc.on('error', (err) => {
+          reject(new Error(`Failed to spawn photofield process: ${err.message}`));
+        });
+      });
+    });
+
+    // Set the generated paths from cache
+    this.dataDir = this.cwd || process.cwd();
+    this.cwd = outputDir;
+    this.collectionPath = `/collections/${collectionName}`;
+  }
+
   async run() {
     const exe = process.platform === 'win32' ? '.exe' : '';
     const command = join(process.cwd(), '../photofield' + exe);
@@ -58,6 +130,7 @@ export class App {
       PHOTOFIELD_ADDRESS: this.listenHost || address,
       PHOTOFIELD_API_PREFIX: '/',
       PHOTOFIELD_CORS_ALLOWED_ORIGINS: 'http://localhost:5173',
+      PHOTOFIELD_DATA_DIR: this.dataDir,
     };
 
     console.log("Running:", command, env);
