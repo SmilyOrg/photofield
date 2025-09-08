@@ -13,9 +13,8 @@ import (
 )
 
 func (source *Source) indexContents(in <-chan interface{}) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	for elem := range in {
-
 		for source.metadataQueue.Length() > 0 {
 			time.Sleep(1 * time.Second)
 		}
