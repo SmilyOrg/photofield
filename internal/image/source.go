@@ -309,7 +309,14 @@ func (source *Source) Vacuum() error {
 	return source.database.vacuum()
 }
 
+func (source *Source) WaitOnQueue() {
+	source.metadataQueue.Wait()
+	source.contentsQueue.Wait()
+}
+
 func (source *Source) Close() {
+	source.metadataQueue.Close()
+	source.contentsQueue.Close()
 	source.decoder.Close()
 	source.database.Close()
 	source.imageCache.Close()
@@ -317,8 +324,6 @@ func (source *Source) Close() {
 	source.pathCache.Close()
 	source.Sources.Close()
 	source.thumbnailSink.Close()
-	source.metadataQueue.Close()
-	source.contentsQueue.Close()
 }
 
 func (source *Source) Shutdown() {

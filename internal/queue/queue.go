@@ -90,6 +90,18 @@ func (q *Queue) Run() {
 	}
 }
 
+func (q *Queue) Wait() {
+	for {
+		q.mu.RLock()
+		queue := q.queue
+		q.mu.RUnlock()
+		if queue == nil || queue.Length() == 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func (q *Queue) Close() {
 	if q == nil {
 		return

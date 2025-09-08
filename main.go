@@ -136,14 +136,15 @@ func instrumentationMiddleware(next http.Handler) http.Handler {
 }
 
 type Task struct {
-	Id           string `json:"id"`
-	Type         string `json:"type"`
-	Name         string `json:"name"`
-	CollectionId string `json:"collection_id"`
-	Done         int    `json:"done"`
-	Pending      int    `json:"pending,omitempty"`
-	Offset       int    `json:"-"`
-	Queue        string `json:"-"`
+	Id           string        `json:"id"`
+	Type         string        `json:"type"`
+	Name         string        `json:"name"`
+	CollectionId string        `json:"collection_id"`
+	Done         int           `json:"done"`
+	Pending      int           `json:"pending,omitempty"`
+	Offset       int           `json:"-"`
+	Queue        string        `json:"-"`
+	completed    chan struct{} `json:"-"`
 }
 
 func (t *Task) Counter() chan<- int {
@@ -154,6 +155,10 @@ func (t *Task) Counter() chan<- int {
 		}
 	}()
 	return counter
+}
+
+func (t *Task) Completed() <-chan struct{} {
+	return t.completed
 }
 
 type TileWriter func(w io.Writer) error
@@ -291,6 +296,7 @@ func newFileIndexTask(collection *collection.Collection) *Task {
 		Name:         fmt.Sprintf("Indexing files %v", collection.Name),
 		CollectionId: collection.Id,
 		Done:         0,
+		completed:    make(chan struct{}),
 	}
 }
 
@@ -1282,6 +1288,7 @@ func indexCollection(collection *collection.Collection) (task *Task, existing bo
 		now := time.Now()
 		collection.IndexedAt = &now
 		collection.IndexedCount = task.Done
+		close(task.completed)
 	}()
 	return
 }
@@ -1596,6 +1603,9 @@ func main() {
 	genPhotosWidths := flag.String("gen-photos.widths", "400,600,800", "comma-separated list of image widths")
 	genPhotosHeights := flag.String("gen-photos.heights", "300,450", "comma-separated list of image heights")
 
+	// Scan collection flag
+	scanFlag := flag.String("scan", "", "scan specified collection and exit")
+
 	flag.Parse()
 
 	if *benchFlag {
@@ -1692,6 +1702,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		imageSource.Close()
 		return
 	}
 
@@ -1711,6 +1722,31 @@ func main() {
 	if *dummyFlag {
 		log.Printf("creating %d dummy database entries with seed %d", *dummyCount, *dummySeed)
 		createDummyEntries(*dummyCount, *dummySeed)
+		return
+	}
+
+	if *scanFlag != "" {
+		log.Printf("collection %s scan starting", *scanFlag)
+		c := getCollectionById(*scanFlag)
+		if c == nil {
+			log.Fatalf("collection %v not found", *scanFlag)
+		}
+
+		// Perform the scan
+		task, existing := indexCollection(c)
+		if existing {
+			log.Printf("collection %s scan already in progress", *scanFlag)
+		} else {
+			log.Printf("collection %s scan started", *scanFlag)
+		}
+
+		// Wait for the task to complete using the completion channel
+		<-task.Completed()
+
+		log.Printf("collection %s scan finished", *scanFlag)
+
+		imageSource.WaitOnQueue()
+		imageSource.Close()
 		return
 	}
 
