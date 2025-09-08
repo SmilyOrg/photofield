@@ -104,6 +104,7 @@ export class App {
   uiLocal: boolean = true;
   public uiUrl: string = "http://localhost:5173";
   public collectionPath: string = "";
+  public testScrollPosition: number = 0;
 
   constructor(
     public page: Page,

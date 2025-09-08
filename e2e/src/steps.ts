@@ -189,6 +189,10 @@ When('(the user )clicks on the first photo', async ({ app }) => {
   await app.clickFirstPhoto();
 });
 
+Then('the page loads', async ({ app }) => {
+  await app.waitForSceneLoaded();
+});
+
 When('the user clicks on a photo at scene coordinates {int}, {int}', async ({ app }, x: number, y: number) => {
   await app.clickPhotoAtCoordinates(x, y);
 });
@@ -220,11 +224,15 @@ Then('the collection subpath is {string}', async ({ app, page }, expectedSubpath
 });
 
 Then('the url contains {string}', async ({ app, page }, substring: string) => {
-  await expect(page.url()).toContain(substring);
+  await expect(async () => {
+    expect(page.url()).toContain(substring);
+  }).toPass();
 });
 
 Then('the url does not contain {string}', async ({ app, page }, substring: string) => {
-  await expect(page.url()).not.toContain(substring);
+  await expect(async () => {
+    expect(page.url()).not.toContain(substring);
+  }).toPass();
 });
 
 When('the user clicks on the info icon', async ({ page }) => {
@@ -361,4 +369,37 @@ Then('the previous photo is shown', async ({ page }) => {
 
 When('the page finishes loading', async ({ app }) => {
   await app.waitForSceneLoaded();
+});
+
+When('the user scrolls down {int}px', async ({ page, app }, pixels: number) => {
+  // Store initial scroll position for later comparison
+  const initialScrollY = await page.evaluate(() => window.scrollY);
+
+  // Scroll down by the specified amount
+  await page.evaluate((px) => {
+    window.scrollBy(0, px);
+  }, pixels);
+
+  // Wait for scroll to complete and any URL updates
+  await page.waitForTimeout(500);
+
+  // Store the scroll position in the app fixture for later verification
+  app.testScrollPosition = initialScrollY + pixels;
+});
+
+When('the user reloads the page', async ({ page }) => {
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+});
+
+Then('the scroll position is roughly the same', async ({ page, app }) => {
+  // Wait for page to fully load and scroll position to be restored
+  await page.waitForTimeout(1000);
+
+  const currentScrollY = await page.evaluate(() => window.scrollY);
+  const expectedScrollY = app.testScrollPosition;
+
+  // Allow for some tolerance in scroll position (within 100px)
+  const tolerance = 100;
+  expect(Math.abs(currentScrollY - expectedScrollY)).toBeLessThan(tolerance);
 });
