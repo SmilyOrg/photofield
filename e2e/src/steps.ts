@@ -3,15 +3,6 @@ import { createBdd } from 'playwright-bdd';
 import { test, App } from './fixtures';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { 
-  clickFirstPhoto,
-  waitForSceneLoaded, 
-  waitForImmersiveMode, 
-  getFocusZoom,
-  swipeOnViewer,
-  clickPhotoAtCoordinates,
-  getRegionCenter
-} from './photoTestUtils';
 
 interface DataTable {
   rows(): string[][];
@@ -194,28 +185,28 @@ Then('the page shows photo {string}', async ({ app, page }, path: string) => {
 });
 
 // Photo interaction and navigation steps
-When('(the user )clicks on the first photo', async ({ page }) => {
-  await clickFirstPhoto(page);
+When('(the user )clicks on the first photo', async ({ app }) => {
+  await app.clickFirstPhoto();
 });
 
-When('the user clicks on a photo at scene coordinates {int}, {int}', async ({ page }, x: number, y: number) => {
-  await clickPhotoAtCoordinates(page, x, y);
+When('the user clicks on a photo at scene coordinates {int}, {int}', async ({ app }, x: number, y: number) => {
+  await app.clickPhotoAtCoordinates(x, y);
 });
 
 Then('the page shows photo details', async ({ page }) => {
   await expect(page.locator('.photo-details')).toBeVisible();
 });
 
-Then('the photo is focused and zoomed in', async ({ page }) => {
+Then('the photo is focused and zoomed in', async ({ app }) => {
   // Check that we're in focus mode (URL should contain photo ID)
-  await waitForImmersiveMode(page);
+  await app.waitForImmersiveMode();
 
   // Wait for animation
-  await page.waitForTimeout(1000);
+  await app.page.waitForTimeout(1000);
   
   // Wait until the focus zoom level is greater than 0.9
   await expect(async () => {
-    const focusZoom = await getFocusZoom(page);
+    const focusZoom = await app.getFocusZoom();
     expect(focusZoom).toBeGreaterThan(0.9);
   }).toPass();
 });
@@ -245,13 +236,13 @@ When('(the user )presses the {string} key', async ({ page }, key: string) => {
   await page.keyboard.press(key);
 });
 
-When('swipes left on the photo viewer', async ({ page }) => {
-  await swipeOnViewer(page, 'left', 400);
+When('swipes left on the photo viewer', async ({ app }) => {
+  await app.swipeOnViewer('left', 400);
 });
 
-Then('no photo is focused', async ({ page }) => {
+Then('no photo is focused', async ({ app }) => {
   // Verify focus zoom is reset
-  const focusZoom = await getFocusZoom(page);
+  const focusZoom = await app.getFocusZoom();
   expect(focusZoom).toBeLessThan(0.1);
 });
 
@@ -265,12 +256,12 @@ When('(the user )zooms in using mouse wheel', async ({ page }) => {
   await page.mouse.wheel(0, -200); // Scroll up to zoom in
 });
 
-Then('the photo is displayed at higher magnification', async ({ page }) => {
+Then('the photo is displayed at higher magnification', async ({ app }) => {
   // Wait for zoom change to take effect
-  await page.waitForTimeout(500);
+  await app.page.waitForTimeout(500);
   
   // Check that we're still focused (zoom should be > 1)
-  const focusZoom = await getFocusZoom(page);
+  const focusZoom = await app.getFocusZoom();
   expect(focusZoom).toBeGreaterThan(1.0);
 });
 
@@ -286,20 +277,20 @@ When('the user drags the photo', async ({ page }) => {
   }
 });
 
-Then('the photo view pans accordingly', async ({ page }) => {
+Then('the photo view pans accordingly', async ({ app }) => {
   // Wait for pan animation to complete
-  await page.waitForTimeout(500);
+  await app.page.waitForTimeout(500);
   
   // The pan is successful if we didn't lose focus
-  await waitForImmersiveMode(page);
+  await app.waitForImmersiveMode();
 });
 
-When('the user right-clicks on a photo', async ({ page }) => {
+When('the user right-clicks on a photo', async ({ app }) => {
   // First click on a photo, then right-click
-  const coords = await getRegionCenter(page, 1);
+  const coords = await app.getRegionCenter(1);
   if (!coords) throw new Error('No coordinates found');
 
-  await page.mouse.click(coords.x, coords.y, { button: 'right' });
+  await app.page.mouse.click(coords.x, coords.y, { button: 'right' });
 });
 
 Then('a context menu appears', async ({ page }) => {
@@ -324,37 +315,37 @@ When('the user holds Ctrl and drags a selection box', async ({ page }) => {
   }
 });
 
-When('the user switches to {string} layout', async ({ page }, layout: string) => {
+When('the user switches to {string} layout', async ({ app }, layout: string) => {
   // Navigate using URL parameter (most reliable method)
-  const currentUrl = new URL(page.url());
+  const currentUrl = new URL(app.page.url());
   currentUrl.searchParams.set('layout', layout);
-  await page.goto(currentUrl.toString());
+  await app.page.goto(currentUrl.toString());
   
-  await waitForSceneLoaded(page);
+  await app.waitForSceneLoaded();
 });
 
-When('the user searches for {string}', async ({ page }, searchTerm: string) => {
+When('the user searches for {string}', async ({ app }, searchTerm: string) => {
   // Navigate using URL parameter
-  const currentUrl = new URL(page.url());
+  const currentUrl = new URL(app.page.url());
   currentUrl.searchParams.set('search', searchTerm);
-  await page.goto(currentUrl.toString());
+  await app.page.goto(currentUrl.toString());
   
-  await waitForSceneLoaded(page);
+  await app.waitForSceneLoaded();
 });
 
-When('the user performs a cross-drag gesture {string}', async ({ page }, direction: string) => {
+When('the user performs a cross-drag gesture {string}', async ({ app }, direction: string) => {
   switch (direction) {
     case 'up':
-      await swipeOnViewer(page, 'up', 100);
+      await app.swipeOnViewer('up', 100);
       break;
     case 'down':
-      await swipeOnViewer(page, 'down', 100);
+      await app.swipeOnViewer('down', 100);
       break;
     case 'left':
-      await swipeOnViewer(page, 'left', 150);
+      await app.swipeOnViewer('left', 150);
       break;
     case 'right':
-      await swipeOnViewer(page, 'right', 150);
+      await app.swipeOnViewer('right', 150);
       break;
   }
 });
@@ -368,6 +359,6 @@ Then('the previous photo is shown', async ({ page }) => {
   // Could add additional verification that ID decreased
 });
 
-When('the page finishes loading', async ({ page }) => {
-  await waitForSceneLoaded(page);
+When('the page finishes loading', async ({ app }) => {
+  await app.waitForSceneLoaded();
 });
