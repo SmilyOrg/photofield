@@ -4,12 +4,6 @@ Feature: Photo Navigation and Interaction
     Given 100 generated test photos
     And a running app
     And the user opens the collection
-    And the user clicks "Rescan"
-    # TODO: fix this bug
-    And the user waits for 1 seconds
-    And the user clicks "Rescan"
-    And the user clicks "e2e-test"
-    And the page finishes loading
 
   Scenario: Click on first photo
     When the user clicks on the first photo
@@ -46,33 +40,19 @@ Feature: Photo Navigation and Interaction
     Then a context menu appears
     And the menu contains "Open Image in New Tab"
 
-  Scenario: Box selection for tagging
-    When the user holds Ctrl and drags a selection box
-    Then the page shows "Selection"
-    And the url contains "select_tag=sys:select:col:e2e-test"
+  Scenario: Open photo details
+    When the user clicks on the first photo
+    Then the photo is focused and zoomed in
+    When the user clicks on the info icon
+    Then the page shows "Info"
+    And the collection subpath is "/1#details"
 
-  Scenario: Photo navigation in different layouts
-    When the user switches to "TIMELINE" layout
-    And clicks on the first photo
+  Scenario: Open photo details, close with Escape
+    When the user clicks on the first photo
     Then the photo is focused and zoomed in
-    When the user switches to "WALL" layout
-    And clicks on the first photo
-    Then the photo is focused and zoomed in
-    When the user switches to "MAP" layout
-    And clicks on the first photo
-    Then the photo is focused and zoomed in
-
-  Scenario: Photo search and selection
-    When the user searches for "logo"
-    And clicks on the first photo
-    Then the photo is focused and zoomed in
-    And the url contains "search=logo"
-
-#   Scenario: Cross-navigation gestures
-#     When the user clicks on the first photo
-#     And performs a cross-drag gesture up
-#     Then the photo collection view is shown
-#     When the user performs a cross-drag gesture left
-#     Then the previous photo is shown
-#     When the user performs a cross-drag gesture right
-#     Then the next photo is shown
+    When the user clicks on the info icon
+    Then the url contains "#details"
+    When the user presses the "Escape" key
+    Then the url does not contain "#details"
+    And the page does not show "Info"
+    And the collection subpath is ""

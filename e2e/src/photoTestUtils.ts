@@ -8,14 +8,16 @@ import { Page } from '@playwright/test';
 declare global {
   interface Window {
     __PHOTOFIELD__?: {
-      currentScene?: {
-        id: string;
-        bounds?: { x: number; y: number; w: number; h: number };
-        file_count?: number;
-        loading?: boolean;
-      };
+      currentScene?: Scene;
     };
   }
+}
+
+interface Scene {
+  id: string | null;
+  bounds?: { x: number; y: number; w: number; h: number };
+  file_count?: number;
+  loading?: boolean;
 }
 
 export interface PhotoRegion {
@@ -254,39 +256,28 @@ export async function clickFirstPhoto(page: Page) {
 /**
  * Wait for the scene to be loaded and ready
  */
-export async function waitForSceneReady(page: Page): Promise<void> {
-  // Wait for network to be idle
-  await page.waitForLoadState('networkidle');
-  
-  // Wait for the tile viewer to be present
-  await page.waitForSelector('.tileViewer', { timeout: 10000 });
-  
-  // Wait for tiles to start loading
-  await page.waitForFunction(() => {
-    const canvas = document.querySelector('.tileViewer canvas');
-    return canvas && canvas.getBoundingClientRect().width > 0;
-  }, { timeout: 10000 });
-  
-  // Additional wait for scene data to be available
-  await page.waitForTimeout(1000);
+export async function waitForSceneLoaded(page: Page): Promise<void> {
+  await getCurrentScene(page);
 }
 
 /**
  * Get current scene ID directly from the global window variable
  */
 export async function getCurrentSceneId(page: Page): Promise<string | null> {
-  return await page.evaluate(() => {
-    return window.__PHOTOFIELD__?.currentScene?.id || null;
-  });
+  return (await getCurrentScene(page)).id || null;
 }
 
 /**
  * Get the complete current scene data from the global window variable
  */
-export async function getCurrentScene(page: Page): Promise<any | null> {
-  return await page.evaluate(() => {
-    return window.__PHOTOFIELD__?.currentScene || null;
-  });
+export async function getCurrentScene(page: Page): Promise<Scene> {
+  const handle = await page.waitForFunction(() => {
+    const scene = window.__PHOTOFIELD__?.currentScene;
+    console.log(window.__PHOTOFIELD__);
+    if (!scene || scene.loading) return null;
+    return scene;
+  }, { timeout: 3000 });
+  return await handle.jsonValue() as Scene;
 }
 
 /**

@@ -2,11 +2,48 @@
 import { test as base } from 'playwright-bdd';
 import fs from 'fs/promises';
 import { join } from 'path';
-import { ChildProcess, spawn, exec } from 'child_process';
+import { ChildProcess, spawn, exec, SpawnOptionsWithoutStdio } from 'child_process';
 import { BrowserContext, Page } from '@playwright/test';
 import { globalCache } from '@vitalets/global-cache';
 
 const LISTEN_REGEX = /local\s+http:\/\/(\S+)/;
+
+async function spawnp(
+  command: string,
+  args: string[],
+  options: SpawnOptionsWithoutStdio,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, options);
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout?.on('data', (data) => {
+      const msg = data.toString();
+      console.log(msg);
+      stdout += msg;
+    });
+
+    proc.stderr?.on('data', (data) => {
+      const msg = data.toString();
+      console.error(msg);
+      stderr += msg;
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(new Error(`Process failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to spawn process: ${err.message}`));
+    });
+  });
+}
 
 export class App {
 
@@ -54,7 +91,11 @@ export class App {
     // Use global cache to generate test data only once per run
     const cacheKey = `test-photos-${count}-${seed}`;
     
-    const { outputDir, collectionName } = await globalCache.get(cacheKey, async () => {
+    const {
+      dataDir: generatedDataDir,
+      outputDir,
+      collectionName
+    } = await globalCache.get(cacheKey, async () => {
       console.log(`Generating ${count} test photos with seed ${seed}...`);
       
       const exe = process.platform === 'win32' ? '.exe' : '';
@@ -75,51 +116,58 @@ export class App {
       ];
 
       console.log("Generating photos:", command, args);
-
-      return new Promise<{ outputDir: string; collectionName: string }>((resolve, reject) => {
-        const proc = spawn(command, args, {
-          cwd: outputDir,
-          stdio: 'pipe',
-          timeout: 30000,
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        proc.stdout!.on('data', (data) => {
-          const msg = data.toString();
-          console.log('Generate stdout:', msg);
-          stdout += msg;
-        });
-
-        proc.stderr!.on('data', (data) => {
-          const msg = data.toString();
-          console.error('Generate stderr:', msg);
-          stderr += msg;
-        });
-
-        proc.on('close', (code) => {
-          if (code === 0) {
-            console.log(`Generated ${count} test photos in ${outputDir}`);
-            resolve({ outputDir, collectionName });
-          } else {
-            reject(new Error(`Photo generation failed with code ${code}: ${stderr}`));
-          }
-        });
-
-        proc.on('error', (err) => {
-          reject(new Error(`Failed to spawn photofield process: ${err.message}`));
-        });
+      await spawnp(command, args, {
+        cwd: outputDir,
+        stdio: 'pipe',
+        timeout: 30000,
       });
-    });
 
+      const dataDir = join(outputDir, collectionName);
+
+      console.log("Generating database");
+      await spawnp(command, ['-scan', collectionName], {
+        cwd: outputDir,
+        stdio: 'pipe',
+        timeout: 30000,
+        env: {
+          PATH: process.env.PATH,
+          PHOTOFIELD_DATA_DIR: dataDir,
+        }
+      });
+
+      console.log("Vacuuming database");
+      await spawnp(command, ['-vacuum'], {
+        cwd: outputDir,
+        stdio: 'pipe',
+        timeout: 30000,
+        env: {
+          PATH: process.env.PATH,
+          PHOTOFIELD_DATA_DIR: dataDir,
+        }
+      });
+      return {
+        outputDir,
+        collectionName,
+        dataDir,
+      };
+    });
+    
     // Set the generated paths from cache
     this.dataDir = this.cwd || process.cwd();
     this.cwd = outputDir;
     this.collectionPath = `/collections/${collectionName}`;
+
+    // Copy database files from the generated data dir
+    const files = [
+      "photofield.cache.db",
+      "photofield.thumbs.db",
+    ]
+    await Promise.all(files.map(file => {
+      return fs.copyFile(join(generatedDataDir, file), join(this.dataDir, file));
+    }));
   }
 
-  async run() {
+  async run(args: string[] = []) {
     const exe = process.platform === 'win32' ? '.exe' : '';
     const command = join(process.cwd(), '../photofield' + exe);
 
@@ -133,9 +181,9 @@ export class App {
       PHOTOFIELD_DATA_DIR: this.dataDir,
     };
 
-    console.log("Running:", command, env);
+    console.log("Running:", command, args, env);
 
-    this.proc = spawn(command, [], {
+    this.proc = spawn(command, args, {
       cwd: this.cwd,
       env,
       stdio: 'pipe',

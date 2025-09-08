@@ -5,7 +5,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { 
   clickFirstPhoto,
-  waitForSceneReady, 
+  waitForSceneLoaded, 
   waitForImmersiveMode, 
   getFocusZoom,
   swipeOnViewer,
@@ -195,7 +195,6 @@ Then('the page shows photo {string}', async ({ app, page }, path: string) => {
 
 // Photo interaction and navigation steps
 When('(the user )clicks on the first photo', async ({ page }) => {
-  await waitForSceneReady(page);
   await clickFirstPhoto(page);
 });
 
@@ -222,7 +221,6 @@ Then('the photo is focused and zoomed in', async ({ page }) => {
 });
 
 Then('the path is {string}', async ({ app, page }, expectedUrl: string) => {
-  console.log(app.uiUrl);
   await expect(page).toHaveURL(app.uiUrl + expectedUrl);
 });
 
@@ -232,6 +230,15 @@ Then('the collection subpath is {string}', async ({ app, page }, expectedSubpath
 
 Then('the url contains {string}', async ({ app, page }, substring: string) => {
   await expect(page.url()).toContain(substring);
+});
+
+Then('the url does not contain {string}', async ({ app, page }, substring: string) => {
+  await expect(page.url()).not.toContain(substring);
+});
+
+When('the user clicks on the info icon', async ({ page }) => {
+  // Click on the info icon in the controls toolbar
+  await page.locator('.controls .toolbar .icon:has-text("info_outline")').click();
 });
 
 When('(the user )presses the {string} key', async ({ page }, key: string) => {
@@ -323,7 +330,7 @@ When('the user switches to {string} layout', async ({ page }, layout: string) =>
   currentUrl.searchParams.set('layout', layout);
   await page.goto(currentUrl.toString());
   
-  await waitForSceneReady(page);
+  await waitForSceneLoaded(page);
 });
 
 When('the user searches for {string}', async ({ page }, searchTerm: string) => {
@@ -332,7 +339,7 @@ When('the user searches for {string}', async ({ page }, searchTerm: string) => {
   currentUrl.searchParams.set('search', searchTerm);
   await page.goto(currentUrl.toString());
   
-  await waitForSceneReady(page);
+  await waitForSceneLoaded(page);
 });
 
 When('the user performs a cross-drag gesture {string}', async ({ page }, direction: string) => {
@@ -362,5 +369,5 @@ Then('the previous photo is shown', async ({ page }) => {
 });
 
 When('the page finishes loading', async ({ page }) => {
-  await waitForSceneReady(page);
+  await waitForSceneLoaded(page);
 });
