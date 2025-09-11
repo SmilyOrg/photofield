@@ -35,87 +35,34 @@ func fitInside(cw float64, ch float64, w float64, h float64) (float64, float64) 
 	return w, h
 }
 
-// func fitCenterInside(c Rect, r Rect) Rect {
-// 	ar := r.W / r.H
-// 	car := c.W / c.H
-// 	if ar < car {
-// 		h := r.W / car
-// 		r.Y = h
-// 	} else {
-// 		r.W = r.H * car
-// 	}
-// 	return r
-// }
+func pixelColorDivSum(img goimage.Image, xmin int, xmax int, ymin int, ymax int) uint64 {
+	sum := uint64(0)
+	div := uint64(10 * 0x100 * 3)
+	for y := ymin; y <= ymax; y++ {
+		for x := xmin; x <= xmax; x++ {
+			c := img.At(x, y)
+			r, g, b, _ := c.RGBA()
+			sum += (uint64(r) + uint64(g) + uint64(b)) / div
+		}
+	}
+	return sum
+}
 
 func cropsBlackbarsOnly(img goimage.Image, crop goimage.Rectangle) bool {
 	bounds := img.Bounds()
+	bx1, bx2, by1, by2 := bounds.Min.X, bounds.Max.X, bounds.Min.Y, bounds.Max.Y
+	cx1, cx2, cy1, cy2 := crop.Min.X, crop.Max.X, crop.Min.Y, crop.Max.Y
 
+	m := 1 // margin
 	sum := uint64(0)
-	maxBlack := uint64(0xC00)
-
-	// Horizontal top left black bar line
-	for x := 0; x < crop.Min.X; x++ {
-		c := img.At(x, bounds.Min.Y)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("horizontal top left black bar line: %v\n", sum)
-
-	// Horizontal top right black bar line
-	for x := crop.Max.X; x < bounds.Max.X; x++ {
-		c := img.At(x, bounds.Min.Y)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("horizontal top right black bar line: %v\n", sum)
-
-	// Horizontal bottom left black bar line
-	for x := 0; x < crop.Min.X; x++ {
-		c := img.At(x, bounds.Max.Y-1)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("horizontal bottom left black bar line: %v\n", sum)
-
-	// Horizontal bottom right black bar line
-	for x := crop.Max.X; x < bounds.Max.X; x++ {
-		c := img.At(x, bounds.Max.Y-1)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("horizontal bottom right black bar line: %v\n", sum)
-
-	// Vertical top left black bar line
-	for y := 0; y < crop.Min.Y; y++ {
-		c := img.At(bounds.Min.X, y)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("vertical top left black bar line: %v\n", sum)
-
-	// Vertical top right black bar line
-	for y := crop.Max.Y; y < bounds.Max.Y; y++ {
-		c := img.At(bounds.Min.X, y)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("vertical top right black bar line: %v\n", sum)
-
-	// Vertical bottom left black bar line
-	for y := 0; y < crop.Min.Y; y++ {
-		c := img.At(bounds.Max.X-1, y)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("vertical bottom left black bar line: %v\n", sum)
-
-	// Vertical bottom right black bar line
-	for y := crop.Max.Y; y < bounds.Max.Y; y++ {
-		c := img.At(bounds.Max.X-1, y)
-		r, g, b, _ := c.RGBA()
-		sum += uint64((r + g + b)) / 3 / maxBlack
-	}
-	// fmt.Printf("vertical bottom right black bar line: %v\n", sum)
+	sum += pixelColorDivSum(img, bx1+0, cx1-1-m, cy1+0, cy1+0) // Top Left Horizontal
+	sum += pixelColorDivSum(img, cx2+m, bx2-1, cy1+0, cy1+0)   // Top Right Horizontal
+	sum += pixelColorDivSum(img, bx1+0, cx1-1-m, cy2-1, cy2-1) // Bottom Left Horizontal
+	sum += pixelColorDivSum(img, cx2+m, bx2-1, cy2-1, cy2-1)   // Bottom Right Horizontal
+	sum += pixelColorDivSum(img, cx1+0, cx1+0, by1+0, cy1-1-m) // Top Left Vertical
+	sum += pixelColorDivSum(img, cx2-1, cx2-1, by1+0, cy1-1-m) // Top Right Vertical
+	sum += pixelColorDivSum(img, cx1+0, cx1+0, cy2+m, by2-1)   // Bottom Left Vertical
+	sum += pixelColorDivSum(img, cx2-1, cx2-1, cy2+m, by2-1)   // Bottom Right Vertical
 
 	return sum < 2
 }
@@ -143,13 +90,14 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 	aro := float64(bitmap.Sprite.Rect.W) / float64(bitmap.Sprite.Rect.H)
 	ard := math.Abs(arb - aro)
 	crop := ard > 0.05
-	// cut = false
+	// crop = false
 
 	var croprect goimage.Rectangle
 	if crop {
 		croprect = cropRect(bitmap, bounds)
 		if !cropsBlackbarsOnly(img, croprect) {
 			crop = false
+			croprect = bounds
 		}
 	} else {
 		croprect = bounds
