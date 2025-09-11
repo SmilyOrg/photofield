@@ -97,6 +97,8 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 		croprect = cropRect(bitmap, bounds)
 		if !cropsBlackbarsOnly(img, croprect) {
 			crop = false
+			// Cropping is disabled because the detected crop rectangle would remove more than just black bars.
+			// Use the full image bounds as the crop rectangle in this fallback case.
 			croprect = bounds
 		}
 	} else {
