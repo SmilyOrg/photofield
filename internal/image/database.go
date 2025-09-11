@@ -96,6 +96,7 @@ const (
 	RemoveTagIds  InfoWriteType = iota
 	InvertTagIds  InfoWriteType = iota
 	CompactTagIds InfoWriteType = iota
+	CommitBarrier InfoWriteType = iota
 )
 
 type InfoWrite struct {
@@ -471,6 +472,7 @@ func (source *Database) writePendingInfosSqlite() {
 
 	pendingCompactionTags := tagSet{}
 	pendingUpdatedDirs := make(stringSet)
+	commitBarriers := make([]chan any, 0)
 
 	defer func() {
 		source.WaitForCommit()
@@ -480,29 +482,30 @@ func (source *Database) writePendingInfosSqlite() {
 	commitInterval := 200 * time.Millisecond
 
 	commit := func() {
-		if !inTransaction {
-			return
-		}
 		err := sqlitex.Execute(conn, "COMMIT;", nil)
 		if err != nil {
 			panic(err)
 		}
-		source.transactionMutex.Unlock()
-		inTransaction = false
+		for i, barrier := range commitBarriers {
+			close(barrier)
+			commitBarriers[i] = nil
+		}
+		commitBarriers = commitBarriers[:0]
+	}
+
+	begin := func() {
+		err := sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	commitRestart := func() {
 		if !inTransaction {
 			return
 		}
-		err := sqlitex.Execute(conn, "COMMIT;", nil)
-		if err != nil {
-			panic(err)
-		}
-		err = sqlitex.Execute(conn, "BEGIN TRANSACTION;", nil)
-		if err != nil {
-			panic(err)
-		}
+		commit()
+		begin()
 	}
 
 	for {
@@ -522,10 +525,7 @@ func (source *Database) writePendingInfosSqlite() {
 				continue
 			}
 
-			err := sqlitex.Execute(conn, "COMMIT;", nil)
-			if err != nil {
-				panic(err)
-			}
+			commit()
 
 			// Flush updated dirs
 			dirs := pendingUpdatedDirs.Slice()
@@ -539,7 +539,7 @@ func (source *Database) writePendingInfosSqlite() {
 				lastOptimize = time.Now()
 				log.Println("database optimizing")
 				optimizeDone := metrics.Elapsed("database optimize")
-				err = sqlitex.Execute(conn, "PRAGMA optimize;", nil)
+				err := sqlitex.Execute(conn, "PRAGMA optimize;", nil)
 				if err != nil {
 					panic(err)
 				}
@@ -551,7 +551,11 @@ func (source *Database) writePendingInfosSqlite() {
 
 		case imageInfo, ok := <-source.pending:
 			if !ok {
-				commit()
+				if inTransaction {
+					commit()
+					source.transactionMutex.Unlock()
+					inTransaction = false
+				}
 				log.Println("database closed")
 				return
 			}
@@ -903,6 +907,9 @@ func (source *Database) writePendingInfosSqlite() {
 
 				imageInfo.Done <- updatedAt
 				close(imageInfo.Done)
+
+			case CommitBarrier:
+				commitBarriers = append(commitBarriers, imageInfo.Done)
 			}
 		}
 
@@ -1546,6 +1553,17 @@ func (source *Database) ListTagsOfTag(id tag.Id, limit int) <-chan tag.Tag {
 		close(out)
 	}()
 	return out
+}
+
+// CommitBarrier creates a channel that will be closed when
+// all the writes until the barrier are committed.
+func (source *Database) CommitBarrier() <-chan any {
+	done := make(chan any)
+	source.pending <- &InfoWrite{
+		Type: CommitBarrier,
+		Done: done,
+	}
+	return done
 }
 
 func (source *Database) WaitForCommit() {

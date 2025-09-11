@@ -1279,6 +1279,7 @@ func indexCollection(collection *collection.Collection) (task *Task, existing bo
 			log.Printf("indexing files %s dir %s\n", collection.Id, dir)
 			imageSource.IndexFiles(dir, collection.IndexLimit, counter)
 		}
+		log.Printf("indexing files %s done\n", collection.Id)
 		// imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
 		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{})
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{})

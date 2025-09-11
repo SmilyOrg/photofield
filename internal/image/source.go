@@ -441,12 +441,13 @@ func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 		// time.Sleep(10 * time.Millisecond)
 		counter <- 1
 	}
+	<-source.database.CommitBarrier()
 	for ip := range source.database.ListNonexistent(dir, indexed) {
 		source.database.Delete(ip.Id)
 		source.thumbnailSink.Delete(uint32(ip.Id))
 	}
 	source.database.SetIndexed(dir)
-	source.database.WaitForCommit()
+	<-source.database.CommitBarrier()
 }
 
 func (source *Source) IndexMetadata(dirs []string, maxPhotos int, force Missing) {

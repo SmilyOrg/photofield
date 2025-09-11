@@ -2,8 +2,8 @@
 import { test as base } from 'playwright-bdd';
 import fs from 'fs/promises';
 import { join } from 'path';
-import { ChildProcess, spawn, exec, SpawnOptionsWithoutStdio } from 'child_process';
-import { BrowserContext, Page } from '@playwright/test';
+import { ChildProcess, spawn, SpawnOptionsWithoutStdio } from 'child_process';
+import { BrowserContext, expect, Page } from '@playwright/test';
 import { globalCache } from '@vitalets/global-cache';
 
 const LISTEN_REGEX = /local\s+http:\/\/(\S+)/;
@@ -448,32 +448,40 @@ export class App {
     regionId: number,
     sceneId?: string
   ): Promise<SceneCoordinates | null> {
-    const actualSceneId = sceneId || await this.getCurrentSceneId();
-    if (!actualSceneId) {
-      throw new Error('No scene ID available');
-    }
+    const region = await this.getRegion(regionId, sceneId);
+    return {
+      x: region.bounds.x + region.bounds.w / 2,
+      y: region.bounds.y + region.bounds.h / 2
+    };
+  }
 
+  /**
+   * Wait for a specific photo region to be available in the scene and return its data.
+   */
+  async getRegion(regionId: number, sceneId?: string): Promise<PhotoRegion> {
     const apiHost = await this.getApiHost();
-    const url = `${apiHost}/scenes/${actualSceneId}/regions/${regionId}`;
     
-    try {
-      const region = await this.page.evaluate(async (url) => {
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        return res.json();
-      }, url);
-
-      if (!region || !region.bounds) {
-        return null;
+    let region: PhotoRegion | undefined;
+    await expect(async () => {
+      const actualSceneId = sceneId || await this.getCurrentSceneId();
+      if (!actualSceneId) {
+        throw new Error('No scene ID available');
       }
 
-      return {
-        x: region.bounds.x + region.bounds.w / 2,
-        y: region.bounds.y + region.bounds.h / 2
-      };
-    } catch (error) {
-      return null;
+      const url = `${apiHost}/scenes/${actualSceneId}/regions/${regionId}`;
+      const response = await this.page.request.get(url);
+      expect(response.ok).toBeTruthy();
+      region = await response.json();
+      expect(region).toBeDefined();
+      expect(region?.id).toBeGreaterThan(0);
+      expect(region?.bounds).toBeDefined();
+      expect(region?.bounds?.w).toBeGreaterThan(0);
+      expect(region?.bounds?.h).toBeGreaterThan(0);
+    }).toPass();
+    if (!region) {
+      throw new Error(`Region ${regionId} not found`);
     }
+    return region;
   }
 
   /**

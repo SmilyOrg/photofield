@@ -179,11 +179,6 @@ Then('the file {string} does not exist', async ({ app }, filePath: string) => {
   }
 });
 
-Then('the page shows photo {string}', async ({ app, page }, path: string) => {
-  // This step can be enhanced to verify specific photo is displayed
-  await expect(page.locator('.photo-details')).toBeVisible();
-});
-
 // Photo interaction and navigation steps
 When('(the user )clicks on the first photo', async ({ app }) => {
   await app.clickFirstPhoto();
@@ -195,10 +190,6 @@ Then('the page loads', async ({ app }) => {
 
 When('the user clicks on a photo at scene coordinates {int}, {int}', async ({ app }, x: number, y: number) => {
   await app.clickPhotoAtCoordinates(x, y);
-});
-
-Then('the page shows photo details', async ({ page }) => {
-  await expect(page.locator('.photo-details')).toBeVisible();
 });
 
 Then('the photo is focused and zoomed in', async ({ app }) => {

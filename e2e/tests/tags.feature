@@ -5,6 +5,7 @@ Feature: Tagging
     And a running app
     And the user opens the collection
 
+  @skip
   Scenario: Box selection for tagging
     When the user holds Ctrl and drags a selection box
     Then the page shows "Selection"

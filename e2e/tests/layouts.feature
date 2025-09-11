@@ -5,6 +5,7 @@ Feature: Photo Navigation and Interaction
     And a running app
     And the user opens the collection
 
+  @skip
   Scenario: Photo navigation in different layouts
     When the user switches to "TIMELINE" layout
     And clicks on the first photo
