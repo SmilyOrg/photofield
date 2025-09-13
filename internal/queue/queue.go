@@ -16,17 +16,15 @@ type Queue struct {
 	Name        string
 	Worker      func(<-chan interface{})
 	WorkerCount int
-	Stop        chan bool
+	workerWg    sync.WaitGroup
 }
 
 func (q *Queue) Run() {
 	q.mu.Lock()
 	if q.queue == nil {
 		q.queue = queue.New()
-		q.Stop = make(chan bool)
 	}
 	queue := q.queue
-	stop := q.Stop
 	q.mu.Unlock()
 
 	loadCount := 0
@@ -38,14 +36,19 @@ func (q *Queue) Run() {
 	logging := false
 
 	items := make(chan interface{})
-	defer close(items)
 
 	if q.WorkerCount == 0 {
 		q.WorkerCount = 1
 	}
+
+	// Start workers with WaitGroup tracking
 	for i := 0; i < q.WorkerCount; i++ {
 		if q.Worker != nil {
-			go q.Worker(items)
+			q.workerWg.Add(1)
+			go func() {
+				defer q.workerWg.Done()
+				q.Worker(items)
+			}()
 		}
 	}
 
@@ -54,7 +57,8 @@ func (q *Queue) Run() {
 			item := queue.Pop()
 			if item == nil {
 				log.Printf("%s queue stopping\n", q.Name)
-				close(stop)
+				close(items)
+				q.workerWg.Wait() // Wait for all workers to finish
 				return
 			}
 			items <- item
@@ -70,7 +74,6 @@ func (q *Queue) Run() {
 			if loadCount+pendingCount > 0 {
 				percent = loadCount * 100 / (loadCount + pendingCount)
 			}
-			// log.Printf("%s %4d%% completed, %5d loaded, %5d pending, %.2f / sec\n", q.Name, percent, loadCount, pendingCount, perSec)
 			perSecDiv := 1
 			if perSec > 1 {
 				perSecDiv = int(perSec)
@@ -84,9 +87,20 @@ func (q *Queue) Run() {
 		loadCount++
 
 		if logging {
-			// log.Printf("image info load for id %5d, %5d pending, %5d ms get file, %5d ms set db, %5d ms set cache\n", id, len(backlog), fileGetMs, dbSetMs, cacheSetMs)
 			log.Printf("%s queue %5d pending\n", q.Name, queue.Length())
 		}
+	}
+}
+
+func (q *Queue) Wait() {
+	for {
+		q.mu.RLock()
+		queue := q.queue
+		q.mu.RUnlock()
+		if queue == nil || queue.Length() == 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -101,16 +115,20 @@ func (q *Queue) Close() {
 		return
 	}
 	queue := q.queue
-	stop := q.Stop
 	q.mu.Unlock()
 
 	queue.Clean()
 	queue.Append(nil)
-	<-stop
+
+	q.workerWg.Wait()
 
 	q.mu.Lock()
 	q.queue = nil
 	q.mu.Unlock()
+}
+
+func (q *Queue) WaitForWorkers() {
+	q.workerWg.Wait()
 }
 
 func (q *Queue) Length() int {

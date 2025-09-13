@@ -41,7 +41,7 @@ func AngleToKm(a s1.Angle) float64 {
 
 func (info *Info) AspectRatio() float64 {
 	if info.Height == 0 {
-		return 3 / 2
+		return 3. / 2
 	}
 	return float64(info.Width) / float64(info.Height)
 }

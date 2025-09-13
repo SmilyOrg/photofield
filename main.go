@@ -64,6 +64,7 @@ import (
 	"photofield/internal/openapi"
 	"photofield/internal/render"
 	"photofield/internal/scene"
+	"photofield/internal/test"
 	pfio "photofield/io"
 	"photofield/io/bench"
 	"photofield/tag"
@@ -135,14 +136,15 @@ func instrumentationMiddleware(next http.Handler) http.Handler {
 }
 
 type Task struct {
-	Id           string `json:"id"`
-	Type         string `json:"type"`
-	Name         string `json:"name"`
-	CollectionId string `json:"collection_id"`
-	Done         int    `json:"done"`
-	Pending      int    `json:"pending,omitempty"`
-	Offset       int    `json:"-"`
-	Queue        string `json:"-"`
+	Id           string        `json:"id"`
+	Type         string        `json:"type"`
+	Name         string        `json:"name"`
+	CollectionId string        `json:"collection_id"`
+	Done         int           `json:"done"`
+	Pending      int           `json:"pending,omitempty"`
+	Offset       int           `json:"-"`
+	Queue        string        `json:"-"`
+	completed    chan struct{} `json:"-"`
 }
 
 func (t *Task) Counter() chan<- int {
@@ -153,6 +155,10 @@ func (t *Task) Counter() chan<- int {
 		}
 	}()
 	return counter
+}
+
+func (t *Task) Completed() <-chan struct{} {
+	return t.completed
 }
 
 type TileWriter func(w io.Writer) error
@@ -290,6 +296,7 @@ func newFileIndexTask(collection *collection.Collection) *Task {
 		Name:         fmt.Sprintf("Indexing files %v", collection.Name),
 		CollectionId: collection.Id,
 		Done:         0,
+		completed:    make(chan struct{}),
 	}
 }
 
@@ -1272,6 +1279,7 @@ func indexCollection(collection *collection.Collection) (task *Task, existing bo
 			log.Printf("indexing files %s dir %s\n", collection.Id, dir)
 			imageSource.IndexFiles(dir, collection.IndexLimit, counter)
 		}
+		log.Printf("indexing files %s done\n", collection.Id)
 		// imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
 		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{})
 		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{})
@@ -1281,6 +1289,7 @@ func indexCollection(collection *collection.Collection) (task *Task, existing bo
 		now := time.Now()
 		collection.IndexedAt = &now
 		collection.IndexedCount = task.Done
+		close(task.completed)
 	}()
 	return
 }
@@ -1498,6 +1507,69 @@ func createDummyEntries(count int, seed int64) {
 	log.Printf("Dummy data generation completed in %v (%.1f entries/sec)", elapsed, float64(count)/elapsed.Seconds())
 }
 
+// generateTestPhotos creates test images using the internal test package
+func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr, heightsStr string) error {
+	// Parse widths and heights from comma-separated strings
+	widths, err := parseIntList(widthsStr)
+	if err != nil {
+		return fmt.Errorf("invalid widths: %w", err)
+	}
+
+	heights, err := parseIntList(heightsStr)
+	if err != nil {
+		return fmt.Errorf("invalid heights: %w", err)
+	}
+
+	// Create image specs with different combinations of widths and heights
+	specs := make([]test.ImageSpec, count)
+	for i := 0; i < count; i++ {
+		width := widths[i%len(widths)]
+		height := heights[i%len(heights)]
+
+		specs[i] = test.ImageSpec{
+			Width:  width,
+			Height: height,
+		}
+	}
+
+	// Create dataset
+	dataset := test.TestDataset{
+		Name:    name,
+		Seed:    seed,
+		Samples: 1, // One sample per spec
+		Images:  specs,
+	}
+
+	// Generate the images
+	images, err := test.GenerateTestDataset(outputDir, dataset)
+	if err != nil {
+		return fmt.Errorf("failed to generate test dataset: %w", err)
+	}
+
+	log.Printf("Generated %d test images in %s", len(images), outputDir)
+	for _, img := range images {
+		log.Printf("- %s (%dx%d)", img.Name, img.Spec.Width, img.Spec.Height)
+	}
+
+	return nil
+}
+
+// parseIntList parses a comma-separated string of integers
+func parseIntList(s string) ([]int, error) {
+	parts := strings.Split(s, ",")
+	result := make([]int, len(parts))
+
+	for i, part := range parts {
+		val, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer '%s': %w", part, err)
+		}
+		result[i] = val
+	}
+
+	return result, nil
+}
+
 func main() {
 	var err error
 
@@ -1518,6 +1590,18 @@ func main() {
 	dummyCount := flag.Int("dummy.count", 100000, "number of dummy entries to create")
 	dummySeed := flag.Int64("dummy.seed", 42, "seed for random dummy data generation")
 
+	// Photo generation flags
+	genPhotosFlag := flag.Bool("gen-photos", false, "generate test photos and exit")
+	genPhotosCount := flag.Int("gen-photos.count", 10, "number of test photos to generate")
+	genPhotosOutput := flag.String("gen-photos.output", "testdata/e2e-photos", "output directory for generated photos")
+	genPhotosSeed := flag.Int64("gen-photos.seed", 12345, "seed for random photo generation")
+	genPhotosName := flag.String("gen-photos.name", "e2e-test", "dataset name for generated photos")
+	genPhotosWidths := flag.String("gen-photos.widths", "100,150,200", "comma-separated list of image widths")
+	genPhotosHeights := flag.String("gen-photos.heights", "75,100", "comma-separated list of image heights")
+
+	// Scan collection flag
+	scanFlag := flag.String("scan", "", "scan specified collection and exit")
+
 	flag.Parse()
 
 	if *benchFlag {
@@ -1526,6 +1610,15 @@ func main() {
 
 	if *versionFlag {
 		fmt.Printf("photofield %s, commit %s, built on %s by %s\n", version, commit, date, builtBy)
+		return
+	}
+
+	if *genPhotosFlag {
+		log.Printf("generating %d test photos", *genPhotosCount)
+		err := generateTestPhotos(*genPhotosCount, *genPhotosOutput, *genPhotosSeed, *genPhotosName, *genPhotosWidths, *genPhotosHeights)
+		if err != nil {
+			log.Fatalf("failed to generate test photos: %v", err)
+		}
 		return
 	}
 
@@ -1605,6 +1698,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		imageSource.Close()
 		return
 	}
 
@@ -1624,6 +1718,31 @@ func main() {
 	if *dummyFlag {
 		log.Printf("creating %d dummy database entries with seed %d", *dummyCount, *dummySeed)
 		createDummyEntries(*dummyCount, *dummySeed)
+		return
+	}
+
+	if *scanFlag != "" {
+		log.Printf("collection %s scan starting", *scanFlag)
+		c := getCollectionById(*scanFlag)
+		if c == nil {
+			log.Fatalf("collection %v not found", *scanFlag)
+		}
+
+		// Perform the scan
+		task, existing := indexCollection(c)
+		if existing {
+			log.Printf("collection %s scan already in progress", *scanFlag)
+		} else {
+			log.Printf("collection %s scan started", *scanFlag)
+		}
+
+		// Wait for the task to complete using the completion channel
+		<-task.Completed()
+
+		log.Printf("collection %s scan finished", *scanFlag)
+
+		imageSource.WaitOnQueue()
+		imageSource.Close()
 		return
 	}
 

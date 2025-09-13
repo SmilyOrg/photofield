@@ -309,7 +309,14 @@ func (source *Source) Vacuum() error {
 	return source.database.vacuum()
 }
 
+func (source *Source) WaitOnQueue() {
+	source.metadataQueue.Wait()
+	source.contentsQueue.Wait()
+}
+
 func (source *Source) Close() {
+	source.metadataQueue.Close()
+	source.contentsQueue.Close()
 	source.decoder.Close()
 	source.database.Close()
 	source.imageCache.Close()
@@ -317,8 +324,6 @@ func (source *Source) Close() {
 	source.pathCache.Close()
 	source.Sources.Close()
 	source.thumbnailSink.Close()
-	source.metadataQueue.Close()
-	source.contentsQueue.Close()
 }
 
 func (source *Source) Shutdown() {
@@ -436,12 +441,13 @@ func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
 		// time.Sleep(10 * time.Millisecond)
 		counter <- 1
 	}
+	<-source.database.CommitBarrier()
 	for ip := range source.database.ListNonexistent(dir, indexed) {
 		source.database.Delete(ip.Id)
 		source.thumbnailSink.Delete(uint32(ip.Id))
 	}
 	source.database.SetIndexed(dir)
-	source.database.WaitForCommit()
+	<-source.database.CommitBarrier()
 }
 
 func (source *Source) IndexMetadata(dirs []string, maxPhotos int, force Missing) {
