@@ -15,14 +15,12 @@ Given('an empty working directory', async ({ app }) => {
   console.log("CWD:", app.cwd);
 });
 
-Given('{int} generated test photos', async ({ app }, count: number) => {
+Given('{int} generated {int} x {int} test photos', async ({ app }, count: number, width: number, height: number) => {
   if (!app.cwd) {
     await app.useTempDir();
     console.log("CWD:", app.cwd);
   }
-  
-  // The generatePhotos method now uses global cache internally
-  await app.generatePhotos(count);
+  await app.generatePhotos(count, 12345, [width], [height]);
 });
 
 Given('{int} generated test photos with seed {int}', async ({ app }, count: number, seed: number) => {
@@ -235,7 +233,7 @@ When('(the user )presses the {string} key', async ({ page }, key: string) => {
   await page.keyboard.press(key);
 });
 
-When('swipes left on the photo viewer', async ({ app }) => {
+When('(the user )swipes left on the photo viewer', async ({ app }) => {
   await app.swipeOnViewer('left', 400);
 });
 

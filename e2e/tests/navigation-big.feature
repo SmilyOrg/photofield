@@ -1,7 +1,7 @@
 Feature: Photo Navigation and Interaction
 
   Background:
-    Given 100 generated test photos
+    Given 300 generated 30 x 20 test photos
     And a running app
     And the user opens the collection
 
@@ -12,12 +12,14 @@ Feature: Photo Navigation and Interaction
 
   Scenario: Navigate between photos with keyboard
     When the user clicks on the first photo
-    And presses the "ArrowRight" key
+    Then the collection subpath is "/1"
+    When the user presses the "ArrowRight" key
     Then the collection subpath is "/2"
 
   Scenario: Navigate between photos with swipe gestures
     When the user clicks on the first photo
-    And swipes left on the photo viewer
+    Then the collection subpath is "/1"
+    When the user swipes left on the photo viewer
     Then the collection subpath is "/2"
 
   Scenario: Exit photo focus with Escape key

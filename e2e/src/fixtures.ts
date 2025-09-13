@@ -132,16 +132,16 @@ export class App {
     return join(this.cwd, path);
   }
 
-  async generatePhotos(count: number, seed: number = 12345): Promise<void> {
+  async generatePhotos(count: number, seed: number = 12345, widths: number[], heights: number[]): Promise<void> {
     // Use global cache to generate test data only once per run
-    const cacheKey = `test-photos-${count}-${seed}`;
+    const widthKey = widths.join('_');
+    const heightKey = heights.join('_');
+    const cacheKey = `e2e-test-${count}-${widthKey}-${heightKey}-${seed}`;
+
+    console.log("Using generated photos cache key:", cacheKey);
     
-    const {
-      dataDir: generatedDataDir,
-      outputDir,
-      collectionName
-    } = await globalCache.get(cacheKey, async () => {
-      console.log(`Generating ${count} test photos with seed ${seed}...`);
+    const cache = await globalCache.get(cacheKey, async () => {
+      console.log(`Generating ${count} test ${widths.join(',')} x ${heights.join(',')} photos with seed ${seed}...`);
       
       const exe = process.platform === 'win32' ? '.exe' : '';
       const command = join(process.cwd(), '..', 'photofield' + exe);
@@ -150,16 +150,16 @@ export class App {
       const outputDir = join(process.cwd(), '..', 'testdata');
       await fs.mkdir(outputDir, { recursive: true });
 
-      const collectionName = `e2e-test-${count}`;
-
       const args = [
         '-gen-photos',
         '-gen-photos.count', count.toString(),
         '-gen-photos.seed', seed.toString(),
-        '-gen-photos.name', collectionName,
-        '-gen-photos.output', outputDir
+        '-gen-photos.name', cacheKey,
+        '-gen-photos.output', outputDir,
       ];
-
+      args.push('-gen-photos.widths', widths.join(','));
+      args.push('-gen-photos.heights', heights.join(','));
+      
       console.log("Generating photos:", command, args);
       await spawnp(command, args, {
         cwd: outputDir,
@@ -167,10 +167,10 @@ export class App {
         timeout: 30000,
       });
 
-      const dataDir = join(outputDir, collectionName);
+      const dataDir = join(outputDir, cacheKey);
 
       console.log("Generating database");
-      await spawnp(command, ['-scan', collectionName], {
+      await spawnp(command, ['-scan', cacheKey], {
         cwd: outputDir,
         stdio: 'pipe',
         timeout: 30000,
@@ -192,15 +192,16 @@ export class App {
       });
       return {
         outputDir,
-        collectionName,
         dataDir,
       };
     });
+
+    const { dataDir: generatedDataDir, outputDir } = cache;
     
     // Set the generated paths from cache
     this.dataDir = this.cwd || process.cwd();
     this.cwd = outputDir;
-    this.collectionPath = `/collections/${collectionName}`;
+    this.collectionPath = `/collections/${cacheKey}`;
 
     // Copy database files from the generated data dir
     const files = [

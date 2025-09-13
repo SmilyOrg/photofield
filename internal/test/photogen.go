@@ -40,10 +40,74 @@ type GeneratedImage struct {
 	Spec ImageSpec
 }
 
+// ImageSize represents image dimensions for pool keys
+type ImageSize struct {
+	Width  int
+	Height int
+}
+
+// SizedImagePool manages reusable image buffers per size to reduce allocations
+type SizedImagePool struct {
+	pools sync.Map // map[ImageSize]*sync.Pool
+}
+
+// NewSizedImagePool creates a new size-specific image pool
+func NewSizedImagePool() *SizedImagePool {
+	return &SizedImagePool{}
+}
+
+// getPoolForSize gets or creates a pool for the specific image size
+func (p *SizedImagePool) getPoolForSize(width, height int) *sync.Pool {
+	size := ImageSize{Width: width, Height: height}
+
+	if pool, ok := p.pools.Load(size); ok {
+		return pool.(*sync.Pool)
+	}
+
+	// Create new pool for this size
+	newPool := &sync.Pool{
+		New: func() interface{} {
+			return image.NewRGBA(image.Rect(0, 0, width, height))
+		},
+	}
+
+	// Store the pool (another goroutine might have created one in the meantime, but that's fine)
+	actual, _ := p.pools.LoadOrStore(size, newPool)
+	return actual.(*sync.Pool)
+}
+
+// Get retrieves an image from the size-specific pool
+func (p *SizedImagePool) Get(width, height int) *image.RGBA {
+	pool := p.getPoolForSize(width, height)
+	img := pool.Get().(*image.RGBA)
+
+	// Clear the image to transparent black
+	for i := range img.Pix {
+		img.Pix[i] = 0
+	}
+
+	return img
+}
+
+// Put returns an image to the appropriate size-specific pool
+func (p *SizedImagePool) Put(img *image.RGBA) {
+	if img == nil {
+		return
+	}
+
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	pool := p.getPoolForSize(width, height)
+	pool.Put(img)
+}
+
 // TestImageGenerator manages test image generation
 type TestImageGenerator struct {
 	baseDir    string
 	generators []generator
+	imagePool  *SizedImagePool
 }
 
 // Generator function type
@@ -57,7 +121,8 @@ func GenerateTestDataset(baseDir string, dataset TestDataset) ([]GeneratedImage,
 	}
 
 	g := &TestImageGenerator{
-		baseDir: baseDir,
+		baseDir:   baseDir,
+		imagePool: NewSizedImagePool(),
 		generators: []generator{
 			// generateGradient,
 			generateCheckered,
@@ -318,8 +383,8 @@ func (g *TestImageGenerator) generateImages(datasetDir string, dataset TestDatas
 				// Each image gets its own random source
 				r := rand.New(rand.NewSource(work.imageSeed))
 
-				// Create image
-				img := image.NewRGBA(image.Rect(0, 0, work.spec.Width, work.spec.Height))
+				// Get reusable image from pool
+				img := g.imagePool.Get(work.spec.Width, work.spec.Height)
 
 				// Choose random generator
 				generatorIndex := r.Intn(len(g.generators))
@@ -332,8 +397,13 @@ func (g *TestImageGenerator) generateImages(datasetDir string, dataset TestDatas
 				imagePath := filepath.Join(datasetDir, imageName+".jpg")
 				if err := g.saveJPEG(img, imagePath); err != nil {
 					errChan <- fmt.Errorf("failed to save image %s: %w", imageName, err)
+					// Return image to pool even on error
+					g.imagePool.Put(img)
 					continue
 				}
+
+				// Return image to pool after use
+				g.imagePool.Put(img)
 
 				images[work.imageIndex] = GeneratedImage{
 					Name: imageName,

@@ -1601,8 +1601,8 @@ func main() {
 	genPhotosOutput := flag.String("gen-photos.output", "testdata/e2e-photos", "output directory for generated photos")
 	genPhotosSeed := flag.Int64("gen-photos.seed", 12345, "seed for random photo generation")
 	genPhotosName := flag.String("gen-photos.name", "e2e-test", "dataset name for generated photos")
-	genPhotosWidths := flag.String("gen-photos.widths", "400,600,800", "comma-separated list of image widths")
-	genPhotosHeights := flag.String("gen-photos.heights", "300,450", "comma-separated list of image heights")
+	genPhotosWidths := flag.String("gen-photos.widths", "100,150,200", "comma-separated list of image widths")
+	genPhotosHeights := flag.String("gen-photos.heights", "75,100", "comma-separated list of image heights")
 
 	// Scan collection flag
 	scanFlag := flag.String("scan", "", "scan specified collection and exit")
