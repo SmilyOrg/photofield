@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { defineBddConfig } from 'playwright-bdd';
+import { globalCache } from '@vitalets/global-cache';
 
 /**
  * Read environment variables from file.
@@ -18,6 +19,8 @@ const testDir = defineBddConfig({
 export default defineConfig({
   // testDir: './tests',
   testDir,
+  globalSetup: globalCache.setup,        // <-- Setup globalCache
+  globalTeardown: globalCache.teardown,  // <-- Teardown globalCache
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -25,7 +28,7 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  // workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.CI ? [
     ['github'],

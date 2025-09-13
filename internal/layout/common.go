@@ -336,13 +336,10 @@ func addSectionToScene(section *Section, scene *render.Scene, bounds render.Rect
 			y += config.ImageHeight*scale + config.LineSpacing
 		}
 
-		photo.Sprite.PlaceFitHeight(
-			bounds.X+x,
-			bounds.Y+y,
-			config.ImageHeight,
-			float64(info.Width),
-			float64(info.Height),
-		)
+		photo.Sprite.Rect.X = bounds.X + x
+		photo.Sprite.Rect.Y = bounds.Y + y
+		photo.Sprite.Rect.W = imageWidth
+		photo.Sprite.Rect.H = config.ImageHeight
 
 		// println(photo.GetPath(source), photo.Sprite.Rect.String(), bounds.X, bounds.Y, x, y, config.ImageHeight, photo.Size.X, photo.Size.Y)
 

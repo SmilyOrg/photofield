@@ -233,6 +233,14 @@ export default {
     },
     viewExtent() {
       let { width, height } = this.getTiledImageSizeAtZoom(this.maxZoom);
+      const { height: viewportHeight } = this.getTiledImageBoundsSizeAtZoom(
+        this.viewport?.width.value,
+        this.viewport?.height.value,
+        this.maxZoom,
+      );
+      if (viewportHeight > height) {
+        height = viewportHeight;
+      }
       return [-width*0.95, -height, width*1.95, height];
     },
     crossPanActive() {
@@ -266,18 +274,26 @@ export default {
   },
   methods: {
   
-    getTiledImageSizeAtZoom(zoom) {
+    getTiledImageBoundsSizeAtZoom(w, h, zoom) {
       const tileSize = this.tileSize;
       const power = 1 << zoom;
       let width = power*tileSize;
       let height = power*tileSize;
-      const sceneAspect = this.scene.bounds.w / this.scene.bounds.h;
-      if (sceneAspect < 1) {
-        width = height * sceneAspect;
+      const aspect = w / h;
+      if (aspect < 1) {
+        width = height * aspect;
       } else {
-        height = width / sceneAspect;
+        height = width / aspect;
       }
-      return { width, height }
+      return { width, height };
+    },
+
+    getTiledImageSizeAtZoom(zoom) {
+      return this.getTiledImageBoundsSizeAtZoom(
+        this.scene.bounds.w,
+        this.scene.bounds.h,
+        zoom,
+      );
     },
 
     getTiledImageZoomAtSize(width, height) {

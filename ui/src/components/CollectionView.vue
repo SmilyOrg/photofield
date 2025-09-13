@@ -218,6 +218,16 @@ const layout = computed(() => {
 
 watch(currentScene, scene => emit("scene", scene));
 
+// Expose current scene to global window for testing
+watch(currentScene, (scene) => {
+  if (typeof window !== 'undefined') {
+    if (!window.__PHOTOFIELD__) {
+      window.__PHOTOFIELD__ = {};
+    }
+    window.__PHOTOFIELD__.currentScene = scene;
+  }
+}, { immediate: true });
+
 const selectTagId = computed(() => {
   return route.query.select_tag || undefined;
 })
