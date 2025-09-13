@@ -1529,11 +1529,6 @@ func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr
 		specs[i] = test.ImageSpec{
 			Width:  width,
 			Height: height,
-			ExifTags: map[string]string{
-				"ImageDescription": fmt.Sprintf("Test image %d", i+1),
-				"Software":         "Photofield E2E Test Generator",
-				"Artist":           "Test Suite",
-			},
 		}
 	}
 

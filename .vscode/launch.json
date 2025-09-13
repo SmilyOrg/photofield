@@ -29,5 +29,27 @@
       ],
       "type": "node"
     },
+    {
+      "name": "Debug gen-photos",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": [
+        "-gen-photos",
+        "-gen-photos.count",
+        "300",
+        "-gen-photos.seed",
+        "12345",
+        "-gen-photos.name",
+        "debug-300-30-20",
+        "-gen-photos.output",
+        "./testdata",
+        "-gen-photos.widths",
+        "30",
+        "-gen-photos.heights",
+        "20"
+      ]
+    },
   ]
 }
