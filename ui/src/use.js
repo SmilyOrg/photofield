@@ -322,6 +322,17 @@ export function useViewport(element) {
   }
 }
 
+export function useRegionZoom({ view, region }) {
+  return computed(() => {
+    const viewBounds = view?.value;
+    const regionBounds = region?.value?.bounds;
+    if (!viewBounds || !regionBounds) return 1;
+    const zoomX = regionBounds.w / viewBounds.w;
+    const zoomY = regionBounds.h / viewBounds.h;
+    return Math.max(zoomX, zoomY);
+  });
+}
+
 export function useRetry(f) {
   const count = ref(0);
   const delays = [10, 50, 100, 200, 500, 1000];

@@ -27,7 +27,6 @@
       @wheel="onWheel"
       @contextmenu.prevent="onContextMenu"
       @load-end="onLoadEnd"
-      @keydown.esc="onEscape"
       @box-select="onBoxSelect"
       @viewer="emit('viewer', $event)"
     ></tile-viewer>
@@ -77,7 +76,7 @@
 import { useEventBus, watchDebounced } from '@vueuse/core';
 import { computed, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { getRegion, getRegions, useScene, useApi, getRegionClosestTo } from '../api';
-import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimestamps, useTimestampsDate, useRegion } from '../use.js';
+import { useSeekableRegion, useViewport, useContextMenu, useTags, useTimestamps, useTimestampsDate, useRegion, useRegionZoom } from '../use.js';
 import DateStrip from './DateStrip.vue';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
@@ -171,7 +170,6 @@ watch(scene, async (newScene) => {
     return;
   }
   if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
-    updateFocusFile(null);
     scrollToPixels(0);
   }
   lastLoadedScene = newScene;
@@ -216,8 +214,20 @@ watch(region, async newRegion => {
   emit("region", newRegion);
 }, { immediate: true });
 
+const regionZoom = useRegionZoom({ view: lastView, region });
+
 const exit = async () => {
-  await centerToBounds(lastNonNativeView.value);
+  if (selectTag.value) {
+    emit("selectTag", null);
+    return;
+  }
+  if (regionZoom.value > 1.1) {
+    zoomOut();
+    return;
+  }
+  if (region.value?.bounds) {
+    await centerToBounds(region.value.bounds);
+  }
   await regionExit();
 }
 
@@ -269,20 +279,6 @@ const centerToBounds = async (bounds) => {
   await nextTick();
   scrollToPixels(by - vy);
   await nextTick();
-}
-
-const onEscape = async () => {
-  if (selectTag.value) {
-    emit("selectTag", null);
-    return;
-  }
-  zoomOut();
-  if (lastView.value) {
-    const lastZoom = scene.value.bounds.w / lastView.value.w;
-    if (lastZoom > 1.1) {
-      return;
-    }
-  }
 }
 
 const zoomOut = () => {
@@ -466,6 +462,7 @@ const view = computed(oldRegion => {
 
 watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
   if (!focusRegion) return;
+  if (!focusFileId.value) return;
   if (canvas.value.height <= 1) return;
   if (regionId.value) return;
   if (focusRegion.data.id == lastFocusFileId) {

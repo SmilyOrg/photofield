@@ -241,7 +241,8 @@ async function onFocusFileId(id) {
     query: {
       ...route.query,
       f: id || undefined,
-    }
+    },
+    hash: route.hash,
   });
 }
 
@@ -267,8 +268,9 @@ const onSelectTag = async (tag) => {
   await router.replace({
     query: {
       ...route.query,
-      select_tag: tag.id,
-    }
+      select_tag: tag?.id,
+    },
+    hash: route.hash,
   });
   await selectTagMutate(() => tag);
 }
@@ -295,7 +297,8 @@ const onSearch = (search) => {
     query: {
       ...route.query,
       search,
-    }
+    },
+    hash: route.hash,
   });
 }
 
@@ -315,7 +318,7 @@ const tweaks = computed(() => {
 
 const onRegion = async (region) => {
   if (!region) return;
-  const r = {
+  router.push({
     name: "region",
     params: {
       collectionId: collectionId.value,
@@ -323,12 +326,8 @@ const onRegion = async (region) => {
     },
     query: route.query,
     hash: route.hash,
-  };
-  if (regionId.value) {
-    router.replace(r);
-  } else {
-    router.push(r);
-  }
+    replace: !!regionId.value
+  });
 }
 
 </script>

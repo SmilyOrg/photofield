@@ -103,7 +103,7 @@ const right = e => {
   emit("navigate", 1);
 }
 
-const exit = () => {
+const exit = (e) => {
   emit("exit");
 }
 

@@ -132,7 +132,7 @@ const photo = computed(() => {
 
 const date = computed(() => {
   if (!createdAt.value) return "";
-  return dateFormat(createdAt.value, "MMM d");
+  return dateFormat(createdAt.value, "MMM d, yyyy");
 });
 
 const time = computed(() => {
