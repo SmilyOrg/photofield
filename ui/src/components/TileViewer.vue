@@ -934,7 +934,7 @@ export default {
     },
 
     pixelCornersFromView(view) {
-      if (!this.map) return null;
+      if (!this.map || !this.scene) return null;
       const extent = this.extentFromView(view);
       // Coordinate from extent
       const tl = getTopLeft(extent);

@@ -14,7 +14,7 @@
       :interactive="interactive"
       :pannable="interactive"
       :zoomable="interactive"
-      :zoom-transition="regionTransition"
+      :zoom-transition="true"
       :focus="!!region"
       :crossNav="!!region"
       :viewport="viewport"
@@ -56,7 +56,7 @@ import { debounce } from 'throttle-debounce';
 import { computed, ref, toRefs, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getRegions, useApi, useScene } from '../api';
-import { useContextMenu, useRegion, useSeekableRegion, useTags, useViewport } from '../use.js';
+import { useContextMenu, useRegion, useRegionZoom, useSeekableRegion, useTags, useViewport } from '../use.js';
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
@@ -217,7 +217,8 @@ const applyGeoview = async (geoview) => {
     query: {
       ...router.currentRoute.value.query,
       p: `${lat.toFixed(7)},${lon.toFixed(7)},${z.toFixed(2)}z`,
-    }
+    },
+    hash: route.hash,
   });
 }
 
@@ -236,6 +237,8 @@ const onView = (view) => {
   lastView.value = view;
 }
 
+const regionZoom = useRegionZoom({ view: lastView, region });
+
 const exit = async () => {
   if (selectTag.value) {
     emit("selectTag", null);
@@ -244,20 +247,17 @@ const exit = async () => {
   if (!region.value) {
     return;
   }
-  const g = Geoview.fromView(lastView.value, scene.value?.bounds);
-  await applyGeoview(g);
-  await regionExit();
-}
-
-const externalExit = async () => {
-  if (!region.value) {
+  const zoomedIn = regionZoom.value > 1.1;
+  if (zoomedIn) {
+    zoomOut();
     return;
   }
-  const g = Geoview.fromView(view.value, scene.value?.bounds);
+  const zoomedOut = regionZoom.value < 0.9;
+  const g = Geoview.fromView(lastView.value, scene.value?.bounds);
   await applyGeoview([
     g[0],
     g[1],
-    Math.max(1, g[2] - 3),
+    zoomedOut ? Math.max(1, g[2] - 1/(1+regionZoom.value)) : Math.max(1, g[2] - 3),
   ])
   await regionExit();
 }
@@ -335,7 +335,7 @@ const onBoxSelect = async (bounds, shift) => {
 
 defineExpose({
   navigate,
-  exit: externalExit,
+  exit,
 })
 
 </script>
