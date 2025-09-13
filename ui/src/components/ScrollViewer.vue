@@ -170,7 +170,6 @@ watch(scene, async (newScene) => {
     return;
   }
   if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
-    updateFocusFile(null);
     scrollToPixels(0);
   }
   lastLoadedScene = newScene;
@@ -463,6 +462,7 @@ const view = computed(oldRegion => {
 
 watch([focusRegion, scrollMax], async ([focusRegion, _]) => {
   if (!focusRegion) return;
+  if (!focusFileId.value) return;
   if (canvas.value.height <= 1) return;
   if (regionId.value) return;
   if (focusRegion.data.id == lastFocusFileId) {

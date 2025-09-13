@@ -4,6 +4,7 @@
     :class="{ active: active }"
   >
     <ui-icon-button
+      :aria-label="active ? 'Close search' : 'Open search'"
       :class="{ hidden: loading }"
       @click="toggle()"
     >

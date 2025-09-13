@@ -409,11 +409,11 @@ export default {
     onSearch(query) {
       if (this.selected) {
         if (!this.searchActive && query == "") {
-          this.setQuery({ search: this.selected });
+          this.setQuery({ search: this.selected, f: undefined });
           return;
         }
       }
-      this.setQuery({ search: query });
+      this.setQuery({ search: query, f: undefined });
     },
   }
 }
