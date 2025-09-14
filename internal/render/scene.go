@@ -32,6 +32,7 @@ type Render struct {
 	Color             color.Color `json:"color"`
 	TransparencyMask  bool        `json:"transparency_mask"`
 	LogDraws          bool
+	NRGBA             bool
 
 	Sources io.Sources
 

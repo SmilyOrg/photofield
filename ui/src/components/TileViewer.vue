@@ -331,17 +331,17 @@ export default {
       });
       
       if (this.geo) {
-        main.on("prerender", event => {
-          const ctx = event.context;
-          // Fill in the transparent holes with the photos
-          ctx.globalCompositeOperation = "destination-over";
-        });
+        // main.on("prerender", event => {
+        //   const ctx = event.context;
+        //   // Fill in the transparent holes with the photos
+        //   ctx.globalCompositeOperation = "destination-over";
+        // });
         
-        main.on("postrender", event => {
-          const ctx = event.context;
-          // Restore the default
-          ctx.globalCompositeOperation = "source-over";
-        });
+        // main.on("postrender", event => {
+        //   const ctx = event.context;
+        //   // Restore the default
+        //   ctx.globalCompositeOperation = "source-over";
+        // });
       }
 
       main.on("postrender", event => {
@@ -434,22 +434,24 @@ export default {
           }),
         });
 
-        mask.on("prerender", event => {
-          const ctx = event.context;
-          // Cut out transparent holes out of the rendered map
-          // using the mask
-          ctx.globalCompositeOperation = "destination-out";
-        });
+        // mask.on("prerender", event => {
+        //   const ctx = event.context;
+        //   // Cut out transparent holes out of the rendered map
+        //   // using the mask
+        //   ctx.globalCompositeOperation = "destination-out";
+        // });
 
-        mask.on("postrender", event => {
-          const ctx = event.context;
-          // Restore the default
-          ctx.globalCompositeOperation = "source-over";
-        });
+        // mask.on("postrender", event => {
+        //   const ctx = event.context;
+        //   // Restore the default
+        //   ctx.globalCompositeOperation = "source-over";
+        // });
+
+        main.setOpacity(0.8);
 
         return [
           osmLayer,
-          mask,
+          // mask,
           main,
         ]
       } else {

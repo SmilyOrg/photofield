@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no" />
+        <link rel="preload" href="https://cdn.jsdelivr.net/npm/@finos/perspective/dist/wasm/perspective-server.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
+        <link rel="preload" href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer/dist/wasm/perspective-viewer.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
+        <link rel="preload" href="https://cdn.jsdelivr.net/npm/superstore-arrow/superstore.lz4.arrow" as="fetch" type="arraybuffer" crossorigin="anonymous" />
+        <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer/dist/css/themes.css" />
+        <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/@finos/perspective-workspace/dist/css/pro.css" />
+        <style>
+            perspective-workspace {
+                left: 0;
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                right: 0;
+            }
+
+            perspective-viewer[theme="Pro Light"] {
+                --d3fc-positive--gradient: linear-gradient(#94d0ff, #8795e8, #966bff, #ad8cff, #c774e8, #c774a9, #ff6ad5, #ff6a8b, #ff8b8b, #ffa58b, #ffde8b, #cdde8b, #8bde8b, #20de8b);
+            }
+        </style>
+        <script type="module">
+            import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.7.4/dist/cdn/perspective-viewer.js";
+            import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid@3.7.4/dist/cdn/perspective-viewer-datagrid.js";
+            import "https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc@3.7.4/dist/cdn/perspective-viewer-d3fc.js";
+            import "https://cdn.jsdelivr.net/npm/@finos/perspective-workspace@3.7.4/dist/cdn/perspective-workspace.js";
+
+            import perspective from "https://cdn.jsdelivr.net/npm/@finos/perspective@3.7.4/dist/cdn/perspective.js";
+
+            const worker = await perspective.worker();
+
+            const files = [
+                "Pareto front.config.json",
+                "Pareto front all.config.json",
+                "Pareto front with alpha support.config.json",
+                "avif latency vs. worker count.config.json",
+                "Format list.config.json",
+                "Minimum size per encoder.config.json",
+                "Name (with no quality).config.json",
+                "Pareto front short.config.json",
+                "Quality per encoder.config.json",
+                "Quality vs. latency per encoder.config.json",
+                "Quality vs. size per encoder.config.json",
+                "worker count & encoder latency.config.json",
+            ]
+
+            const datasource = async () => {
+                const request = fetch("./tilebench.csv");
+                const worker = await perspective.worker();
+                const response = await request;
+                const csv = await response.text();
+                const table = await worker.table(csv);
+                return table;
+            };
+
+            // Function to load configs from JSON files
+            const loadConfigs = async (files) => {
+                const configs = {};
+                for (const filename of files) {
+                    try {
+                        const res = await fetch(`./configs/${filename}`);
+                        if (res.ok) {
+                            const config = await res.json();
+                            config.table = "tilebench"; // Ensure the table name is set correctly
+                            const configId = filename
+                                .replace('.json', '')
+                                .replace('.config', '')
+                                .replaceAll(/[.()&]/g, '')
+                                .replaceAll(' ', '-')
+                                .toLowerCase();
+                            configs[configId] = config;
+                        }
+                    } catch (error) {
+                        console.error(`Failed to load config ${filename}:`, error);
+                    }
+                }
+
+                return configs;
+
+            };
+
+            const viewer = document.getElementsByTagName("perspective-viewer")[0];
+            window.workspace.tables.set("tilebench", datasource());
+            
+            // Load views dynamically and restore workspace
+            const configs = await loadConfigs(files);
+            const configIds = Object.keys(configs);
+            
+            window.workspace.restore({
+                settings: true,
+                plugin_config: { edit_mode: "EDIT" },
+                detail: {
+                    main: {
+                        type: "tab-area",
+                        widgets: configIds,
+                        currentIndex: Math.min(1, configIds.length - 1),
+                    },
+                },
+                viewers: configs
+            });
+        </script>
+    </head>
+    <body>
+        <perspective-workspace id="workspace"></perspective-workspace>
+    </body>
+</html>

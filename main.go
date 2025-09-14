@@ -36,7 +36,9 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/chai2010/webp"
 	"github.com/felixge/fgprof"
+	"github.com/gen2brain/avif"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -45,9 +47,16 @@ import (
 	"github.com/hako/durafmt"
 	"github.com/joho/godotenv"
 	"github.com/lpar/gzipped"
+	"modernc.org/libc"
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/rasterizer"
+
+	jackwebpcommon "git.sr.ht/~jackmordaunt/go-libwebp/lib/common"
+	jackwebpdyn "git.sr.ht/~jackmordaunt/go-libwebp/lib/dynamic/webp"
+	jackwebptra "git.sr.ht/~jackmordaunt/go-libwebp/lib/transpiled/webp"
+	jackwebp "git.sr.ht/~jackmordaunt/go-libwebp/webp"
+	"github.com/HugoSmits86/nativewebp"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -104,6 +113,7 @@ var tilePools sync.Map
 type TilePool struct {
 	TileSize int
 	Mask     bool
+	NRGBA    bool
 }
 
 var imageSource *image.Source
@@ -224,7 +234,8 @@ func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *r
 	c.ResetView()
 
 	img := r.CanvasImage
-	draw.Draw(img, img.Bounds(), &goimage.Uniform{r.BackgroundColor}, goimage.Point{}, draw.Src)
+	draw.Draw(img, img.Bounds(), &goimage.Uniform{canvas.Transparent}, goimage.Point{}, draw.Src)
+	// draw.Draw(img, img.Bounds(), &goimage.Uniform{r.BackgroundColor}, goimage.Point{}, draw.Src)
 
 	matrix := canvas.Identity.
 		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
@@ -241,6 +252,7 @@ func getTilePool(config *render.Render) *sync.Pool {
 	p := TilePool{
 		TileSize: config.TileSize,
 		Mask:     config.TransparencyMask,
+		NRGBA:    config.NRGBA,
 	}
 	stored, ok := tilePools.Load(p)
 	if ok {
@@ -255,6 +267,12 @@ func getTilePool(config *render.Render) *sync.Pool {
 					color.RGBA{0x00, 0x00, 0x00, 0x00},
 					color.RGBA{0xFF, 0xFF, 0xFF, 0xFF},
 				},
+			)
+		}
+	} else if p.NRGBA {
+		pool.New = func() interface{} {
+			return goimage.NewNRGBA(
+				goimage.Rect(0, 0, p.TileSize, p.TileSize),
 			)
 		}
 	} else {
@@ -820,6 +838,34 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		rn.BackgroundColor = color.Transparent
 	}
 
+	// Determine output format based on Accept header and capabilities
+	acceptHeader := r.Header.Get("Accept")
+	// acceptHeader := "image/webp;encoder=jackdyn;mem=nrgba;quality=80"
+	// acceptHeader := "image/webp;encoder=jack;mem=nrgba;quality=80"
+	// acceptHeader := "image/webp;encoder=jack;mem=nrgba;quality=90"
+
+	// Parse Accept header to determine preferred format
+	var outputFormat string
+	var contentType string
+	var acceptParams map[string]string
+
+	// Parse media type with parameters (e.g., "image/webp;encoder=jack;quality=70")
+	acceptType, paramStr, _ := strings.Cut(acceptHeader, ";")
+	acceptParams = make(map[string]string)
+
+	if paramStr != "" {
+		for _, param := range strings.Split(paramStr, ";") {
+			if key, value, found := strings.Cut(strings.TrimSpace(param), "="); found {
+				acceptParams[strings.TrimSpace(key)] = strings.TrimSpace(value)
+			}
+		}
+	}
+
+	// Apply memory format preference
+	if acceptParams["mem"] == "nrgba" {
+		rn.NRGBA = true
+	}
+
 	img, context := getTileImage(&rn)
 	defer putTileImage(&rn, img)
 
@@ -835,19 +881,101 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	}
 
-	if params.TransparencyMask != nil {
-		w.Header().Add("Content-Type", "image/png")
+	// Check for specific image format preferences in Accept header
+	if strings.Contains(acceptType, "image/avif") {
+		outputFormat = "avif"
+		contentType = "image/avif"
+	} else if strings.Contains(acceptType, "image/webp") {
+		outputFormat = "webp"
+		contentType = "image/webp"
+	} else if strings.Contains(acceptType, "image/jpeg") {
+		outputFormat = "jpeg"
+		contentType = "image/jpeg"
+	} else if strings.Contains(acceptType, "image/png") {
+		outputFormat = "png"
+		contentType = "image/png"
+	} else {
+		// Default fallback based on transparency mask
+		if rn.TransparencyMask {
+			outputFormat = "png"
+			contentType = "image/png"
+		} else {
+			outputFormat = "webp"
+			contentType = "image/webp"
+		}
+	}
+
+	// Force PNG for transparency masks regardless of Accept header
+	if rn.TransparencyMask {
+		outputFormat = "png"
+		contentType = "image/png"
+	}
+
+	qualityInt := 0
+	if q, ok := acceptParams["quality"]; ok {
+		if parsed, err := strconv.Atoi(q); err == nil {
+			qualityInt = parsed
+		}
+	}
+
+	w.Header().Add("Content-Type", contentType)
+	switch outputFormat {
+	case "png":
 		png.Encode(w, img)
-		return
+	case "webp":
+		encoder := acceptParams["encoder"]
+		quality := acceptParams["quality"]
+
+		switch encoder {
+		case "chai2010":
+			opts := &webp.Options{}
+			if qualityInt != 0 {
+				opts.Quality = float32(qualityInt)
+			}
+			webp.Encode(w, img, opts)
+		case "jack":
+			var opts []jackwebp.EncodeOption
+			if quality != "" {
+				opts = append(opts, jackwebp.Quality(float32(qualityInt)/100))
+			}
+			jackwebp.Encode(w, img, opts...)
+		case "jackdyn":
+			// jackwebpdyn.EncodeImpl(w, img.(*goimage.NRGBA), float32(qualityInt)/100)
+			jackwebpcommon.Encode(w, img.(*goimage.NRGBA), float32(qualityInt), jackwebpdyn.WebPEncodeRGBA, jackwebpdyn.WebPFree)
+		case "jacktra":
+			// jackwebptra.EncodeImpl(w, img.(*goimage.NRGBA), float32(qualityInt)/100)
+			tls := libc.NewTLS()
+			defer tls.Close()
+			jackwebpcommon.Encode(w, img.(*goimage.NRGBA), float32(qualityInt),
+				func(in uintptr, w, h, bps int32, q float32, out uintptr) uint64 {
+					return jackwebptra.WebPEncodeRGBA(tls, in, w, h, bps, q, out)
+				},
+				func(p uintptr) {
+					jackwebptra.WebPFree(tls, p)
+				},
+			)
+
+		default:
+			nativewebp.Encode(w, img, &nativewebp.Options{})
+		}
+	case "avif":
+		opts := avif.Options{}
+		if qualityInt != 0 {
+			opts.Quality = qualityInt
+		}
+		avif.Encode(w, img, opts)
+	case "jpeg":
+		if rn.QualityPreset == render.QualityPresetHigh {
+			qualityInt = 100
+		} else if qualityInt == 0 {
+			qualityInt = 80
+		}
+		trace.WithRegion(ctx, "jpeg.Encode", func() {
+			codec.EncodeJpeg(w, img, qualityInt)
+		})
+	default:
+		problem(w, r, http.StatusBadRequest, "Unsupported output format")
 	}
-	w.Header().Add("Content-Type", "image/jpeg")
-	quality := 80
-	if rn.QualityPreset == render.QualityPresetHigh {
-		quality = 100
-	}
-	trace.WithRegion(ctx, "jpeg.Encode", func() {
-		codec.EncodeJpeg(w, img, quality)
-	})
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
@@ -1623,6 +1751,11 @@ func main() {
 	}
 
 	log.Printf("photofield %s", version)
+
+	err = jackwebpdyn.Init()
+	if err != nil {
+		log.Fatalf("failed to initialize jackwebpdyn: %v", err)
+	}
 
 	loadEnv()
 
