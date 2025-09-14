@@ -21,3 +21,4 @@ node_modules/
 .docker-image-id
 .task-release-changelog.md
 testdata/
+libwebp_amd64.so
