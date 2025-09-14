@@ -47,8 +47,8 @@ func main() {
 		log.Fatal("Scene ID is required (use -scene flag)")
 	}
 
-	if *maxX <= *minX || *maxY <= *minY {
-		log.Fatal("Invalid coordinate ranges: max values must be greater than min values")
+	if *maxX < *minX || *maxY < *minY {
+		log.Fatal("Invalid coordinate ranges: max values must be greater than or equal to min values")
 	}
 
 	fmt.Fprintf(os.Stderr, "Benchmarking tiles for scene %s\n", *sceneID)
