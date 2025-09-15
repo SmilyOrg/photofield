@@ -49,13 +49,13 @@ type MediaRanges []MediaRange
 var encoderMap = map[EncoderType]Encoder{
 	{"jpeg", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
 	{"png", ""}:  {png.Encode, ImageMemRGBA, "image/png"},
-	// {"avif", ""}: {avif.Encode, ImageMemRGBA},
-	// {"webp", "chai"}:    {webpchai.Encode, ImageMemRGBA},
+	// {"avif", ""}:        {avif.Encode, ImageMemRGBA, "image/avif"},
+	// {"webp", "chai"}:    {webpchai.Encode, ImageMemRGBA, "image/webp"},
 	{"webp", ""}:        {webpjack.Encode, ImageMemNRGBA, "image/webp"},
 	{"webp", "jack"}:    {webpjack.Encode, ImageMemNRGBA, "image/webp"},
 	{"webp", "jackdyn"}: {webpjackdyn.Encode, ImageMemNRGBA, "image/webp"},
 	{"webp", "jacktra"}: {webpjacktra.Encode, ImageMemNRGBA, "image/webp"},
-	// {"webp", "hugo"}:    {webphugo.Encode, ImageMemNRGBA},
+	// {"webp", "hugo"}:    {webphugo.Encode, ImageMemNRGBA, "image/webp"},
 	{"*", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
 }
 

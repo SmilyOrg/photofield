@@ -855,6 +855,9 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		encoder, mr, ok = ranges.FastestEncoder()
 	}
 	if !ok {
+		encoder, mr, ok = ranges.FirstSupported()
+	}
+	if !ok {
 		problem(w, r, http.StatusBadRequest, "No supported image format in Accept header")
 		return
 	}
