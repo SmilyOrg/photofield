@@ -224,8 +224,7 @@ func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *r
 	c.ResetView()
 
 	img := r.CanvasImage
-	draw.Draw(img, img.Bounds(), &goimage.Uniform{canvas.Transparent}, goimage.Point{}, draw.Src)
-	// draw.Draw(img, img.Bounds(), &goimage.Uniform{r.BackgroundColor}, goimage.Point{}, draw.Src)
+	draw.Draw(img, img.Bounds(), &goimage.Uniform{r.BackgroundColor}, goimage.Point{}, draw.Src)
 
 	matrix := canvas.Identity.
 		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
@@ -725,7 +724,10 @@ func GetTilesRequestPriority(params openapi.GetScenesSceneIdTilesParams) int8 {
 	return 100
 }
 
-func decodeColor(s string) (color.RGBA, error) {
+func decodeColor(s string) (color.Color, error) {
+	if s == "transparent" {
+		return color.Transparent, nil
+	}
 	c, err := hex.DecodeString(strings.TrimPrefix(s, "#"))
 	if err != nil {
 		return color.RGBA{}, err
@@ -844,7 +846,14 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		return
 	}
 
-	encoder, mr, ok := ranges.BestEncoder()
+	var encoder codec.Encoder
+	var mr codec.MediaRange
+	var ok bool
+	if rn.BackgroundColor == color.Transparent {
+		encoder, mr, ok = ranges.AlphaEncoder()
+	} else {
+		encoder, mr, ok = ranges.FastestEncoder()
+	}
 	if !ok {
 		problem(w, r, http.StatusBadRequest, "No supported image format in Accept header")
 		return
@@ -869,11 +878,17 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	}
 
-	w.Header().Add("Content-Type", fmt.Sprintf("%s/%s", mr.Type, mr.Subtype))
+	w.Header().Add("Content-Type", encoder.ContentType)
+	w.Header().Add("Vary", "Accept")
 
 	quality := mr.QualityParam()
 	if quality == 0 {
-		quality = 80
+		switch mr.Subtype {
+		case "webp":
+			quality = 60
+		default:
+			quality = 80
+		}
 	}
 	if rn.QualityPreset == render.QualityPresetHigh {
 		quality = 100

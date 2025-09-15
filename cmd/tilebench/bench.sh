@@ -6,11 +6,10 @@ go build -o tilebench .
 
 SCENE="${1}"
 
-ZOOM=17
-MIN_X=40700
-MAX_X=40720
-MIN_Y=74100
-MAX_Y=74120
+ZOOM=17; MIN_X=40700; MAX_X=40720; MIN_Y=74100; MAX_Y=74120
+# ZOOM=22; MIN_X=1302485; MAX_X=1302499; MIN_Y=2371466; MAX_Y=2371484
+
+
 WORKERS=(1 2 4 8 16 32)
 # WORKERS=(8)
 
@@ -48,6 +47,38 @@ FORMATS=(
     "image/webp;encoder=jacktra;quality=60"
     "image/webp;encoder=jacktra;quality=50"
 )
+
+# FORMATS=(
+#     "image/jpeg;quality=1"
+#     "image/jpeg;quality=2"
+#     "image/jpeg;quality=4"
+#     "image/jpeg;quality=8"
+#     "image/jpeg;quality=10"
+#     "image/jpeg;quality=20"
+#     "image/jpeg;quality=30"
+#     "image/jpeg;quality=40"
+#     "image/jpeg;quality=50"
+#     "image/jpeg;quality=60"
+#     "image/jpeg;quality=70"
+#     "image/jpeg;quality=80"
+#     "image/jpeg;quality=90"
+#     "image/jpeg;quality=100"
+    
+#     "image/webp;quality=1"
+#     "image/webp;quality=2"
+#     "image/webp;quality=4"
+#     "image/webp;quality=8"
+#     "image/webp;quality=10"
+#     "image/webp;quality=20"
+#     "image/webp;quality=30"
+#     "image/webp;quality=40"
+#     "image/webp;quality=50"
+#     "image/webp;quality=60"
+#     "image/webp;quality=70"
+#     "image/webp;quality=80"
+#     "image/webp;quality=90"
+#     "image/webp;quality=100"
+# )
 
 echo "x,y,size,latency,format,workers,error" > tilebench.csv
 for workers in "${WORKERS[@]}"; do

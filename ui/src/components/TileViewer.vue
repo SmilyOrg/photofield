@@ -447,8 +447,6 @@ export default {
         //   ctx.globalCompositeOperation = "source-over";
         // });
 
-        main.setOpacity(0.8);
-
         return [
           osmLayer,
           // mask,
@@ -834,6 +832,9 @@ export default {
       if (this.colorMode === "dark") {
         extra.color = "#FFFFFF";
         extra.background_color = "#222222";
+      }
+      if (this.geo) {
+        extra.background_color = "transparent";
       }
       return getTileUrl(
         this.scene.id,

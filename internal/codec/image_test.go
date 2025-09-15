@@ -3,10 +3,8 @@ package codec
 import (
 	"testing"
 
-	"photofield/internal/codec/avif"
 	"photofield/internal/codec/jpeg"
 	"photofield/internal/codec/png"
-	webpchai "photofield/internal/codec/webp/chai"
 	webphugo "photofield/internal/codec/webp/hugo"
 	webpjack "photofield/internal/codec/webp/jack"
 	webpjackdyn "photofield/internal/codec/webp/jack/dynamic"
@@ -45,24 +43,24 @@ func TestMediaRanges_Best(t *testing.T) {
 			expectSubtype: "webp",
 			expectEncoder: webphugo.Encode,
 		},
-		{
-			name:          "finds avif encoder",
-			accept:        "image/avif",
-			expectSubtype: "avif",
-			expectEncoder: avif.Encode,
-		},
+		// {
+		// 	name:          "finds avif encoder",
+		// 	accept:        "image/avif",
+		// 	expectSubtype: "avif",
+		// 	expectEncoder: avif.Encode,
+		// },
 		{
 			name:          "returns first matching encoder",
 			accept:        "image/jpeg, image/webp",
 			expectSubtype: "jpeg",
 			expectEncoder: jpeg.Encode,
 		},
-		{
-			name:          "handles encoder parameter for webp",
-			accept:        "image/webp;encoder=chai",
-			expectSubtype: "webp",
-			expectEncoder: webpchai.Encode,
-		},
+		// {
+		// 	name:          "handles encoder parameter for webp",
+		// 	accept:        "image/webp;encoder=chai",
+		// 	expectSubtype: "webp",
+		// 	expectEncoder: webpchai.Encode,
+		// },
 		{
 			name:          "handles encoder parameter for webp - jack",
 			accept:        "image/webp;encoder=jack",
@@ -92,6 +90,12 @@ func TestMediaRanges_Best(t *testing.T) {
 			expectEncoder: jpeg.Encode,
 		},
 		{
+			name:          "accept all types uses jpeg",
+			accept:        "*/*",
+			expectSubtype: "*",
+			expectEncoder: jpeg.Encode,
+		},
+		{
 			name:          "returns nil for unsupported type",
 			accept:        "image/gif",
 			expectEncoder: nil,
@@ -108,18 +112,18 @@ func TestMediaRanges_Best(t *testing.T) {
 			expectSubtype: "png",
 			expectEncoder: png.Encode,
 		},
-		{
-			name:          "real world browser accept header",
-			accept:        "image/avif, image/webp, image/png, image/svg+xml, image/*;q=0.8, */*;q=0.5",
-			expectSubtype: "avif",
-			expectEncoder: avif.Encode,
-		},
-		{
-			name:          "modern browser with quality preferences",
-			accept:        "image/avif;q=0.9, image/webp;q=0.8, image/jpeg;q=0.6, image/*;q=0.4",
-			expectSubtype: "avif",
-			expectEncoder: avif.Encode,
-		},
+		// {
+		// 	name:          "real world browser accept header",
+		// 	accept:        "image/avif, image/webp, image/png, image/svg+xml, image/*;q=0.8, */*;q=0.5",
+		// 	expectSubtype: "avif",
+		// 	expectEncoder: avif.Encode,
+		// },
+		// {
+		// 	name:          "modern browser with quality preferences",
+		// 	accept:        "image/avif;q=0.9, image/webp;q=0.8, image/jpeg;q=0.6, image/*;q=0.4",
+		// 	expectSubtype: "avif",
+		// 	expectEncoder: avif.Encode,
+		// },
 		{
 			name:          "jpeg with quality parameter",
 			accept:        "image/jpeg;quality=100",
@@ -167,48 +171,48 @@ func TestMediaRanges_Best(t *testing.T) {
 			accept:        "image/webp;encoder=HugoSmits86",
 			expectEncoder: nil,
 		},
-		{
-			name:          "webp chai with quality 100",
-			accept:        "image/webp;encoder=chai;quality=100",
-			expectSubtype: "webp",
-			expectEncoder: webpchai.Encode,
-			expectQuality: 100,
-		},
-		{
-			name:          "webp chai with quality 90",
-			accept:        "image/webp;encoder=chai;quality=90",
-			expectSubtype: "webp",
-			expectEncoder: webpchai.Encode,
-			expectQuality: 90,
-		},
-		{
-			name:          "webp chai with quality 80",
-			accept:        "image/webp;encoder=chai;quality=80",
-			expectSubtype: "webp",
-			expectEncoder: webpchai.Encode,
-			expectQuality: 80,
-		},
-		{
-			name:          "webp chai with quality 70",
-			accept:        "image/webp;encoder=chai;quality=70",
-			expectSubtype: "webp",
-			expectEncoder: webpchai.Encode,
-			expectQuality: 70,
-		},
-		{
-			name:          "webp chai with quality 60",
-			accept:        "image/webp;encoder=chai;quality=60",
-			expectSubtype: "webp",
-			expectEncoder: webpchai.Encode,
-			expectQuality: 60,
-		},
-		{
-			name:          "webp chai with quality 50",
-			accept:        "image/webp;encoder=chai;quality=50",
-			expectSubtype: "webp",
-			expectEncoder: webpchai.Encode,
-			expectQuality: 50,
-		},
+		// {
+		// 	name:          "webp  with quality 100",
+		// 	accept:        "image/webp;encoder=chai;quality=100",
+		// 	expectSubtype: "webp",chai
+		// 	expectEncoder: webpchai.Encode,
+		// 	expectQuality: 100,
+		// },
+		// {
+		// 	name:          "webp chai with quality 90",
+		// 	accept:        "image/webp;encoder=chai;quality=90",
+		// 	expectSubtype: "webp",
+		// 	expectEncoder: webpchai.Encode,
+		// 	expectQuality: 90,
+		// },
+		// {
+		// 	name:          "webp chai with quality 80",
+		// 	accept:        "image/webp;encoder=chai;quality=80",
+		// 	expectSubtype: "webp",
+		// 	expectEncoder: webpchai.Encode,
+		// 	expectQuality: 80,
+		// },
+		// {
+		// 	name:          "webp chai with quality 70",
+		// 	accept:        "image/webp;encoder=chai;quality=70",
+		// 	expectSubtype: "webp",
+		// 	expectEncoder: webpchai.Encode,
+		// 	expectQuality: 70,
+		// },
+		// {
+		// 	name:          "webp chai with quality 60",
+		// 	accept:        "image/webp;encoder=chai;quality=60",
+		// 	expectSubtype: "webp",
+		// 	expectEncoder: webpchai.Encode,
+		// 	expectQuality: 60,
+		// },
+		// {
+		// 	name:          "webp chai with quality 50",
+		// 	accept:        "image/webp;encoder=chai;quality=50",
+		// 	expectSubtype: "webp",
+		// 	expectEncoder: webpchai.Encode,
+		// 	expectQuality: 50,
+		// },
 		{
 			name:          "webp jackdyn with mem and quality 100",
 			accept:        "image/webp;encoder=jackdyn;quality=100",
@@ -308,7 +312,7 @@ func TestMediaRanges_Best(t *testing.T) {
 				// No ranges and no expected encoder is a valid case
 				return
 			}
-			encoder, mr, ok := ranges.BestEncoder()
+			encoder, mr, ok := ranges.FirstSupported()
 
 			if tt.expectQuality != 0 {
 				quality := mr.QualityParam()

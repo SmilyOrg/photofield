@@ -8,11 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"photofield/internal/codec/avif"
 	"photofield/internal/codec/jpeg"
 	"photofield/internal/codec/png"
-	webpchai "photofield/internal/codec/webp/chai"
-	webphugo "photofield/internal/codec/webp/hugo"
 	webpjack "photofield/internal/codec/webp/jack"
 	webpjackdyn "photofield/internal/codec/webp/jack/dynamic"
 	webpjacktra "photofield/internal/codec/webp/jack/transpiled"
@@ -38,8 +35,9 @@ type MediaRange struct {
 type EncodeFunc func(w io.Writer, m image.Image, quality int) error
 
 type Encoder struct {
-	Func EncodeFunc
-	Mem  ImageMem
+	Func        EncodeFunc
+	Mem         ImageMem
+	ContentType string
 }
 
 type EncoderType struct {
@@ -49,16 +47,44 @@ type EncoderType struct {
 type MediaRanges []MediaRange
 
 var encoderMap = map[EncoderType]Encoder{
-	{"jpeg", ""}:        {jpeg.Encode, ImageMemRGBA},
-	{"png", ""}:         {png.Encode, ImageMemRGBA},
-	{"avif", ""}:        {avif.Encode, ImageMemRGBA},
-	{"webp", "chai"}:    {webpchai.Encode, ImageMemRGBA},
-	{"webp", ""}:        {webpjack.Encode, ImageMemNRGBA},
-	{"webp", "jack"}:    {webpjack.Encode, ImageMemNRGBA},
-	{"webp", "jackdyn"}: {webpjackdyn.Encode, ImageMemNRGBA},
-	{"webp", "jacktra"}: {webpjacktra.Encode, ImageMemNRGBA},
-	{"webp", "hugo"}:    {webphugo.Encode, ImageMemNRGBA},
-	{"*", ""}:           {jpeg.Encode, ImageMemRGBA},
+	{"jpeg", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
+	{"png", ""}:  {png.Encode, ImageMemRGBA, "image/png"},
+	// {"avif", ""}: {avif.Encode, ImageMemRGBA},
+	// {"webp", "chai"}:    {webpchai.Encode, ImageMemRGBA},
+	{"webp", ""}:        {webpjack.Encode, ImageMemNRGBA, "image/webp"},
+	{"webp", "jack"}:    {webpjack.Encode, ImageMemNRGBA, "image/webp"},
+	{"webp", "jackdyn"}: {webpjackdyn.Encode, ImageMemNRGBA, "image/webp"},
+	{"webp", "jacktra"}: {webpjacktra.Encode, ImageMemNRGBA, "image/webp"},
+	// {"webp", "hugo"}:    {webphugo.Encode, ImageMemNRGBA},
+	{"*", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
+}
+
+type Encoders []EncoderType
+
+var fastestEncoders = Encoders{
+	{"jpeg", ""},
+	{"webp", "jackdyn"},
+	{"webp", "jacktra"},
+	{"png", ""},
+}
+
+var alphaEncoders = Encoders{
+	{"webp", "jack"},
+	{"png", ""},
+}
+
+func (ets Encoders) FirstMatch(ranges MediaRanges) (Encoder, MediaRange, bool) {
+	for _, et := range ets {
+		for _, mr := range ranges {
+			if mr.Matches("image", et.Subtype) {
+				enc, ok := encoderMap[et]
+				if ok {
+					return enc, mr, true
+				}
+			}
+		}
+	}
+	return Encoder{}, MediaRange{}, false
 }
 
 // String returns the string representation of the media range
@@ -118,8 +144,8 @@ func (mr MediaRange) QualityParam() int {
 	return quality
 }
 
-func (mr MediaRanges) BestEncoder() (Encoder, MediaRange, bool) {
-	for _, mr := range mr {
+func (ranges MediaRanges) FirstSupported() (Encoder, MediaRange, bool) {
+	for _, mr := range ranges {
 		if mr.Type != "image" && mr.Type != "*" {
 			continue
 		}
@@ -134,6 +160,14 @@ func (mr MediaRanges) BestEncoder() (Encoder, MediaRange, bool) {
 	return Encoder{}, MediaRange{}, false
 }
 
+func (ranges MediaRanges) FastestEncoder() (Encoder, MediaRange, bool) {
+	return fastestEncoders.FirstMatch(ranges)
+}
+
+func (ranges MediaRanges) AlphaEncoder() (Encoder, MediaRange, bool) {
+	return alphaEncoders.FirstMatch(ranges)
+}
+
 func EncodeAccepted(w io.Writer, m image.Image, acceptHeader string) error {
 	ranges, err := ParseAccept(acceptHeader)
 	if err != nil {
@@ -144,7 +178,7 @@ func EncodeAccepted(w io.Writer, m image.Image, acceptHeader string) error {
 		return fmt.Errorf("no valid media ranges found in Accept header")
 	}
 
-	encoder, mr, ok := ranges.BestEncoder()
+	encoder, mr, ok := ranges.FirstSupported()
 	if !ok {
 		return fmt.Errorf("no suitable encoder found for Accept header")
 	}
