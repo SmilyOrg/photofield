@@ -8,8 +8,11 @@ import (
 	"strconv"
 	"strings"
 
+	"photofield/internal/codec/avif"
 	"photofield/internal/codec/jpeg"
 	"photofield/internal/codec/png"
+	webpchai "photofield/internal/codec/webp/chai"
+	webphugo "photofield/internal/codec/webp/hugo"
 	webpjack "photofield/internal/codec/webp/jack"
 	webpjackdyn "photofield/internal/codec/webp/jack/dynamic"
 	webpjacktra "photofield/internal/codec/webp/jack/transpiled"
@@ -47,16 +50,16 @@ type EncoderType struct {
 type MediaRanges []MediaRange
 
 var encoderMap = map[EncoderType]Encoder{
-	{"jpeg", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
-	{"png", ""}:  {png.Encode, ImageMemRGBA, "image/png"},
-	// {"avif", ""}:        {avif.Encode, ImageMemRGBA, "image/avif"},
-	// {"webp", "chai"}:    {webpchai.Encode, ImageMemRGBA, "image/webp"},
+	{"jpeg", ""}:        {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
+	{"png", ""}:         {png.Encode, ImageMemRGBA, "image/png"},
+	{"avif", ""}:        {avif.Encode, ImageMemRGBA, "image/avif"},
+	{"webp", "chai"}:    {webpchai.Encode, ImageMemRGBA, "image/webp"},
 	{"webp", ""}:        {webpjack.Encode, ImageMemNRGBA, "image/webp"},
 	{"webp", "jack"}:    {webpjack.Encode, ImageMemNRGBA, "image/webp"},
 	{"webp", "jackdyn"}: {webpjackdyn.Encode, ImageMemNRGBA, "image/webp"},
 	{"webp", "jacktra"}: {webpjacktra.Encode, ImageMemNRGBA, "image/webp"},
-	// {"webp", "hugo"}:    {webphugo.Encode, ImageMemNRGBA, "image/webp"},
-	{"*", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
+	{"webp", "hugo"}:    {webphugo.Encode, ImageMemNRGBA, "image/webp"},
+	{"*", ""}:           {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
 }
 
 type Encoders []EncoderType
@@ -76,7 +79,7 @@ var alphaEncoders = Encoders{
 func (ets Encoders) FirstMatch(ranges MediaRanges) (Encoder, MediaRange, bool) {
 	for _, et := range ets {
 		for _, mr := range ranges {
-			if mr.Matches("image", et.Subtype) {
+			if mr.Matches("image", et.Subtype, et.Encoder) {
 				enc, ok := encoderMap[et]
 				if ok {
 					return enc, mr, true
@@ -110,7 +113,10 @@ func (mr MediaRange) String() string {
 }
 
 // Matches returns true if this media range matches the given media type
-func (mr MediaRange) Matches(mediaType, mediaSubtype string) bool {
+func (mr MediaRange) Matches(mediaType, mediaSubtype, encoder string) bool {
+	if encoder != "" && mr.Encoder() != encoder {
+		return false
+	}
 	if mr.Type == "*" {
 		return true
 	}
@@ -118,6 +124,10 @@ func (mr MediaRange) Matches(mediaType, mediaSubtype string) bool {
 		return false
 	}
 	return mr.Subtype == "*" || mr.Subtype == mediaSubtype
+}
+
+func (mr MediaRange) Encoder() string {
+	return mr.Parameters["encoder"]
 }
 
 // Specificity returns the specificity level for precedence ordering
@@ -293,28 +303,4 @@ func parseParameter(param string) (string, string, error) {
 	}
 
 	return key, value, nil
-}
-
-// FindBestMatch finds the best matching media range for a given content type
-func (ranges MediaRanges) FindBestMatch(contentType, contentSubtype string) (MediaRange, bool) {
-	var bestMatch *MediaRange
-	highestQuality := -1.0
-	highestSpecificity := -1
-
-	for i := range ranges {
-		mr := &ranges[i]
-		if mr.Matches(contentType, contentSubtype) {
-			specificity := mr.Specificity()
-			if mr.Quality > highestQuality || (mr.Quality == highestQuality && specificity > highestSpecificity) {
-				bestMatch = mr
-				highestQuality = mr.Quality
-				highestSpecificity = specificity
-			}
-		}
-	}
-
-	if bestMatch == nil {
-		return MediaRange{}, false
-	}
-	return *bestMatch, true
 }
