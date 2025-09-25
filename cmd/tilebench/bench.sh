@@ -16,48 +16,48 @@ SCENE="${1}"
 ZOOM=19; MIN_X=162810; MIN_Y=296430; EDGE=20;
 MAX_X=$((MIN_X + EDGE)); MAX_Y=$((MIN_Y + EDGE));
 
-# WORKERS=(1 2 4 8 16 32)
+WORKERS=(1 2 4 8 16 32)
 # WORKERS=(8)
-WORKERS=(32)
-
-FORMATS=(
-    "image/jpeg;quality=80"
-)
+# WORKERS=(32)
 
 # FORMATS=(
-#     "image/jpeg;quality=100"
-#     "image/jpeg;quality=90"
 #     "image/jpeg;quality=80"
-#     "image/jpeg;quality=70"
-#     "image/jpeg;quality=60"
-#     "image/jpeg;quality=50"
-#     "image/png"
-#     "image/avif;quality=50"
-#     "image/avif;quality=60"
-#     "image/avif;quality=70"
-#     "image/avif;quality=80"
-#     "image/avif;quality=90"
-#     "image/avif;quality=100"
-#     "image/webp;encoder=hugo"
-#     "image/webp;encoder=chai;quality=100"
-#     "image/webp;encoder=chai;quality=90"
-#     "image/webp;encoder=chai;quality=80"
-#     "image/webp;encoder=chai;quality=70"
-#     "image/webp;encoder=chai;quality=60"
-#     "image/webp;encoder=chai;quality=50"
-#     "image/webp;encoder=jackdyn;quality=100"
-#     "image/webp;encoder=jackdyn;quality=90"
-#     "image/webp;encoder=jackdyn;quality=80"
-#     "image/webp;encoder=jackdyn;quality=70"
-#     "image/webp;encoder=jackdyn;quality=60"
-#     "image/webp;encoder=jackdyn;quality=50"
-#     "image/webp;encoder=jacktra;quality=100"
-#     "image/webp;encoder=jacktra;quality=90"
-#     "image/webp;encoder=jacktra;quality=80"
-#     "image/webp;encoder=jacktra;quality=70"
-#     "image/webp;encoder=jacktra;quality=60"
-#     "image/webp;encoder=jacktra;quality=50"
 # )
+
+FORMATS=(
+    "image/jpeg;quality=100"
+    "image/jpeg;quality=90"
+    "image/jpeg;quality=80"
+    "image/jpeg;quality=70"
+    "image/jpeg;quality=60"
+    "image/jpeg;quality=50"
+    "image/png"
+    "image/avif;quality=50"
+    "image/avif;quality=60"
+    "image/avif;quality=70"
+    "image/avif;quality=80"
+    "image/avif;quality=90"
+    "image/avif;quality=100"
+    "image/webp;encoder=hugo"
+    "image/webp;encoder=chai;quality=100"
+    "image/webp;encoder=chai;quality=90"
+    "image/webp;encoder=chai;quality=80"
+    "image/webp;encoder=chai;quality=70"
+    "image/webp;encoder=chai;quality=60"
+    "image/webp;encoder=chai;quality=50"
+    "image/webp;encoder=jackdyn;quality=100"
+    "image/webp;encoder=jackdyn;quality=90"
+    "image/webp;encoder=jackdyn;quality=80"
+    "image/webp;encoder=jackdyn;quality=70"
+    "image/webp;encoder=jackdyn;quality=60"
+    "image/webp;encoder=jackdyn;quality=50"
+    "image/webp;encoder=jacktra;quality=100"
+    "image/webp;encoder=jacktra;quality=90"
+    "image/webp;encoder=jacktra;quality=80"
+    "image/webp;encoder=jacktra;quality=70"
+    "image/webp;encoder=jacktra;quality=60"
+    "image/webp;encoder=jacktra;quality=50"
+)
 
 # FORMATS=(
 #     "image/jpeg;quality=1"
