@@ -30,20 +30,24 @@
 
             const worker = await perspective.worker();
 
-            const files = [
-                "Pareto front.config.json",
-                "Pareto front all.config.json",
-                "Pareto front with alpha support.config.json",
-                "avif latency vs. worker count.config.json",
-                "Format list.config.json",
-                "Minimum size per encoder.config.json",
-                "Name (with no quality).config.json",
-                "Pareto front short.config.json",
-                "Quality per encoder.config.json",
-                "Quality vs. latency per encoder.config.json",
-                "Quality vs. size per encoder.config.json",
-                "worker count & encoder latency.config.json",
-            ]
+            // Load files from config.json
+            const loadFilesFromConfig = async () => {
+                try {
+                    const res = await fetch('./config.json');
+                    if (res.ok) {
+                        const config = await res.json();
+                        return config.files || [];
+                    } else {
+                        console.error('Failed to load config.json');
+                        return [];
+                    }
+                } catch (error) {
+                    console.error('Error loading config.json:', error);
+                    return [];
+                }
+            };
+
+            const files = await loadFilesFromConfig();
 
             const datasource = async () => {
                 const request = fetch("./tilebench.csv");
@@ -66,7 +70,7 @@
                             const configId = filename
                                 .replace('.json', '')
                                 .replace('.config', '')
-                                .replaceAll(/[.()&]/g, '')
+                                .replaceAll(/[.,()&+]/g, '')
                                 .replaceAll(' ', '-')
                                 .toLowerCase();
                             configs[configId] = config;

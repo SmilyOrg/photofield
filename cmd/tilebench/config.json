@@ -1,0 +1,33 @@
+{
+  "files": [
+    "avif latency vs. worker count.config.json",
+    "Format list.config.json",
+    "Formats with alpha support.config.json",
+    "Grid tile size _ latency.config.json",
+    "JPEG size vs. latency (80_, 8 workers).config.json",
+    "JPEG size vs. latency at 80_ quality.config.json",
+    "JPEG size vs. latency.config.json",
+    "JPEG size vs. latency no labels (80_, 8 workers).config.json",
+    "JPEG size vs. latency with labels at 80_ quality.config.json",
+    "JPEG size vs. latency _ worker count.config.json",
+    "JPEG vs. WEBP size vs. latency at 80_.config.json",
+    "Minimum size per encoder.config.json",
+    "Name (with no quality).config.json",
+    "Pareto front all.config.json",
+    "Pareto front all with quality.config.json",
+    "Pareto front at 80_.config.json",
+    "Pareto front by name (all qualities).config.json",
+    "Pareto front.config.json",
+    "Pareto front per type.config.json",
+    "Pareto front quality.config.json",
+    "Pareto front quality + workers.config.json",
+    "Pareto front short.config.json",
+    "Pareto front with alpha support.config.json",
+    "Pareto front workers.config.json",
+    "Quality per encoder.config.json",
+    "Quality vs. latency per encoder.config.json",
+    "Quality vs. size per encoder.config.json",
+    "Total size per encoder quality.config.json",
+    "worker count & encoder latency.config.json"
+  ]
+}

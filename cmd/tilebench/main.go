@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -25,6 +27,12 @@ type TileStats struct {
 	MedianLatency time.Duration
 	TotalBytes    int64
 	TotalTime     time.Duration
+}
+
+// Problem represents an HTTP problem response from photofield
+type Problem struct {
+	Status int    `json:"status"`
+	Title  string `json:"title"`
 }
 
 func main() {
@@ -249,6 +257,15 @@ func worker(requests <-chan TileRequest, results chan<- TileResult, csvOutput bo
 
 		if resp.StatusCode != http.StatusOK {
 			httpErr := fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+
+			// Try to parse JSON problem response
+			if contentType := resp.Header.Get("Content-Type"); strings.Contains(contentType, "application/json") {
+				var problem Problem
+				if err := json.Unmarshal(body, &problem); err == nil && problem.Title != "" {
+					httpErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, problem.Title)
+				}
+			}
+
 			result := TileResult{
 				X:          req.X,
 				Y:          req.Y,
@@ -261,8 +278,6 @@ func worker(requests <-chan TileRequest, results chan<- TileResult, csvOutput bo
 			results <- result
 			continue
 		}
-
-		// fmt.Fprintf(os.Stderr, "fetch %6d %6d %6d %s\n", req.X, req.Y, size, req.AcceptType)
 
 		result := TileResult{
 			Size:       int64(size),
