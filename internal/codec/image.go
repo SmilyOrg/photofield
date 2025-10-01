@@ -38,6 +38,7 @@ type Encoder struct {
 	Func        EncodeFunc
 	Mem         ImageMem
 	ContentType string
+	Type        EncoderType
 }
 
 type EncoderType struct {
@@ -47,16 +48,16 @@ type EncoderType struct {
 type MediaRanges []MediaRange
 
 var encoderMap = map[EncoderType]Encoder{
-	{"jpeg", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
-	{"png", ""}:  {png.Encode, ImageMemRGBA, "image/png"},
-	// {"avif", ""}:        {avif.Encode, ImageMemRGBA, "image/avif"},
-	// {"webp", "chai"}:    {webpchai.Encode, ImageMemRGBA, "image/webp"},
-	{"webp", ""}:        {webpjack.Encode, ImageMemNRGBA, "image/webp"},
-	{"webp", "jack"}:    {webpjack.Encode, ImageMemNRGBA, "image/webp"},
-	{"webp", "jackdyn"}: {webpjackdyn.Encode, ImageMemNRGBA, "image/webp"},
-	{"webp", "jacktra"}: {webpjacktra.Encode, ImageMemNRGBA, "image/webp"},
-	// {"webp", "hugo"}:    {webphugo.Encode, ImageMemNRGBA, "image/webp"},
-	{"*", ""}: {jpeg.Encode, ImageMemRGBA, "image/jpeg"},
+	{"jpeg", ""}: {Func: jpeg.Encode, Mem: ImageMemRGBA, ContentType: "image/jpeg"},
+	{"png", ""}:  {Func: png.Encode, Mem: ImageMemRGBA, ContentType: "image/png"},
+	// {"avif", ""}:        {Func: avif.Encode, Mem: ImageMemRGBA, ContentType: "image/avif"},
+	// {"webp", "chai"}:    {Func: webpchai.Encode, Mem: ImageMemRGBA, ContentType: "image/webp"},
+	{"webp", ""}:        {Func: webpjack.Encode, Mem: ImageMemNRGBA, ContentType: "image/webp"},
+	{"webp", "jack"}:    {Func: webpjack.Encode, Mem: ImageMemNRGBA, ContentType: "image/webp"},
+	{"webp", "jackdyn"}: {Func: webpjackdyn.Encode, Mem: ImageMemNRGBA, ContentType: "image/webp"},
+	{"webp", "jacktra"}: {Func: webpjacktra.Encode, Mem: ImageMemNRGBA, ContentType: "image/webp"},
+	// {"webp", "hugo"}:    {Func: webphugo.Encode, Mem: ImageMemNRGBA, ContentType: "image/webp"},
+	{"*", ""}: {Func: jpeg.Encode, Mem: ImageMemRGBA, ContentType: "image/jpeg"},
 }
 
 type Encoders []EncoderType
@@ -76,10 +77,10 @@ var alphaEncoders = Encoders{
 func (ets Encoders) FirstMatch(ranges MediaRanges) (Encoder, MediaRange, bool) {
 	for _, et := range ets {
 		for _, mr := range ranges {
-			fmt.Printf("Checking media range %s against encoder type %+v matches %v\n", mr.String(), et, mr.Matches("image", et.Subtype, et.Encoder))
 			if mr.Matches("image", et.Subtype, et.Encoder) {
 				enc, ok := encoderMap[et]
 				if ok {
+					enc.Type = et
 					return enc, mr, true
 				}
 			}
@@ -164,6 +165,7 @@ func (ranges MediaRanges) FirstSupported() (Encoder, MediaRange, bool) {
 		if !ok {
 			continue
 		}
+		enc.Type = encType
 		return enc, mr, true
 	}
 	return Encoder{}, MediaRange{}, false

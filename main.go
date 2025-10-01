@@ -832,9 +832,6 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 
 	// Determine output format based on Accept header and capabilities
 	acceptHeader := r.Header.Get("Accept")
-	// acceptHeader := "image/webp;encoder=jackdyn;mem=nrgba;quality=80"
-	// acceptHeader := "image/webp;encoder=jack;mem=nrgba;quality=80"
-	// acceptHeader := "image/webp;encoder=jack;mem=nrgba;quality=90"
 
 	if rn.TransparencyMask {
 		acceptHeader = "image/png"
