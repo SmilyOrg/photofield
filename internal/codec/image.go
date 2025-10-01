@@ -76,6 +76,7 @@ var alphaEncoders = Encoders{
 func (ets Encoders) FirstMatch(ranges MediaRanges) (Encoder, MediaRange, bool) {
 	for _, et := range ets {
 		for _, mr := range ranges {
+			fmt.Printf("Checking media range %s against encoder type %+v matches %v\n", mr.String(), et, mr.Matches("image", et.Subtype, et.Encoder))
 			if mr.Matches("image", et.Subtype, et.Encoder) {
 				enc, ok := encoderMap[et]
 				if ok {
@@ -111,7 +112,8 @@ func (mr MediaRange) String() string {
 
 // Matches returns true if this media range matches the given media type
 func (mr MediaRange) Matches(mediaType, mediaSubtype, encoder string) bool {
-	if encoder != "" && mr.Encoder() != encoder {
+	mrenc := mr.Encoder()
+	if mrenc != "" && mrenc != encoder {
 		return false
 	}
 	if mr.Type == "*" {

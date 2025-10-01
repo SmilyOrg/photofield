@@ -330,19 +330,7 @@ export default {
         source,
       });
       
-      if (this.geo) {
-        // main.on("prerender", event => {
-        //   const ctx = event.context;
-        //   // Fill in the transparent holes with the photos
-        //   ctx.globalCompositeOperation = "destination-over";
-        // });
-        
-        // main.on("postrender", event => {
-        //   const ctx = event.context;
-        //   // Restore the default
-        //   ctx.globalCompositeOperation = "source-over";
-        // });
-      }
+
 
       main.on("postrender", event => {
         if (!this.focus) return;
@@ -406,22 +394,6 @@ export default {
       const main = this.createMainLayer();
 
       if (this.geo) {
-
-        const mask = new TileLayer({
-          properties: {
-            geo: true,
-          },
-          preload: 2,
-          source: new XYZ({
-            tileUrlFunction: this.maskUrlFunction,
-            crossOrigin: "Anonymous",
-            projection: this.projection,
-            tileSize: [this.tileSize, this.tileSize],
-            opaque: false,
-            transition: 0,
-          }),
-        });
-
         const osmLayer = new TileLayer({
           properties: {
             geo: true,
@@ -434,22 +406,8 @@ export default {
           }),
         });
 
-        // mask.on("prerender", event => {
-        //   const ctx = event.context;
-        //   // Cut out transparent holes out of the rendered map
-        //   // using the mask
-        //   ctx.globalCompositeOperation = "destination-out";
-        // });
-
-        // mask.on("postrender", event => {
-        //   const ctx = event.context;
-        //   // Restore the default
-        //   ctx.globalCompositeOperation = "source-over";
-        // });
-
         return [
           osmLayer,
-          // mask,
           main,
         ]
       } else {
@@ -844,17 +802,7 @@ export default {
       );
     },
 
-    maskUrlFunction([z, x, y]) {
-      if (!this.scene) return;
-      return getTileUrl(
-        this.scene.id,
-        z, x, y,
-        this.tileSize,
-        {
-          transparency_mask: true,
-        },
-      );
-    },
+
 
     elementToViewportCoordinates(eventOrPoint) {
       if (!this.map) {

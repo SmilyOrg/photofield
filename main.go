@@ -888,7 +888,7 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 	if quality == 0 {
 		switch mr.Subtype {
 		case "webp":
-			quality = 60
+			quality = 80
 		default:
 			quality = 80
 		}
