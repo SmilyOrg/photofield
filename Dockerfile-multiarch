@@ -1,5 +1,10 @@
 FROM --platform=$BUILDPLATFORM alpine:latest
-RUN apk add --no-cache exiftool ffmpeg libjpeg-turbo-utils
+RUN apk add --no-cache \
+    exiftool \
+    ffmpeg \
+    libjpeg-turbo-utils \
+    libwebp && \
+    ln -s /usr/lib/libwebp.so.7 /usr/lib/libwebp.so
 
 ARG TARGETOS
 ARG TARGETARCH
