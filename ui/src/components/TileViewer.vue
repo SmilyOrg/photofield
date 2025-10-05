@@ -86,7 +86,7 @@ export default {
   emits: [
     "zoom",
     "click",
-    "pointer-down",
+    "pointerdown",
     "view",
     "move-end",
     "reset",
@@ -550,6 +550,7 @@ export default {
       });
 
       this.map.on("click", event => this.onClick(event));
+      this.map.on("pointerdown", event => this.onPointerDown(event));
       this.map.on("movestart", event => this.onMoveStart(event));
       this.map.on("moveend", event => this.onMoveEnd(event));
       this.map.on("loadend", event => this.onLoadEnd(event));
@@ -600,6 +601,13 @@ export default {
       if (!coords) return;
       this.$emit("click", {
         ...coords,
+        originalEvent: event.originalEvent,
+      });
+    },
+
+    onPointerDown(event) {
+      if (!this.interactive) return;
+      this.$emit("pointerdown", {
         originalEvent: event.originalEvent,
       });
     },

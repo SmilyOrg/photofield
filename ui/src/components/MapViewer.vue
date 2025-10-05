@@ -21,6 +21,7 @@
       @click="onClick"
       @view="onView"
       @nav="onNav"
+      @pointerdown="onContextMenuPointerDown"
       @contextmenu.prevent="onContextMenu"
       @box-select="onBoxSelect"
       @viewer="emit('viewer', $event)"
@@ -172,6 +173,7 @@ const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 const contextMenu = ref(null);
 const {
   onContextMenu,
+  onPointerDown: onContextMenuPointerDown,
   openEvent: contextEvent,
   close: closeContextMenu,
   region: contextRegion,

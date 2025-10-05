@@ -1,0 +1,3 @@
+kind: Fixed
+body: Fix the context menu closing right after opening with long-press on touch devices
+time: 2025-10-05T15:02:58.3878629+02:00
