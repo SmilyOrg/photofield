@@ -1,6 +1,7 @@
 package webp
 
 import (
+	"errors"
 	"image"
 	"io"
 	dynamic "photofield/internal/codec/webp/jack/dynamic"
@@ -34,9 +35,15 @@ func Encode(writer io.Writer, img image.Image, quality int) error {
 		}
 	}
 
+	// Try dynamic encoder first (uses system libwebp if available)
 	err := dynamic.Encode(writer, nrgbaImg, quality)
 	if err == dynamic.ErrNotSupported {
-		return transpiled.Encode(writer, nrgbaImg, quality)
+		// Fall back to transpiled encoder
+		err = transpiled.Encode(writer, nrgbaImg, quality)
+		if errors.Is(err, transpiled.ErrNotSupported) {
+			// Both encoders are unavailable (unsupported architecture)
+			return errors.New("webp encoding not supported on this architecture")
+		}
 	}
 	return err
 }

@@ -1621,40 +1621,10 @@ func parseIntList(s string) ([]int, error) {
 	return result, nil
 }
 
-// detectEncoderSupport tests which WebP encoders are available at startup
+// detectEncoderSupport logs which encoders are available at startup
 func detectEncoderSupport() {
-	// Create a simple 1x1 test image
-	testImg := goimage.NewNRGBA(goimage.Rect(0, 0, 1, 1))
-	testImg.Set(0, 0, color.RGBA{255, 0, 0, 255})
-
-	encodersToTest := []struct {
-		name         string
-		acceptHeader string
-	}{
-		{"jpeg", "image/jpeg"},
-		{"png", "image/png"},
-		{"webp-jackdyn", "image/webp;encoder=jackdyn"},
-		{"webp-jacktra", "image/webp;encoder=jacktra"},
-	}
-
-	var supportedEncoders []string
-	var unsupportedEncoders []string
-
-	for _, encoder := range encodersToTest {
-		// Try to encode a test image with each encoder
-		err := codec.EncodeAccepted(io.Discard, testImg, encoder.acceptHeader)
-		if err != nil {
-			unsupportedEncoders = append(unsupportedEncoders, encoder.name)
-		} else {
-			supportedEncoders = append(supportedEncoders, encoder.name)
-		}
-	}
-
-	// Log the results
-	log.Printf("encoders available %s", strings.Join(supportedEncoders, ", "))
-	if len(unsupportedEncoders) > 0 {
-		log.Printf("encoders unavailable %s (will use fallback)", strings.Join(unsupportedEncoders, ", "))
-	}
+	log.Printf("encoders %s", codec.FastestEncoders.String())
+	log.Printf("encoders with alpha %s", codec.AlphaEncoders.String())
 }
 
 func main() {

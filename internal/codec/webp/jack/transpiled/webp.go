@@ -1,6 +1,9 @@
+//go:build (linux && (amd64 || arm64)) || (darwin && (amd64 || arm64)) || (windows && (amd64 || arm64))
+
 package webp
 
 import (
+	"errors"
 	"image"
 	"io"
 
@@ -8,6 +11,9 @@ import (
 	"git.sr.ht/~jackmordaunt/go-libwebp/lib/transpiled/webp"
 	"modernc.org/libc"
 )
+
+// ErrNotSupported is defined for consistency but not used on supported architectures
+var ErrNotSupported = errors.New("webp transpiled encoder not supported on this architecture")
 
 // Encode writes the image to the writer as WebP with the specified quality
 // quality should be between 0-100, with higher values meaning better quality

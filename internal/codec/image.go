@@ -1,8 +1,10 @@
 package codec
 
 import (
+	"bytes"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"sort"
 	"strconv"
@@ -22,6 +24,18 @@ const (
 	ImageMemPaletted
 	ImageMemNRGBA
 )
+
+// testEncoder checks if an encoder actually works at runtime
+func testEncoder(encFunc EncodeFunc) bool {
+	// Create a minimal 1x1 test image
+	testImg := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	testImg.Set(0, 0, color.RGBA{255, 0, 0, 255})
+
+	// Try to encode it
+	var buf bytes.Buffer
+	err := encFunc(&buf, testImg, 80)
+	return err == nil
+}
 
 // MediaRange represents a parsed media range from an Accept header
 type MediaRange struct {
@@ -45,6 +59,14 @@ type EncoderType struct {
 	Subtype string
 	Encoder string
 }
+
+func (et EncoderType) String() string {
+	if et.Encoder != "" {
+		return et.Subtype + "-" + et.Encoder
+	}
+	return et.Subtype
+}
+
 type MediaRanges []MediaRange
 
 var encoderMap = map[EncoderType]Encoder{
@@ -62,16 +84,63 @@ var encoderMap = map[EncoderType]Encoder{
 
 type Encoders []EncoderType
 
-var fastestEncoders = Encoders{
+func (et Encoders) String() string {
+	var sb strings.Builder
+	for i, e := range et {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(e.String())
+	}
+	return sb.String()
+}
+
+// FastestEncoders is a list of encoders in order of speed
+var FastestEncoders = Encoders{
 	{"jpeg", ""},
 	{"webp", "jackdyn"},
 	{"webp", "jacktra"},
 	{"png", ""},
 }
 
-var alphaEncoders = Encoders{
-	{"webp", "jack"},
+// AlphaEncoders is a list of encoders that support transparency
+var AlphaEncoders = Encoders{
+	{"webp", "jackdyn"},
+	{"webp", "jacktra"},
 	{"png", ""},
+}
+
+var supportedEncoders map[EncoderType]bool
+
+func init() {
+	// Test which encoders actually work on this platform
+	supportedEncoders = make(map[EncoderType]bool)
+	for encType, encoder := range encoderMap {
+		if testEncoder(encoder.Func) {
+			supportedEncoders[encType] = true
+		}
+	}
+
+	// Remove unsupported encoders from the encoder map
+	for encType := range encoderMap {
+		if !supportedEncoders[encType] {
+			delete(encoderMap, encType)
+		}
+	}
+
+	// Filter encoder lists to only include supported encoders
+	FastestEncoders = filterSupportedEncoders(FastestEncoders)
+	AlphaEncoders = filterSupportedEncoders(AlphaEncoders)
+}
+
+func filterSupportedEncoders(encoders Encoders) Encoders {
+	filtered := make(Encoders, 0, len(encoders))
+	for _, et := range encoders {
+		if supportedEncoders[et] {
+			filtered = append(filtered, et)
+		}
+	}
+	return filtered
 }
 
 func (ets Encoders) FirstMatch(ranges MediaRanges) (Encoder, MediaRange, bool) {
@@ -172,11 +241,11 @@ func (ranges MediaRanges) FirstSupported() (Encoder, MediaRange, bool) {
 }
 
 func (ranges MediaRanges) FastestEncoder() (Encoder, MediaRange, bool) {
-	return fastestEncoders.FirstMatch(ranges)
+	return FastestEncoders.FirstMatch(ranges)
 }
 
 func (ranges MediaRanges) AlphaEncoder() (Encoder, MediaRange, bool) {
-	return alphaEncoders.FirstMatch(ranges)
+	return AlphaEncoders.FirstMatch(ranges)
 }
 
 func EncodeAccepted(w io.Writer, m image.Image, acceptHeader string) error {

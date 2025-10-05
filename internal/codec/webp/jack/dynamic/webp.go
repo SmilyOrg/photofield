@@ -1,3 +1,5 @@
+//go:build (linux && (amd64 || arm64)) || (darwin && (amd64 || arm64)) || (windows && (amd64 || arm64))
+
 package webp
 
 import (
@@ -11,7 +13,7 @@ import (
 
 var (
 	supported       = false
-	ErrNotSupported = errors.New("webp-dynamic not supported: library not found")
+	ErrNotSupported = errors.New("webp-jackdyn not supported: library not found")
 )
 
 func init() {
