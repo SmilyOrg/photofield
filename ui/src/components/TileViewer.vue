@@ -354,6 +354,7 @@ export default {
 
         const size = this.map.getSize();
         const corners = this.pixelCornersFromView(view);
+        if (!corners) return;
 
         // Need to use the internal pixel ratio as it may be different
         // from the current window pixel ratio if it changed after the map was created
@@ -934,7 +935,7 @@ export default {
     },
 
     pixelCornersFromView(view) {
-      if (!this.map) return null;
+      if (!this.map || !this.scene) return null;
       const extent = this.extentFromView(view);
       // Coordinate from extent
       const tl = getTopLeft(extent);

@@ -110,7 +110,7 @@ Then('the app logs {string}', async ({ app }, log: string) => {
   }).toPass();
 });
 
-When('the user waits for {int} second(s)', async ({ page }, sec: number) => { 
+When('the user waits( for) {int} second(s)', async ({ page }, sec: number) => { 
   await page.waitForTimeout(sec * 1000);
 });
 
@@ -321,11 +321,13 @@ When('the user switches to {string} layout', async ({ app }, layout: string) => 
   await app.waitForSceneLoaded();
 });
 
-When('the user searches for {string}', async ({ app }, searchTerm: string) => {
-  // Navigate using URL parameter
-  const currentUrl = new URL(app.page.url());
-  currentUrl.searchParams.set('search', searchTerm);
-  await app.page.goto(currentUrl.toString());
+When('the user searches for {string}', async ({ app, page }, searchTerm: string) => {
+  if (!await page.getByRole('button', { name: 'Close Search' }).isVisible()) {
+    await page.getByRole('button', { name: 'Open Search' }).click();
+  }
+  const input = page.getByRole('textbox', { name: 'Search' });
+  await input.fill(searchTerm);
+  await input.press('Enter');
   
   await app.waitForSceneLoaded();
 });
@@ -364,13 +366,15 @@ When('the user scrolls down {int}px', async ({ page, app }, pixels: number) => {
   // Store initial scroll position for later comparison
   const initialScrollY = await page.evaluate(() => window.scrollY);
 
-  // Scroll down by the specified amount
-  await page.evaluate((px) => {
-    window.scrollBy(0, px);
-  }, pixels);
+  await expect(async () => {
+    const height = await page.evaluate(() => document.body.scrollHeight);
+    expect(height).toBeGreaterThanOrEqual(initialScrollY + pixels);
+  }, "Page is tall enough to scroll").toPass();
 
-  // Wait for scroll to complete and any URL updates
-  await page.waitForTimeout(500);
+  await page.waitForFunction(async ([initialScrollY, pixels]) => {
+    window.scrollTo(0, initialScrollY + pixels);
+    return window.scrollY === initialScrollY + pixels;
+  }, [initialScrollY, pixels]);
 
   // Store the scroll position in the app fixture for later verification
   app.testScrollPosition = initialScrollY + pixels;
@@ -391,4 +395,8 @@ Then('the scroll position is roughly the same', async ({ page, app }) => {
   // Allow for some tolerance in scroll position (within 100px)
   const tolerance = 100;
   expect(Math.abs(currentScrollY - expectedScrollY)).toBeLessThan(tolerance);
+});
+
+Then('the scroll position is {int}px', async ({ page }, expectedScrollY: number) => {
+  expect(await page.evaluate(() => window.scrollY)).toBe(expectedScrollY);
 });

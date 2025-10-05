@@ -2,14 +2,15 @@ Feature: Rescan
 
   Scenario: One photo
     Given an empty working directory
-    And a running app
     And the following files:
-      | src                          | dst          |
+      | src                          | dst            |
       | ../docs/assets/logo-wide.jpg | vacation/a.jpg |
+    And a running app
 
     When the user opens "/collections/vacation"
-    And the user clicks "vacation"
+    # The page should open the dropdown on empty collections by default
     Then the page shows "0 files indexed"
+    And the page shows "Rescan"
 
     When the user clicks "Rescan"
     Then the page shows "1 file indexed"

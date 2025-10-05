@@ -38,9 +38,11 @@
 
       <template #nav-icon>
         <!-- <img src="/favicon-32x32.png" /> -->
-        <ui-icon-button @click="goBack()" class="inline">
-          {{ collection ? selecting || selected ? 'close' : 'arrow_back' : 'home' }}
-        </ui-icon-button>
+        <router-link :to="navIconRoute">
+          <ui-icon-button class="inline">
+            {{ collection ? selecting || selected ? 'close' : 'arrow_back' : 'home' }}
+          </ui-icon-button>
+        </router-link>
       </template>
 
       <template #toolbar="{ toolbarItemClass }">
@@ -234,27 +236,15 @@ export default {
       }
     });
 
-    const goBack = () => {
+    const navIconRoute = computed(() => {
       if (selected.value) {
-        router.push({
-          query: {
-            ...query.value,
-            search: undefined,
-          }
-        });
-      } else if (selecting.value) {
-        router.push({
-          query: {
-            ...query.value,
-            select_tag: undefined,
-          }
-        });
-      } else {
-        router.replace({
-          path: "/",
-        });
+        return { query: { ...query.value, search: undefined } };
       }
-    }
+      if (selecting.value) {
+        return { query: { ...query.value, select_tag: undefined } };
+      }
+      return { path: '/', replace: true };
+    });
 
     const setQuery = (patch) => {
       settingsExpanded.value = false;
@@ -268,7 +258,7 @@ export default {
           }
         }
       }
-      router.push({ query });
+      router.push({ query, hash: route.hash });
     }
 
     const { items: indexTasks, error: indexTasksError, mutate: indexTasksMutate } = useApi(
@@ -305,7 +295,6 @@ export default {
     });
 
     return {
-      goBack,
       query,
       setQuery,
       selecting,
@@ -323,6 +312,7 @@ export default {
       pageTitle,
       title,
       settingsExpanded,
+      navIconRoute,
     }
   },
   computed: {
@@ -367,6 +357,17 @@ export default {
       return this.capabilities?.search.supported && this.collection && !this.selecting;
     }
   },
+  watch: {
+    currentScene: {
+      handler(newScene) {
+        // If the scene loads with 0 photos, open the collection panel
+        if (newScene && !newScene.loading && newScene.file_count === 0) {
+          this.collectionExpanded = true;
+        }
+      },
+      immediate: false
+    }
+  },
   methods: {
     toggleFocus() {
       if (!this.collectionExpandedPending) return;
@@ -408,11 +409,11 @@ export default {
     onSearch(query) {
       if (this.selected) {
         if (!this.searchActive && query == "") {
-          this.setQuery({ search: this.selected });
+          this.setQuery({ search: this.selected, f: undefined });
           return;
         }
       }
-      this.setQuery({ search: query });
+      this.setQuery({ search: query, f: undefined });
     },
   }
 }

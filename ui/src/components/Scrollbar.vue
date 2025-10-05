@@ -23,7 +23,7 @@
     >
       <span
         v-for="marker in marker.items"
-        :key="marker.t"
+        :key="marker.y"
         class="marker"
         :style="{ top: marker.y + 'px' }"
       >
