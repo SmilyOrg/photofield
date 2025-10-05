@@ -1508,8 +1508,6 @@ func applyConfig(appConfig *AppConfig) {
 		processTileRequests(tileRequestConfig.Concurrency)
 	}
 
-	detectEncoderSupport()
-
 	extensions := strings.Join(appConfig.Media.ListExtensions, ", ")
 	log.Printf("extensions %v", extensions)
 
@@ -1771,6 +1769,8 @@ func main() {
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
 	listenForShutdown()
+
+	detectEncoderSupport()
 
 	watchConfig(dataDir, func(appConfig *AppConfig) {
 		applyConfig(appConfig)
