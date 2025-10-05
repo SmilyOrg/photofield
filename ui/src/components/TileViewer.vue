@@ -101,7 +101,7 @@ export default {
     return {
       viewer: null,
       maxZoom: 30,
-      focusZoom: 1,
+      focusZoom: 0,
     }
   },
   async mounted() {

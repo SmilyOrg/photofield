@@ -50,6 +50,17 @@ declare global {
       currentScene?: Scene;
     };
   }
+
+  interface Element {
+    __vueParentComponent?: {
+      ctx?: {
+        focusZoom?: number;
+      };
+      setupState?: {
+        regionZoom?: number;
+      };
+    };
+  }
 }
 
 async function spawnp(
@@ -313,32 +324,6 @@ export class App {
   }
 
   /**
-   * Get the current scene ID from the page
-   */
-  async getSceneId(): Promise<string | null> {
-    return await this.page.evaluate(() => {
-      // Try to extract from URL
-      const pathMatch = window.location.pathname.match(/\/collections\/([^\/]+)/);
-      if (pathMatch) {
-        // For collection URLs, we need to make an API call to get scene
-        return null; // Will need to be handled by caller
-      }
-      
-      // Try to get from Vue router if available
-      try {
-        const app = (window as any).__VUE_APP__;
-        if (app?.config?.globalProperties?.$route) {
-          return app.config.globalProperties.$route.params.sceneId;
-        }
-      } catch (e) {
-        // Vue app not available or different structure
-      }
-      
-      return null;
-    });
-  }
-
-  /**
    * Get photo regions from the API
    */
   async getPhotoRegions(
@@ -439,7 +424,10 @@ export class App {
       throw new Error('Could not convert scene coordinates to pixel coordinates');
     }
     
-    await this.page.mouse.click(pixelCoords.x, pixelCoords.y);
+    await expect(async () => {
+      await this.page.mouse.click(pixelCoords.x, pixelCoords.y);
+      await expect(this.page.locator('header.immersive')).toBeVisible({ timeout: 500 });
+    }).toPass();
   }
 
   /**
@@ -532,7 +520,7 @@ export class App {
     // Wait until header.immersive is present
     await this.page.waitForSelector('header.immersive');
   }
-
+  
   /**
    * Get the current focus zoom level
    */
@@ -540,14 +528,10 @@ export class App {
     return await this.page.evaluate(() => {
       // Try to access the Vue component state
       const tileViewer = document.querySelector('.tileViewer');
-      if (tileViewer && (tileViewer as any).__vueParentComponent) {
-        const ctx = (tileViewer as any).__vueParentComponent.ctx;
-        return ctx.focusZoom || 0;
-      }
-      
-      // Fallback: check if we're in focused state based on URL and viewport
-      const isRegionUrl = /\/regions\/\d+/.test(window.location.href);
-      return isRegionUrl ? 1 : 0;
+      if (!tileViewer) return 0;
+      const focusZoom = tileViewer.__vueParentComponent?.ctx?.focusZoom;
+      console.log("Focus zoom:", document.querySelector('.tileViewer')?.__vueParentComponent?.ctx?.focusZoom);
+      return focusZoom || 0;
     });
   }
 

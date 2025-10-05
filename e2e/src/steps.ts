@@ -23,17 +23,6 @@ Given('{int} generated {int} x {int} test photos', async ({ app }, count: number
   await app.generatePhotos(count, 12345, [width], [height]);
 });
 
-Given('{int} generated test photos with seed {int}', async ({ app }, count: number, seed: number) => {
-  if (!app.cwd) {
-    await app.useTempDir();
-    console.log("CWD:", app.cwd);
-  }
-  
-  // The generatePhotos method now uses global cache internally
-  await app.generatePhotos(count, seed);
-});
-
-
 Given('the config {string}', async ({ app }, p: string) => {
   const configPath = path.resolve(__dirname, "..", "configs", p);
   await fs.copyFile(configPath, app.path("configuration.yaml"));
@@ -194,13 +183,9 @@ Then('the photo is focused and zoomed in', async ({ app }) => {
   // Check that we're in focus mode (URL should contain photo ID)
   await app.waitForImmersiveMode();
 
-  // Wait for animation
-  await app.page.waitForTimeout(1000);
-  
   // Wait until the focus zoom level is greater than 0.9
   await expect(async () => {
-    const focusZoom = await app.getFocusZoom();
-    expect(focusZoom).toBeGreaterThan(0.9);
+    expect(await app.getFocusZoom()).toBeGreaterThan(0.9);
   }).toPass();
 });
 
