@@ -18,10 +18,8 @@ import (
 )
 
 const (
-	maxMoveX = 100.0
-	maxMoveY = 100.0
-	maxSizeW = 2000.0
-	maxSizeH = 2000.0
+	maxMove = 1500.0
+	maxSize = 2000.0
 )
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
@@ -50,8 +48,6 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	proj := s2.NewMercatorProjection(maxlng)
 
-	maxDist := 1500.
-	maxExtent := maxDist + maxSizeW*0.5*1.0001
 	minSize := 1.
 	startSize := 1.
 
@@ -137,7 +133,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 				ib = len(pp)
 			}
 			go func() {
-				intersections += collide(pp, v, s, sv, ia, ib, maxExtent, dt, rTree)
+				intersections += collide(pp, v, s, sv, ia, ib, dt, rTree)
 				wg.Done()
 			}()
 		}
@@ -161,8 +157,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			np := pp[i].Add(v[i].Mul(dt))
 			npd := np.Sub(po[i])
 			ndist := npd.Norm()
-			if ndist > maxDist {
-				np = po[i].Add(npd.Mul(maxDist / ndist))
+			if ndist > maxMove {
+				np = po[i].Add(npd.Mul(maxMove / ndist))
 				v[i] = r2.Point{}
 				sv[i] = 0
 			}
@@ -175,8 +171,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			sv[i] += 100 * dt
 			sv[i] *= 1.01
 
-			if s[i] > maxSizeW {
-				s[i] = maxSizeW
+			if s[i] > maxSize {
+				s[i] = maxSize
 				sv[i] = 0
 			}
 			if s[i] < minSize {
@@ -225,10 +221,10 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 func getInflatedBox(p r2.Point, size float64) rtree.Box {
 	return rtree.Box{
-		MinX: p.X - maxMoveX,
-		MinY: p.Y - maxMoveY,
-		MaxX: p.X + max(size, maxSizeW) + maxMoveX,
-		MaxY: p.Y + max(size, maxSizeH) + maxMoveY,
+		MinX: p.X - maxMove - max(size, maxSize)/2,
+		MinY: p.Y - maxMove - max(size, maxSize)/2,
+		MaxX: p.X + maxMove + max(size, maxSize)/2,
+		MaxY: p.Y + maxMove + max(size, maxSize)/2,
 	}
 }
 
@@ -244,7 +240,7 @@ func buildRTree(points []r2.Point, sizes []float64) *rtree.RTree {
 }
 
 // Collision detection using R-tree
-func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float64, rTree *rtree.RTree) int {
+func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, dt float64, rTree *rtree.RTree) int {
 	inters := 0
 	for i := ia; i < ib; i++ {
 		p := pp[i]
@@ -257,7 +253,7 @@ func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float6
 		}
 
 		err := rTree.RangeSearch(box, func(j int) error {
-			if i == j {
+			if i <= j {
 				return nil
 			}
 
