@@ -103,7 +103,7 @@ var tilePools sync.Map
 
 type TilePool struct {
 	TileSize int
-	Mask     bool
+	ImageMem codec.ImageMem
 }
 
 var imageSource *image.Source
@@ -240,14 +240,15 @@ func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *r
 func getTilePool(config *render.Render) *sync.Pool {
 	p := TilePool{
 		TileSize: config.TileSize,
-		Mask:     config.TransparencyMask,
+		ImageMem: config.ImageMem,
 	}
 	stored, ok := tilePools.Load(p)
 	if ok {
 		return stored.(*sync.Pool)
 	}
 	pool := sync.Pool{}
-	if p.Mask {
+	switch p.ImageMem {
+	case codec.ImageMemPaletted:
 		pool.New = func() interface{} {
 			return goimage.NewPaletted(
 				goimage.Rect(0, 0, p.TileSize, p.TileSize),
@@ -257,7 +258,13 @@ func getTilePool(config *render.Render) *sync.Pool {
 				},
 			)
 		}
-	} else {
+	case codec.ImageMemNRGBA:
+		pool.New = func() interface{} {
+			return goimage.NewNRGBA(
+				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+			)
+		}
+	default:
 		pool.New = func() interface{} {
 			return goimage.NewRGBA(
 				goimage.Rect(0, 0, p.TileSize, p.TileSize),
@@ -717,7 +724,10 @@ func GetTilesRequestPriority(params openapi.GetScenesSceneIdTilesParams) int8 {
 	return 100
 }
 
-func decodeColor(s string) (color.RGBA, error) {
+func decodeColor(s string) (color.Color, error) {
+	if s == "transparent" {
+		return color.Transparent, nil
+	}
 	c, err := hex.DecodeString(strings.TrimPrefix(s, "#"))
 	if err != nil {
 		return color.RGBA{}, err
@@ -820,6 +830,39 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		rn.BackgroundColor = color.Transparent
 	}
 
+	// Determine output format based on Accept header and capabilities
+	acceptHeader := r.Header.Get("Accept")
+
+	if rn.TransparencyMask {
+		acceptHeader = "image/png"
+	}
+
+	ranges, err := codec.ParseAccept(acceptHeader)
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, "Invalid Accept header")
+		return
+	}
+
+	var encoder codec.Encoder
+	var mr codec.MediaRange
+	var ok bool
+	if rn.BackgroundColor == color.Transparent {
+		encoder, mr, ok = ranges.AlphaEncoder()
+	} else {
+		encoder, mr, ok = ranges.FastestEncoder()
+	}
+	if !ok {
+		encoder, mr, ok = ranges.FirstSupported()
+	}
+	if !ok {
+		problem(w, r, http.StatusBadRequest, "No supported image format in Accept header")
+		return
+	}
+
+	if rn.TransparencyMask {
+		encoder.Mem = codec.ImageMemPaletted
+	}
+
 	img, context := getTileImage(&rn)
 	defer putTileImage(&rn, img)
 
@@ -835,19 +878,27 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
 	}
 
-	if params.TransparencyMask != nil {
-		w.Header().Add("Content-Type", "image/png")
-		png.Encode(w, img)
-		return
+	w.Header().Add("Content-Type", encoder.ContentType)
+	w.Header().Add("Vary", "Accept")
+
+	quality := mr.QualityParam()
+	if quality == 0 {
+		switch mr.Subtype {
+		case "webp":
+			quality = 80
+		default:
+			quality = 80
+		}
 	}
-	w.Header().Add("Content-Type", "image/jpeg")
-	quality := 80
 	if rn.QualityPreset == render.QualityPresetHigh {
 		quality = 100
 	}
-	trace.WithRegion(ctx, "jpeg.Encode", func() {
-		codec.EncodeJpeg(w, img, quality)
-	})
+
+	err = encoder.Func(w, img, quality)
+	if err != nil {
+		log.Printf("Error encoding image as %s: %v", mr.String(), err)
+		problem(w, r, http.StatusInternalServerError, "Error encoding image")
+	}
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
@@ -1570,6 +1621,12 @@ func parseIntList(s string) ([]int, error) {
 	return result, nil
 }
 
+// detectEncoderSupport logs which encoders are available at startup
+func detectEncoderSupport() {
+	log.Printf("encoders %s", codec.FastestEncoders.String())
+	log.Printf("encoders with alpha %s", codec.AlphaEncoders.String())
+}
+
 func main() {
 	var err error
 
@@ -1682,6 +1739,8 @@ func main() {
 	sceneSource.DefaultScene = defaultSceneConfig.Scene
 
 	listenForShutdown()
+
+	detectEncoderSupport()
 
 	watchConfig(dataDir, func(appConfig *AppConfig) {
 		applyConfig(appConfig)

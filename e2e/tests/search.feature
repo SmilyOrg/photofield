@@ -7,7 +7,8 @@ Feature: Search
 
   Scenario: Photo search and selection
     When the user searches for "bird"
-    And clicks on the first photo
+    Then the page shows "AI server host not configured"
+    When the user clicks on the first photo
     Then the photo is focused and zoomed in
     And the url contains "search=bird"
 

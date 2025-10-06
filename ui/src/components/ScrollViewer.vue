@@ -25,6 +25,7 @@
       @view="onView"
       @nav="onNav"
       @wheel="onWheel"
+      @pointerdown="onContextMenuPointerDown"
       @contextmenu.prevent="onContextMenu"
       @load-end="onLoadEnd"
       @box-select="onBoxSelect"
@@ -237,6 +238,7 @@ const tagsSupported = computed(() => capabilities.value?.tags?.supported);
 const contextMenu = ref(null);
 const {
   onContextMenu,
+  onPointerDown: onContextMenuPointerDown,
   openEvent: contextEvent,
   close: closeContextMenu,
   region: contextRegion,

@@ -14,6 +14,7 @@ import (
 	"golang.org/x/image/draw"
 
 	"photofield/internal/clip"
+	"photofield/internal/codec"
 	"photofield/internal/image"
 	"photofield/io"
 )
@@ -32,6 +33,7 @@ type Render struct {
 	Color             color.Color `json:"color"`
 	TransparencyMask  bool        `json:"transparency_mask"`
 	LogDraws          bool
+	ImageMem          codec.ImageMem
 
 	Sources io.Sources
 

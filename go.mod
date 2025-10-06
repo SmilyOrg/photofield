@@ -5,14 +5,18 @@ go 1.24.0
 toolchain go1.24.6
 
 require (
+	git.sr.ht/~jackmordaunt/go-libwebp v1.8.0
 	github.com/EdlinOrg/prominentcolor v1.0.0
+	github.com/HugoSmits86/nativewebp v1.2.0
 	github.com/alecthomas/assert/v2 v2.2.2
 	github.com/alecthomas/participle/v2 v2.0.0
+	github.com/chai2010/webp v1.4.0
 	github.com/deepmap/oapi-codegen v1.8.2
 	github.com/dgraph-io/ristretto v0.1.2-0.20230929213430-5239be55a219
 	github.com/docker/go-units v0.4.0
 	github.com/felixge/fgprof v0.9.5
 	github.com/gammazero/deque v0.2.1
+	github.com/gen2brain/avif v0.4.4
 	github.com/go-chi/chi/v5 v5.0.4
 	github.com/go-chi/cors v1.2.0
 	github.com/go-chi/render v1.0.1
@@ -31,7 +35,6 @@ require (
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
 	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9
 	github.com/peterstace/simplefeatures v0.44.0
-	github.com/pixiv/go-libjpeg v0.0.0-20190822045933-3da21a74767d
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/rjeczalik/notify v0.9.3
@@ -44,6 +47,7 @@ require (
 	golang.org/x/exp v0.0.0-20250819170805-f6d41f060dd3
 	golang.org/x/image v0.29.0
 	golang.org/x/sync v0.16.0
+	modernc.org/libc v1.66.7
 	modernc.org/sqlite v1.38.2
 	zombiezen.com/go/sqlite v1.4.2
 )
@@ -57,6 +61,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/ebitengine/purego v0.8.3 // indirect
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
@@ -84,6 +89,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/tdewolff/minify/v2 v2.7.1-0.20200112204046-70870d25a935 // indirect
 	github.com/tdewolff/parse/v2 v2.4.2 // indirect
+	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
@@ -91,7 +97,6 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
-	modernc.org/libc v1.66.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )

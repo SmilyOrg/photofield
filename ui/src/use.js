@@ -326,7 +326,7 @@ export function useRegionZoom({ view, region }) {
   return computed(() => {
     const viewBounds = view?.value;
     const regionBounds = region?.value?.bounds;
-    if (!viewBounds || !regionBounds) return 1;
+    if (!viewBounds || !regionBounds) return 0;
     const zoomX = regionBounds.w / viewBounds.w;
     const zoomY = regionBounds.h / viewBounds.h;
     return Math.max(zoomX, zoomY);
@@ -389,14 +389,28 @@ export function useContextMenu(menu, viewer, scene) {
   
   const openEvent = ref(null);
   const flip = ref({ x: false, y: false });
+  const lastPointerDown = ref(0);
+  const menuOpenedAt = ref(0);
 
   const open = (event) => {
     openEvent.value = event;
+    menuOpenedAt.value = Date.now();
   }
 
   const close = () => {
-    if (!openEvent.value) return;
+    if (!openEvent.value) return false;
+    // Don't close if the menu was opened from a long-press
+    // (meaning that there was a pointerdown event before contextmenu)
+    if (lastPointerDown.value < menuOpenedAt.value) {
+      return false;
+    }
     openEvent.value = null;
+    menuOpenedAt.value = 0;
+    return true;
+  }
+
+  const onPointerDown = () => {
+    lastPointerDown.value = Date.now();
   }
 
   watch([openEvent, menu], async ([event]) => {
@@ -437,6 +451,7 @@ export function useContextMenu(menu, viewer, scene) {
   
   return {
     onContextMenu,
+    onPointerDown,
     // flip,
     openEvent,
     close,

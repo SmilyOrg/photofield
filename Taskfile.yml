@@ -292,6 +292,14 @@ tasks:
       - go build -tags embedgeo
       - ./photofield
 
+  run:docker:
+    desc: Build & Run in Docker
+    cmds:
+      - task: build:deps
+      - task: build:release
+      - task: docker
+      - docker run --rm -p 8080:8080 -v $PWD/testdata/thumbs/:/app/thumbs {{.DOCKER_REPO}}:{{ .VERSION }}
+
   bench:
     desc: Run benchmarks for a specified collection
     cmds:
