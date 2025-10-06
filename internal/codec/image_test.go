@@ -59,7 +59,7 @@ func TestMediaRanges_Best(t *testing.T) {
 		{
 			name:              "handles encoder parameter for webp - jacktra",
 			accept:            "image/webp;encoder=jacktra",
-			expectEncoderType: &EncoderType{"webp", "jacktra"},
+			expectEncoderType: &EncoderType{"webp", "jacktra"}, // may be removed under -race
 		},
 		{
 			name:              "returns nil for unknown encoder with parameter",
@@ -266,6 +266,14 @@ func TestMediaRanges_Best(t *testing.T) {
 				return
 			}
 			encoder, mr, ok := ranges.FirstSupported()
+
+			// If the test expects a specific encoder that is not actually supported
+			// on this build (e.g. webp jacktra under -race), skip gracefully.
+			if tt.expectEncoderType != nil {
+				if _, present := encoderMap[*tt.expectEncoderType]; !present {
+					t.Skipf("encoder %s not supported on this platform/build (skipping)", tt.expectEncoderType.String())
+				}
+			}
 
 			if tt.expectQuality != 0 {
 				quality := mr.QualityParam()

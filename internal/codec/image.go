@@ -121,7 +121,7 @@ func init() {
 		}
 	}
 
-	// Remove unsupported encoders from the encoder map
+	// Remove unsupported encoders entirely so they cannot be selected or referenced
 	for encType := range encoderMap {
 		if !supportedEncoders[encType] {
 			delete(encoderMap, encType)
