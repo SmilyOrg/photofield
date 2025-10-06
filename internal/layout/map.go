@@ -13,7 +13,15 @@ import (
 
 	"github.com/golang/geo/r2"
 	"github.com/golang/geo/s2"
+	"github.com/peterstace/simplefeatures/rtree"
 	"golang.org/x/exp/slices"
+)
+
+const (
+	maxMoveX = 100.0
+	maxMoveY = 100.0
+	maxSizeW = 2000.0
+	maxSizeH = 2000.0
 )
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
@@ -42,9 +50,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	proj := s2.NewMercatorProjection(maxlng)
 
-	maxSize := 2000.
 	maxDist := 1500.
-	maxExtent := maxDist + maxSize*0.5*1.0001
+	maxExtent := maxDist + maxSizeW*0.5*1.0001
 	minSize := 1.
 	startSize := 1.
 
@@ -116,6 +123,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	workerBatch := len(pp) / workerNum
 
 	vSumLast := 0.
+	rTree := buildRTree(pp, s)
+
 	for n := 0; n < 1000; n++ {
 		intersections := 0
 		start := time.Now()
@@ -128,7 +137,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 				ib = len(pp)
 			}
 			go func() {
-				intersections += collide(pp, v, s, sv, ia, ib, maxExtent, dt)
+				intersections += collide(pp, v, s, sv, ia, ib, maxExtent, dt, rTree)
 				wg.Done()
 			}()
 		}
@@ -166,8 +175,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			sv[i] += 100 * dt
 			sv[i] *= 1.01
 
-			if s[i] > maxSize {
-				s[i] = maxSize
+			if s[i] > maxSizeW {
+				s[i] = maxSizeW
 				sv[i] = 0
 			}
 			if s[i] < minSize {
@@ -214,39 +223,52 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	layoutFinished()
 }
 
-// Collision detection incl. sweep and prune skips
-func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float64) int {
+func getInflatedBox(p r2.Point, size float64) rtree.Box {
+	return rtree.Box{
+		MinX: p.X - maxMoveX,
+		MinY: p.Y - maxMoveY,
+		MaxX: p.X + max(size, maxSizeW) + maxMoveX,
+		MaxY: p.Y + max(size, maxSizeH) + maxMoveY,
+	}
+}
+
+func buildRTree(points []r2.Point, sizes []float64) *rtree.RTree {
+	bulkItems := make([]rtree.BulkItem, len(points))
+	for i := range points {
+		bulkItems[i] = rtree.BulkItem{
+			RecordID: i,
+			Box:      getInflatedBox(points[i], sizes[i]),
+		}
+	}
+	return rtree.BulkLoad(bulkItems)
+}
+
+// Collision detection using R-tree
+func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float64, rTree *rtree.RTree) int {
 	inters := 0
 	for i := ia; i < ib; i++ {
 		p := pp[i]
 		hs := s[i] * 0.5
-		for j := i + 1; j < len(pp); j++ {
+		box := rtree.Box{
+			MinX: p.X - hs,
+			MinY: p.Y - hs,
+			MaxX: p.X + hs,
+			MaxY: p.Y + hs,
+		}
+
+		err := rTree.RangeSearch(box, func(j int) error {
+			if i == j {
+				return nil
+			}
+
 			q := pp[j]
 			d := q.Sub(p)
 
-			// Early-out due to presorted points
-			if d.X > maxExtent {
-				break
-			}
-
-			dyabs := d.Y
-			if dyabs < 0 {
-				dyabs = -dyabs
-			}
-
-			if dyabs > maxExtent {
-				continue
-			}
-
 			minDist := (hs + s[j]*0.5) * 1.3
-			if d.X > minDist || dyabs > minDist {
-				continue
-			}
-
 			distsq := d.X*d.X + d.Y*d.Y
 			minDistSq := minDist * minDist
 			if distsq > minDistSq {
-				continue
+				return nil
 			}
 
 			inters++
@@ -258,6 +280,10 @@ func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float6
 			v[j] = v[j].Add(a)
 			sv[i] *= 0.3
 			sv[j] *= 0.3
+			return nil
+		})
+		if err != nil {
+			panic(err)
 		}
 	}
 	return inters
