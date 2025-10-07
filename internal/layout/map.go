@@ -3,24 +3,37 @@ package layout
 import (
 	"cmp"
 	"log"
+	"math"
 	"math/rand"
 	"photofield/internal/image"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/golang/geo/r2"
 	"github.com/golang/geo/s2"
-	"github.com/peterstace/simplefeatures/rtree"
 	"golang.org/x/exp/slices"
 )
 
 const (
 	maxMove = 1500.0
 	maxSize = 2000.0
+
+	// Clustering configuration
+	clusteringEnabled = true
+	minClusterSize    = 20 // Don't bother for tiny datasets
 )
+
+// Grid cell identifier
+type cellID struct {
+	x, y int
+}
+
+// A cluster of points that can be processed independently
+type Cluster struct {
+	indices []int // Global indices into pp, v, s, sv arrays
+}
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
@@ -31,7 +44,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		H: layout.ViewportHeight,
 	}
 
-	layoutFinished := metrics.Elapsed("layout")
+	// layoutFinished := metrics.Elapsed("layout")
 
 	earthEquatorMeters := 40075017.
 
@@ -48,6 +61,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	proj := s2.NewMercatorProjection(maxlng)
 
+	maxExtent := maxMove + maxSize*0.5*1.0001
 	minSize := 1.
 	startSize := 1.
 
@@ -115,29 +129,21 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	dt := 0.1
 
-	workerNum := runtime.NumCPU()
-	workerBatch := len(pp) / workerNum
-
 	vSumLast := 0.
-	rTree := buildRTree(pp, s)
-
-	for n := 0; n < 1000; n++ {
-		intersections := 0
+	for n := 0; n < 10; n++ {
 		start := time.Now()
-		wg := &sync.WaitGroup{}
-		wg.Add(workerNum)
-		for w := 0; w < workerNum; w++ {
-			ia := w * workerBatch
-			ib := (w + 1) * workerBatch
-			if w == workerNum-1 {
-				ib = len(pp)
-			}
-			go func() {
-				intersections += collide(pp, v, s, sv, ia, ib, dt, rTree)
-				wg.Done()
-			}()
+
+		var intersections, clusterCount int
+
+		// Use clustering for larger datasets
+		if clusteringEnabled && len(pp) > minClusterSize {
+			intersections, clusterCount = findAndProcessClusters(pp, v, s, sv, maxExtent, dt)
+		} else {
+			// Fallback to original algorithm for small datasets
+			intersections = collide(pp, v, s, sv, 0, len(pp), maxExtent, dt)
+			clusterCount = 1
 		}
-		wg.Wait()
+
 		elapsed := int(time.Since(start).Microseconds())
 
 		dispSum := 0.
@@ -187,8 +193,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		}
 		vSumLast = vSum
 		log.Printf(
-			"layout map %4d with %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.1f energy %8d us\n",
-			n, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
+			"layout map %4d with %4d clusters %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.1f energy %8d us\n",
+			n, clusterCount, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
 		)
 
 		scene.LoadCount = n
@@ -216,55 +222,42 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	scene.RegionSource = PhotoRegionSource{
 		Source: source,
 	}
-	layoutFinished()
+	// layoutFinished()
 }
 
-func getInflatedBox(p r2.Point, size float64) rtree.Box {
-	return rtree.Box{
-		MinX: p.X - maxMove - max(size, maxSize)/2,
-		MinY: p.Y - maxMove - max(size, maxSize)/2,
-		MaxX: p.X + maxMove + max(size, maxSize)/2,
-		MaxY: p.Y + maxMove + max(size, maxSize)/2,
-	}
-}
-
-func buildRTree(points []r2.Point, sizes []float64) *rtree.RTree {
-	bulkItems := make([]rtree.BulkItem, len(points))
-	for i := range points {
-		bulkItems[i] = rtree.BulkItem{
-			RecordID: i,
-			Box:      getInflatedBox(points[i], sizes[i]),
-		}
-	}
-	return rtree.BulkLoad(bulkItems)
-}
-
-// Collision detection using R-tree
-func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, dt float64, rTree *rtree.RTree) int {
+// Collision detection incl. sweep and prune skips
+func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float64) int {
 	inters := 0
 	for i := ia; i < ib; i++ {
 		p := pp[i]
 		hs := s[i] * 0.5
-		box := rtree.Box{
-			MinX: p.X - hs,
-			MinY: p.Y - hs,
-			MaxX: p.X + hs,
-			MaxY: p.Y + hs,
-		}
-
-		err := rTree.RangeSearch(box, func(j int) error {
-			if i <= j {
-				return nil
-			}
-
+		for j := i + 1; j < len(pp); j++ {
 			q := pp[j]
 			d := q.Sub(p)
 
+			// Early-out due to presorted points
+			if d.X > maxExtent {
+				break
+			}
+
+			dyabs := d.Y
+			if dyabs < 0 {
+				dyabs = -dyabs
+			}
+
+			if dyabs > maxExtent {
+				continue
+			}
+
 			minDist := (hs + s[j]*0.5) * 1.3
+			if d.X > minDist || dyabs > minDist {
+				continue
+			}
+
 			distsq := d.X*d.X + d.Y*d.Y
 			minDistSq := minDist * minDist
 			if distsq > minDistSq {
-				return nil
+				continue
 			}
 
 			inters++
@@ -276,11 +269,189 @@ func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, dt float64, rTree *r
 			v[j] = v[j].Add(a)
 			sv[i] *= 0.3
 			sv[j] *= 0.3
-			return nil
-		})
-		if err != nil {
-			panic(err)
 		}
 	}
 	return inters
+}
+
+// assignToGrid assigns each point to a grid cell based on position.
+// Cell size is chosen so points in non-adjacent cells cannot interact.
+func assignToGrid(pp []r2.Point, cellSize float64) map[cellID][]int {
+	grid := make(map[cellID][]int)
+
+	for i, p := range pp {
+		cell := cellID{
+			x: int(math.Floor(p.X / cellSize)),
+			y: int(math.Floor(p.Y / cellSize)),
+		}
+		grid[cell] = append(grid[cell], i)
+	}
+
+	return grid
+}
+
+// unionFind implements Union-Find with path compression for grouping cells.
+type unionFind struct {
+	parent map[cellID]cellID
+}
+
+func newUnionFind() *unionFind {
+	return &unionFind{
+		parent: make(map[cellID]cellID),
+	}
+}
+
+func (uf *unionFind) find(cell cellID) cellID {
+	// Initialize if not seen
+	if _, exists := uf.parent[cell]; !exists {
+		uf.parent[cell] = cell
+		return cell
+	}
+
+	// Path compression
+	if uf.parent[cell] != cell {
+		uf.parent[cell] = uf.find(uf.parent[cell])
+	}
+	return uf.parent[cell]
+}
+
+func (uf *unionFind) union(cell1, cell2 cellID) {
+	root1 := uf.find(cell1)
+	root2 := uf.find(cell2)
+
+	if root1 != root2 {
+		uf.parent[root1] = root2
+	}
+}
+
+// mergeAdjacentCells groups grid cells into clusters.
+// Adjacent cells (including diagonals) are merged since points in them could interact.
+func mergeAdjacentCells(grid map[cellID][]int) []Cluster {
+	if len(grid) == 0 {
+		return nil
+	}
+
+	uf := newUnionFind()
+
+	// For each cell, check its 8 neighbors (and itself = 9 cells total)
+	for cell := range grid {
+		for dx := -1; dx <= 1; dx++ {
+			for dy := -1; dy <= 1; dy++ {
+				neighbor := cellID{x: cell.x + dx, y: cell.y + dy}
+
+				// If neighbor exists in grid, merge with current cell
+				if _, exists := grid[neighbor]; exists {
+					uf.union(cell, neighbor)
+				}
+			}
+		}
+	}
+
+	// Group cells by their root
+	clusterMap := make(map[cellID][]int)
+	for cell, indices := range grid {
+		root := uf.find(cell)
+		clusterMap[root] = append(clusterMap[root], indices...)
+	}
+
+	// Convert to cluster slice
+	clusters := make([]Cluster, 0, len(clusterMap))
+	for _, indices := range clusterMap {
+		clusters = append(clusters, Cluster{indices: indices})
+	}
+
+	return clusters
+}
+
+// collideClusters processes collision detection for each cluster in parallel.
+func collideClusters(clusters []Cluster, pp, v []r2.Point, s, sv []float64, maxExtent, dt float64) int {
+	if len(clusters) == 0 {
+		return 0
+	}
+
+	// Single cluster - no need for parallelization overhead
+	if len(clusters) == 1 {
+		return collideCluster(clusters[0], pp, v, s, sv, maxExtent, dt)
+	}
+
+	// Multiple clusters - process in parallel
+	totalInters := make([]int, len(clusters))
+	var wg sync.WaitGroup
+
+	for i := range clusters {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			totalInters[idx] = collideCluster(clusters[idx], pp, v, s, sv, maxExtent, dt)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Sum up intersections
+	total := 0
+	for _, count := range totalInters {
+		total += count
+	}
+	return total
+}
+
+// collideCluster performs collision detection within a single cluster.
+func collideCluster(cluster Cluster, pp, v []r2.Point, s, sv []float64, maxExtent, dt float64) int {
+	inters := 0
+	indices := cluster.indices
+
+	// Check all pairs within this cluster
+	for i := 0; i < len(indices); i++ {
+		idx1 := indices[i]
+		p := pp[idx1]
+		hs := s[idx1] * 0.5
+
+		for j := i + 1; j < len(indices); j++ {
+			idx2 := indices[j]
+			q := pp[idx2]
+			d := q.Sub(p)
+
+			// Distance check
+			minDist := (hs + s[idx2]*0.5) * 1.3
+			distsq := d.X*d.X + d.Y*d.Y
+			minDistSq := minDist * minDist
+
+			if distsq > minDistSq {
+				continue
+			}
+
+			inters++
+
+			// Apply collision forces
+			ddist := (minDistSq - distsq) / minDistSq
+			a := d.Mul(ddist * 40 * dt)
+
+			v[idx1] = v[idx1].Sub(a)
+			v[idx2] = v[idx2].Add(a)
+			sv[idx1] *= 0.3
+			sv[idx2] *= 0.3
+		}
+	}
+
+	return inters
+}
+
+// findAndProcessClusters finds independent clusters and processes collisions.
+// Returns total number of intersections and cluster count.
+func findAndProcessClusters(pp, v []r2.Point, s, sv []float64, maxExtent, dt float64) (intersections, clusterCount int) {
+	// Calculate grid cell size
+	// Use 2*maxExtent so points in non-adjacent cells can't interact
+	cellSize := maxExtent * 2
+
+	// Phase 1: Assign points to grid cells - O(n)
+	grid := assignToGrid(pp, cellSize)
+
+	// Phase 2: Merge adjacent cells into clusters - O(cells)
+	clusters := mergeAdjacentCells(grid)
+
+	// Phase 3: Process clusters in parallel
+	intersections = collideClusters(clusters, pp, v, s, sv, maxExtent, dt)
+
+	return intersections, len(clusters)
 }
