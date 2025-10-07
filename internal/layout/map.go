@@ -129,15 +129,26 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	dt := 0.1
 
+	// Find clusters once based on initial positions
+	// Since maxExtent limits movement, clusters remain stable across iterations
+	var clusters []Cluster
+	useClustering := clusteringEnabled && len(pp) > minClusterSize
+	if useClustering {
+		cellSize := maxExtent * 2
+		grid := assignToGrid(pp, cellSize)
+		clusters = mergeAdjacentCells(grid)
+	}
+
 	vSumLast := 0.
 	for n := 0; n < 10; n++ {
 		start := time.Now()
 
 		var intersections, clusterCount int
 
-		// Use clustering for larger datasets
-		if clusteringEnabled && len(pp) > minClusterSize {
-			intersections, clusterCount = findAndProcessClusters(pp, v, s, sv, maxExtent, dt)
+		// Process collisions using pre-computed clusters
+		if useClustering {
+			intersections = collideClusters(clusters, pp, v, s, sv, maxExtent, dt)
+			clusterCount = len(clusters)
 		} else {
 			// Fallback to original algorithm for small datasets
 			intersections = collide(pp, v, s, sv, 0, len(pp), maxExtent, dt)
@@ -435,23 +446,4 @@ func collideCluster(cluster Cluster, pp, v []r2.Point, s, sv []float64, maxExten
 	}
 
 	return inters
-}
-
-// findAndProcessClusters finds independent clusters and processes collisions.
-// Returns total number of intersections and cluster count.
-func findAndProcessClusters(pp, v []r2.Point, s, sv []float64, maxExtent, dt float64) (intersections, clusterCount int) {
-	// Calculate grid cell size
-	// Use 2*maxExtent so points in non-adjacent cells can't interact
-	cellSize := maxExtent * 2
-
-	// Phase 1: Assign points to grid cells - O(n)
-	grid := assignToGrid(pp, cellSize)
-
-	// Phase 2: Merge adjacent cells into clusters - O(cells)
-	clusters := mergeAdjacentCells(grid)
-
-	// Phase 3: Process clusters in parallel
-	intersections = collideClusters(clusters, pp, v, s, sv, maxExtent, dt)
-
-	return intersections, len(clusters)
 }
