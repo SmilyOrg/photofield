@@ -137,6 +137,11 @@ func BenchmarkLayoutMap_100Clumps_1000Photos(b *testing.B) {
 	benchmarkLayoutMap(b, coords)
 }
 
+func BenchmarkLayoutMap_100Clumps_10000Photos(b *testing.B) {
+	coords := generateClumpedGeoCoords(100, 10000, 4, 42) // 1000000 total
+	benchmarkLayoutMap(b, coords)
+}
+
 // Spread variation benchmarks
 func BenchmarkLayoutMap_VeryTight_1000Photos(b *testing.B) {
 	coords := generateClumpedGeoCoords(10, 100, 0.05, 42) // 50m spread - very tight
