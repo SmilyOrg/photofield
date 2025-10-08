@@ -3,7 +3,8 @@ RUN apk add --no-cache \
     exiftool \
     ffmpeg \
     libjpeg-turbo-utils \
-    libwebp && \
+    libwebp \
+    gcompat && \
     ln -s /usr/lib/libwebp.so.7 /usr/lib/libwebp.so
 
 ARG TARGETOS
