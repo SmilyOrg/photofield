@@ -27,13 +27,12 @@ type cellID struct {
 
 // A cluster of points that can be processed independently
 type Cluster struct {
-	pp      []r2.Point // positions
-	po      []r2.Point // original positions
-	v       []r2.Point // velocities
-	s       []float64  // sizes
-	sv      []float64  // size velocities
-	pi      []int      // original indices for mapping back to photos
-	sortIdx []int      // indices for sorting within cluster
+	pp []r2.Point // positions
+	po []r2.Point // original positions
+	v  []r2.Point // velocities
+	s  []float64  // sizes
+	sv []float64  // size velocities
+	pi []int      // original indices for mapping back to photos
 }
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
@@ -307,31 +306,28 @@ func mergeAdjacentCells(grid map[cellID][]int, pp, po, v []r2.Point, s, sv []flo
 	clusters := make([]Cluster, 0, len(clusterMap))
 	for _, indices := range clusterMap {
 		n := len(indices)
-		cluster := Cluster{
-			pp:      make([]r2.Point, n),
-			po:      make([]r2.Point, n),
-			v:       make([]r2.Point, n),
-			s:       make([]float64, n),
-			sv:      make([]float64, n),
-			pi:      make([]int, n),
-			sortIdx: make([]int, n),
-		}
 
-		// Copy data from global arrays
-		for i, globalIdx := range indices {
+		// Build list of global indices sorted by X upfront so we copy only once.
+		sorted := make([]int, len(indices))
+		copy(sorted, indices)
+		slices.SortFunc(sorted, func(a, b int) int { return cmp.Compare(pp[a].X, pp[b].X) })
+
+		cluster := Cluster{
+			pp: make([]r2.Point, n),
+			po: make([]r2.Point, n),
+			v:  make([]r2.Point, n),
+			s:  make([]float64, n),
+			sv: make([]float64, n),
+			pi: make([]int, n),
+		}
+		for i, globalIdx := range sorted {
 			cluster.pp[i] = pp[globalIdx]
 			cluster.po[i] = po[globalIdx]
 			cluster.v[i] = v[globalIdx]
 			cluster.s[i] = s[globalIdx]
 			cluster.sv[i] = sv[globalIdx]
 			cluster.pi[i] = pi[globalIdx]
-			cluster.sortIdx[i] = i
 		}
-
-		// Sort by X coordinate for sweep and prune optimization
-		slices.SortFunc(cluster.sortIdx, func(i, j int) int {
-			return cmp.Compare(cluster.pp[i].X, cluster.pp[j].X)
-		})
 
 		clusters = append(clusters, cluster)
 	}
@@ -396,66 +392,38 @@ func processClusterPhysics(cluster *Cluster, dt, maxMove, minSize, maxSize float
 
 // collideClusterSorted performs collision detection on a sorted cluster using sweep and prune
 func collideClusterSorted(cluster *Cluster, maxExtent, dt float64) int {
-	sortIdx := cluster.sortIdx
 	pp := cluster.pp
 	v := cluster.v
 	s := cluster.s
 	sv := cluster.sv
 
 	inters := 0
-	for i := 0; i < len(sortIdx); i++ {
-		idx1 := sortIdx[i]
-		p := pp[idx1]
-		hs := s[idx1] * 0.5
-
-		for j := i + 1; j < len(sortIdx); j++ {
-			idx2 := sortIdx[j]
-			q := pp[idx2]
+	for i := 0; i < len(pp); i++ {
+		p := pp[i]
+		hs := s[i] * 0.5
+		for j := i + 1; j < len(pp); j++ {
+			q := pp[j]
 			d := q.Sub(p)
-
-			// fmt.Printf("A")
-
-			// Early-out due to presorted points
 			if d.X > maxExtent {
-				// fmt.Printf("B")
 				break
 			}
-
-			// dyabs := d.Y
-			// if dyabs < 0 {
-			// 	dyabs = -dyabs
-			// }
-
 			dyabs := math.Abs(d.Y)
-
-			// Remove - it's slower if we check apparently
-			// if dyabs > maxExtent {
-			// fmt.Printf("C")
-			// continue
-			// }
-
-			minDist := (hs + s[idx2]*0.5) * 1.3
+			minDist := (hs + s[j]*0.5) * 1.3
 			if d.X > minDist || dyabs > minDist {
-				// fmt.Printf("D")
 				continue
 			}
-
 			distsq := d.X*d.X + d.Y*d.Y
 			minDistSq := minDist * minDist
 			if distsq > minDistSq {
-				// fmt.Printf("E")
 				continue
 			}
-
 			inters++
-
 			ddist := (minDistSq - distsq) / minDistSq
 			a := d.Mul(ddist * 40 * dt)
-
-			v[idx1] = v[idx1].Sub(a)
-			v[idx2] = v[idx2].Add(a)
-			sv[idx1] *= 0.3
-			sv[idx2] *= 0.3
+			v[i] = v[i].Sub(a)
+			v[j] = v[j].Add(a)
+			sv[i] *= 0.3
+			sv[j] *= 0.3
 		}
 	}
 	return inters
