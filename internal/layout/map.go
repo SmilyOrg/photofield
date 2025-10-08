@@ -2,7 +2,6 @@ package layout
 
 import (
 	"cmp"
-	"log"
 	"math"
 	"math/rand"
 	"photofield/internal/image"
@@ -19,10 +18,6 @@ import (
 const (
 	maxMove = 1500.0
 	maxSize = 2000.0
-
-	// Clustering configuration
-	clusteringEnabled = true
-	minClusterSize    = 20 // Don't bother for tiny datasets
 )
 
 // Grid cell identifier
@@ -32,7 +27,13 @@ type cellID struct {
 
 // A cluster of points that can be processed independently
 type Cluster struct {
-	indices []int // Global indices into pp, v, s, sv arrays
+	pp      []r2.Point // positions
+	po      []r2.Point // original positions
+	v       []r2.Point // velocities
+	s       []float64  // sizes
+	sv      []float64  // size velocities
+	pi      []int      // original indices for mapping back to photos
+	sortIdx []int      // indices for sorting within cluster
 }
 
 func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
@@ -131,82 +132,65 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	// Find clusters once based on initial positions
 	// Since maxExtent limits movement, clusters remain stable across iterations
-	var clusters []Cluster
-	useClustering := clusteringEnabled && len(pp) > minClusterSize
-	if useClustering {
-		cellSize := maxExtent * 2
-		grid := assignToGrid(pp, cellSize)
-		clusters = mergeAdjacentCells(grid)
-	}
+	// Always use clustering for consistent code path and better parallelization
+	cellSize := maxExtent * 2
+	grid := assignToGrid(pp, cellSize)
+	clusters := mergeAdjacentCells(grid, pp, po, v, s, sv, pi)
 
 	vSumLast := 0.
 	for n := 0; n < 10; n++ {
-		start := time.Now()
+		// start := time.Now()
 
-		var intersections, clusterCount int
+		// var intersections, clusterCount int
+		var dispSum, dispMax, vSum float64
 
-		// Process collisions using pre-computed clusters
-		if useClustering {
-			intersections = collideClusters(clusters, pp, v, s, sv, maxExtent, dt)
-			clusterCount = len(clusters)
-		} else {
-			// Fallback to original algorithm for small datasets
-			intersections = collide(pp, v, s, sv, 0, len(pp), maxExtent, dt)
-			clusterCount = 1
+		// Process collisions and physics using clusters (always)
+		// clusterCount = len(clusters)
+
+		// Process each cluster in parallel
+		totalInters := make([]int, len(clusters))
+		clusterResults := make([][3]float64, len(clusters)) // [dispSum, dispMax, vSum]
+		var wg sync.WaitGroup
+
+		for i := range clusters {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				cluster := &clusters[idx]
+
+				// Collision detection using sweep and prune on sorted points
+				totalInters[idx] = collideClusterSorted(cluster, maxExtent, dt)
+
+				// Physics update for this cluster
+				ds, dm, vs := processClusterPhysics(cluster, dt, maxMove, minSize, maxSize)
+				clusterResults[idx] = [3]float64{ds, dm, vs}
+			}(i)
 		}
 
-		elapsed := int(time.Since(start).Microseconds())
+		wg.Wait()
 
-		dispSum := 0.
-		dispMax := 0.
-		vSum := 0.
-		for i := range pp {
-
-			dorig := po[i].Sub(pp[i])
-			dist := dorig.Norm()
-			dispSum += dist
-			if dist > dispMax {
-				dispMax = dist
+		// Aggregate results (no need to merge back to global arrays yet)
+		// for _, count := range totalInters {
+		// 	intersections += count
+		// }
+		for _, result := range clusterResults {
+			dispSum += result[0]
+			if result[1] > dispMax {
+				dispMax = result[1]
 			}
-			v[i] = v[i].Add(dorig.Mul(0.1 * dt))
-			v[i] = v[i].Mul(0.98)
-
-			np := pp[i].Add(v[i].Mul(dt))
-			npd := np.Sub(po[i])
-			ndist := npd.Norm()
-			if ndist > maxMove {
-				np = po[i].Add(npd.Mul(maxMove / ndist))
-				v[i] = r2.Point{}
-				sv[i] = 0
-			}
-			pp[i] = np
-
-			s[i] += sv[i] * dt
-
-			vSum += v[i].Norm() + sv[i]
-
-			sv[i] += 100 * dt
-			sv[i] *= 1.01
-
-			if s[i] > maxSize {
-				s[i] = maxSize
-				sv[i] = 0
-			}
-			if s[i] < minSize {
-				s[i] = minSize
-				sv[i] = 0
-			}
-
+			vSum += result[2]
 		}
+
+		// elapsed := int(time.Since(start).Microseconds())
 		energy := vSum - vSumLast
 		if energy < 0 {
 			energy = -energy
 		}
 		vSumLast = vSum
-		log.Printf(
-			"layout map %4d with %4d clusters %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.1f energy %8d us\n",
-			n, clusterCount, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
-		)
+		// log.Printf(
+		// 	"layout map %4d with %4d clusters %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.1f energy %8d us\n",
+		// 	n, clusterCount, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
+		// )
 
 		scene.LoadCount = n
 		scene.LoadUnit = "iterations"
@@ -215,6 +199,9 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			break
 		}
 	}
+
+	// Merge results back to global arrays only once, after all iterations
+	mergeFromClusters(clusters, pp, po, v, s, sv, pi)
 
 	for i, p := range pp {
 		photo := &photos[pi[i]]
@@ -234,55 +221,6 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		Source: source,
 	}
 	// layoutFinished()
-}
-
-// Collision detection incl. sweep and prune skips
-func collide(pp, v []r2.Point, s, sv []float64, ia, ib int, maxExtent, dt float64) int {
-	inters := 0
-	for i := ia; i < ib; i++ {
-		p := pp[i]
-		hs := s[i] * 0.5
-		for j := i + 1; j < len(pp); j++ {
-			q := pp[j]
-			d := q.Sub(p)
-
-			// Early-out due to presorted points
-			if d.X > maxExtent {
-				break
-			}
-
-			dyabs := d.Y
-			if dyabs < 0 {
-				dyabs = -dyabs
-			}
-
-			if dyabs > maxExtent {
-				continue
-			}
-
-			minDist := (hs + s[j]*0.5) * 1.3
-			if d.X > minDist || dyabs > minDist {
-				continue
-			}
-
-			distsq := d.X*d.X + d.Y*d.Y
-			minDistSq := minDist * minDist
-			if distsq > minDistSq {
-				continue
-			}
-
-			inters++
-
-			ddist := (minDistSq - distsq) / minDistSq
-			a := d.Mul(ddist * 40 * dt)
-
-			v[i] = v[i].Sub(a)
-			v[j] = v[j].Add(a)
-			sv[i] *= 0.3
-			sv[j] *= 0.3
-		}
-	}
-	return inters
 }
 
 // assignToGrid assigns each point to a grid cell based on position.
@@ -335,9 +273,9 @@ func (uf *unionFind) union(cell1, cell2 cellID) {
 	}
 }
 
-// mergeAdjacentCells groups grid cells into clusters.
+// mergeAdjacentCells groups grid cells into clusters and splits data directly.
 // Adjacent cells (including diagonals) are merged since points in them could interact.
-func mergeAdjacentCells(grid map[cellID][]int) []Cluster {
+func mergeAdjacentCells(grid map[cellID][]int, pp, po, v []r2.Point, s, sv []float64, pi []int) []Cluster {
 	if len(grid) == 0 {
 		return nil
 	}
@@ -365,76 +303,152 @@ func mergeAdjacentCells(grid map[cellID][]int) []Cluster {
 		clusterMap[root] = append(clusterMap[root], indices...)
 	}
 
-	// Convert to cluster slice
+	// Convert to cluster slice with data directly split
 	clusters := make([]Cluster, 0, len(clusterMap))
 	for _, indices := range clusterMap {
-		clusters = append(clusters, Cluster{indices: indices})
+		n := len(indices)
+		cluster := Cluster{
+			pp:      make([]r2.Point, n),
+			po:      make([]r2.Point, n),
+			v:       make([]r2.Point, n),
+			s:       make([]float64, n),
+			sv:      make([]float64, n),
+			pi:      make([]int, n),
+			sortIdx: make([]int, n),
+		}
+
+		// Copy data from global arrays
+		for i, globalIdx := range indices {
+			cluster.pp[i] = pp[globalIdx]
+			cluster.po[i] = po[globalIdx]
+			cluster.v[i] = v[globalIdx]
+			cluster.s[i] = s[globalIdx]
+			cluster.sv[i] = sv[globalIdx]
+			cluster.pi[i] = pi[globalIdx]
+			cluster.sortIdx[i] = i
+		}
+
+		// Sort by X coordinate for sweep and prune optimization
+		slices.SortFunc(cluster.sortIdx, func(i, j int) int {
+			return cmp.Compare(cluster.pp[i].X, cluster.pp[j].X)
+		})
+
+		clusters = append(clusters, cluster)
 	}
 
 	return clusters
 }
 
-// collideClusters processes collision detection for each cluster in parallel.
-func collideClusters(clusters []Cluster, pp, v []r2.Point, s, sv []float64, maxExtent, dt float64) int {
-	if len(clusters) == 0 {
-		return 0
+// mergeFromClusters merges the results back into the global arrays
+func mergeFromClusters(clusters []Cluster, pp, po, v []r2.Point, s, sv []float64, pi []int) {
+	for _, cluster := range clusters {
+		for i, globalIdx := range cluster.pi {
+			pp[globalIdx] = cluster.pp[i]
+			po[globalIdx] = cluster.po[i]
+			v[globalIdx] = cluster.v[i]
+			s[globalIdx] = cluster.s[i]
+			sv[globalIdx] = cluster.sv[i]
+			pi[globalIdx] = cluster.pi[i]
+		}
 	}
-
-	// Single cluster - no need for parallelization overhead
-	if len(clusters) == 1 {
-		return collideCluster(clusters[0], pp, v, s, sv, maxExtent, dt)
-	}
-
-	// Multiple clusters - process in parallel
-	totalInters := make([]int, len(clusters))
-	var wg sync.WaitGroup
-
-	for i := range clusters {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			totalInters[idx] = collideCluster(clusters[idx], pp, v, s, sv, maxExtent, dt)
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Sum up intersections
-	total := 0
-	for _, count := range totalInters {
-		total += count
-	}
-	return total
 }
 
-// collideCluster performs collision detection within a single cluster.
-func collideCluster(cluster Cluster, pp, v []r2.Point, s, sv []float64, maxExtent, dt float64) int {
-	inters := 0
-	indices := cluster.indices
+// processClusterPhysics handles the physics update for a single cluster
+func processClusterPhysics(cluster *Cluster, dt, maxMove, minSize, maxSize float64) (dispSum, dispMax, vSum float64) {
+	for i := range cluster.pp {
+		dorig := cluster.po[i].Sub(cluster.pp[i])
+		dist := dorig.Norm()
+		dispSum += dist
+		if dist > dispMax {
+			dispMax = dist
+		}
+		cluster.v[i] = cluster.v[i].Add(dorig.Mul(0.1 * dt))
+		cluster.v[i] = cluster.v[i].Mul(0.98)
 
-	// Check all pairs within this cluster
-	for i := 0; i < len(indices); i++ {
-		idx1 := indices[i]
+		np := cluster.pp[i].Add(cluster.v[i].Mul(dt))
+		npd := np.Sub(cluster.po[i])
+		ndist := npd.Norm()
+		if ndist > maxMove {
+			np = cluster.po[i].Add(npd.Mul(maxMove / ndist))
+			cluster.v[i] = r2.Point{}
+			cluster.sv[i] = 0
+		}
+		cluster.pp[i] = np
+
+		cluster.s[i] += cluster.sv[i] * dt
+
+		vSum += cluster.v[i].Norm() + cluster.sv[i]
+
+		cluster.sv[i] += 100 * dt
+		cluster.sv[i] *= 1.01
+
+		if cluster.s[i] > maxSize {
+			cluster.s[i] = maxSize
+			cluster.sv[i] = 0
+		}
+		if cluster.s[i] < minSize {
+			cluster.s[i] = minSize
+			cluster.sv[i] = 0
+		}
+	}
+	return dispSum, dispMax, vSum
+}
+
+// collideClusterSorted performs collision detection on a sorted cluster using sweep and prune
+func collideClusterSorted(cluster *Cluster, maxExtent, dt float64) int {
+	sortIdx := cluster.sortIdx
+	pp := cluster.pp
+	v := cluster.v
+	s := cluster.s
+	sv := cluster.sv
+
+	inters := 0
+	for i := 0; i < len(sortIdx); i++ {
+		idx1 := sortIdx[i]
 		p := pp[idx1]
 		hs := s[idx1] * 0.5
 
-		for j := i + 1; j < len(indices); j++ {
-			idx2 := indices[j]
+		for j := i + 1; j < len(sortIdx); j++ {
+			idx2 := sortIdx[j]
 			q := pp[idx2]
 			d := q.Sub(p)
 
-			// Distance check
+			// fmt.Printf("A")
+
+			// Early-out due to presorted points
+			if d.X > maxExtent {
+				// fmt.Printf("B")
+				break
+			}
+
+			// dyabs := d.Y
+			// if dyabs < 0 {
+			// 	dyabs = -dyabs
+			// }
+
+			dyabs := math.Abs(d.Y)
+
+			// Remove - it's slower if we check apparently
+			// if dyabs > maxExtent {
+			// fmt.Printf("C")
+			// continue
+			// }
+
 			minDist := (hs + s[idx2]*0.5) * 1.3
+			if d.X > minDist || dyabs > minDist {
+				// fmt.Printf("D")
+				continue
+			}
+
 			distsq := d.X*d.X + d.Y*d.Y
 			minDistSq := minDist * minDist
-
 			if distsq > minDistSq {
+				// fmt.Printf("E")
 				continue
 			}
 
 			inters++
 
-			// Apply collision forces
 			ddist := (minDistSq - distsq) / minDistSq
 			a := d.Mul(ddist * 40 * dt)
 
@@ -444,6 +458,5 @@ func collideCluster(cluster Cluster, pp, v []r2.Point, s, sv []float64, maxExten
 			sv[idx2] *= 0.3
 		}
 	}
-
 	return inters
 }
