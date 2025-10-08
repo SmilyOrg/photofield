@@ -2,6 +2,7 @@ package layout
 
 import (
 	"cmp"
+	"log"
 	"math"
 	"math/rand"
 	"photofield/internal/image"
@@ -128,6 +129,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	}
 
 	dt := 0.1
+	maxTime := 10 * time.Second
+	maxIterations := 10000
 
 	// Find clusters once based on initial positions
 	// Since maxExtent limits movement, clusters remain stable across iterations
@@ -137,14 +140,20 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	clusters := mergeAdjacentCells(grid, pp, po, v, s, sv, pi)
 
 	vSumLast := 0.
-	for n := 0; n < 10; n++ {
-		// start := time.Now()
+	layoutStart := time.Now()
+	for n := 0; n < maxIterations; n++ {
+		start := time.Now()
+		layoutElapsed := start.Sub(layoutStart)
+		if layoutElapsed > maxTime {
+			log.Printf("layout map timeout after %v\n", layoutElapsed)
+			break
+		}
 
-		// var intersections, clusterCount int
+		var intersections, clusterCount int
 		var dispSum, dispMax, vSum float64
 
 		// Process collisions and physics using clusters (always)
-		// clusterCount = len(clusters)
+		clusterCount = len(clusters)
 
 		// Process each cluster in parallel
 		totalInters := make([]int, len(clusters))
@@ -169,9 +178,9 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		wg.Wait()
 
 		// Aggregate results (no need to merge back to global arrays yet)
-		// for _, count := range totalInters {
-		// 	intersections += count
-		// }
+		for _, count := range totalInters {
+			intersections += count
+		}
 		for _, result := range clusterResults {
 			dispSum += result[0]
 			if result[1] > dispMax {
@@ -180,16 +189,13 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 			vSum += result[2]
 		}
 
-		// elapsed := int(time.Since(start).Microseconds())
-		energy := vSum - vSumLast
-		if energy < 0 {
-			energy = -energy
-		}
+		elapsed := int(time.Since(start).Microseconds())
+		energy := math.Abs(vSum-vSumLast) * 1000 / float64(1+intersections)
 		vSumLast = vSum
-		// log.Printf(
-		// 	"layout map %4d with %4d clusters %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.1f energy %8d us\n",
-		// 	n, clusterCount, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
-		// )
+		log.Printf(
+			"layout map %4d with %4d clusters %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.0f energy %8d us\n",
+			n, clusterCount, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
+		)
 
 		scene.LoadCount = n
 		scene.LoadUnit = "iterations"
