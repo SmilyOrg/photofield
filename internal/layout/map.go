@@ -93,9 +93,9 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		photos = append(photos, photo)
 		loadCounter.Set(index)
 		index++
+		scene.LoadUnit = "files"
 		scene.FileCount = index
 		scene.LoadCount = index
-		scene.LoadUnit = "files"
 	}
 
 	n := len(pp)
@@ -146,6 +146,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		layoutElapsed := start.Sub(layoutStart)
 		if layoutElapsed > maxTime {
 			log.Printf("layout map timeout after %v\n", layoutElapsed)
+			scene.LoadUnit = "good enough 🤷‍♀️"
+			time.Sleep(1 * time.Second)
 			break
 		}
 
