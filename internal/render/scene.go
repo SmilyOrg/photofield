@@ -28,10 +28,13 @@ const (
 
 type Render struct {
 	TileSize          int         `json:"tile_size"`
+	ImageWidth        int         `json:"image_width"`
+	ImageHeight       int         `json:"image_height"`
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
 	BackgroundColor   color.Color `json:"background_color"`
 	Color             color.Color `json:"color"`
 	TransparencyMask  bool        `json:"transparency_mask"`
+	CoverFit          bool
 	LogDraws          bool
 	ImageMem          codec.ImageMem
 
@@ -44,6 +47,7 @@ type Render struct {
 	QualityPreset   QualityPreset
 
 	Zoom        int
+	TileRect    Rect
 	CanvasImage draw.Image
 }
 
@@ -106,6 +110,7 @@ type Scene struct {
 	FileCount       int            `json:"file_count"`
 	Solids          []Solid        `json:"-"`
 	Texts           []Text         `json:"-"`
+	ClusterPhotos   []Photo        `json:"-"`
 	RegionSource    RegionSource   `json:"-"`
 	Stale           bool           `json:"stale"`
 	Dependencies    []Dependency   `json:"-"`
@@ -138,8 +143,7 @@ func (scene *Scene) UpdateStaleness() {
 }
 
 type Scales struct {
-	Pixel float64
-	Tile  float64
+	Tile float64
 }
 
 type PhotoRef struct {
@@ -175,6 +179,34 @@ func invertMatrix(m canvas.Matrix) canvas.Matrix {
 	}}
 }
 
+func (scene *Scene) TileView(zoom int, x int, y int, tileSize int) (canvasToTile canvas.Matrix, tileOnCanvas Rect) {
+	zoomPower := 1 << zoom
+	ts := float64(tileSize)
+	tx := float64(x) * ts
+	ty := float64(zoomPower-1-y) * ts
+	sw := scene.Bounds.W
+	sh := scene.Bounds.H
+	var s float64
+	if 1 < sw/sh {
+		s = ts / sw
+		tx += (s*sw - ts) * 0.5
+	} else {
+		s = ts / sh
+		ty += (s*sh - ts) * 0.5
+	}
+	s *= float64(zoomPower)
+
+	canvasToTile = canvas.Identity.
+		Translate(-tx, -ty+ts*float64(zoomPower)).
+		Scale(s, s)
+
+	tileRect := Rect{X: 0, Y: 0, W: ts, H: ts}
+	tileToCanvas := invertMatrix(canvasToTile)
+	tileOnCanvas = tileRect.Transform(tileToCanvas)
+	tileOnCanvas.Y = -tileOnCanvas.Y - tileOnCanvas.H
+	return
+}
+
 func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context, scales Scales, source *image.Source) {
 	trace.WithRegion(ctx, "solid.Draw", func() {
 		for i := range scene.Solids {
@@ -182,6 +214,11 @@ func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context,
 			solid.Draw(c, scales)
 		}
 	})
+
+	for i := range scene.Texts {
+		text := &scene.Texts[i]
+		text.Draw(config, c, scales)
+	}
 
 	// for i := range scene.Photos {
 	// 	photo := &scene.Photos[i]
@@ -214,10 +251,6 @@ func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context,
 	// micros := time.Since(startTime).Microseconds()
 	// log.Printf("scene draw %5d / %5d photos, %6d μs all, %.2f μs / photo\n", visiblePhotoCount, photoCount, micros, float64(micros)/float64(visiblePhotoCount))
 
-	for i := range scene.Texts {
-		text := &scene.Texts[i]
-		text.Draw(config, c, scales)
-	}
 }
 
 func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {

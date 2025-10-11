@@ -19,6 +19,7 @@
 import Map from 'ol/Map';
 import XYZ from 'ol/source/XYZ';
 import OSM from 'ol/source/OSM';
+import GeoJSON from 'ol/format/GeoJSON';
 import TileLayer from 'ol/layer/Tile';
 import View from 'ol/View';
 import Projection from 'ol/proj/Projection';
@@ -26,7 +27,7 @@ import { easeIn, easeOut, linear } from 'ol/easing';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
 import Kinetic from 'ol/Kinetic';
-import { get as getProjection } from 'ol/proj';
+import { addCoordinateTransforms, get as getProjection, toLonLat } from 'ol/proj';
 import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
 
 import equal from 'fast-deep-equal';
@@ -35,8 +36,13 @@ import Geoview from './openlayers/geoview.js';
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
-import { getTileUrl } from '../api';
+import { getFeaturesUrl, getPreviewUrl, getTileUrl } from '../api';
 import { useColorMode } from '@vueuse/core';
+import VectorTileLayer from 'ol/layer/VectorTile';
+import VectorTile from 'ol/source/VectorTile';
+import Style from 'ol/style/Style';
+import Fill from 'ol/style/Fill';
+import Icon from 'ol/style/Icon';
 
 // Detect Mac platform (replaces the removed ol/has MAC constant)
 const MAC = navigator.platform.indexOf('Mac') > -1;
@@ -54,6 +60,8 @@ function ctrlWithMaybeShift(mapBrowserEvent) {
 function zoomEase(x) {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
 };
+
+const MAX_ICON_ZOOM = 10;
 
 export default {
 
@@ -109,6 +117,7 @@ export default {
     this.lastAnimationTime = 0;
     this.loadingMainTiles = 0;
     this.preloadedView = null;
+    this.imageStyles = new global.Map();
     this.reset();
   },
   setup() {
@@ -389,11 +398,51 @@ export default {
       return main;
     },
 
+    styleFunction(feature) {
+      const geom = feature.getGeometry();
+      const type = geom.getType();
+      const zoom = this.v.getZoom();
+      if (zoom > MAX_ICON_ZOOM) return null;
+      switch (type) {
+        case "Polygon":
+          return new Style({
+            fill: new Fill({
+              color: feature.get('color'),
+            }),
+          });
+        case "Point":
+          const width = 48;
+          const height = 48;
+          const src = getPreviewUrl(feature.get("file_id"), "img", {
+            w: width,
+            h: height,
+            border_width: 3,
+            border_color: "FFFFFF",
+          });
+          let style = this.imageStyles.get(src);
+          if (style) {
+            return style;
+          }
+          style = new Style({
+            image: new Icon({
+              src,
+              width,
+              height,
+              color: "white",
+            }),
+          });
+          this.imageStyles.set(src, style);
+          return style;
+      }
+      return null;
+    },
+
     createLayers() {
 
       const main = this.createMainLayer();
 
       if (this.geo) {
+
         const osmLayer = new TileLayer({
           properties: {
             geo: true,
@@ -406,9 +455,56 @@ export default {
           }),
         });
 
+        const sceneProjection = new Projection({
+          code: 'CUSTOM:SCENE',
+          units: 'pixels',
+        });
+
+        addCoordinateTransforms(
+          sceneProjection,
+          this.projection, 
+          // Forward transform (custom to map projection)
+          coordinate => {
+            const coord = this.coordinateFromView({
+              x: coordinate[0],
+              y: coordinate[1],
+            });
+            return coord;
+          },
+          // Inverse transform (map projection to custom)
+          coordinate => {
+            const view = this.viewFromCoordinate(coordinate);
+            return [view.x, view.y];
+          }
+        );
+
+        // Tile size based on image height so that we always get
+        // approx. the same amount of features
+        const tileSize = 512;
+        
+        const vectorSource = new VectorTile({
+          format: new GeoJSON({
+            dataProjection: sceneProjection,
+            featureProjection: this.projection,
+          }),
+          tileUrlFunction: this.featuresUrlFunction,
+          projection: this.projection,
+          tileSize,
+          zDirection: 0,
+        });
+        const vector = new VectorTileLayer({
+          properties: {
+            vector: true,
+          },
+          source: vectorSource,
+          declutter: true,
+          style: this.styleFunction,
+        })
+
         return [
           osmLayer,
           main,
+          vector,
         ]
       } else {
         return [
@@ -597,6 +693,26 @@ export default {
 
     onClick(event) {
       if (!this.interactive) return;
+      
+      if (this.geo) {
+        const feature = this.map.forEachFeatureAtPixel(event.pixel, (feature) => {
+          return feature;
+        });
+
+        if (feature && feature.getGeometry().getType() === 'Point') {
+          const coordinate = feature.getGeometry().getCoordinates();
+          const targetZoom = MAX_ICON_ZOOM + 3;
+          const lonlat = toLonLat(coordinate, this.projection);
+          const geoview = [lonlat[0], lonlat[1], targetZoom];
+          const targetView = Geoview.toView(geoview, this.scene.bounds);
+          this.setView(targetView, {
+            animationTime: 0.5,
+            ease: 'out',
+          });
+          return;
+        }
+      }
+      
       const coords = this.viewFromCoordinate(event.coordinate);
       if (!coords) return;
       this.$emit("click", {
@@ -743,6 +859,7 @@ export default {
       if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
       if (this.map) {
         this.map.dispose();
+        this.imageStyles?.clear();
         this.dragPan = null;
         this.dragPanKinetic = null;
       }
@@ -807,6 +924,15 @@ export default {
         z, x, y,
         this.tileSize,
         extra,
+      );
+    },
+
+
+    featuresUrlFunction([z, x, y]) {
+      if (!this.scene) return;
+      return getFeaturesUrl(
+        this.scene.id,
+        z, x, y,
       );
     },
 
@@ -876,6 +1002,16 @@ export default {
         x: (coord[0] - xa) / (xb - xa) * this.scene.bounds.w,
         y: (yb - coord[1]) / (yb - ya) * this.scene.bounds.h,
       }
+    },
+
+    coordinateFromView(view) {
+      if (!this.scene) return null;
+      const fullExtent = this.projection.getExtent();
+      const [xa, ya, xb, yb] = fullExtent;
+      return [
+        view.x / this.scene.bounds.w * (xb - xa) + xa,
+        yb - view.y / this.scene.bounds.h * (yb - ya),
+      ]
     },
 
     elementFromView(view) {

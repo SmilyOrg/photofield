@@ -101,9 +101,10 @@ var tileRequestConfig TileRequestConfig
 
 var tilePools sync.Map
 
-type TilePool struct {
-	TileSize int
-	ImageMem codec.ImageMem
+type ImagePool struct {
+	Width  int
+	Height int
+	Memory codec.ImageMem
 }
 
 var imageSource *image.Source
@@ -113,9 +114,9 @@ var collections []collection.Collection
 
 var globalTasks sync.Map
 
-var tileRequestsOut chan struct{}
-var tileRequests []TileRequest
-var tileRequestsMutex sync.Mutex
+var requestsOut chan struct{}
+var requests []ApiRequest
+var requestsMutex sync.Mutex
 
 var httpLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 	Namespace: metrics.Namespace,
@@ -165,14 +166,14 @@ type TileWriter func(w io.Writer) error
 
 const MAX_PRIORITY = math.MaxInt8
 
-type TileRequest struct {
+type ApiRequest struct {
 	Request  *http.Request
 	Response http.ResponseWriter
-	// 0 - highest priority
-	// 127 - lowest priority
+	// 0 - highest priority, 127 - lowest priority
 	Priority int8
 	Process  chan struct{}
 	Done     chan struct{}
+	Handler  func() // Function to execute for this request
 }
 
 type Problem struct {
@@ -199,26 +200,8 @@ func respond(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
 
 func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *render.Scene, zoom int, x int, y int) {
 
-	tileSize := float64(r.TileSize)
-	zoomPower := 1 << zoom
-
-	tx := float64(x) * tileSize
-	ty := float64(zoomPower-1-y) * tileSize
-
-	var scale float64
-	if 1 < scene.Bounds.W/scene.Bounds.H {
-		scale = tileSize / scene.Bounds.W
-		tx += (scale*scene.Bounds.W - tileSize) * 0.5
-	} else {
-		scale = tileSize / scene.Bounds.H
-		ty += (scale*scene.Bounds.H - tileSize) * 0.5
-	}
-
-	scale *= float64(zoomPower)
-
 	scales := render.Scales{
-		Pixel: scale,
-		Tile:  1 / float64(tileSize),
+		Tile: 1 / float64(r.TileSize),
 	}
 
 	c.ResetView()
@@ -226,32 +209,35 @@ func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *r
 	img := r.CanvasImage
 	draw.Draw(img, img.Bounds(), &goimage.Uniform{r.BackgroundColor}, goimage.Point{}, draw.Src)
 
-	matrix := canvas.Identity.
-		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
-		Scale(float64(scale), float64(scale))
-
+	matrix, tileRect := scene.TileView(zoom, x, y, r.TileSize)
 	c.SetView(matrix)
+	r.TileRect = tileRect
 
 	c.SetFillColor(canvas.Black)
 
 	scene.Draw(ctx, r, c, scales, imageSource)
 }
 
-func getTilePool(config *render.Render) *sync.Pool {
-	p := TilePool{
-		TileSize: config.TileSize,
-		ImageMem: config.ImageMem,
+func getImagePool(config *render.Render) *sync.Pool {
+	p := ImagePool{
+		Width:  config.TileSize,
+		Height: config.TileSize,
+		Memory: config.ImageMem,
+	}
+	if config.ImageWidth != 0 && config.ImageHeight != 0 {
+		p.Width = config.ImageWidth
+		p.Height = config.ImageHeight
 	}
 	stored, ok := tilePools.Load(p)
 	if ok {
 		return stored.(*sync.Pool)
 	}
 	pool := sync.Pool{}
-	switch p.ImageMem {
+	switch p.Memory {
 	case codec.ImageMemPaletted:
 		pool.New = func() interface{} {
 			return goimage.NewPaletted(
-				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+				goimage.Rect(0, 0, p.Width, p.Width),
 				color.Palette{
 					color.RGBA{0x00, 0x00, 0x00, 0x00},
 					color.RGBA{0xFF, 0xFF, 0xFF, 0xFF},
@@ -261,13 +247,13 @@ func getTilePool(config *render.Render) *sync.Pool {
 	case codec.ImageMemNRGBA:
 		pool.New = func() interface{} {
 			return goimage.NewNRGBA(
-				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+				goimage.Rect(0, 0, p.Width, p.Width),
 			)
 		}
 	default:
 		pool.New = func() interface{} {
 			return goimage.NewRGBA(
-				goimage.Rect(0, 0, p.TileSize, p.TileSize),
+				goimage.Rect(0, 0, p.Width, p.Width),
 			)
 		}
 	}
@@ -275,15 +261,15 @@ func getTilePool(config *render.Render) *sync.Pool {
 	return stored.(*sync.Pool)
 }
 
-func getTileImage(config *render.Render) (draw.Image, *canvas.Context) {
-	pool := getTilePool(config)
+func getPoolImage(config *render.Render) (draw.Image, *canvas.Context) {
+	pool := getImagePool(config)
 	img := pool.Get().(draw.Image)
 	renderer := rasterizer.New(img, 1.0)
 	return img, canvas.NewContext(renderer)
 }
 
-func putTileImage(config *render.Render, img draw.Image) {
-	pool := getTilePool(config)
+func putPoolImage(config *render.Render, img draw.Image) {
+	pool := getImagePool(config)
 	pool.Put(img)
 }
 
@@ -307,22 +293,22 @@ func newFileIndexTask(collection *collection.Collection) *Task {
 	}
 }
 
-func pushTileRequest(request TileRequest) {
-	tileRequestsMutex.Lock()
-	tileRequests = append(tileRequests, request)
-	tileRequestsMutex.Unlock()
-	tileRequestsOut <- struct{}{}
+func pushApiRequest(request ApiRequest) {
+	requestsMutex.Lock()
+	requests = append(requests, request)
+	requestsMutex.Unlock()
+	requestsOut <- struct{}{}
 }
 
-func popBestTileRequest() (bool, TileRequest) {
-	<-tileRequestsOut
+func popBestApiRequest() (bool, ApiRequest) {
+	<-requestsOut
 
-	var bestRequest TileRequest
+	var bestRequest ApiRequest
 	bestRequest.Priority = MAX_PRIORITY
 
-	tileRequestsMutex.Lock()
+	requestsMutex.Lock()
 	var bestIndex = -1
-	for index, request := range tileRequests {
+	for index, request := range requests {
 		if request.Priority < bestRequest.Priority {
 			bestRequest = request
 			bestIndex = index
@@ -330,12 +316,12 @@ func popBestTileRequest() (bool, TileRequest) {
 	}
 
 	if bestIndex == -1 {
-		tileRequestsMutex.Unlock()
+		requestsMutex.Unlock()
 		return false, bestRequest
 	}
 
-	tileRequests = append(tileRequests[:bestIndex], tileRequests[bestIndex+1:]...)
-	tileRequestsMutex.Unlock()
+	requests = append(requests[:bestIndex], requests[bestIndex+1:]...)
+	requestsMutex.Unlock()
 	return true, bestRequest
 }
 
@@ -343,7 +329,7 @@ func processTileRequests(concurrency int) {
 	for i := 0; i < concurrency; i++ {
 		go func(i int) {
 			for {
-				ok, request := popBestTileRequest()
+				ok, request := popBestApiRequest()
 				if !ok {
 					log.Printf("tile request worker %v exiting", i)
 				}
@@ -358,8 +344,8 @@ func renderSample(config render.Render, scene *render.Scene) {
 	log.Println("rendering sample")
 	config.LogDraws = true
 
-	image, canvas := getTileImage(&config)
-	defer putTileImage(&config, image)
+	image, canvas := getPoolImage(&config)
+	defer putPoolImage(&config, image)
 	config.CanvasImage = image
 
 	drawFinished := metrics.ElapsedWithCount("draw", len(scene.Photos))
@@ -696,16 +682,19 @@ func (*Api) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneI
 	if tileRequestConfig.Concurrency == 0 {
 		GetScenesSceneIdTilesImpl(w, r, sceneId, params)
 	} else {
-		request := TileRequest{
+		request := ApiRequest{
 			Request:  r,
 			Response: w,
 			Priority: GetTilesRequestPriority(params),
 			Process:  make(chan struct{}),
 			Done:     make(chan struct{}),
+			Handler: func() {
+				GetScenesSceneIdTilesImpl(w, r, sceneId, params)
+			},
 		}
-		pushTileRequest(request)
+		pushApiRequest(request)
 		<-request.Process
-		GetScenesSceneIdTilesImpl(w, r, sceneId, params)
+		request.Handler()
 		request.Done <- struct{}{}
 	}
 
@@ -863,8 +852,8 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		encoder.Mem = codec.ImageMemPaletted
 	}
 
-	img, context := getTileImage(&rn)
-	defer putTileImage(&rn, img)
+	img, context := getPoolImage(&rn)
+	defer putPoolImage(&rn, img)
 
 	rn.CanvasImage = img
 	rn.Zoom = zoom
@@ -899,6 +888,70 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		log.Printf("Error encoding image as %s: %v", mr.String(), err)
 		problem(w, r, http.StatusInternalServerError, "Error encoding image")
 	}
+}
+
+func (*Api) GetScenesSceneIdFeatures(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdFeaturesParams) {
+	if tileRequestConfig.Concurrency == 0 {
+		GetScenesSceneIdFeaturesImpl(w, r, sceneId, params)
+	} else {
+		request := ApiRequest{
+			Request:  r,
+			Response: w,
+			Priority: -10,
+			Process:  make(chan struct{}),
+			Done:     make(chan struct{}),
+			Handler: func() {
+				GetScenesSceneIdFeaturesImpl(w, r, sceneId, params)
+			},
+		}
+		pushApiRequest(request)
+		<-request.Process
+		request.Handler()
+		request.Done <- struct{}{}
+	}
+}
+
+func GetScenesSceneIdFeaturesImpl(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdFeaturesParams) {
+	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusBadRequest, "Scene not found")
+		return
+	}
+
+	_, tileRect := scene.TileView(params.Zoom, int(params.X), int(params.Y), 1)
+
+	geojson := openapi.GeoJSON{
+		Type:     "FeatureCollection",
+		Features: make([]openapi.GeoJSONFeature, 0),
+	}
+
+	for _, photo := range scene.ClusterPhotos {
+		if !photo.Sprite.Rect.IsVisible(tileRect) {
+			continue
+		}
+		bounds := photo.Sprite.Rect
+		fileId := openapi.FileId(photo.Id)
+		geojson.Features = append(geojson.Features,
+			openapi.GeoJSONFeature{
+				Type: "Feature",
+				Geometry: openapi.GeoJSONPoint{
+					Type:        "Point",
+					Coordinates: []float32{float32(bounds.X + bounds.W/2), float32(bounds.Y + bounds.H/2)},
+				},
+				Properties: openapi.GeoJSONProperties{
+					FileId: &fileId,
+				},
+			},
+		)
+	}
+
+	if scene.Loading {
+		w.Header().Add("Cache-Control", "no-cache")
+	} else {
+		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+	}
+
+	respond(w, r, http.StatusOK, geojson)
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
@@ -1289,6 +1342,173 @@ func (*Api) GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+func (*Api) GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request, id openapi.FileIdPathParam, filename openapi.FilenamePathParam, params openapi.GetFilesIdPreviewsFilenameParams) {
+	ctx := r.Context()
+
+	// Get file info
+	info := imageSource.GetInfo(image.ImageId(id))
+	if info.Width == 0 || info.Height == 0 {
+		problem(w, r, http.StatusNotFound, "File not found")
+		return
+	}
+
+	// Parse dimensions with border-box sizing
+	targetW, targetH, err := parsePreviewDimensions(info.Width, info.Height, params.W, params.H)
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	rn := defaultSceneConfig.Render
+	rn.ImageWidth = targetW
+	rn.ImageHeight = targetH
+
+	// Parse border parameters
+	borderWidth := 0
+	if params.BorderWidth != nil {
+		borderWidth = *params.BorderWidth
+		if borderWidth < 0 || borderWidth > 100 {
+			problem(w, r, http.StatusBadRequest, "Border width must be 0-100")
+			return
+		}
+	}
+
+	borderColor := color.RGBA{0, 0, 0, 0xFF}
+	if params.BorderColor != nil {
+		c, err := decodeColor(string(*params.BorderColor))
+		if err != nil {
+			problem(w, r, http.StatusBadRequest, "Invalid border color: "+err.Error())
+			return
+		}
+		// Convert color.Color to color.RGBA
+		r, g, b, a := c.RGBA()
+		borderColor = color.RGBA{
+			R: uint8(r >> 8),
+			G: uint8(g >> 8),
+			B: uint8(b >> 8),
+			A: uint8(a >> 8),
+		}
+	}
+
+	acceptHeader := r.Header.Get("Accept")
+	ranges, err := codec.ParseAccept(acceptHeader)
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, "Invalid Accept header")
+		return
+	}
+
+	encoder, mr, ok := ranges.FastestEncoder()
+	if !ok {
+		problem(w, r, http.StatusBadRequest, "No supported image format in Accept header")
+		return
+	}
+
+	img, c := getPoolImage(&rn)
+	defer putPoolImage(&rn, img)
+
+	rn.CanvasImage = img
+	rn.MaxSolidPixelArea = 0 // Force full render, no solid color optimization
+	rn.BackgroundColor = color.RGBA{0, 0, 0, 0}
+	rn.CoverFit = true
+
+	c.ResetView()
+	c.SetView(canvas.Identity.Translate(0, float64(targetH)))
+
+	draw.Draw(img, img.Bounds(), &goimage.Uniform{rn.BackgroundColor}, goimage.Point{}, draw.Src)
+
+	// Draw border first (if requested)
+	if borderWidth > 0 {
+		// Draw rounded rectangle border using canvas library
+		style := c.Style
+		style.FillColor = borderColor
+
+		borderPath := canvas.Rectangle(float64(targetW), float64(targetH))
+
+		// Transform to correct position (canvas coordinates)
+		matrix := canvas.Identity.Translate(0, -float64(targetH))
+		c.RenderPath(borderPath, style, c.View().Mul(matrix))
+	}
+
+	// Calculate content area (inset by border)
+	contentX := float64(borderWidth)
+	contentY := float64(borderWidth)
+	contentW := float64(targetW - 2*borderWidth)
+	contentH := float64(targetH - 2*borderWidth)
+
+	if contentW < 1 || contentH < 1 {
+		problem(w, r, http.StatusBadRequest, "Border too large for image size")
+		return
+	}
+
+	// Setup photo with content area bounds
+	photo := &render.Photo{
+		Id: image.ImageId(id),
+	}
+	photo.Sprite.Rect = render.Rect{
+		X: contentX,
+		Y: contentY,
+		W: contentW,
+		H: contentH,
+	}
+
+	// Draw photo on top of border using existing rendering logic
+	photo.Draw(ctx, &rn, nil, c, render.Scales{Tile: 1.0}, imageSource, false)
+
+	w.Header().Add("Content-Type", encoder.ContentType)
+	w.Header().Add("Vary", "Accept")
+	w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+
+	quality := mr.QualityParam()
+	if quality == 0 {
+		switch mr.Subtype {
+		case "webp":
+			quality = 80
+		default:
+			quality = 80
+		}
+	}
+	if rn.QualityPreset == render.QualityPresetHigh {
+		quality = 100
+	}
+
+	err = encoder.Func(w, img, quality)
+	if err != nil {
+		log.Printf("Error encoding image as %s: %v", mr.String(), err)
+		problem(w, r, http.StatusInternalServerError, "Error encoding image")
+	}
+}
+
+func parsePreviewDimensions(origW, origH int, reqW, reqH *int) (w, h int, err error) {
+	// Both specified - use as-is (final size including border)
+	if reqW != nil && reqH != nil {
+		w, h = *reqW, *reqH
+	} else if reqW != nil {
+		// Only width - calculate height maintaining aspect ratio
+		w = *reqW
+		h = int(float64(origH) * float64(w) / float64(origW))
+		if h < 1 {
+			h = 1
+		}
+	} else if reqH != nil {
+		// Only height - calculate width maintaining aspect ratio
+		h = *reqH
+		w = int(float64(origW) * float64(h) / float64(origH))
+		if w < 1 {
+			w = 1
+		}
+	} else {
+		// Neither - use original dimensions
+		w, h = origW, origH
+	}
+
+	// Validate
+	if w < 1 || w > 4096 || h < 1 || h > 4096 {
+		return 0, 0, fmt.Errorf("dimensions %dx%d out of range (1-4096)", w, h)
+	}
+
+	return w, h, nil
+}
+
 func AddPrefix(prefix string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1472,7 +1692,7 @@ func applyConfig(appConfig *AppConfig) {
 	}
 
 	if tileRequestConfig.Concurrency > 0 {
-		close(tileRequestsOut)
+		close(requestsOut)
 	}
 
 	if len(appConfig.Collections) > 0 {
@@ -1504,7 +1724,7 @@ func applyConfig(appConfig *AppConfig) {
 	imageSource.HandleDirUpdates(invalidateDirs)
 	if tileRequestConfig.Concurrency > 0 {
 		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
-		tileRequestsOut = make(chan struct{}, 10000)
+		requestsOut = make(chan struct{}, 10000)
 		processTileRequests(tileRequestConfig.Concurrency)
 	}
 
@@ -1843,6 +2063,7 @@ func main() {
 	// r.Use(middleware.Logger)
 	r.Use(instrumentationMiddleware)
 	r.Use(middleware.Recoverer)
+	r.Use(middleware.Compress(5))
 
 	r.Route(apiPrefix, func(r chi.Router) {
 

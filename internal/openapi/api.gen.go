@@ -99,6 +99,56 @@ type FileBinary string
 // FileId defines model for FileId.
 type FileId int
 
+// GeoJSON FeatureCollection
+type GeoJSON struct {
+	// Array of GeoJSON features representing photos in the scene
+	Features []GeoJSONFeature `json:"features"`
+
+	// The GeoJSON type identifier for the feature collection
+	Type string `json:"type"`
+}
+
+// GeoJSON feature representing a photo in the scene
+type GeoJSONFeature struct {
+	Geometry GeoJSONGeometry `json:"geometry"`
+
+	// Additional properties of the feature
+	Properties GeoJSONProperties `json:"properties"`
+
+	// The GeoJSON type identifier for the feature
+	Type string `json:"type"`
+}
+
+// GeoJSONGeometry defines model for GeoJSONGeometry.
+type GeoJSONGeometry interface{}
+
+// GeoJSON point geometry
+type GeoJSONPoint struct {
+	// Coordinate pair representing a point
+	Coordinates []float32 `json:"coordinates"`
+
+	// The GeoJSON type identifier for the geometry
+	Type string `json:"type"`
+}
+
+// GeoJSON polygon geometry, usually a rectangle representing a photo
+type GeoJSONPolygon struct {
+	// Array of linear rings representing the polygon
+	Coordinates [][][]float32 `json:"coordinates"`
+
+	// The GeoJSON type identifier for the geometry
+	Type string `json:"type"`
+}
+
+// Additional properties of the feature
+type GeoJSONProperties struct {
+	Color  *Color  `json:"color,omitempty"`
+	FileId *FileId `json:"file_id,omitempty"`
+
+	// Feature text to be displayed on the map
+	Text *string `json:"text,omitempty"`
+}
+
 // ImageHeight defines model for ImageHeight.
 type ImageHeight float32
 
@@ -254,6 +304,21 @@ type SizePathParam string
 // TagIdPathParam defines model for TagIdPathParam.
 type TagIdPathParam TagId
 
+// GetFilesIdPreviewsFilenameParams defines parameters for GetFilesIdPreviewsFilename.
+type GetFilesIdPreviewsFilenameParams struct {
+	// Target width in pixels. If omitted, uses original width or scales proportionally with height.
+	W *int `json:"w,omitempty"`
+
+	// Target height in pixels. If omitted, uses original height or scales proportionally with width.
+	H *int `json:"h,omitempty"`
+
+	// Border width in pixels to add around the image.
+	BorderWidth *int `json:"border_width,omitempty"`
+
+	// Border color in hexadecimal format (with or without
+	BorderColor *Color `json:"border_color,omitempty"`
+}
+
 // GetScenesParams defines parameters for GetScenes.
 type GetScenesParams struct {
 	// Collection ID
@@ -274,6 +339,13 @@ type PostScenesJSONBody SceneParams
 // GetScenesSceneIdDatesParams defines parameters for GetScenesSceneIdDates.
 type GetScenesSceneIdDatesParams struct {
 	Height int `json:"height"`
+}
+
+// GetScenesSceneIdFeaturesParams defines parameters for GetScenesSceneIdFeatures.
+type GetScenesSceneIdFeaturesParams struct {
+	Zoom int       `json:"zoom"`
+	X    TileCoord `json:"x"`
+	Y    TileCoord `json:"y"`
 }
 
 // GetScenesSceneIdRegionsParams defines parameters for GetScenesSceneIdRegions.
@@ -379,6 +451,9 @@ type ServerInterface interface {
 	// (GET /files/{id}/original/{filename})
 	GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, filename FilenamePathParam)
 
+	// (GET /files/{id}/previews/{filename})
+	GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, filename FilenamePathParam, params GetFilesIdPreviewsFilenameParams)
+
 	// (GET /files/{id}/variants/{size}/{filename})
 	GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, size SizePathParam, filename FilenamePathParam)
 
@@ -393,6 +468,9 @@ type ServerInterface interface {
 
 	// (GET /scenes/{scene_id}/dates)
 	GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdDatesParams)
+
+	// (GET /scenes/{scene_id}/features)
+	GetScenesSceneIdFeatures(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdFeaturesParams)
 
 	// (GET /scenes/{scene_id}/regions)
 	GetScenesSceneIdRegions(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdRegionsParams)
@@ -541,6 +619,88 @@ func (siw *ServerInterfaceWrapper) GetFilesIdOriginalFilename(w http.ResponseWri
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFilesIdOriginalFilename(w, r, id, filename)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// GetFilesIdPreviewsFilename operation middleware
+func (siw *ServerInterfaceWrapper) GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id FileIdPathParam
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Path parameter "filename" -------------
+	var filename FilenamePathParam
+
+	err = runtime.BindStyledParameter("simple", false, "filename", chi.URLParam(r, "filename"), &filename)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter filename: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFilesIdPreviewsFilenameParams
+
+	// ------------- Optional query parameter "w" -------------
+	if paramValue := r.URL.Query().Get("w"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "w", r.URL.Query(), &params.W)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter w: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "h" -------------
+	if paramValue := r.URL.Query().Get("h"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "h", r.URL.Query(), &params.H)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter h: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "border_width" -------------
+	if paramValue := r.URL.Query().Get("border_width"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "border_width", r.URL.Query(), &params.BorderWidth)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter border_width: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "border_color" -------------
+	if paramValue := r.URL.Query().Get("border_color"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "border_color", r.URL.Query(), &params.BorderColor)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter border_color: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFilesIdPreviewsFilename(w, r, id, filename, params)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -791,6 +951,77 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdDates(w http.ResponseWriter, 
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetScenesSceneIdDates(w, r, sceneId, params)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// GetScenesSceneIdFeatures operation middleware
+func (siw *ServerInterfaceWrapper) GetScenesSceneIdFeatures(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "scene_id" -------------
+	var sceneId SceneId
+
+	err = runtime.BindStyledParameter("simple", false, "scene_id", chi.URLParam(r, "scene_id"), &sceneId)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter scene_id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetScenesSceneIdFeaturesParams
+
+	// ------------- Required query parameter "zoom" -------------
+	if paramValue := r.URL.Query().Get("zoom"); paramValue != "" {
+
+	} else {
+		http.Error(w, "Query argument zoom is required, but not found", http.StatusBadRequest)
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "zoom", r.URL.Query(), &params.Zoom)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter zoom: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Required query parameter "x" -------------
+	if paramValue := r.URL.Query().Get("x"); paramValue != "" {
+
+	} else {
+		http.Error(w, "Query argument x is required, but not found", http.StatusBadRequest)
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "x", r.URL.Query(), &params.X)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter x: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Required query parameter "y" -------------
+	if paramValue := r.URL.Query().Get("y"); paramValue != "" {
+
+	} else {
+		http.Error(w, "Query argument y is required, but not found", http.StatusBadRequest)
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "y", r.URL.Query(), &params.Y)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter y: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetScenesSceneIdFeatures(w, r, sceneId, params)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1370,6 +1601,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/files/{id}/original/{filename}", wrapper.GetFilesIdOriginalFilename)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/files/{id}/previews/{filename}", wrapper.GetFilesIdPreviewsFilename)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/files/{id}/variants/{size}/{filename}", wrapper.GetFilesIdVariantsSizeFilename)
 	})
 	r.Group(func(r chi.Router) {
@@ -1383,6 +1617,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/dates", wrapper.GetScenesSceneIdDates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/scenes/{scene_id}/features", wrapper.GetScenesSceneIdFeatures)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/regions", wrapper.GetScenesSceneIdRegions)

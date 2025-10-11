@@ -229,6 +229,20 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	scene.Photos = photos
 
+	// Sort clusters by size
+	slices.SortFunc(clusters, func(a, b Cluster) int {
+		return cmp.Compare(len(b.pp), len(a.pp))
+	})
+
+	// Convert clusters to cluster photos
+	for _, cluster := range clusters {
+		if len(cluster.pp) == 0 {
+			continue
+		}
+		middlePhoto := photos[cluster.pi[len(cluster.pi)/2]]
+		scene.ClusterPhotos = append(scene.ClusterPhotos, middlePhoto)
+	}
+
 	scene.LoadCount = 0
 	scene.LoadUnit = ""
 	scene.RegionSource = PhotoRegionSource{

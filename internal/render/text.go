@@ -24,7 +24,7 @@ func NewTextFromRect(rect Rect, font *canvas.FontFace, txt string) Text {
 }
 
 func (text *Text) Draw(config *Render, c *canvas.Context, scales Scales) {
-	if text.Sprite.IsVisible(c, scales) {
+	if text.Sprite.IsVisible(c, scales) && text.Font != nil {
 		pixelArea := text.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
 		if pixelArea < config.MaxSolidPixelArea {
 			// Skip rendering small text

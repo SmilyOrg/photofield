@@ -256,6 +256,46 @@ paths:
                 type: string
                 format: binary
 
+  /scenes/{scene_id}/features:
+    get:
+      description: Get features of a scene i.e. a vector tile
+      tags: ["Display"]
+      parameters:
+
+        - name: scene_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SceneId"
+
+        - name: zoom
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            example: 3
+
+        - name: "x"
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/TileCoord"
+
+        - name: "y"
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/TileCoord"
+
+      responses:
+        "200":
+          description: OK
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/GeoJSON"
+
   /scenes/{scene_id}/dates:
     get:
       description: Get layout photo dates
@@ -461,6 +501,95 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/FileResponse"
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+
+  /files/{id}/previews/{filename}:
+    get:
+      description: |
+        Get a dynamically resized preview of an image with optional transformations.
+        The service automatically selects the optimal source variant and applies the
+        requested transformations (resize, border, fit mode).
+        
+        This endpoint is designed for use cases requiring specific image dimensions
+        such as map cluster icons, social media cards, or email thumbnails.
+      tags: ["Files"]
+      parameters:
+        - $ref: "#/components/parameters/FileIdPathParam"
+        - $ref: "#/components/parameters/FilenamePathParam"
+        
+        - name: w
+          in: query
+          required: false
+          description: Target width in pixels. If omitted, uses original width or scales proportionally with height.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4096
+          example: 48
+        
+        - name: h
+          in: query
+          required: false
+          description: Target height in pixels. If omitted, uses original height or scales proportionally with width.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4096
+          example: 48
+        
+        - name: border_width
+          in: query
+          required: false
+          description: Border width in pixels to add around the image.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+            default: 0
+          example: 2
+        
+        - name: border_color
+          in: query
+          required: false
+          description: Border color in hexadecimal format (with or without # prefix).
+          schema:
+            $ref: "#/components/schemas/Color"
+        
+      responses:
+        "200":
+          description: Successfully generated preview image
+          headers:
+            Content-Type:
+              description: Image MIME type
+              schema:
+                type: string
+                example: "image/jpeg"
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                status: 400
+                title: Invalid parameters
+                detail: "Dimensions 5000x5000 exceed maximum allowed size of 4096x4096"
+        
         "404":
           $ref: "#/components/responses/FileNotFound"
 
@@ -1099,3 +1228,96 @@ components:
             for engineers, usually not suited for non technical stakeholders and
             not localized.
           example: Service Unavailable
+
+    GeoJSON:
+      type: object
+      description: GeoJSON FeatureCollection
+      required: 
+        - type
+        - features
+      properties:
+        type:
+          type: string
+          description: The GeoJSON type identifier for the feature collection
+          example: "FeatureCollection"
+        features:
+          type: array
+          description: Array of GeoJSON features representing photos in the scene
+          items:
+            $ref: "#/components/schemas/GeoJSONFeature"
+
+    GeoJSONFeature:
+      type: object
+      description: GeoJSON feature representing a photo in the scene
+      required:
+        - type
+        - geometry
+        - properties
+      properties:
+        type:
+          type: string
+          description: The GeoJSON type identifier for the feature
+          example: "Feature"
+        geometry:
+          $ref: "#/components/schemas/GeoJSONGeometry"
+        properties:
+          $ref: "#/components/schemas/GeoJSONProperties"
+
+    GeoJSONGeometry:
+      oneOf:
+        - $ref: "#/components/schemas/GeoJSONPolygon"
+        - $ref: "#/components/schemas/GeoJSONPoint"
+
+    GeoJSONPolygon:
+      type: object
+      description: GeoJSON polygon geometry, usually a rectangle representing a photo
+      required:
+      - type
+      - coordinates
+      properties:
+        type:
+          type: string
+          description: The GeoJSON type identifier for the geometry
+          example: "Polygon"
+        coordinates:
+          type: array
+          description: Array of linear rings representing the polygon
+          items:
+            type: array
+            description: Array of coordinates representing a linear ring
+            items:
+              type: array
+              description: Coordinate pair representing a point
+              items:
+                type: number
+                example: 10.0
+
+    GeoJSONPoint:
+      type: object
+      description: GeoJSON point geometry
+      required:
+      - type
+      - coordinates
+      properties:
+        type:
+          type: string
+          description: The GeoJSON type identifier for the geometry
+          example: "Point"
+        coordinates:
+          type: array
+          description: Coordinate pair representing a point
+          items:
+            type: number
+            example: 10.0
+
+    GeoJSONProperties:
+      type: object
+      description: Additional properties of the feature
+      properties:
+        file_id:
+          $ref: "#/components/schemas/FileId"
+        color:
+          $ref: "#/components/schemas/Color"
+        text:
+          type: string
+          description: Feature text to be displayed on the map

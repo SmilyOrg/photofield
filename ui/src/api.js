@@ -151,6 +151,17 @@ export function getTileUrl(sceneId, level, x, y, tileSize, extraParams) {
   return url;
 }
 
+export function getFeaturesUrl(sceneId, level, x, y, extraParams) {
+  const params = {
+    zoom: level,
+    x,
+    y,
+    ...extraParams,
+  };
+  let url = `${host()}/scenes/${sceneId}/features?${qs.stringify(params, { arrayFormat: "comma" })}`;
+  return url;
+}
+
 export function getFileUrl(id, filename) {
   if (!filename) {
     return `${host()}/files/${id}`;
@@ -164,6 +175,14 @@ export async function getFileBlob(id) {
 
 export function getThumbnailUrl(id, size, filename) {
   return `${host()}/files/${id}/variants/${size}/${filename}`;
+}
+
+export function getPreviewUrl(id, filename, params) {
+  let url = `${host()}/files/${id}/previews/${filename}`;
+  if (params) {
+    url += "?" + qs.stringify(params);
+  }
+  return url;
 }
 
 export function useApi(getUrl, config) {
