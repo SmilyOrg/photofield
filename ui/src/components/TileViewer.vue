@@ -27,7 +27,7 @@ import { easeIn, easeOut, linear } from 'ol/easing';
 import { defaults as defaultInteractions, DragBox, DragPan, MouseWheelZoom } from 'ol/interaction';
 import { defaults as defaultControls } from 'ol/control';
 import Kinetic from 'ol/Kinetic';
-import { addCoordinateTransforms, get as getProjection } from 'ol/proj';
+import { addCoordinateTransforms, get as getProjection, toLonLat } from 'ol/proj';
 import { getBottomLeft, getTopLeft, getTopRight, getBottomRight } from 'ol/extent';
 
 import equal from 'fast-deep-equal';
@@ -61,6 +61,8 @@ function ctrlWithMaybeShift(mapBrowserEvent) {
 function zoomEase(x) {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
 };
+
+const MAX_ICON_ZOOM = 10;
 
 export default {
 
@@ -402,7 +404,7 @@ export default {
       const geom = feature.getGeometry();
       const type = geom.getType();
       const zoom = this.v.getZoom();
-      if (zoom > 10) return null;
+      if (zoom > MAX_ICON_ZOOM) return null;
       switch (type) {
         case "Polygon":
           return new Style({
@@ -773,6 +775,26 @@ export default {
 
     onClick(event) {
       if (!this.interactive) return;
+      
+      if (this.geo) {
+        const feature = this.map.forEachFeatureAtPixel(event.pixel, (feature) => {
+          return feature;
+        });
+
+        if (feature && feature.getGeometry().getType() === 'Point') {
+          const coordinate = feature.getGeometry().getCoordinates();
+          const targetZoom = MAX_ICON_ZOOM + 3;
+          const lonlat = toLonLat(coordinate, this.projection);
+          const geoview = [lonlat[0], lonlat[1], targetZoom];
+          const targetView = Geoview.toView(geoview, this.scene.bounds);
+          this.setView(targetView, {
+            animationTime: 0.5,
+            ease: 'out',
+          });
+          return;
+        }
+      }
+      
       const coords = this.viewFromCoordinate(event.coordinate);
       if (!coords) return;
       this.$emit("click", {
