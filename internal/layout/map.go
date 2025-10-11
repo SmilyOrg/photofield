@@ -45,7 +45,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		H: layout.ViewportHeight,
 	}
 
-	// layoutFinished := metrics.Elapsed("layout")
+	layoutFinished := metrics.Elapsed("layout")
 
 	earthEquatorMeters := 40075017.
 
@@ -227,7 +227,7 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 	scene.RegionSource = PhotoRegionSource{
 		Source: source,
 	}
-	// layoutFinished()
+	layoutFinished()
 }
 
 // assignToGrid assigns each point to a grid cell based on position.
