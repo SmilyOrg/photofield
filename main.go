@@ -113,9 +113,9 @@ var collections []collection.Collection
 
 var globalTasks sync.Map
 
-var tileRequestsOut chan struct{}
-var tileRequests []TileRequest
-var tileRequestsMutex sync.Mutex
+var requestsOut chan struct{}
+var requests []ApiRequest
+var requestsMutex sync.Mutex
 
 var httpLatency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 	Namespace: metrics.Namespace,
@@ -165,14 +165,14 @@ type TileWriter func(w io.Writer) error
 
 const MAX_PRIORITY = math.MaxInt8
 
-type TileRequest struct {
+type ApiRequest struct {
 	Request  *http.Request
 	Response http.ResponseWriter
-	// 0 - highest priority
-	// 127 - lowest priority
+	// 0 - highest priority, 127 - lowest priority
 	Priority int8
 	Process  chan struct{}
 	Done     chan struct{}
+	Handler  func() // Function to execute for this request
 }
 
 type Problem struct {
@@ -199,26 +199,8 @@ func respond(w http.ResponseWriter, r *http.Request, code int, v interface{}) {
 
 func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *render.Scene, zoom int, x int, y int) {
 
-	tileSize := float64(r.TileSize)
-	zoomPower := 1 << zoom
-
-	tx := float64(x) * tileSize
-	ty := float64(zoomPower-1-y) * tileSize
-
-	var scale float64
-	if 1 < scene.Bounds.W/scene.Bounds.H {
-		scale = tileSize / scene.Bounds.W
-		tx += (scale*scene.Bounds.W - tileSize) * 0.5
-	} else {
-		scale = tileSize / scene.Bounds.H
-		ty += (scale*scene.Bounds.H - tileSize) * 0.5
-	}
-
-	scale *= float64(zoomPower)
-
 	scales := render.Scales{
-		Pixel: scale,
-		Tile:  1 / float64(tileSize),
+		Tile: 1 / float64(r.TileSize),
 	}
 
 	c.ResetView()
@@ -226,11 +208,9 @@ func drawTile(ctx context.Context, c *canvas.Context, r *render.Render, scene *r
 	img := r.CanvasImage
 	draw.Draw(img, img.Bounds(), &goimage.Uniform{r.BackgroundColor}, goimage.Point{}, draw.Src)
 
-	matrix := canvas.Identity.
-		Translate(float64(-tx), float64(-ty+tileSize*float64(zoomPower))).
-		Scale(float64(scale), float64(scale))
-
+	matrix, tileRect := scene.TileView(zoom, x, y, r.TileSize)
 	c.SetView(matrix)
+	r.TileRect = tileRect
 
 	c.SetFillColor(canvas.Black)
 
@@ -307,22 +287,22 @@ func newFileIndexTask(collection *collection.Collection) *Task {
 	}
 }
 
-func pushTileRequest(request TileRequest) {
-	tileRequestsMutex.Lock()
-	tileRequests = append(tileRequests, request)
-	tileRequestsMutex.Unlock()
-	tileRequestsOut <- struct{}{}
+func pushApiRequest(request ApiRequest) {
+	requestsMutex.Lock()
+	requests = append(requests, request)
+	requestsMutex.Unlock()
+	requestsOut <- struct{}{}
 }
 
-func popBestTileRequest() (bool, TileRequest) {
-	<-tileRequestsOut
+func popBestApiRequest() (bool, ApiRequest) {
+	<-requestsOut
 
-	var bestRequest TileRequest
+	var bestRequest ApiRequest
 	bestRequest.Priority = MAX_PRIORITY
 
-	tileRequestsMutex.Lock()
+	requestsMutex.Lock()
 	var bestIndex = -1
-	for index, request := range tileRequests {
+	for index, request := range requests {
 		if request.Priority < bestRequest.Priority {
 			bestRequest = request
 			bestIndex = index
@@ -330,12 +310,12 @@ func popBestTileRequest() (bool, TileRequest) {
 	}
 
 	if bestIndex == -1 {
-		tileRequestsMutex.Unlock()
+		requestsMutex.Unlock()
 		return false, bestRequest
 	}
 
-	tileRequests = append(tileRequests[:bestIndex], tileRequests[bestIndex+1:]...)
-	tileRequestsMutex.Unlock()
+	requests = append(requests[:bestIndex], requests[bestIndex+1:]...)
+	requestsMutex.Unlock()
 	return true, bestRequest
 }
 
@@ -343,7 +323,7 @@ func processTileRequests(concurrency int) {
 	for i := 0; i < concurrency; i++ {
 		go func(i int) {
 			for {
-				ok, request := popBestTileRequest()
+				ok, request := popBestApiRequest()
 				if !ok {
 					log.Printf("tile request worker %v exiting", i)
 				}
@@ -696,16 +676,19 @@ func (*Api) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneI
 	if tileRequestConfig.Concurrency == 0 {
 		GetScenesSceneIdTilesImpl(w, r, sceneId, params)
 	} else {
-		request := TileRequest{
+		request := ApiRequest{
 			Request:  r,
 			Response: w,
 			Priority: GetTilesRequestPriority(params),
 			Process:  make(chan struct{}),
 			Done:     make(chan struct{}),
+			Handler: func() {
+				GetScenesSceneIdTilesImpl(w, r, sceneId, params)
+			},
 		}
-		pushTileRequest(request)
+		pushApiRequest(request)
 		<-request.Process
-		GetScenesSceneIdTilesImpl(w, r, sceneId, params)
+		request.Handler()
 		request.Done <- struct{}{}
 	}
 
@@ -899,6 +882,77 @@ func GetScenesSceneIdTilesImpl(w http.ResponseWriter, r *http.Request, sceneId o
 		log.Printf("Error encoding image as %s: %v", mr.String(), err)
 		problem(w, r, http.StatusInternalServerError, "Error encoding image")
 	}
+}
+
+func (*Api) GetScenesSceneIdFeatures(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdFeaturesParams) {
+	if tileRequestConfig.Concurrency == 0 {
+		GetScenesSceneIdFeaturesImpl(w, r, sceneId, params)
+	} else {
+		request := ApiRequest{
+			Request:  r,
+			Response: w,
+			Priority: -10,
+			Process:  make(chan struct{}),
+			Done:     make(chan struct{}),
+			Handler: func() {
+				GetScenesSceneIdFeaturesImpl(w, r, sceneId, params)
+			},
+		}
+		pushApiRequest(request)
+		<-request.Process
+		request.Handler()
+		request.Done <- struct{}{}
+	}
+}
+
+func GetScenesSceneIdFeaturesImpl(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdFeaturesParams) {
+	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusBadRequest, "Scene not found")
+		return
+	}
+
+	_, tileRect := scene.TileView(params.Zoom, int(params.X), int(params.Y), 1)
+
+	geojson := openapi.GeoJSON{
+		Type:     "FeatureCollection",
+		Features: make([]openapi.GeoJSONFeature, 0),
+	}
+	for photo := range scene.GetVisiblePhotos(tileRect) {
+		info := photo.GetInfo(imageSource)
+		fileId := openapi.FileId(photo.Id)
+		color := openapi.Color(fmt.Sprintf("#%06x", info.Color&0xFFFFFF))
+		bounds := photo.Sprite.Rect
+		geojson.Features = append(geojson.Features,
+			openapi.GeoJSONFeature{
+				Type: "Feature",
+				Geometry: openapi.GeoJSONPolygon{
+					Type: "Polygon",
+					Coordinates: [][][]float32{
+						[][]float32{
+							[]float32{float32(bounds.X), float32(bounds.Y)},
+							[]float32{float32(bounds.X + bounds.W), float32(bounds.Y)},
+							[]float32{float32(bounds.X + bounds.W), float32(bounds.Y + bounds.H)},
+							[]float32{float32(bounds.X), float32(bounds.Y + bounds.H)},
+							[]float32{float32(bounds.X), float32(bounds.Y)},
+						},
+					},
+				},
+				Properties: openapi.GeoJSONProperties{
+					FileId: &fileId,
+					Color:  &color,
+				},
+			},
+		)
+	}
+
+	if scene.Loading {
+		w.Header().Add("Cache-Control", "no-cache")
+	} else {
+		w.Header().Add("Cache-Control", "max-age=86400") // 1 day
+	}
+
+	respond(w, r, http.StatusOK, geojson)
 }
 
 func (*Api) GetScenesSceneIdDates(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdDatesParams) {
@@ -1472,7 +1526,7 @@ func applyConfig(appConfig *AppConfig) {
 	}
 
 	if tileRequestConfig.Concurrency > 0 {
-		close(tileRequestsOut)
+		close(requestsOut)
 	}
 
 	if len(appConfig.Collections) > 0 {
@@ -1504,7 +1558,7 @@ func applyConfig(appConfig *AppConfig) {
 	imageSource.HandleDirUpdates(invalidateDirs)
 	if tileRequestConfig.Concurrency > 0 {
 		log.Printf("request concurrency %v", tileRequestConfig.Concurrency)
-		tileRequestsOut = make(chan struct{}, 10000)
+		requestsOut = make(chan struct{}, 10000)
 		processTileRequests(tileRequestConfig.Concurrency)
 	}
 
@@ -1843,6 +1897,7 @@ func main() {
 	// r.Use(middleware.Logger)
 	r.Use(instrumentationMiddleware)
 	r.Use(middleware.Recoverer)
+	r.Use(middleware.Compress(5))
 
 	r.Route(apiPrefix, func(r chi.Router) {
 

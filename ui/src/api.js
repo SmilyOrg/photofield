@@ -151,6 +151,17 @@ export function getTileUrl(sceneId, level, x, y, tileSize, extraParams) {
   return url;
 }
 
+export function getFeaturesUrl(sceneId, level, x, y, extraParams) {
+  const params = {
+    zoom: level,
+    x,
+    y,
+    ...extraParams,
+  };
+  let url = `${host()}/scenes/${sceneId}/features?${qs.stringify(params, { arrayFormat: "comma" })}`;
+  return url;
+}
+
 export function getFileUrl(id, filename) {
   if (!filename) {
     return `${host()}/files/${id}`;
