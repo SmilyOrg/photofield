@@ -7,7 +7,7 @@ import (
 	"image"
 	"log"
 	"os/exec"
-	"photofield/io"
+	"photofield/internal/io"
 	"time"
 
 	"image/jpeg"

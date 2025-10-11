@@ -17,8 +17,8 @@ import (
 	"image/jpeg"
 	"image/png"
 
-	"photofield/io"
-	"photofield/io/goimage"
+	"photofield/internal/io"
+	"photofield/internal/io/goimage"
 )
 
 // type Fit uint8

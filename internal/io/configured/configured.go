@@ -3,7 +3,7 @@ package configured
 import (
 	"context"
 	"fmt"
-	"photofield/io"
+	"photofield/internal/io"
 	"runtime/trace"
 	"time"
 

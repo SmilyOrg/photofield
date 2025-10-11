@@ -59,14 +59,14 @@ import (
 	"photofield/internal/fs/rewrite"
 	"photofield/internal/geo"
 	"photofield/internal/image"
+	pfio "photofield/internal/io"
+	"photofield/internal/io/bench"
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
 	"photofield/internal/openapi"
 	"photofield/internal/render"
 	"photofield/internal/scene"
 	"photofield/internal/test"
-	pfio "photofield/io"
-	"photofield/io/bench"
 	"photofield/tag"
 )
 

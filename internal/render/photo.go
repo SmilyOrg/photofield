@@ -7,7 +7,7 @@ import (
 	"log"
 	"math"
 	"photofield/internal/image"
-	"photofield/io"
+	"photofield/internal/io"
 	"runtime/trace"
 	"time"
 
