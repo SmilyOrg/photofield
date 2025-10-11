@@ -2,7 +2,6 @@ package layout
 
 import (
 	"cmp"
-	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/golang/geo/r2"
 	"github.com/golang/geo/s2"
-	"github.com/tdewolff/canvas"
 	"golang.org/x/exp/slices"
 )
 
@@ -231,95 +229,19 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	scene.Photos = photos
 
-	// Add text labels for each cluster
-	// ctx := context.Background()
+	// Sort clusters by size
+	slices.SortFunc(clusters, func(a, b Cluster) int {
+		return cmp.Compare(len(b.pp), len(a.pp))
+	})
 
-	// Structure to hold cluster label info before overlap detection
-	type clusterLabel struct {
-		text       render.Text
-		clusterIdx int
-		size       int // number of photos in cluster
-		rect       render.Rect
-		highlight  render.Photo
-	}
-
-	fontSize := 1.0
-	labels := make([]clusterLabel, 0, len(clusters))
-	for clusterIdx, cluster := range clusters {
+	// Convert clusters to cluster photos
+	for _, cluster := range clusters {
 		if len(cluster.pp) == 0 {
 			continue
 		}
-
-		// Calculate midpoint of the cluster
-		var midpoint r2.Point
-		for _, p := range cluster.pp {
-			midpoint = midpoint.Add(p)
-		}
-		midpoint = midpoint.Mul(1.0 / float64(len(cluster.pp)))
-
-		// Convert back to lat/lng
-		// latlng := proj.ToLatLng(midpoint)
-
-		// Reverse geocode to get location name
-		// locationName, err := source.Geo.ReverseGeocode(ctx, latlng)
-		// if err != nil {
-		// 	log.Printf("failed to reverse geocode cluster: %v", err)
-		// 	continue
-		// }
-		textLabel := fmt.Sprintf("%d photos", len(cluster.pp))
-
-		// Find the topmost point in the cluster to position text above it
-		minY := math.MaxFloat64
-		for _, p := range cluster.pp {
-			if p.Y < minY {
-				minY = p.Y
-			}
-		}
-		textX := (maxlng + midpoint.X) * scale
-		textY := (maxlng - minY) * scale
-
-		// Position text above the topmost point
-		textHeight := fontSize * 0.6
-		textWidth := fontSize * float64(len(textLabel)) * 0.3
-		textRect := render.Rect{
-			X: textX - textWidth/2,
-			Y: textY,
-			W: textWidth,
-			H: textHeight,
-		}
-
-		// fmt.Printf("cluster at %.5f,%.5f -> %q (%d photos)\n", latlng.Lat.Degrees(), latlng.Lng.Degrees(), locationName, len(cluster.pp))
-
-		text := render.NewTextFromRect(textRect, nil, textLabel)
-		text.HAlign = canvas.Center
-		text.VAlign = canvas.Center
-
-		// Middle photo
 		middlePhoto := photos[cluster.pi[len(cluster.pi)/2]]
-
-		labels = append(labels, clusterLabel{
-			text:       text,
-			clusterIdx: clusterIdx,
-			size:       len(cluster.pp),
-			rect:       textRect,
-			highlight:  middlePhoto,
-		})
+		scene.ClusterPhotos = append(scene.ClusterPhotos, middlePhoto)
 	}
-
-	// Sort labels by size
-	slices.SortFunc(labels, func(a, b clusterLabel) int {
-		return cmp.Compare(b.size, a.size)
-	})
-
-	// Convert labels to texts
-	texts := make([]render.Text, 0, len(labels))
-	for _, label := range labels {
-		texts = append(texts, label.text)
-		scene.ClusterPhotos = append(scene.ClusterPhotos, label.highlight)
-	}
-
-	log.Printf("cluster labels: %d candidates, %d visible after overlap removal\n", len(labels), len(texts))
-	scene.Texts = texts
 
 	scene.LoadCount = 0
 	scene.LoadUnit = ""

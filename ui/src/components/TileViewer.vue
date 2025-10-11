@@ -42,7 +42,6 @@ import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTile from 'ol/source/VectorTile';
 import Style from 'ol/style/Style';
 import Fill from 'ol/style/Fill';
-import Text from 'ol/style/Text';
 import Icon from 'ol/style/Icon';
 
 // Detect Mac platform (replaces the removed ol/has MAC constant)
@@ -117,9 +116,8 @@ export default {
     this.latestView = null;
     this.lastAnimationTime = 0;
     this.loadingMainTiles = 0;
-    this.loadingVectorTiles = 0;
     this.preloadedView = null;
-    this.imageStyles = new Map();
+    this.imageStyles = new global.Map();
     this.reset();
   },
   setup() {
@@ -432,10 +430,6 @@ export default {
               height,
               color: "white",
             }),
-            // text: new Text({
-            //   text: feature.get('text') || '',
-            //   font: '16px sans-serif',
-            // }),
           });
           this.imageStyles.set(src, style);
           return style;
@@ -486,9 +480,6 @@ export default {
 
         // Tile size based on image height so that we always get
         // approx. the same amount of features
-        // const approxFeaturesPerTile = 50;
-        // const approxEdge = Math.sqrt(approxFeaturesPerTile) * this.imageHeight;
-        // const tileSize = Math.max(256, Math.pow(2, Math.ceil(Math.log2(approxEdge))));
         const tileSize = 512;
         
         const vectorSource = new VectorTile({
@@ -509,9 +500,6 @@ export default {
           declutter: true,
           style: this.styleFunction,
         })
-        vectorSource.on('tileloadstart', this.onVectorTileLoadStart);
-        vectorSource.on('tileloadend', this.onVectorTileLoadEnd);
-        vectorSource.on('tileloaderror', this.onVectorTileLoadError);
 
         return [
           osmLayer,
@@ -519,60 +507,7 @@ export default {
           vector,
         ]
       } else {
-          
-        const sceneProjection = new Projection({
-          code: 'CUSTOM:SCENE',
-          units: 'pixels',
-        });
-
-        addCoordinateTransforms(
-          sceneProjection,
-          this.projection, 
-          // Forward transform (custom to map projection)
-          coordinate => {
-            const coord = this.coordinateFromView({
-              x: coordinate[0],
-              y: coordinate[1],
-            });
-            return coord;
-          },
-          // Inverse transform (map projection to custom)
-          function(coordinate) {
-            const view = this.viewFromCoordinate(coordinate);
-            return [view.x, view.y];
-          }
-        );
-
-        // Tile size based on image height so that we always get
-        // approx. the same amount of features
-        const approxFeaturesPerTile = 50;
-        const approxEdge = Math.sqrt(approxFeaturesPerTile) * this.imageHeight;
-        const tileSize = Math.max(256, Math.pow(2, Math.ceil(Math.log2(approxEdge))));
-        
-        const vectorSource = new VectorTile({
-          format: new GeoJSON({
-            dataProjection: sceneProjection,
-            featureProjection: this.projection,
-          }),
-          tileUrlFunction: this.featuresUrlFunction,
-          projection: this.projection,
-          tileSize,
-          zDirection: 0,
-        });
-        const vector = new VectorTileLayer({
-          properties: {
-            vector: true,
-          },
-          source: vectorSource,
-          declutter: false,
-          style: this.styleFunction,
-        })
-        vectorSource.on('tileloadstart', this.onVectorTileLoadStart);
-        vectorSource.on('tileloadend', this.onVectorTileLoadEnd);
-        vectorSource.on('tileloaderror', this.onVectorTileLoadError);
-
         return [
-          // vector,
           main,
         ];
       }
@@ -621,23 +556,6 @@ export default {
         tile.load();
       });
     },
-
-    onVectorTileLoadStart(event) {
-      this.loadingVectorTiles++;
-    },
-
-    onVectorTileLoadEnd(event) {
-      this.loadingVectorTiles = Math.max(0, this.loadingVectorTiles - 1);
-      if (this.loadingVectorTiles == 0) {
-        // Preload tiles?
-        // this.loadAdjacentTiles(event.tile.tileCoord[0]);
-      }
-    },
-
-    onVectorTileLoadError(event) {
-      this.loadingVectorTiles = Math.max(0, this.loadingVectorTiles - 1);
-    },
-
 
     initOpenLayers(element) {
       // Limit minimum size loaded to avoid
@@ -941,6 +859,7 @@ export default {
       if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
       if (this.map) {
         this.map.dispose();
+        this.imageStyles?.clear();
         this.dragPan = null;
         this.dragPanKinetic = null;
       }

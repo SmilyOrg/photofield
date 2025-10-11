@@ -382,10 +382,6 @@ const scrollRatio = computed(() => {
   return scrollY.value / scrollMax.value;
 });
 
-const preloadYDelta = computed(() => {
-  return scrollSpeed.value * 1;
-});
-
 let lastScrollTime = 0;
 let scrollDeltaResetTimer = null;
 
