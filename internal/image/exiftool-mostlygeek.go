@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"math"
-	"photofield/tag"
+	"photofield/internal/tag"
 	"regexp"
 	"strconv"
 	"strings"

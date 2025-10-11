@@ -23,7 +23,7 @@ import (
 	"photofield/internal/io/sqlite"
 	"photofield/internal/metrics"
 	"photofield/internal/queue"
-	"photofield/tag"
+	"photofield/internal/tag"
 
 	"github.com/docker/go-units"
 	"github.com/prometheus/client_golang/prometheus"

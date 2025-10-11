@@ -8,7 +8,7 @@ import (
 	"photofield/internal/image"
 	"photofield/internal/io"
 	"photofield/internal/render"
-	"photofield/tag"
+	"photofield/internal/tag"
 	"sort"
 	"strings"
 	"time"

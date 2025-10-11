@@ -6,7 +6,7 @@ import (
 	"image/jpeg"
 	"io"
 	"log"
-	"photofield/tag"
+	"photofield/internal/tag"
 	"strconv"
 	"time"
 )
