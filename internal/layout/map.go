@@ -141,6 +141,8 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 
 	vSumLast := 0.
 	layoutStart := time.Now()
+	lastLogTime := layoutStart
+
 	for n := 0; n < maxIterations; n++ {
 		start := time.Now()
 		layoutElapsed := start.Sub(layoutStart)
@@ -194,10 +196,15 @@ func LayoutMap(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scen
 		elapsed := int(time.Since(start).Microseconds())
 		energy := math.Abs(vSum-vSumLast) * 1000 / float64(1+intersections)
 		vSumLast = vSum
-		log.Printf(
-			"layout map %4d with %4d clusters %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.0f energy %8d us\n",
-			n, clusterCount, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
-		)
+
+		// Log once per second
+		if time.Since(lastLogTime) >= 1*time.Second {
+			log.Printf(
+				"layout map %4d with %4d clusters %4d intrs %4.0f m avg %4.0f m max disp %3.0f km/s %6.0f energy %8d us\n",
+				n, clusterCount, intersections, dispSum/float64(len(pp)), dispMax, vSum/1000, energy, elapsed,
+			)
+			lastLogTime = time.Now()
+		}
 
 		scene.LoadCount = n
 		scene.LoadUnit = "iterations"
