@@ -16,7 +16,7 @@ import (
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
-	"photofield/search"
+	"photofield/internal/search"
 )
 
 type SceneSource struct {
