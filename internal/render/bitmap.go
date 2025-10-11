@@ -81,7 +81,7 @@ func cropRect(bitmap *Bitmap, bounds goimage.Rectangle) goimage.Rectangle {
 	return croprect
 }
 
-func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64, hq bool) {
+func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64, hq bool, cover bool) {
 	defer trace.StartRegion(ctx, "bitmap.DrawImage").End()
 
 	bounds := img.Bounds()
@@ -93,9 +93,9 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 	// crop = false
 
 	var croprect goimage.Rectangle
-	if crop {
+	if crop || cover {
 		croprect = cropRect(bitmap, bounds)
-		if !cropsBlackbarsOnly(img, croprect) {
+		if !cover && !cropsBlackbarsOnly(img, croprect) {
 			crop = false
 			// Cropping is disabled because the detected crop rectangle would remove more than just black bars.
 			// Use the full image bounds as the crop rectangle in this fallback case.
@@ -106,7 +106,7 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 	}
 
 	var model canvas.Matrix
-	if crop {
+	if crop || cover {
 		model = bitmap.Sprite.Rect.GetMatrixFillBoundsRotate(bounds, bitmap.Orientation)
 	} else {
 		model = bitmap.Sprite.Rect.GetMatrixFitBoundsRotate(bounds, bitmap.Orientation)

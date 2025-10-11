@@ -504,6 +504,95 @@ paths:
         "404":
           $ref: "#/components/responses/FileNotFound"
 
+  /files/{id}/previews/{filename}:
+    get:
+      description: |
+        Get a dynamically resized preview of an image with optional transformations.
+        The service automatically selects the optimal source variant and applies the
+        requested transformations (resize, border, fit mode).
+        
+        This endpoint is designed for use cases requiring specific image dimensions
+        such as map cluster icons, social media cards, or email thumbnails.
+      tags: ["Files"]
+      parameters:
+        - $ref: "#/components/parameters/FileIdPathParam"
+        - $ref: "#/components/parameters/FilenamePathParam"
+        
+        - name: w
+          in: query
+          required: false
+          description: Target width in pixels. If omitted, uses original width or scales proportionally with height.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4096
+          example: 48
+        
+        - name: h
+          in: query
+          required: false
+          description: Target height in pixels. If omitted, uses original height or scales proportionally with width.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4096
+          example: 48
+        
+        - name: border_width
+          in: query
+          required: false
+          description: Border width in pixels to add around the image.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+            default: 0
+          example: 2
+        
+        - name: border_color
+          in: query
+          required: false
+          description: Border color in hexadecimal format (with or without # prefix).
+          schema:
+            $ref: "#/components/schemas/Color"
+        
+      responses:
+        "200":
+          description: Successfully generated preview image
+          headers:
+            Content-Type:
+              description: Image MIME type
+              schema:
+                type: string
+                example: "image/jpeg"
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        
+        "400":
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                status: 400
+                title: Invalid parameters
+                detail: "Dimensions 5000x5000 exceed maximum allowed size of 4096x4096"
+        
+        "404":
+          $ref: "#/components/responses/FileNotFound"
+
   /tags:
     get:
       description: Retrieve a list of tags

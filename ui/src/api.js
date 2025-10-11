@@ -177,6 +177,14 @@ export function getThumbnailUrl(id, size, filename) {
   return `${host()}/files/${id}/variants/${size}/${filename}`;
 }
 
+export function getPreviewUrl(id, filename, params) {
+  let url = `${host()}/files/${id}/previews/${filename}`;
+  if (params) {
+    url += "?" + qs.stringify(params);
+  }
+  return url;
+}
+
 export function useApi(getUrl, config) {
   const response = useSWRV(getUrl, fetcher, config);
   const items = computed(() => response.data.value?.items);

@@ -28,10 +28,13 @@ const (
 
 type Render struct {
 	TileSize          int         `json:"tile_size"`
+	ImageWidth        int         `json:"image_width"`
+	ImageHeight       int         `json:"image_height"`
 	MaxSolidPixelArea float64     `json:"max_solid_pixel_area"`
 	BackgroundColor   color.Color `json:"background_color"`
 	Color             color.Color `json:"color"`
 	TransparencyMask  bool        `json:"transparency_mask"`
+	CoverFit          bool
 	LogDraws          bool
 	ImageMem          codec.ImageMem
 

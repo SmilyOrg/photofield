@@ -163,7 +163,7 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 			scale = 0.8
 		}
 
-		bitmap.DrawImage(ctx, config.CanvasImage, img, c, scale, hq)
+		bitmap.DrawImage(ctx, config.CanvasImage, img, c, scale, hq, config.CoverFit)
 		drawn = true
 
 		if source.IsSupportedVideo(path) {

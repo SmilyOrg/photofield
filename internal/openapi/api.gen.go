@@ -304,6 +304,21 @@ type SizePathParam string
 // TagIdPathParam defines model for TagIdPathParam.
 type TagIdPathParam TagId
 
+// GetFilesIdPreviewsFilenameParams defines parameters for GetFilesIdPreviewsFilename.
+type GetFilesIdPreviewsFilenameParams struct {
+	// Target width in pixels. If omitted, uses original width or scales proportionally with height.
+	W *int `json:"w,omitempty"`
+
+	// Target height in pixels. If omitted, uses original height or scales proportionally with width.
+	H *int `json:"h,omitempty"`
+
+	// Border width in pixels to add around the image.
+	BorderWidth *int `json:"border_width,omitempty"`
+
+	// Border color in hexadecimal format (with or without
+	BorderColor *Color `json:"border_color,omitempty"`
+}
+
 // GetScenesParams defines parameters for GetScenes.
 type GetScenesParams struct {
 	// Collection ID
@@ -435,6 +450,9 @@ type ServerInterface interface {
 
 	// (GET /files/{id}/original/{filename})
 	GetFilesIdOriginalFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, filename FilenamePathParam)
+
+	// (GET /files/{id}/previews/{filename})
+	GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, filename FilenamePathParam, params GetFilesIdPreviewsFilenameParams)
 
 	// (GET /files/{id}/variants/{size}/{filename})
 	GetFilesIdVariantsSizeFilename(w http.ResponseWriter, r *http.Request, id FileIdPathParam, size SizePathParam, filename FilenamePathParam)
@@ -601,6 +619,88 @@ func (siw *ServerInterfaceWrapper) GetFilesIdOriginalFilename(w http.ResponseWri
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFilesIdOriginalFilename(w, r, id, filename)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// GetFilesIdPreviewsFilename operation middleware
+func (siw *ServerInterfaceWrapper) GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id FileIdPathParam
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Path parameter "filename" -------------
+	var filename FilenamePathParam
+
+	err = runtime.BindStyledParameter("simple", false, "filename", chi.URLParam(r, "filename"), &filename)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter filename: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFilesIdPreviewsFilenameParams
+
+	// ------------- Optional query parameter "w" -------------
+	if paramValue := r.URL.Query().Get("w"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "w", r.URL.Query(), &params.W)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter w: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "h" -------------
+	if paramValue := r.URL.Query().Get("h"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "h", r.URL.Query(), &params.H)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter h: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "border_width" -------------
+	if paramValue := r.URL.Query().Get("border_width"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "border_width", r.URL.Query(), &params.BorderWidth)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter border_width: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "border_color" -------------
+	if paramValue := r.URL.Query().Get("border_color"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "border_color", r.URL.Query(), &params.BorderColor)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter border_color: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFilesIdPreviewsFilename(w, r, id, filename, params)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1499,6 +1599,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/files/{id}/original/{filename}", wrapper.GetFilesIdOriginalFilename)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/files/{id}/previews/{filename}", wrapper.GetFilesIdPreviewsFilename)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/files/{id}/variants/{size}/{filename}", wrapper.GetFilesIdVariantsSizeFilename)

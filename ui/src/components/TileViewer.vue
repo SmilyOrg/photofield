@@ -36,7 +36,7 @@ import Geoview from './openlayers/geoview.js';
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
-import { getFeaturesUrl, getThumbnailUrl, getTileUrl } from '../api';
+import { getFeaturesUrl, getPreviewUrl, getTileUrl } from '../api';
 import { useColorMode } from '@vueuse/core';
 import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTile from 'ol/source/VectorTile';
@@ -411,16 +411,23 @@ export default {
             }),
           });
         case "Point":
-          const url = getThumbnailUrl(feature.get("file_id"), "sqlite", "file.jpg");
-          let style = this.imageStyles.get(url);
+          const width = 48;
+          const height = 48;
+          const src = getPreviewUrl(feature.get("file_id"), "img", {
+            w: width,
+            h: height,
+            border_width: 3,
+            border_color: "FFFFFF",
+          });
+          let style = this.imageStyles.get(src);
           if (style) {
             return style;
           }
           style = new Style({
             image: new Icon({
-              src: getThumbnailUrl(feature.get("file_id"), "sqlite", "file.jpg"),
-              width: 48,
-              size: [128, 128],
+              src,
+              width,
+              height,
               color: "white",
             }),
             // text: new Text({
@@ -428,7 +435,7 @@ export default {
             //   font: '16px sans-serif',
             // }),
           });
-          this.imageStyles.set(url, style);
+          this.imageStyles.set(src, style);
           return style;
       }
       return null;
