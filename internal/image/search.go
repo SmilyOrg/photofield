@@ -6,8 +6,8 @@ import (
 	"math"
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
-	"photofield/rangetree"
-	"photofield/tag"
+	"photofield/internal/rangetree"
+	"photofield/internal/tag"
 	"sort"
 
 	"github.com/kelindar/intmap"

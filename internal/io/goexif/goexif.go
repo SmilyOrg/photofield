@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"photofield/io"
+	"photofield/internal/io"
 	"runtime/trace"
 	"strconv"
 	"time"

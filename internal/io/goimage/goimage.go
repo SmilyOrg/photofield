@@ -4,7 +4,7 @@ import (
 	"context"
 	"image"
 	"os"
-	"photofield/io"
+	"photofield/internal/io"
 	"runtime/trace"
 	"time"
 

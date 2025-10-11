@@ -16,7 +16,7 @@ import (
 	"photofield/internal/clip"
 	"photofield/internal/codec"
 	"photofield/internal/image"
-	"photofield/io"
+	"photofield/internal/io"
 )
 
 type QualityPreset int

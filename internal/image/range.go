@@ -1,6 +1,6 @@
 package image
 
-import "photofield/rangetree"
+import "photofield/internal/rangetree"
 
 type Ids = *rangetree.Tree
 type IdRange = rangetree.Range

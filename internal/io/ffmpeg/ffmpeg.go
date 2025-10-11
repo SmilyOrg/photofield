@@ -7,7 +7,7 @@ import (
 	"image"
 	"log"
 	"os/exec"
-	"photofield/io"
+	"photofield/internal/io"
 	"runtime/trace"
 	"strconv"
 	"time"

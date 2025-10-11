@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"photofield/io"
+	"photofield/internal/io"
 	"testing"
 )
 

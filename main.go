@@ -59,15 +59,15 @@ import (
 	"photofield/internal/fs/rewrite"
 	"photofield/internal/geo"
 	"photofield/internal/image"
+	pfio "photofield/internal/io"
+	"photofield/internal/io/bench"
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
 	"photofield/internal/openapi"
 	"photofield/internal/render"
 	"photofield/internal/scene"
+	"photofield/internal/tag"
 	"photofield/internal/test"
-	pfio "photofield/io"
-	"photofield/io/bench"
-	"photofield/tag"
 )
 
 //go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen@v1.8.2 -generate=types,chi-server -package=openapi -o internal/openapi/api.gen.go api.yaml

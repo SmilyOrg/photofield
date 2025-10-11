@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"photofield/io"
+	"photofield/internal/io"
 	"runtime/trace"
 	"strings"
 	"time"

@@ -3,7 +3,7 @@ package mutex
 import (
 	"context"
 	"fmt"
-	"photofield/io"
+	"photofield/internal/io"
 	"sync"
 	"time"
 )

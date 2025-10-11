@@ -8,9 +8,9 @@ import (
 	"image/png"
 	"os"
 	"path"
+	"photofield/internal/io"
+	"photofield/internal/io/goimage"
 	"photofield/internal/test"
-	"photofield/io"
-	"photofield/io/goimage"
 	"strconv"
 	"testing"
 )

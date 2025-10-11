@@ -15,8 +15,8 @@ import (
 
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
-	"photofield/search"
-	"photofield/tag"
+	"photofield/internal/search"
+	"photofield/internal/tag"
 
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"

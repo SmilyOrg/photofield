@@ -12,7 +12,7 @@ import (
 	"photofield/internal/image"
 	"photofield/internal/layout"
 	"photofield/internal/render"
-	"photofield/tag"
+	"photofield/internal/tag"
 
 	"github.com/goccy/go-yaml"
 	"github.com/imdario/mergo"

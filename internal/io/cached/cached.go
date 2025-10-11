@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"photofield/io"
-	"photofield/io/ristretto"
+	"photofield/internal/io"
+	"photofield/internal/io/ristretto"
 	"time"
 
 	goio "io"

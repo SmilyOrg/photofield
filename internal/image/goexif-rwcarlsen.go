@@ -4,7 +4,7 @@ import (
 	"image"
 	"io"
 	"os"
-	"photofield/tag"
+	"photofield/internal/tag"
 
 	"github.com/rwcarlsen/goexif/exif"
 )
