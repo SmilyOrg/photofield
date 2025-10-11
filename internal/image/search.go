@@ -6,7 +6,7 @@ import (
 	"math"
 	"photofield/internal/clip"
 	"photofield/internal/metrics"
-	"photofield/rangetree"
+	"photofield/internal/rangetree"
 	"photofield/tag"
 	"sort"
 
