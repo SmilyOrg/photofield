@@ -472,7 +472,7 @@ export default {
             return coord;
           },
           // Inverse transform (map projection to custom)
-          function(coordinate) {
+          coordinate => {
             const view = this.viewFromCoordinate(coordinate);
             return [view.x, view.y];
           }
