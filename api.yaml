@@ -1229,3 +1229,6 @@ components:
           $ref: "#/components/schemas/FileId"
         color:
           $ref: "#/components/schemas/Color"
+        text:
+          type: string
+          description: Feature text to be displayed on the map

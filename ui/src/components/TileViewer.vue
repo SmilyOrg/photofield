@@ -36,12 +36,14 @@ import Geoview from './openlayers/geoview.js';
 import PhotoSkeleton from './PhotoSkeleton.vue';
 
 import "ol/ol.css";
-import { getFeaturesUrl, getTileUrl } from '../api';
+import { getFeaturesUrl, getThumbnailUrl, getTileUrl } from '../api';
 import { useColorMode } from '@vueuse/core';
 import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTile from 'ol/source/VectorTile';
 import Style from 'ol/style/Style';
 import Fill from 'ol/style/Fill';
+import Text from 'ol/style/Text';
+import Icon from 'ol/style/Icon';
 
 // Detect Mac platform (replaces the removed ol/has MAC constant)
 const MAC = navigator.platform.indexOf('Mac') > -1;
@@ -115,6 +117,7 @@ export default {
     this.loadingMainTiles = 0;
     this.loadingVectorTiles = 0;
     this.preloadedView = null;
+    this.imageStyles = new Map();
     this.reset();
   },
   setup() {
@@ -398,6 +401,8 @@ export default {
     styleFunction(feature) {
       const geom = feature.getGeometry();
       const type = geom.getType();
+      const zoom = this.v.getZoom();
+      if (zoom > 10) return null;
       switch (type) {
         case "Polygon":
           return new Style({
@@ -405,6 +410,26 @@ export default {
               color: feature.get('color'),
             }),
           });
+        case "Point":
+          const url = getThumbnailUrl(feature.get("file_id"), "sqlite", "file.jpg");
+          let style = this.imageStyles.get(url);
+          if (style) {
+            return style;
+          }
+          style = new Style({
+            image: new Icon({
+              src: getThumbnailUrl(feature.get("file_id"), "sqlite", "file.jpg"),
+              width: 48,
+              size: [128, 128],
+              color: "white",
+            }),
+            // text: new Text({
+            //   text: feature.get('text') || '',
+            //   font: '16px sans-serif',
+            // }),
+          });
+          this.imageStyles.set(url, style);
+          return style;
       }
       return null;
     },
@@ -427,9 +452,62 @@ export default {
           }),
         });
 
+        const sceneProjection = new Projection({
+          code: 'CUSTOM:SCENE',
+          units: 'pixels',
+        });
+
+        addCoordinateTransforms(
+          sceneProjection,
+          this.projection, 
+          // Forward transform (custom to map projection)
+          coordinate => {
+            const coord = this.coordinateFromView({
+              x: coordinate[0],
+              y: coordinate[1],
+            });
+            return coord;
+          },
+          // Inverse transform (map projection to custom)
+          function(coordinate) {
+            const view = this.viewFromCoordinate(coordinate);
+            return [view.x, view.y];
+          }
+        );
+
+        // Tile size based on image height so that we always get
+        // approx. the same amount of features
+        // const approxFeaturesPerTile = 50;
+        // const approxEdge = Math.sqrt(approxFeaturesPerTile) * this.imageHeight;
+        // const tileSize = Math.max(256, Math.pow(2, Math.ceil(Math.log2(approxEdge))));
+        const tileSize = 512;
+        
+        const vectorSource = new VectorTile({
+          format: new GeoJSON({
+            dataProjection: sceneProjection,
+            featureProjection: this.projection,
+          }),
+          tileUrlFunction: this.featuresUrlFunction,
+          projection: this.projection,
+          tileSize,
+          zDirection: 0,
+        });
+        const vector = new VectorTileLayer({
+          properties: {
+            vector: true,
+          },
+          source: vectorSource,
+          declutter: true,
+          style: this.styleFunction,
+        })
+        vectorSource.on('tileloadstart', this.onVectorTileLoadStart);
+        vectorSource.on('tileloadend', this.onVectorTileLoadEnd);
+        vectorSource.on('tileloaderror', this.onVectorTileLoadError);
+
         return [
           osmLayer,
           main,
+          vector,
         ]
       } else {
           
@@ -485,8 +563,8 @@ export default {
         vectorSource.on('tileloaderror', this.onVectorTileLoadError);
 
         return [
-          vector,
-          // main,
+          // vector,
+          main,
         ];
       }
     },

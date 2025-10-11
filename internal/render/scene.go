@@ -107,6 +107,7 @@ type Scene struct {
 	FileCount       int            `json:"file_count"`
 	Solids          []Solid        `json:"-"`
 	Texts           []Text         `json:"-"`
+	ClusterPhotos   []Photo        `json:"-"`
 	RegionSource    RegionSource   `json:"-"`
 	Stale           bool           `json:"stale"`
 	Dependencies    []Dependency   `json:"-"`

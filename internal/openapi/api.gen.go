@@ -144,6 +144,9 @@ type GeoJSONPolygon struct {
 type GeoJSONProperties struct {
 	Color  *Color  `json:"color,omitempty"`
 	FileId *FileId `json:"file_id,omitempty"`
+
+	// Feature text to be displayed on the map
+	Text *string `json:"text,omitempty"`
 }
 
 // ImageHeight defines model for ImageHeight.

@@ -918,29 +918,68 @@ func GetScenesSceneIdFeaturesImpl(w http.ResponseWriter, r *http.Request, sceneI
 		Type:     "FeatureCollection",
 		Features: make([]openapi.GeoJSONFeature, 0),
 	}
-	for photo := range scene.GetVisiblePhotos(tileRect) {
-		info := photo.GetInfo(imageSource)
-		fileId := openapi.FileId(photo.Id)
-		color := openapi.Color(fmt.Sprintf("#%06x", info.Color&0xFFFFFF))
+	// for photo := range scene.GetVisiblePhotos(tileRect) {
+	// 	info := photo.GetInfo(imageSource)
+	// 	fileId := openapi.FileId(photo.Id)
+	// 	color := openapi.Color(fmt.Sprintf("#%06x", info.Color&0xFFFFFF))
+	// 	bounds := photo.Sprite.Rect
+	// 	geojson.Features = append(geojson.Features,
+	// 		openapi.GeoJSONFeature{
+	// 			Type: "Feature",
+	// 			Geometry: openapi.GeoJSONPolygon{
+	// 				Type: "Polygon",
+	// 				Coordinates: [][][]float32{
+	// 					[][]float32{
+	// 						[]float32{float32(bounds.X), float32(bounds.Y)},
+	// 						[]float32{float32(bounds.X + bounds.W), float32(bounds.Y)},
+	// 						[]float32{float32(bounds.X + bounds.W), float32(bounds.Y + bounds.H)},
+	// 						[]float32{float32(bounds.X), float32(bounds.Y + bounds.H)},
+	// 						[]float32{float32(bounds.X), float32(bounds.Y)},
+	// 					},
+	// 				},
+	// 			},
+	// 			Properties: openapi.GeoJSONProperties{
+	// 				FileId: &fileId,
+	// 				Color:  &color,
+	// 			},
+	// 		},
+	// 	)
+	// }
+
+	// for _, text := range scene.Texts {
+	// 	if !text.Sprite.Rect.IsVisible(tileRect) {
+	// 		continue
+	// 	}
+	// 	bounds := text.Sprite.Rect
+	// 	geojson.Features = append(geojson.Features,
+	// 		openapi.GeoJSONFeature{
+	// 			Type: "Feature",
+	// 			Geometry: openapi.GeoJSONPoint{
+	// 				Type:        "Point",
+	// 				Coordinates: []float32{float32(bounds.X + bounds.W/2), float32(bounds.Y + bounds.H/2)},
+	// 			},
+	// 			Properties: openapi.GeoJSONProperties{
+	// 				Text:   &text.Text,
+	// 			},
+	// 		},
+	// 	)
+	// }
+
+	for _, photo := range scene.ClusterPhotos {
+		if !photo.Sprite.Rect.IsVisible(tileRect) {
+			continue
+		}
 		bounds := photo.Sprite.Rect
+		fileId := openapi.FileId(photo.Id)
 		geojson.Features = append(geojson.Features,
 			openapi.GeoJSONFeature{
 				Type: "Feature",
-				Geometry: openapi.GeoJSONPolygon{
-					Type: "Polygon",
-					Coordinates: [][][]float32{
-						[][]float32{
-							[]float32{float32(bounds.X), float32(bounds.Y)},
-							[]float32{float32(bounds.X + bounds.W), float32(bounds.Y)},
-							[]float32{float32(bounds.X + bounds.W), float32(bounds.Y + bounds.H)},
-							[]float32{float32(bounds.X), float32(bounds.Y + bounds.H)},
-							[]float32{float32(bounds.X), float32(bounds.Y)},
-						},
-					},
+				Geometry: openapi.GeoJSONPoint{
+					Type:        "Point",
+					Coordinates: []float32{float32(bounds.X + bounds.W/2), float32(bounds.Y + bounds.H/2)},
 				},
 				Properties: openapi.GeoJSONProperties{
 					FileId: &fileId,
-					Color:  &color,
 				},
 			},
 		)
