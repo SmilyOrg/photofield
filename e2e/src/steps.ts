@@ -23,6 +23,18 @@ Given('{int} generated {int} x {int} test photos', async ({ app }, count: number
   await app.generatePhotos(count, 12345, [width], [height]);
 });
 
+Given('{int} generated {int} x {int} geo test photos', async ({ app }, count: number, width: number, height: number) => {
+  if (!app.cwd) {
+    await app.useTempDir();
+    console.log("CWD:", app.cwd);
+  }
+  await app.generatePhotos(count, 12345, [width], [height], {
+    gps: true,
+    gpsClumps: 1,
+    gpsSpreadKm: 2,
+  });
+});
+
 Given('the config {string}', async ({ app }, p: string) => {
   const configPath = path.resolve(__dirname, "..", "configs", p);
   await fs.copyFile(configPath, app.path("configuration.yaml"));
@@ -126,6 +138,10 @@ When('the user opens the collection', async ({ app }) => {
   await app.goto(app.collectionPath);
 });
 
+When('the user navigates back', async ({ page }) => {
+  await page.goBack();
+});
+
 Then('the page shows a progress bar', async ({ page }) => {
   await expect(page.locator("#content").getByRole('progressbar')).toBeVisible();
 });
@@ -171,6 +187,10 @@ When('(the user )clicks on the first photo', async ({ app }) => {
   await app.clickFirstPhoto();
 });
 
+When('(the user )clicks on the first feature', async ({ app }) => {
+  await app.clickFirstFeature();
+});
+
 Then('the page loads', async ({ app }) => {
   await app.waitForSceneLoaded();
 });
@@ -189,8 +209,30 @@ Then('the photo is focused and zoomed in', async ({ app }) => {
   }).toPass();
 });
 
+Then('the view is full width', async ({ app, page }) => {
+  // Wait until the focus zoom level is less than 0.1
+  await expect(async () => {
+    // expect(await app.getFocusZoom()).toBeLessThan(0.1);
+    expect((await app.getView()).w).toBe(page.viewportSize()?.width);
+  }).toPass();
+});
+
+Then('the view is {float} {float} {float} {float}', async ({ app }, x: number, y: number, w: number, h: number) => {
+  await expect(async () => {
+    const view = await app.getView();
+    expect(view.x).toBeCloseTo(x, 2);
+    expect(view.y).toBeCloseTo(y, 2);
+    expect(view.w).toBeCloseTo(w, 2);
+    expect(view.h).toBeCloseTo(h, 2);
+  }).toPass();
+});
+
 Then('the path is {string}', async ({ app, page }, expectedUrl: string) => {
   await expect(page).toHaveURL(app.uiUrl + expectedUrl);
+});
+
+Then('the url is {string}', async ({ page }, expectedUrl: string) => {
+  await expect(page).toHaveURL(expectedUrl);
 });
 
 Then('the collection subpath is {string}', async ({ app, page }, expectedSubpath: string) => {

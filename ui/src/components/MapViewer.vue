@@ -128,6 +128,7 @@ const { scene, recreate: recreateScene, loadSpeed } = useScene({
 
 const {
   region,
+  bounds: regionBounds,
   navigate,
   exit: regionExit,
 } = useSeekableRegion({
@@ -206,10 +207,7 @@ const geoviewView = computed(() => {
 });
 
 const view = computed(() => {
-  if (region.value) {
-    return region.value.bounds;
-  }
-  return geoviewView.value;
+  return regionBounds.value || geoviewView.value;
 });
 
 const applyGeoview = async (geoview) => {

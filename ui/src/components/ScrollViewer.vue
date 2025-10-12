@@ -195,6 +195,7 @@ useEventBus("recreate-scene").on(scene => {
 
 const {
   region,
+  bounds: regionBounds,
   navigate,
   exit: regionExit,
   isSeeking,
@@ -226,8 +227,8 @@ const exit = async () => {
     zoomOut();
     return;
   }
-  if (region.value?.bounds) {
-    await centerToBounds(region.value.bounds);
+  if (regionBounds.value) {
+    await centerToBounds(regionBounds.value);
   }
   await regionExit();
 }
@@ -435,21 +436,7 @@ function updateFocusFile(id) {
 const timestamps = useTimestamps({ scene, height: viewport.height });
 const scrollDate = useTimestampsDate({ timestamps, ratio: scrollRatio });
 
-// Required for proper caching to avoid redundant updates
-const regionBounds = computed(oldBounds => {
-  const newBounds = region.value?.bounds;
-  if (oldBounds && newBounds &&
-      oldBounds.x == newBounds.x &&
-      oldBounds.y == newBounds.y &&
-      oldBounds.w == newBounds.w &&
-      oldBounds.h == newBounds.h
-  ) {
-    return oldBounds;
-  }
-  return newBounds || null;
-});
-
-const view = computed(oldRegion => {
+const view = computed(() => {
   if (regionBounds.value) {
     return regionBounds.value;
   }
@@ -544,7 +531,7 @@ const onView = (event) => {
     lastNonNativeView.value = event;
   }
   if (region.value?.bounds) {
-    emit("elementView", getScreenView(region.value.bounds));
+    emit("elementView", getScreenView(regionBounds.value));
   }
 }
 

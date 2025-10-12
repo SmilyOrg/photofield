@@ -856,6 +856,9 @@ export default {
     },
 
     reset() {
+      if (!this.viewport?.width.value || !this.viewport?.height.value) {
+        return;
+      }
       if (!this.scene?.bounds?.w || !this.scene?.bounds?.h) return;
       if (this.map) {
         this.map.dispose();

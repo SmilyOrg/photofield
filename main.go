@@ -1779,7 +1779,7 @@ func createDummyEntries(count int, seed int64) {
 }
 
 // generateTestPhotos creates test images using the internal test package
-func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr, heightsStr string) error {
+func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr, heightsStr string, enableGPS bool, gpsClumps int, gpsSpreadKm float64) error {
 	// Parse widths and heights from comma-separated strings
 	widths, err := parseIntList(widthsStr)
 	if err != nil {
@@ -1791,16 +1791,36 @@ func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr
 		return fmt.Errorf("invalid heights: %w", err)
 	}
 
+	// Generate GPS coordinates if enabled
+	var gpsCoords []struct{ lat, lng float64 }
+	if enableGPS {
+		gpsCoords = generateClumpedGPSCoords(count, gpsClumps, gpsSpreadKm, seed)
+		log.Printf("Generated %d GPS coordinates in %d clumps with %.2f km spread", count, gpsClumps, gpsSpreadKm)
+	}
+
 	// Create image specs with different combinations of widths and heights
 	specs := make([]test.ImageSpec, count)
 	for i := 0; i < count; i++ {
 		width := widths[i%len(widths)]
 		height := heights[i%len(heights)]
 
-		specs[i] = test.ImageSpec{
+		spec := test.ImageSpec{
 			Width:  width,
 			Height: height,
 		}
+
+		// Add GPS coordinates as EXIF tags if enabled
+		if enableGPS {
+			if spec.ExifTags == nil {
+				spec.ExifTags = make(map[string]string)
+			}
+			spec.ExifTags["GPSLatitude"] = fmt.Sprintf("%.8f", gpsCoords[i].lat)
+			spec.ExifTags["GPSLongitude"] = fmt.Sprintf("%.8f", gpsCoords[i].lng)
+			spec.ExifTags["GPSLatitudeRef"] = latitudeRef(gpsCoords[i].lat)
+			spec.ExifTags["GPSLongitudeRef"] = longitudeRef(gpsCoords[i].lng)
+		}
+
+		specs[i] = spec
 	}
 
 	// Create dataset
@@ -1819,10 +1839,92 @@ func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr
 
 	log.Printf("Generated %d test images in %s", len(images), outputDir)
 	for _, img := range images {
-		log.Printf("- %s (%dx%d)", img.Name, img.Spec.Width, img.Spec.Height)
+		if enableGPS && len(img.Spec.ExifTags) > 0 {
+			log.Printf("- %s (%dx%d) GPS: %s, %s", img.Name, img.Spec.Width, img.Spec.Height,
+				img.Spec.ExifTags["GPSLatitude"], img.Spec.ExifTags["GPSLongitude"])
+		} else {
+			log.Printf("- %s (%dx%d)", img.Name, img.Spec.Width, img.Spec.Height)
+		}
 	}
 
 	return nil
+}
+
+// generateClumpedGPSCoords generates realistic GPS coordinates in geographic clusters
+// Similar to generateClumpedGeoCoords from map_bench_test.go but returns simple lat/lng structs
+func generateClumpedGPSCoords(totalPhotos, clumps int, spreadKm float64, seed int64) []struct{ lat, lng float64 } {
+	rnd := rand.New(rand.NewSource(seed))
+
+	// Calculate photos per clump
+	photosPerClump := totalPhotos / clumps
+	remainder := totalPhotos % clumps
+
+	coords := make([]struct{ lat, lng float64 }, 0, totalPhotos)
+
+	// Generate clump centers across the world
+	// Using realistic ranges: lat [-60, 60], lng [-180, 180]
+	clumpCenters := make([]struct{ lat, lng float64 }, clumps)
+	for i := 0; i < clumps; i++ {
+		lat := rnd.Float64()*120 - 60  // -60 to 60 degrees
+		lng := rnd.Float64()*360 - 180 // -180 to 180 degrees
+		clumpCenters[i] = struct{ lat, lng float64 }{lat, lng}
+	}
+
+	// Generate photos around each clump center
+	for i, center := range clumpCenters {
+		// Add extra photos to early clumps if there's a remainder
+		photosInThisClump := photosPerClump
+		if i < remainder {
+			photosInThisClump++
+		}
+
+		for j := 0; j < photosInThisClump; j++ {
+			// Convert spread from km to degrees (approximate)
+			// 1 degree latitude ≈ 111 km
+			spreadDeg := spreadKm / 111.0
+
+			// Add random offset within the spread radius
+			latOffset := (rnd.Float64()*2 - 1) * spreadDeg
+			lngOffset := (rnd.Float64()*2 - 1) * spreadDeg
+
+			lat := center.lat + latOffset
+			lng := center.lng + lngOffset
+
+			// Clamp to valid ranges
+			if lat > 85 {
+				lat = 85
+			}
+			if lat < -85 {
+				lat = -85
+			}
+			if lng > 180 {
+				lng -= 360
+			}
+			if lng < -180 {
+				lng += 360
+			}
+
+			coords = append(coords, struct{ lat, lng float64 }{lat, lng})
+		}
+	}
+
+	return coords
+}
+
+// latitudeRef returns "N" for north or "S" for south
+func latitudeRef(lat float64) string {
+	if lat >= 0 {
+		return "N"
+	}
+	return "S"
+}
+
+// longitudeRef returns "E" for east or "W" for west
+func longitudeRef(lng float64) string {
+	if lng >= 0 {
+		return "E"
+	}
+	return "W"
 }
 
 // parseIntList parses a comma-separated string of integers
@@ -1875,6 +1977,9 @@ func main() {
 	genPhotosName := flag.String("gen-photos.name", "e2e-test", "dataset name for generated photos")
 	genPhotosWidths := flag.String("gen-photos.widths", "100,150,200", "comma-separated list of image widths")
 	genPhotosHeights := flag.String("gen-photos.heights", "75,100", "comma-separated list of image heights")
+	genPhotosGPS := flag.Bool("gen-photos.gps", false, "add GPS coordinates to generated photos")
+	genPhotosGPSClumps := flag.Int("gen-photos.gps-clumps", 5, "number of geographic clusters for GPS coordinates")
+	genPhotosGPSSpreadKm := flag.Float64("gen-photos.gps-spread-km", 2.0, "spread of each GPS cluster in kilometers")
 
 	// Scan collection flag
 	scanFlag := flag.String("scan", "", "scan specified collection and exit")
@@ -1892,7 +1997,7 @@ func main() {
 
 	if *genPhotosFlag {
 		log.Printf("generating %d test photos", *genPhotosCount)
-		err := generateTestPhotos(*genPhotosCount, *genPhotosOutput, *genPhotosSeed, *genPhotosName, *genPhotosWidths, *genPhotosHeights)
+		err := generateTestPhotos(*genPhotosCount, *genPhotosOutput, *genPhotosSeed, *genPhotosName, *genPhotosWidths, *genPhotosHeights, *genPhotosGPS, *genPhotosGPSClumps, *genPhotosGPSSpreadKm)
 		if err != nil {
 			log.Fatalf("failed to generate test photos: %v", err)
 		}

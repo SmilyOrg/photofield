@@ -55,6 +55,12 @@ declare global {
     __vueParentComponent?: {
       ctx?: {
         focusZoom?: number;
+        latestView?: {
+          x: number;
+          y: number;
+          w: number;
+          h: number;
+        }
       };
       setupState?: {
         regionZoom?: number;
@@ -143,16 +149,30 @@ export class App {
     return join(this.cwd, path);
   }
 
-  async generatePhotos(count: number, seed: number = 12345, widths: number[], heights: number[]): Promise<void> {
+  async generatePhotos(
+    count: number, 
+    seed: number = 12345, 
+    widths: number[], 
+    heights: number[],
+    options?: {
+      gps?: boolean;
+      gpsClumps?: number;
+      gpsSpreadKm?: number;
+    }
+  ): Promise<void> {
     // Use global cache to generate test data only once per run
     const widthKey = widths.join('_');
     const heightKey = heights.join('_');
-    const cacheKey = `e2e-test-${count}-${widthKey}-${heightKey}-${seed}`;
+    const gpsKey = options?.gps ? `-gps-${options.gpsClumps || 5}-${options.gpsSpreadKm || 2.0}` : '';
+    const cacheKey = `e2e-test-${count}-${widthKey}-${heightKey}-${seed}${gpsKey}`;
 
     console.log("Using generated photos cache key:", cacheKey);
     
     const cache = await globalCache.get(cacheKey, async () => {
-      console.log(`Generating ${count} test ${widths.join(',')} x ${heights.join(',')} photos with seed ${seed}...`);
+      const gpsInfo = options?.gps 
+        ? ` with GPS (${options.gpsClumps || 5} clumps, ${options.gpsSpreadKm || 2.0}km spread)` 
+        : '';
+      console.log(`Generating ${count} test ${widths.join(',')} x ${heights.join(',')} photos with seed ${seed}${gpsInfo}...`);
       
       const exe = process.platform === 'win32' ? '.exe' : '';
       const command = join(process.cwd(), '..', 'photofield' + exe);
@@ -170,6 +190,16 @@ export class App {
       ];
       args.push('-gen-photos.widths', widths.join(','));
       args.push('-gen-photos.heights', heights.join(','));
+      
+      if (options?.gps) {
+        args.push('-gen-photos.gps');
+        if (options.gpsClumps !== undefined) {
+          args.push('-gen-photos.gps-clumps', options.gpsClumps.toString());
+        }
+        if (options.gpsSpreadKm !== undefined) {
+          args.push('-gen-photos.gps-spread-km', options.gpsSpreadKm.toString());
+        }
+      }
       
       console.log("Generating photos:", command, args);
       await spawnp(command, args, {
@@ -391,25 +421,63 @@ export class App {
   }
 
   /**
+   * Get the coordinates of the first feature from the features API
+   */
+  async getFirstFeatureCoordinates(
+    sceneId?: string
+  ): Promise<SceneCoordinates | null> {
+    // Get scene ID if not provided
+    const actualSceneId = sceneId || await this.getCurrentSceneId();
+    if (!actualSceneId) {
+      throw new Error('No scene ID available');
+    }
+    
+    const apiHost = await this.getApiHost();
+    const url = `${apiHost}/scenes/${actualSceneId}/features?zoom=0&x=0&y=0`;
+    
+    const response = await this.page.evaluate(async (url) => {
+      const res = await fetch(url);
+      return res.json();
+    }, url);
+    
+    const firstFeature = response.features?.[0];
+    if (!firstFeature?.geometry?.coordinates) {
+      return null;
+    }
+    
+    const [x, y] = firstFeature.geometry.coordinates;
+    return { x, y };
+  }
+
+
+  /**
    * Convert scene coordinates to pixel coordinates for clicking
    */
   async sceneToPixelCoordinates(
     sceneX: number,
     sceneY: number
-  ): Promise<PixelCoordinates | null> {
-    return await this.page.evaluate(({ sceneX, sceneY }) => {
-      const tileViewer = document.querySelector('.tileViewer');
-      if (!tileViewer) return null;
-      
-      // Try to access the OpenLayers map instance
-      const mapCanvas = tileViewer.querySelector('canvas');
-      if (!mapCanvas) return null;
-      
-      // Get the bounding box of the canvas
-      const rect = mapCanvas.getBoundingClientRect();
+  ): Promise<PixelCoordinates> {
+    let rect: PixelCoordinates | null = null;
+    await expect(async () => {
+      rect = await this.page.evaluate(({ sceneX, sceneY }) => {
+        const tileViewer = document.querySelector('.tileViewer');
+        if (!tileViewer) return null;
+        
+        // Try to access the OpenLayers map instance
+        const mapCanvas = tileViewer.querySelector('canvas');
+        if (!mapCanvas) return null;
 
-      return { x: rect.x + sceneX, y: rect.y + sceneY };
-    }, { sceneX, sceneY });
+        // Get the bounding box of the canvas
+        const rect = mapCanvas.getBoundingClientRect();
+
+        return { x: rect.x + sceneX, y: rect.y + sceneY };
+      }, { sceneX, sceneY });
+      expect(rect).not.toBeNull();
+    }).toPass();
+    if (!rect) {
+      throw new Error('Could not convert scene coordinates to pixel coordinates');
+    }
+    return rect;
   }
 
   /**
@@ -420,13 +488,26 @@ export class App {
     sceneY: number
   ): Promise<void> {
     const pixelCoords = await this.sceneToPixelCoordinates(sceneX, sceneY);
-    if (!pixelCoords) {
-      throw new Error('Could not convert scene coordinates to pixel coordinates');
-    }
-    
     await expect(async () => {
       await this.page.mouse.click(pixelCoords.x, pixelCoords.y);
       await expect(this.page.locator('header.immersive')).toBeVisible({ timeout: 500 });
+    }).toPass();
+  }
+
+  /**
+   * Click on the first feature in the scene
+   */
+  async clickFirstFeature() {
+    // Get coordinates for the first feature
+    const coords = await this.getFirstFeatureCoordinates();
+    if (!coords) {
+      throw new Error('No features found in scene');
+    }
+
+    const pixelCoords = await this.sceneToPixelCoordinates(coords.x, coords.y);
+    
+    await expect(async () => {
+      await this.page.mouse.click(pixelCoords.x, pixelCoords.y);
     }).toPass();
   }
 
@@ -532,6 +613,20 @@ export class App {
       const focusZoom = tileViewer.__vueParentComponent?.ctx?.focusZoom;
       console.log("Focus zoom:", document.querySelector('.tileViewer')?.__vueParentComponent?.ctx?.focusZoom);
       return focusZoom || 0;
+    });
+  }
+
+  /**
+   * Get the current focus zoom level
+   */
+  async getView(): Promise<{ x: number; y: number; w: number; h: number }> {
+    return await this.page.evaluate(() => {
+      // Try to access the Vue component state
+      const tileViewer = document.querySelector('.tileViewer');
+      if (!tileViewer) return { x: 0, y: 0, w: 0, h: 0 };
+      const latestView = tileViewer.__vueParentComponent?.ctx?.latestView;
+      console.log("Latest view:", document.querySelector('.tileViewer')?.__vueParentComponent?.ctx?.latestView);
+      return latestView || { x: 0, y: 0, w: 0, h: 0 };
     });
   }
 
