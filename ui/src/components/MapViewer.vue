@@ -61,7 +61,7 @@ import { useContextMenu, useRegion, useRegionZoom, useSeekableRegion, useTags, u
 import RegionMenu from './RegionMenu.vue';
 import Spinner from './Spinner.vue';
 import TileViewer from './TileViewer.vue';
-import { useEventBus } from '@vueuse/core';
+import { useEventBus, watchDebounced } from '@vueuse/core';
 import Geoview from './openlayers/geoview.js';
 
 const props = defineProps({
@@ -156,7 +156,9 @@ watch(scene, async (newScene, oldScene) => {
 });
 
 watch(region, async (newRegion, oldRegion) => {
+  if (newRegion?.minimal) return;
   regionTransition.value = !!((!newRegion && oldRegion) || (newRegion && !oldRegion));
+  emit("region", newRegion);
 }, { immediate: true });
 
 watch(regionId, (newId, oldId) => {
@@ -222,20 +224,21 @@ const applyGeoview = async (geoview) => {
   });
 }
 
-const applyView = (view) => {
+const applyView = async (view) => {
   const pg = geoview.value;
   const g = Geoview.fromView(view, scene.value?.bounds);
   
   if (Geoview.equal(g, pg)) return;
-  applyGeoview(g);
+  await applyGeoview(g);
 }
-
-const debouncedApplyView = debounce(1000, applyView);
 
 const onView = (view) => {
-  debouncedApplyView(view);
   lastView.value = view;
 }
+
+watchDebounced(lastView, (newView) => {
+  applyView(newView);
+}, { debounce: 1000 });
 
 const regionZoom = useRegionZoom({ view: lastView, region });
 
@@ -320,8 +323,11 @@ const onClick = async (event) => {
   }
   const regions = await getRegions(scene.value?.id, pos.x, pos.y, 0, 0);
   if (regions && regions.length > 0) {
-    const region = regions[0];
-    emit("region", region);
+    if (regions[0].id == region.value?.id) {
+      return false;
+    }
+    await applyView(lastView.value);
+    emit("region", regions[0]);
     return true;
   }
   return false;

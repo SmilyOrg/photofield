@@ -43,3 +43,14 @@ Feature: Back Button Navigation
     When the user navigates back
     Then the path is "/collections/e2e-test-6-300-200-12345-gps-1-2?layout=MAP&p=41.8439482,52.2371564,13.00z"
     And the view is 644.886 371.677 0.434 0.244
+
+  Scenario: Map -> Zoomed -> Photo -> Zoomed
+    When the user opens "/collections/e2e-test-6-300-200-12345-gps-1-2?layout=MAP&p=41.8533611,52.2332093,11.51z"
+    Then the view is 644.483 371.422 1.219 0.686
+    And the user zooms in by delta 1000
+    Then the view is 644.787 371.593 0.610 0.343
+    And the user clicks on the first photo
+    Then the photo is focused and zoomed in
+    When the user navigates back
+    Then the path is "/collections/e2e-test-6-300-200-12345-gps-1-2?layout=MAP&p=41.8533611,52.2332093,12.51z"
+    And the view is 644.787 371.593 0.610 0.343
