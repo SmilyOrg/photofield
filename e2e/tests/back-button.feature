@@ -36,7 +36,7 @@ Feature: Back Button Navigation
     Then the collection subpath is ""
     And the view is full width
 
-  Scenario: Map
+  Scenario: Map -> Photo -> Map
     When the user opens "/collections/e2e-test-6-300-200-12345-gps-1-2?layout=MAP&p=41.8439482,52.2371564,13.00z"
     And the user clicks on the first photo
     Then the photo is focused and zoomed in

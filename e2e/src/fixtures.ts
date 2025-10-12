@@ -60,6 +60,7 @@ declare global {
           y: number;
           w: number;
           h: number;
+          assertion?: string;
         }
       };
       setupState?: {
@@ -468,9 +469,20 @@ export class App {
         if (!mapCanvas) return null;
 
         // Get the bounding box of the canvas
-        const rect = mapCanvas.getBoundingClientRect();
+        const canvasRect = mapCanvas.getBoundingClientRect();
 
-        return { x: rect.x + sceneX, y: rect.y + sceneY };
+        // Get the current view to account for zoom and pan
+        const latestView = tileViewer.__vueParentComponent?.ctx?.latestView;
+        if (!latestView) {
+          // Fallback to old behavior if view not available
+          return { x: canvasRect.x + sceneX, y: canvasRect.y + sceneY };
+        }
+
+        // Transform scene coordinates through the current view
+        const pixelX = ((sceneX - latestView.x) / latestView.w) * canvasRect.width + canvasRect.left;
+        const pixelY = ((sceneY - latestView.y) / latestView.h) * canvasRect.height + canvasRect.top;
+
+        return { x: pixelX, y: pixelY };
       }, { sceneX, sceneY });
       expect(rect).not.toBeNull();
     }).toPass();
@@ -517,7 +529,7 @@ export class App {
   async getRegionCenter(
     regionId: number,
     sceneId?: string
-  ): Promise<SceneCoordinates | null> {
+  ): Promise<SceneCoordinates> {
     const region = await this.getRegion(regionId, sceneId);
     return {
       x: region.bounds.x + region.bounds.w / 2,
@@ -558,13 +570,12 @@ export class App {
    * Click on the first photo in the scene
    */
   async clickFirstPhoto() {
-    // Get coordinates for the first photo
-    const coordinates = await this.getRegionCenter(1);
-    if (!coordinates) {
-      throw new Error('No photos found in scene');
-    }
-    
-    await this.clickPhotoAtCoordinates(coordinates.x, coordinates.y);
+    await expect(async () => {
+      const regionCoords = await this.getRegionCenter(1);
+      const pixelCoords = await this.sceneToPixelCoordinates(regionCoords.x, regionCoords.y);
+      await this.page.mouse.click(pixelCoords.x, pixelCoords.y);
+      await expect(this.page.locator('header.immersive')).toBeVisible({ timeout: 500 });
+    }).toPass();
   }
 
   /**
@@ -625,8 +636,10 @@ export class App {
       const tileViewer = document.querySelector('.tileViewer');
       if (!tileViewer) return { x: 0, y: 0, w: 0, h: 0 };
       const latestView = tileViewer.__vueParentComponent?.ctx?.latestView;
-      console.log("Latest view:", document.querySelector('.tileViewer')?.__vueParentComponent?.ctx?.latestView);
-      return latestView || { x: 0, y: 0, w: 0, h: 0 };
+      const v = latestView;
+      if (v) v.assertion = `${v.x.toFixed(3)} ${v.y.toFixed(3)}  ${v.w.toFixed(3)} ${v.h.toFixed(3)}`;
+      console.log("Latest view:", v);
+      return v || { x: 0, y: 0, w: 0, h: 0 };
     });
   }
 
@@ -675,6 +688,12 @@ export class App {
 // export custom test function
 export const test = base.extend<{ app: App }>({
   app: async ({ page, context }, use) => {
+    // Block requests to OpenStreetMap tiles
+    await context.route('**/*tile.openstreetmap.org/**', route => {
+      console.log('Blocked request to OpenStreetMap:', route.request().url());
+      route.abort();
+    });
+    
     const app = new App(page, context);
     await use(app);
     await app.cleanup();

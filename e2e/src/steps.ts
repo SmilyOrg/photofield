@@ -280,6 +280,16 @@ When('(the user )zooms in using mouse wheel', async ({ page }) => {
   await page.mouse.wheel(0, -200); // Scroll up to zoom in
 });
 
+When('(the user )zooms in by delta {int}', async ({ page }, delta: number) => {
+  const viewer = page.locator('.tileViewer');
+  await viewer.hover();
+  const box = await viewer.boundingBox();
+  if (!box) throw new Error("Could not get bounding box for .tileViewer");
+  // Move to center of page
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -delta); // Scroll up to zoom in
+});
+
 Then('the photo is displayed at higher magnification', async ({ app }) => {
   // Wait for zoom change to take effect
   await app.page.waitForTimeout(500);
