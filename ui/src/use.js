@@ -254,6 +254,21 @@ export function useSeekableRegion({ scene, collectionId, regionId, rangeSize = D
     return { id, loading: true };
   });
 
+  const bounds = computed((prev) => {
+    const b = region.value?.bounds;
+    if (!b) return null;
+    if (
+      prev &&
+      prev.w == b.w &&
+      prev.h == b.h &&
+      prev.x == b.x &&
+      prev.y == b.y
+    ) {
+      return prev;
+    }
+    return b;
+  })
+
   const { ready: notSeeking, start: setSeeking } = useTimeout(200, { controls: true });
 
   // Navigation function
@@ -303,6 +318,7 @@ export function useSeekableRegion({ scene, collectionId, regionId, rangeSize = D
 
   return {
     region,
+    bounds,
     navigate,
     exit,
     mutate,

@@ -48,7 +48,7 @@
       <template #toolbar="{ toolbarItemClass }">
 
         <collection-panel
-          v-if="!immersive"
+          v-if="collection && !immersive"
           class="collection-panel"
           :class="{ hidden: !collectionExpanded }"
           ref="collectionPanel"
@@ -361,7 +361,7 @@ export default {
     currentScene: {
       handler(newScene) {
         // If the scene loads with 0 photos, open the collection panel
-        if (newScene && !newScene.loading && newScene.file_count === 0) {
+        if (newScene && !newScene.loading && !newScene.search && newScene.file_count === 0) {
           this.collectionExpanded = true;
         }
       },

@@ -32,6 +32,7 @@
     "eslint-plugin-vue": "^9.33.0",
     "rollup-plugin-visualizer": "^6.0.3",
     "vite": "^6.2.3",
-    "vite-plugin-compression": "^0.5.1"
+    "vite-plugin-compression": "^0.5.1",
+    "vite-plugin-vue-devtools": "^8.0.2"
   }
 }
