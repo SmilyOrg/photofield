@@ -109,9 +109,11 @@ tasks:
     cmds:
       - git push
       - git push --tags
-      - echo ""
-      - echo "✓ Release pushed to origin"
-      - echo "  GitHub Actions should now build and publish the release"
+      - cmd: |
+          echo ""
+          echo "✓ Release pushed to origin"
+          echo "  GitHub Actions should now build and publish the release"
+        silent: true
 
   release:undo:
     desc: Undo the last release (removes commit and tag locally)
@@ -120,9 +122,11 @@ tasks:
         silent: true
       - git tag -d $(changie latest)
       - git reset --hard HEAD~1
-      - echo ""
-      - echo "✓ Release undone (commit and tag removed)"
-      - echo "  Note - If you already pushed, you'll need to force push to remove from remote"
+      - cmd: |
+          echo ""
+          echo "✓ Release undone (commit and tag removed)"
+          echo "  Note - If you already pushed, you'll need to force push to remove from remote"
+        silent: true
 
   release:version:
     desc: Display the version of the latest release
