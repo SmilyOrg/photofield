@@ -36,7 +36,7 @@
         {{ error }}
       </ui-textfield-helper>
     </div>
-    <div class="chips">
+    <div v-if="active" class="chips">
       <SliderChip
         v-model="threshold"
         icon="tune"
@@ -48,7 +48,6 @@
         :step="1"
         prefix="Filter: "
         suffix="%"
-        @change="handleSliderChange"
       />
       <DateChip
         v-model="exactDate"
@@ -77,7 +76,7 @@
 </template>
 
 <script setup>
-import { computed, ref, toRefs, watch } from 'vue';
+import { computed, nextTick, ref, toRefs, watch } from 'vue';
 import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
@@ -101,10 +100,23 @@ const emit = defineEmits([
 ]);
 
 const input = ref(null);
-const active = ref(true);
+const active = ref(false);
 const inputValue = ref("");
-// const afterDate = ref(null);
-// const beforeDate = ref(null);
+
+const toggle = async () => {
+  active.value = !active.value;
+  if (active.value) {
+    await nextTick();
+    const inputEl = input.value.textfield.querySelector("input");
+    inputEl.focus()
+  }
+}
+
+const onBlur = () => {
+  if (!inputValue.value) {
+    active.value = false;
+  }
+}
 
 const createdAfterQualifier = {
   regex: /created:>=(\d{4}-\d{2}-\d{2})/,
@@ -163,7 +175,8 @@ const inject = (qualifier, value) => {
       .replace('  ', ' ')
       .trim();
   } else if (str) {
-    newValue += " " + str;
+    if (!newValue.endsWith(" ")) newValue += " ";
+    newValue += str + " ";
   }
   inputValue.value = newValue;
   emit("update:modelValue", newValue);
@@ -238,16 +251,12 @@ const handleBeforeDateChange = (date) => {
   inject(createdBeforeQualifier, date);
 };
 
-const handleSliderChange = (value) => {
-  console.log('Slider value changed:', value);
-  // Add your slider logic here
-};
 
 watch(modelValue, value => {
   if (value === undefined) {
     return;
   }
-  // active.value = !!value;
+  active.value = !!value;
   inputValue.value = value;
 }, {
   immediate: true,
@@ -289,8 +298,11 @@ watchDebounced(
   position: relative;
   display: flex;
   align-items: center;
-  margin-top: -4px;
   width: 100%;
+}
+
+.field.active .searchbar {
+  margin-top: -4px;
 }
 
 .chips {
@@ -298,6 +310,39 @@ watchDebounced(
   gap: 8px;
   margin-top: -6px;
   flex-wrap: wrap;
+}
+
+.chips > * {
+  animation: slideInFade 0.3s ease-out forwards;
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.chips > *:nth-child(1) {
+  animation-delay: 200ms;
+}
+
+.chips > *:nth-child(2) {
+  animation-delay: 250ms;
+}
+
+.chips > *:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+.chips > *:nth-child(4) {
+  animation-delay: 350ms;
+}
+
+@keyframes slideInFade {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .helper {

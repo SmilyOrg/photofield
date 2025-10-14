@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import flatpickr from 'flatpickr';
 import 'flatpickr/dist/flatpickr.css';
 import Chip from './Chip.vue';
@@ -103,9 +103,15 @@ const initializeFlatpickr = (el) => {
       emit('update:modelValue', value);
       emit('change', value);
     },
+    onClose: async () => {
+      await nextTick();
+      if (flatpickrInstance.value) {
+        flatpickrInstance.value.destroy();
+        flatpickrInstance.value = null;
+      }
+    },
     ...props.options,
   };
-
   flatpickrInstance.value = flatpickr(el, flatpickrOptions);
 };
 
@@ -116,6 +122,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (flatpickrInstance.value) {
     flatpickrInstance.value.destroy();
+    flatpickrInstance.value = null;
   }
 });
 </script>

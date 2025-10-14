@@ -128,12 +128,6 @@ watch(() => props.modelValue, (newValue) => {
 .slider-container {
   background-color: var(--mdc-theme-surface, #e0e0e0);
   border-radius: 16px;
-  /* padding: 8px 16px; */
   min-width: 200px;
-  /* padding-top: 16px;
-  margin-top: -16px;
-  border-bottom-left-radius: 16px;
-  border-bottom-right-radius: 16px;
-  z-index: -1; */
 }
 </style>
