@@ -6,11 +6,12 @@
       clickable
       :selected="modelValue !== null"
       :removable="modelValue !== null"
-      @click="toggleExpanded"
+      @click="handleChipClick"
       @remove="clear"
     />
-    <div v-if="expanded" class="slider-container">
+    <div v-if="showSlider" class="slider-container" ref="sliderContainer" @focusout="handleFocusOut">
       <ui-slider
+        ref="slider"
         v-model="sliderValue"
         :min="min"
         :max="max"
@@ -24,7 +25,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import Chip from './Chip.vue';
 
 const props = defineProps({
@@ -80,7 +81,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'change']);
 
-const expanded = ref(false);
+const showSlider = ref(false);
+const sliderContainer = ref(null);
+const slider = ref(null);
 const sliderValue = ref(props.modelValue ?? props.defaultValue);
 
 const displayText = computed(() => {
@@ -90,20 +93,39 @@ const displayText = computed(() => {
   return props.prefix + props.formatValue(props.modelValue) + props.suffix;
 });
 
-const toggleExpanded = () => {
+const handleChipClick = async () => {
   // If disabled (null), enable it with default value
   if (props.modelValue === null) {
     sliderValue.value = props.defaultValue;
     emit('update:modelValue', props.defaultValue);
     emit('change', props.defaultValue);
   }
-  expanded.value = !expanded.value;
+  
+  showSlider.value = true;
+  
+  // Wait for DOM update and focus the slider input
+  await nextTick();
+  if (slider.value?.$el) {
+    // Find the actual input element within the ui-slider component
+    const input = slider.value.$el.querySelector('input');
+    if (input) {
+      input.focus();
+    }
+  }
+};
+
+const handleFocusOut = (event) => {
+  // focusout bubbles, so we can catch it from child elements
+  // Check if the new focus target is outside the slider container
+  if (!sliderContainer.value?.contains(event.relatedTarget)) {
+    showSlider.value = false;
+  }
 };
 
 const clear = () => {
   emit('update:modelValue', null);
   emit('change', null);
-  expanded.value = false;
+  showSlider.value = false;
 };
 
 const handleInput = (event) => {
@@ -129,5 +151,6 @@ watch(() => props.modelValue, (newValue) => {
   background-color: var(--mdc-theme-surface, #e0e0e0);
   border-radius: 16px;
   min-width: 200px;
+  outline: none;
 }
 </style>
