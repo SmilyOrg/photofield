@@ -81,22 +81,52 @@ tasks:
     desc: Create a new changelog entry for breaking changes
     cmds: [changie new -k 'Breaking Changes' -e] 
 
-  release:commit:
-    desc: Prepare a new release by updating changelog and committing changes
+  release:
+    desc: Create a new release (batch changelog, tag, and prepare for push)
     cmds:
       - cmd: git diff-index --quiet HEAD -- || { echo "Working directory is not clean. Please commit or stash your changes."; exit 1; }
         silent: true
-      - git checkout -b release/$(changie latest)
+      - cmd: git branch --show-current | grep -q '^main$' || { echo "Must be on main branch to release."; exit 1; }
+        silent: true
       - changie batch auto
       - code --wait .changes/$(changie latest).md
       - changie merge
       - git add CHANGELOG.md .changes
       - git commit -m "Release $(changie latest)"
-
-  release:tag:
-    desc: Create a git tag for the latest release
-    cmds:
       - git tag -a $(changie latest) -m "Release $(changie latest)"
+      - cmd: |
+          echo ""
+          echo "✓ Release $(changie latest) created and tagged"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Review with git show HEAD"
+          echo "  2. Push with task release:push"
+          echo "  3. Or undo with task release:undo"
+        silent: true
+
+  release:push:
+    desc: Push the release commit and tag to origin
+    cmds:
+      - git push
+      - git push --tags
+      - cmd: |
+          echo ""
+          echo "✓ Release pushed to origin"
+          echo "  GitHub Actions should now build and publish the release"
+        silent: true
+
+  release:undo:
+    desc: Undo the last release (removes commit and tag locally)
+    cmds:
+      - cmd: git diff-index --quiet HEAD -- || { echo "Working directory is not clean. Cannot undo."; exit 1; }
+        silent: true
+      - git tag -d $(changie latest)
+      - git reset --hard HEAD~1
+      - cmd: |
+          echo ""
+          echo "✓ Release undone (commit and tag removed)"
+          echo "  Note - If you already pushed, you'll need to force push to remove from remote"
+        silent: true
 
   release:version:
     desc: Display the version of the latest release
