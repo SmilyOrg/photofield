@@ -42,7 +42,7 @@
         icon="tune"
         placeholder="Filter"
         :format-value="value => value.toFixed(0)"
-        :default-value="0"
+        :default-value="75"
         :min="0"
         :max="100"
         :step="1"
@@ -57,6 +57,7 @@
         @change="handleExactDateChange"
       />
       <DateChip
+        v-if="!exactDate"
         v-model="afterDate"
         icon="event"
         placeholder="After"
@@ -64,6 +65,7 @@
         @change="handleAfterDateChange"
       />
       <DateChip
+        v-if="!exactDate"
         v-model="beforeDate"
         icon="event"
         placeholder="Before"
@@ -75,7 +77,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
@@ -161,10 +163,7 @@ const inject = (qualifier, value) => {
       .replace('  ', ' ')
       .trim();
   } else if (str) {
-    if (newValue.length > 0) {
-      newValue += ' ';
-    }
-    newValue += str;
+    newValue += " " + str;
   }
   inputValue.value = newValue;
   emit("update:modelValue", newValue);

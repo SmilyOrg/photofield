@@ -3,6 +3,7 @@
     :icon="icon"
     :text="displayText"
     clickable
+    :selected="modelValue !== null"
     :removable="modelValue !== null"
     @click="openDatePicker"
     @remove="clear"

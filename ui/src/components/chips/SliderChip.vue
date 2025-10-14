@@ -4,7 +4,8 @@
       :icon="icon"
       :text="displayText"
       clickable
-      :removable="modelValue !== defaultValue"
+      :selected="modelValue !== null"
+      :removable="modelValue !== null"
       @click="toggleExpanded"
       @remove="clear"
     />
@@ -83,20 +84,25 @@ const expanded = ref(false);
 const sliderValue = ref(props.modelValue ?? props.defaultValue);
 
 const displayText = computed(() => {
-  if (props.modelValue === null || props.modelValue === props.defaultValue) {
+  if (props.modelValue === null) {
     return props.placeholder;
   }
   return props.prefix + props.formatValue(props.modelValue) + props.suffix;
 });
 
 const toggleExpanded = () => {
+  // If disabled (null), enable it with default value
+  if (props.modelValue === null) {
+    sliderValue.value = props.defaultValue;
+    emit('update:modelValue', props.defaultValue);
+    emit('change', props.defaultValue);
+  }
   expanded.value = !expanded.value;
 };
 
 const clear = () => {
-  sliderValue.value = props.defaultValue;
-  emit('update:modelValue', props.defaultValue);
-  emit('change', props.defaultValue);
+  emit('update:modelValue', null);
+  emit('change', null);
   expanded.value = false;
 };
 
@@ -129,9 +135,5 @@ watch(() => props.modelValue, (newValue) => {
   border-bottom-left-radius: 16px;
   border-bottom-right-radius: 16px;
   z-index: -1; */
-}
-
-.slider-container :deep(.mdc-slider) {
-  /* width: 100%; */
 }
 </style>
