@@ -17,7 +17,7 @@
         active
         size="small"
       ></ui-spinner>
-      <ui-textfield
+      <!-- <ui-textfield
         v-if="active"
         ref="input"
         class="input"
@@ -27,7 +27,17 @@
         @input="inputValue = $event.target.value"
         @keyup.escape="inputValue = ''; onBlur($event)"
       >
-      </ui-textfield>
+      </ui-textfield> -->
+      <highlightable-input
+        v-if="active"
+        ref="input"
+        placeholder="Search your photos"
+        :highlight="highlightRules"
+        v-model="inputValue"
+        @keyup.escape="inputValue = ''; onBlur($event)"
+      ></highlightable-input>
+        <!-- :modelValue="modelValue || ''"
+        @update:modelValue="inputValue = $event" -->
       <ui-textfield-helper
         v-if="active"
         class="helper"
@@ -81,6 +91,7 @@ import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
 import dateFormat from 'date-fns/format';
+import HighlightableInput from 'highlightable-input/vue'
 
 const props = defineProps({
   modelValue: String,
@@ -107,7 +118,7 @@ const toggle = async () => {
   active.value = !active.value;
   if (active.value) {
     await nextTick();
-    const inputEl = input.value.textfield.querySelector("input");
+    const inputEl = input.value.querySelector("input");
     inputEl.focus()
   }
 }
@@ -119,6 +130,7 @@ const onBlur = () => {
 }
 
 const createdAfterQualifier = {
+  name: "createdAfter",
   regex: /created:>=(\d{4}-\d{2}-\d{2})/,
   parse: (str) => new Date(str),
   replace: (date) => {
@@ -128,6 +140,7 @@ const createdAfterQualifier = {
 }
 
 const createdBeforeQualifier = {
+  name: "createdBefore",
   regex: /created:<=(\d{4}-\d{2}-\d{2})/,
   parse: (str) => new Date(str),
   replace: (date) => {
@@ -137,6 +150,7 @@ const createdBeforeQualifier = {
 }
 
 const createdRangeQualifier = {
+  name: "createdRange",
   regex: /created:(\d{4}-\d{2}-\d{2})..(\d{4}-\d{2}-\d{2})/,
   parse: (a, b) => [new Date(a), new Date(b)],
   replace: ([a, b]) => {
@@ -148,6 +162,7 @@ const createdRangeQualifier = {
 }
 
 const thresholdQualifier = {
+  name: "threshold",
   regex: /t:(\d+(\.\d+)?)/,
   parse: (str) => parseFloat(str),
   replace: (value) => {
@@ -155,6 +170,20 @@ const thresholdQualifier = {
     return `t:${value.toFixed(3)}`;
   },
 }
+
+const qualifiers = [
+  createdAfterQualifier,
+  createdBeforeQualifier,
+  createdRangeQualifier,
+  thresholdQualifier,
+];
+
+const highlightRules = computed(() => {
+  return qualifiers.map(q => ({
+    pattern: q.regex,
+    class: q.name,
+  }));
+});
 
 const extract = (qualifier) => {
   const input = modelValue.value;
@@ -303,6 +332,34 @@ watchDebounced(
 
 .field.active .searchbar {
   margin-top: -4px;
+}
+
+highlightable-input :deep(mark) {
+  background: none;
+  color: var(--mdc-theme-text-secondary-on-background);
+}
+
+highlightable-input :deep(.createdRange) {
+  width: 20px;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  transition: width 0.2s ease;
+}
+
+highlightable-input:focus-within :deep(.createdRange),
+highlightable-input :deep(.createdRange:has(+ *:focus)),
+highlightable-input :deep(.createdRange:focus) {
+  width: fit-content
+}
+
+/* highlightable-input :deep(.createdRange):focus {
+  width: 150px;
+} */
+
+highlightable-input :deep(.createdRange)::before {
+  content: "📅";
 }
 
 .chips {

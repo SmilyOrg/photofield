@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import Root from './Root.vue'
 import './index.css'
+import './highlightable-input.css'
 import router from './router'
 
 import BalmUI from 'balm-ui'; // Official Google Material Components
