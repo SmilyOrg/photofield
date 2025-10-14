@@ -36,8 +36,6 @@
         v-model="inputValue"
         @keyup.escape="inputValue = ''; onBlur($event)"
       ></highlightable-input>
-        <!-- :modelValue="modelValue || ''"
-        @update:modelValue="inputValue = $event" -->
       <ui-textfield-helper
         v-if="active"
         class="helper"
@@ -48,6 +46,7 @@
     </div>
     <div v-if="active" class="chips">
       <SliderChip
+        v-if="leftoverText.length > 0"
         v-model="threshold"
         icon="tune"
         placeholder="Filter"
@@ -60,14 +59,14 @@
         suffix="%"
       />
       <DateChip
-        v-model="exactDate"
+        :model-value="exactDate"
         icon="event"
         placeholder="Date"
         @change="handleExactDateChange"
       />
       <DateChip
         v-if="!exactDate"
-        v-model="afterDate"
+        :model-value="afterDate"
         icon="event"
         placeholder="After"
         suffix=" ➔"
@@ -75,7 +74,7 @@
       />
       <DateChip
         v-if="!exactDate"
-        v-model="beforeDate"
+        :model-value="beforeDate"
         icon="event"
         placeholder="Before"
         prefix="➔ "
@@ -257,6 +256,14 @@ const beforeDate = computed(() => {
   return extract(createdBeforeQualifier);
 });
 
+const leftoverText = computed(() => {
+  let text = inputValue.value;
+  qualifiers.forEach(q => {
+    text = text.replace(q.regex, '');
+  });
+  return text.trim();
+});
+
 const handleAfterDateChange = (date) => {
   const before = beforeDate.value;
   if (before) {
@@ -333,15 +340,22 @@ watchDebounced(
 
 highlightable-input :deep(mark) {
   white-space: pre;
-  display: none;
+  display: inline-block;
+  position: absolute;
+  left: 100vw;
   background: none;
   color: var(--mdc-theme-text-secondary-on-background);
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.5s ease, transform 0.3s ease;
 }
 
 highlightable-input:focus-within :deep(mark),
 highlightable-input :deep(mark:has(+ *:focus)),
 highlightable-input :deep(mark:focus) {
-  display: inline;
+  position: unset;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .chips {
@@ -358,19 +372,19 @@ highlightable-input :deep(mark:focus) {
 }
 
 .chips > *:nth-child(1) {
-  animation-delay: 200ms;
+  animation-delay: 150ms;
 }
 
 .chips > *:nth-child(2) {
-  animation-delay: 250ms;
+  animation-delay: 180ms;
 }
 
 .chips > *:nth-child(3) {
-  animation-delay: 300ms;
+  animation-delay: 210ms;
 }
 
 .chips > *:nth-child(4) {
-  animation-delay: 350ms;
+  animation-delay: 240ms;
 }
 
 @keyframes slideInFade {
