@@ -86,7 +86,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, toRefs, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, toRefs, watch } from 'vue';
 import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
@@ -110,7 +110,7 @@ const emit = defineEmits([
   "update:modelValue",
 ]);
 
-const input = ref(null);
+const input = shallowRef();
 const active = ref(false);
 const inputValue = ref("");
 
@@ -118,8 +118,7 @@ const toggle = async () => {
   active.value = !active.value;
   if (active.value) {
     await nextTick();
-    const inputEl = input.value.querySelector("input");
-    inputEl.focus()
+    input.value?.$el?.focus();
   }
 }
 
@@ -131,43 +130,43 @@ const onBlur = () => {
 
 const createdAfterQualifier = {
   name: "createdAfter",
-  regex: /created:>=(\d{4}-\d{2}-\d{2})/,
+  regex: / created:>=(\d{4}-\d{2}-\d{2})/,
   parse: (str) => new Date(str),
   replace: (date) => {
     if (!date) return '';
-    return `created:>=${dateFormat(date, 'yyyy-MM-dd')}`;
+    return ` created:>=${dateFormat(date, 'yyyy-MM-dd')}`;
   },
 }
 
 const createdBeforeQualifier = {
   name: "createdBefore",
-  regex: /created:<=(\d{4}-\d{2}-\d{2})/,
+  regex: / created:<=(\d{4}-\d{2}-\d{2})/,
   parse: (str) => new Date(str),
   replace: (date) => {
     if (!date) return '';
-    return `created:<=${dateFormat(date, 'yyyy-MM-dd')}`;
+    return ` created:<=${dateFormat(date, 'yyyy-MM-dd')}`;
   },
 }
 
 const createdRangeQualifier = {
   name: "createdRange",
-  regex: /created:(\d{4}-\d{2}-\d{2})..(\d{4}-\d{2}-\d{2})/,
+  regex: / created:(\d{4}-\d{2}-\d{2})..(\d{4}-\d{2}-\d{2})/,
   parse: (a, b) => [new Date(a), new Date(b)],
   replace: ([a, b]) => {
     if (!a || !b) return '';
     const astr = dateFormat(a, 'yyyy-MM-dd');
     const bstr = dateFormat(b, 'yyyy-MM-dd');
-    return `created:${astr}..${bstr}`;
+    return ` created:${astr}..${bstr}`;
   },
 }
 
 const thresholdQualifier = {
   name: "threshold",
-  regex: /t:(\d+(\.\d+)?)/,
+  regex: / t:(\d+(\.\d+)?)/,
   parse: (str) => parseFloat(str),
   replace: (value) => {
     if (value === null || value === undefined) return '';
-    return `t:${value.toFixed(3)}`;
+    return ` t:${value.toFixed(3)}`;
   },
 }
 
@@ -204,7 +203,6 @@ const inject = (qualifier, value) => {
       .replace('  ', ' ')
       .trim();
   } else if (str) {
-    if (!newValue.endsWith(" ")) newValue += " ";
     newValue += str + " ";
   }
   inputValue.value = newValue;
@@ -335,31 +333,16 @@ watchDebounced(
 }
 
 highlightable-input :deep(mark) {
+  white-space: pre;
+  display: none;
   background: none;
   color: var(--mdc-theme-text-secondary-on-background);
 }
 
-highlightable-input :deep(.createdRange) {
-  width: 20px;
-  display: inline-block;
-  overflow: hidden;
-  white-space: nowrap;
-  vertical-align: bottom;
-  transition: width 0.2s ease;
-}
-
-highlightable-input:focus-within :deep(.createdRange),
-highlightable-input :deep(.createdRange:has(+ *:focus)),
-highlightable-input :deep(.createdRange:focus) {
-  width: fit-content
-}
-
-/* highlightable-input :deep(.createdRange):focus {
-  width: 150px;
-} */
-
-highlightable-input :deep(.createdRange)::before {
-  content: "📅";
+highlightable-input:focus-within :deep(mark),
+highlightable-input :deep(mark:has(+ *:focus)),
+highlightable-input :deep(mark:focus) {
+  display: inline;
 }
 
 .chips {

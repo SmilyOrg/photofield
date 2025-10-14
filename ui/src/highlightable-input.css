@@ -1,5 +1,6 @@
 highlightable-input {
   line-height: var(--mdc-typography-body2-line-height,1.25rem);
+  height: var(--mdc-typography-body2-line-height,1.25rem);
 
   -moz-osx-font-smoothing:grayscale;
   -webkit-font-smoothing:antialiased;
@@ -9,32 +10,25 @@ highlightable-input {
   background:none;
   border:none;
   border-radius:0;
-  font-family:Roboto,sans-serif;
   font-family:var(--mdc-typography-subtitle1-font-family,var(--mdc-typography-font-family,Roboto,sans-serif));
-  font-size:1rem;
   font-size:var(--mdc-typography-subtitle1-font-size,1rem);
-  font-weight:400;
   font-weight:var(--mdc-typography-subtitle1-font-weight,400);
-  height:28px;
-  letter-spacing:.009375em;
   letter-spacing:var(--mdc-typography-subtitle1-letter-spacing,.009375em);
   min-width:0;
   padding:0;
   text-decoration:inherit;
   -webkit-text-decoration:var(--mdc-typography-subtitle1-text-decoration,inherit);
   text-decoration:var(--mdc-typography-subtitle1-text-decoration,inherit);
-  text-transform:inherit;
   text-transform:var(--mdc-typography-subtitle1-text-transform,inherit);
   transition:opacity .15s cubic-bezier(.4,0,.2,1) 0s;
   width:100%;
 
-  caret-color: var(--mdc-theme-primary,#6200ee);
-  
-  height: 100%;
+  caret-color: var(--mdc-theme-primary,#6200ee);  
 
   background-color: transparent;
-  border: none !important;
   display: block;
+
+  cursor: text;
 }
 
 highlightable-input[aria-multiline="true"] {
