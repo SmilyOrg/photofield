@@ -200,8 +200,7 @@ const inject = (qualifier, value) => {
   if (newValue.match(qualifier.regex)) {
     newValue = inputValue.value
       .replace(qualifier.regex, str)
-      .replace('  ', ' ')
-      .trim();
+      .replace('  ', ' ');
   } else if (str) {
     newValue += str + " ";
   }
