@@ -1,5 +1,5 @@
 <template>
-  <div class="slider-chip">
+  <div class="slider-chip" ref="sliderChip" @mousedown="handleMouseDown">
     <chip
       :icon="icon"
       :text="displayText"
@@ -9,7 +9,12 @@
       @click="handleChipClick"
       @remove="clear"
     />
-    <div v-if="showSlider" class="slider-container" ref="sliderContainer" @focusout="handleFocusOut">
+    <div
+      v-if="showSlider"
+      class="slider-container"
+      ref="sliderContainer"
+      @focusout="handleFocusOut"
+    >
       <ui-slider
         ref="slider"
         v-model="sliderValue"
@@ -85,6 +90,8 @@ const showSlider = ref(false);
 const sliderContainer = ref(null);
 const slider = ref(null);
 const sliderValue = ref(props.modelValue ?? props.defaultValue);
+const sliderChip = ref(null);
+const isMouseDownInComponent = ref(false);
 
 const displayText = computed(() => {
   if (props.modelValue === null) {
@@ -93,6 +100,14 @@ const displayText = computed(() => {
   return props.prefix + props.formatValue(props.modelValue) + props.suffix;
 });
 
+const handleMouseDown = () => {
+  isMouseDownInComponent.value = true;
+  // Reset on next tick to allow click to happen
+  setTimeout(() => {
+    isMouseDownInComponent.value = false;
+  }, 0);
+};
+
 const handleChipClick = async () => {
   // If disabled (null), enable it with default value
   if (props.modelValue === null) {
@@ -100,7 +115,14 @@ const handleChipClick = async () => {
     emit('update:modelValue', props.defaultValue);
     emit('change', props.defaultValue);
   }
-  
+
+  // If slider is already open, just refocus it instead of toggling
+  if (showSlider.value) {
+    showSlider.value = false
+    return;
+  }
+
+  // Open the slider
   showSlider.value = true;
   
   // Wait for DOM update and focus the slider input
@@ -115,9 +137,15 @@ const handleChipClick = async () => {
 };
 
 const handleFocusOut = (event) => {
+  // If mouse is down within the component, don't close the slider
+  // This prevents closing when clicking the chip while slider is open
+  if (isMouseDownInComponent.value) {
+    return;
+  }
+  
   // focusout bubbles, so we can catch it from child elements
-  // Check if the new focus target is outside the slider container
-  if (!sliderContainer.value?.contains(event.relatedTarget)) {
+  // Check if the new focus target is outside the entire slider-chip component
+  if (!sliderChip.value?.contains(event.relatedTarget)) {
     showSlider.value = false;
   }
 };
