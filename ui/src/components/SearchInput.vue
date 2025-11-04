@@ -1,7 +1,7 @@
 <template>
   <ui-form-field
     class="field"
-    :class="{ active: active }"
+    :class="{ active: active, 'show-textual': showTextualParams }"
   >
     <div class="searchbar">
       <ui-icon-button
@@ -44,7 +44,7 @@
         {{ error }}
       </ui-textfield-helper>
     </div>
-    <div v-if="active" class="chips">
+    <div v-if="!showTextualParams" class="chips">
       <SliderChip
         v-if="leftoverText.length > 0"
         v-model="threshold"
@@ -81,6 +81,13 @@
         @change="handleBeforeDateChange"
       />
     </div>
+    <!-- <ui-icon-button
+      :aria-label="showTextualParams ? 'Show chips' : 'Show text params'"
+      class="toggle-params-button"
+      @click="showTextualParams = !showTextualParams"
+    >
+      {{ showTextualParams ? 'grid_view' : 'code' }}
+    </ui-icon-button> -->
   </ui-form-field>
 </template>
 
@@ -112,6 +119,7 @@ const emit = defineEmits([
 const input = shallowRef();
 const active = ref(false);
 const inputValue = ref("");
+const showTextualParams = ref(false);
 
 const toggle = async () => {
   active.value = !active.value;
@@ -318,9 +326,13 @@ watchDebounced(
 .field {
   position: relative;
   display: flex;
-  flex-direction: column;
-  align-self: baseline;
-  align-items: flex-start;
+  flex-direction: row;
+  flex-wrap: wrap;
+  /* align-self: baseline; */
+  align-items: center;
+  overflow-x: scroll;
+  height: fit-content;
+  /* width: 100%; */
 }
 
 .field.active {
@@ -331,38 +343,55 @@ watchDebounced(
   position: relative;
   display: flex;
   align-items: center;
-  width: 100%;
+  margin-right: 16px;
+  /* width: 100%; */
 }
 
 .field.active .searchbar {
-  margin-top: -4px;
+  /* margin-top: -4px; */
+}
+
+highlightable-input {
+  white-space: nowrap;
 }
 
 highlightable-input :deep(mark) {
   white-space: pre;
-  display: inline-block;
-  position: absolute;
-  left: 100vw;
+  display: none;
   background: none;
   color: var(--mdc-theme-text-secondary-on-background);
   opacity: 0;
-  transform: translateY(2px);
-  transition: opacity 0.5s ease, transform 0.3s ease;
+  transform: translateX(4px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.field.show-textual highlightable-input :deep(mark) {
+  display: inline-block;
+  opacity: 1;
+  transform: translateX(0);
 }
 
 highlightable-input:focus-within :deep(mark),
 highlightable-input :deep(mark:has(+ *:focus)),
 highlightable-input :deep(mark:focus) {
-  position: unset;
-  opacity: 1;
-  transform: translateY(0);
+  /* position: unset; */
+  /* opacity: 1; */
+  /* left: 0; */
+  /* transform: translateX(0); */
+  /* transition: ; */
 }
 
 .chips {
   display: flex;
   gap: 8px;
-  margin-top: -6px;
-  flex-wrap: wrap;
+  /* margin-top: -6px; */
+  /* flex-wrap: wrap; */
+  overflow-x: scroll;
+  height: fit-content;
+}
+
+.toggle-params-button {
+  flex-shrink: 0;
 }
 
 .chips > * {

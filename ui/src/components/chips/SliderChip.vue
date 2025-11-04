@@ -180,5 +180,8 @@ watch(() => props.modelValue, (newValue) => {
   border-radius: 16px;
   min-width: 200px;
   outline: none;
+  position: absolute;
+  top: 40px;
+  z-index: 10;
 }
 </style>

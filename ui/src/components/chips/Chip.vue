@@ -1,5 +1,5 @@
 <template>
-  <div
+  <button
     class="chip"
     :class="{
       'chip--clickable': clickable,
@@ -8,7 +8,10 @@
       'chip--dense': dense,
       'chip--disabled': disabled,
     }"
+    :tabindex="clickable && !disabled ? 0 : -1"
     @click="handleClick"
+    @keydown.enter="handleClick"
+    @keydown.space.prevent="handleClick"
   >
     <ui-icon
       v-if="icon"
@@ -34,7 +37,7 @@
     >
       close
     </ui-icon>
-  </div>
+  </button>
 </template>
 
 <script setup>
@@ -151,6 +154,7 @@ const handleRemove = (event) => {
   user-select: none;
   transition: background-color 0.2s, box-shadow 0.2s;
   height: fit-content;
+  border: none;
 }
 
 .chip--dense {
@@ -169,26 +173,55 @@ const handleRemove = (event) => {
 }
 
 .chip--clickable:hover:not(.chip--disabled) {
-  background-color: var(--mdc-theme-primary, #6200ee);
+  background-color: var(--mdc-theme-primary);
   color: var(--mdc-theme-on-primary, white);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+.chip--clickable:focus:not(.chip--disabled) {
+  outline: none;
+  /* background-color: var(--mdc-theme-primary); */
+  /* color: var(--mdc-theme-on-primary, white); */
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.3);
+}
+
+.chip--clickable:active:not(.chip--disabled) {
+  background-color: color-mix(in srgb, var(--mdc-theme-primary) 85%, black);
+  color: var(--mdc-theme-on-primary, white);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transform: translateY(1px);
+}
+
 .chip--outlined.chip--clickable:hover:not(.chip--disabled) {
   background-color: rgba(98, 0, 238, 0.08);
-  border-color: var(--mdc-theme-primary, #6200ee);
-  color: var(--mdc-theme-primary, #6200ee);
+  border-color: var(--mdc-theme-primary);
+  color: var(--mdc-theme-primary);
+}
+
+.chip--outlined.chip--clickable:focus:not(.chip--disabled) {
+  outline: none;
+  background-color: rgba(98, 0, 238, 0.12);
+  border-color: var(--mdc-theme-primary);
+  color: var(--mdc-theme-primary);
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.chip--outlined.chip--clickable:active:not(.chip--disabled) {
+  background-color: rgba(98, 0, 238, 0.18);
+  border-color: color-mix(in srgb, var(--mdc-theme-primary) 85%, black);
+  color: color-mix(in srgb, var(--mdc-theme-primary) 85%, black);
+  transform: translateY(1px);
 }
 
 .chip--selected {
-  background-color: var(--mdc-theme-primary, #6200ee);
+  background-color: var(--mdc-theme-primary);
   color: var(--mdc-theme-on-primary, white);
 }
 
 .chip--outlined.chip--selected {
   background-color: rgba(98, 0, 238, 0.12);
-  border-color: var(--mdc-theme-primary, #6200ee);
-  color: var(--mdc-theme-primary, #6200ee);
+  border-color: var(--mdc-theme-primary);
+  color: var(--mdc-theme-primary);
 }
 
 .chip--disabled {
@@ -209,7 +242,7 @@ const handleRemove = (event) => {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background-color: var(--mdc-theme-primary, #6200ee);
+  background-color: var(--mdc-theme-primary);
   color: var(--mdc-theme-on-primary, white);
   font-size: 12px;
   font-weight: 500;
