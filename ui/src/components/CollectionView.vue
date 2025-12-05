@@ -10,6 +10,22 @@
       class="response"
       :response="collectionResponse"
     ></response-loader>
+    <center-message
+      v-if="currentScene?.file_count === 0 && !currentScene?.loading"
+      icon="image_not_supported"
+      class="center-message"
+    >
+      <h1>No photos found</h1>
+      <p>This may be because:</p>
+      <ul>
+        <li v-if="search">Search filters excluding all photos (check tag:, created:, or t: filters)</li>
+        <li>The collection needs to be rescanned - click on the collection name to rescan</li>
+        <li>No supported image files (.jpg, .png, .avif, etc.) in the collection directories</li>
+        <li>Collection directories are empty or don't exist</li>
+        <li>File system errors preventing access to photo directories</li>
+        <li>Multiple tag filters require photos to have ALL specified tags</li>
+      </ul>
+    </center-message>
 
     <map-viewer
       class="viewer"
@@ -104,9 +120,10 @@ import MapViewer from './MapViewer.vue';
 import PageTitle from './PageTitle.vue';
 import Overlays from './Overlays.vue';
 import PhotoDetails from './PhotoDetails.vue';
+import CenterMessage from './CenterMessage.vue';
 
 import { useApi } from '../api';
-import { refDebounced, useElementSize, watchDebounced } from '@vueuse/core';
+import { refDebounced, useElementSize } from '@vueuse/core';
 
 const props = defineProps([
   "collectionId",
@@ -336,6 +353,16 @@ const onRegion = async (region) => {
 
 .collection {
   --details-width: 360px;
+}
+
+.center-message {
+  position: fixed;
+  top: 100px;
+  left: 0;
+  right: 0;
+  background: var(--bg-color);
+  z-index: 5;
+  height: fit-content
 }
 
 .controls {

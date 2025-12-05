@@ -639,6 +639,10 @@ html .multiselect__spinner {
   overflow: hidden;
 }
 
+.top-bar.search :deep(.mdc-top-app-bar__section) {
+  align-items: start;
+}
+
 .tag-dialog :deep(.mdc-dialog__surface) {
   max-width: 800px !important;
 }

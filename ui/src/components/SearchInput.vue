@@ -17,34 +17,30 @@
         active
         size="small"
       ></ui-spinner>
-      <!-- <ui-textfield
+      <div
         v-if="active"
-        ref="input"
-        class="input"
-        placeholder="Search your photos"
-        outlined
-        :modelValue="modelValue"
-        @input="inputValue = $event.target.value"
-        @keyup.escape="inputValue = ''; onBlur($event)"
+        class="input-with-helper"
       >
-      </ui-textfield> -->
-      <highlightable-input
-        v-if="active"
-        ref="input"
-        placeholder="Search your photos"
-        :highlight="highlightRules"
-        v-model="inputValue"
-        @keyup.escape="inputValue = ''; onBlur($event)"
-      ></highlightable-input>
-      <ui-textfield-helper
-        v-if="active"
-        class="helper"
-        :visible="true"
-      >
-        {{ error }}
-      </ui-textfield-helper>
+        <highlightable-input
+          :class="{ placeholder: !leftoverText }"
+          ref="input"
+          :highlight="highlightRules"
+          v-model="inputValue"
+          @keyup.escape="inputValue = ''; onBlur($event)"
+        ></highlightable-input>
+        <ui-textfield-helper
+          v-if="error"
+          class="helper"
+          :visible="true"
+        >
+          {{ error }}
+        </ui-textfield-helper>
+      </div>
     </div>
-    <div v-if="!showTextualParams" class="chips">
+    <div
+      v-if="active && !showTextualParams"
+      class="chips"
+    >
       <SliderChip
         v-if="leftoverText.length > 0"
         v-model="threshold"
@@ -328,11 +324,9 @@ watchDebounced(
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  /* align-self: baseline; */
-  align-items: center;
+  align-items: start;
   overflow-x: scroll;
   height: fit-content;
-  /* width: 100%; */
 }
 
 .field.active {
@@ -342,25 +336,103 @@ watchDebounced(
 .searchbar {
   position: relative;
   display: flex;
-  align-items: center;
-  margin-right: 16px;
-  /* width: 100%; */
+  align-items: start;
+  max-width: 100%;
+  flex-grow: 1;
 }
 
-.field.active .searchbar {
-  /* margin-top: -4px; */
+.input-with-helper {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  padding: 10px;
+  box-sizing: border-box;
+  min-width: 60px;
 }
 
 highlightable-input {
+  max-width: 100%;
   white-space: nowrap;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+highlightable-input.placeholder::after {
+  content: 'dogs';
+  color: var(--mdc-theme-text-secondary-on-background);
+  pointer-events: none;
+  opacity: 0.6;
+  display: inline-block;
+  animation: cycleSearchPhrases 60s infinite;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+@keyframes cycleSearchPhrases {
+  0%, 4%      { opacity: 0.6; transform: translateY(0);    content: 'sunset'; }
+  4.5%, 5%    { opacity: 0;   transform: translateY(4px);  content: 'sunset'; }
+  5%          { opacity: 0;   transform: translateY(-4px); content: 'cats'; }
+  5.5%, 9%    { opacity: 0.6; transform: translateY(0);    content: 'cats'; }
+  9.5%, 10%   { opacity: 0;   transform: translateY(4px);  content: 'cats'; }
+  10%         { opacity: 0;   transform: translateY(-4px); content: 'night'; }
+  10.5%, 14%  { opacity: 0.6; transform: translateY(0);    content: 'night'; }
+  14.5%, 15%  { opacity: 0;   transform: translateY(4px);  content: 'night'; }
+  15%         { opacity: 0;   transform: translateY(-4px); content: 'beach'; }
+  15.5%, 19%  { opacity: 0.6; transform: translateY(0);    content: 'beach'; }
+  19.5%, 20%  { opacity: 0;   transform: translateY(4px);  content: 'beach'; }
+  20%         { opacity: 0;   transform: translateY(-4px); content: 'rain'; }
+  20.5%, 24%  { opacity: 0.6; transform: translateY(0);    content: 'rain'; }
+  24.5%, 25%  { opacity: 0;   transform: translateY(4px);  content: 'rain'; }
+  25%         { opacity: 0;   transform: translateY(-4px); content: 'snow'; }
+  25.5%, 29%  { opacity: 0.6; transform: translateY(0);    content: 'snow'; }
+  29.5%, 30%  { opacity: 0;   transform: translateY(4px);  content: 'snow'; }
+  30%         { opacity: 0;   transform: translateY(-4px); content: 'forest'; }
+  30.5%, 34%  { opacity: 0.6; transform: translateY(0);    content: 'forest'; }
+  34.5%, 35%  { opacity: 0;   transform: translateY(4px);  content: 'forest'; }
+  35%         { opacity: 0;   transform: translateY(-4px); content: 'city'; }
+  35.5%, 39%  { opacity: 0.6; transform: translateY(0);    content: 'city'; }
+  39.5%, 40%  { opacity: 0;   transform: translateY(4px);  content: 'city'; }
+  40%         { opacity: 0;   transform: translateY(-4px); content: 'food'; }
+  40.5%, 44%  { opacity: 0.6; transform: translateY(0);    content: 'food'; }
+  44.5%, 45%  { opacity: 0;   transform: translateY(4px);  content: 'food'; }
+  45%         { opacity: 0;   transform: translateY(-4px); content: 'car'; }
+  45.5%, 49%  { opacity: 0.6; transform: translateY(0);    content: 'car'; }
+  49.5%, 50%  { opacity: 0;   transform: translateY(4px);  content: 'car'; }
+  50%         { opacity: 0;   transform: translateY(-4px); content: 'dogs'; }
+  50.5%, 54%  { opacity: 0.6; transform: translateY(0);    content: 'dogs'; }
+  54.5%, 55%  { opacity: 0;   transform: translateY(4px);  content: 'dogs'; }
+  55%         { opacity: 0;   transform: translateY(-4px); content: 'bird'; }
+  55.5%, 59%  { opacity: 0.6; transform: translateY(0);    content: 'bird'; }
+  59.5%, 60%  { opacity: 0;   transform: translateY(4px);  content: 'bird'; }
+  60%         { opacity: 0;   transform: translateY(-4px); content: 'sky'; }
+  60.5%, 64%  { opacity: 0.6; transform: translateY(0);    content: 'sky'; }
+  64.5%, 65%  { opacity: 0;   transform: translateY(4px);  content: 'sky'; }
+  65%         { opacity: 0;   transform: translateY(-4px); content: 'water'; }
+  65.5%, 69%  { opacity: 0.6; transform: translateY(0);    content: 'water'; }
+  69.5%, 70%  { opacity: 0;   transform: translateY(4px);  content: 'water'; }
+  70%         { opacity: 0;   transform: translateY(-4px); content: 'party'; }
+  70.5%, 74%  { opacity: 0.6; transform: translateY(0);    content: 'party'; }
+  74.5%, 75%  { opacity: 0;   transform: translateY(4px);  content: 'party'; }
+  75%         { opacity: 0;   transform: translateY(-4px); content: 'happy'; }
+  75.5%, 79%  { opacity: 0.6; transform: translateY(0);    content: 'happy'; }
+  79.5%, 80%  { opacity: 0;   transform: translateY(4px);  content: 'happy'; }
+  80%         { opacity: 0;   transform: translateY(-4px); content: 'tree'; }
+  80.5%, 84%  { opacity: 0.6; transform: translateY(0);    content: 'tree'; }
+  84.5%, 85%  { opacity: 0;   transform: translateY(4px);  content: 'tree'; }
+  85%         { opacity: 0;   transform: translateY(-4px); content: 'smile'; }
+  85.5%, 89%  { opacity: 0.6; transform: translateY(0);    content: 'smile'; }
+  89.5%, 90%  { opacity: 0;   transform: translateY(4px);  content: 'smile'; }
+  90%         { opacity: 0;   transform: translateY(-4px); content: 'flower'; }
+  90.5%, 94%  { opacity: 0.6; transform: translateY(0);    content: 'flower'; }
+  94.5%, 95%  { opacity: 0;   transform: translateY(4px);  content: 'flower'; }
+  95%         { opacity: 0;   transform: translateY(-4px); content: 'art'; }
+  95.5%, 99%  { opacity: 0.6; transform: translateY(0);    content: 'art'; }
+  99.5%, 100% { opacity: 0;   transform: translateY(4px);  content: 'art'; }
 }
 
 highlightable-input :deep(mark) {
   white-space: pre;
-  display: none;
   background: none;
   color: var(--mdc-theme-text-secondary-on-background);
-  opacity: 0;
   transform: translateX(4px);
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
@@ -371,23 +443,12 @@ highlightable-input :deep(mark) {
   transform: translateX(0);
 }
 
-highlightable-input:focus-within :deep(mark),
-highlightable-input :deep(mark:has(+ *:focus)),
-highlightable-input :deep(mark:focus) {
-  /* position: unset; */
-  /* opacity: 1; */
-  /* left: 0; */
-  /* transform: translateX(0); */
-  /* transition: ; */
-}
-
 .chips {
   display: flex;
   gap: 8px;
-  /* margin-top: -6px; */
-  /* flex-wrap: wrap; */
   overflow-x: scroll;
   height: fit-content;
+  padding: 8px;
 }
 
 .toggle-params-button {
@@ -423,14 +484,8 @@ highlightable-input :deep(mark:focus) {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.helper {
-  position: absolute;
-  left: 32px;
-  bottom: 0px;
+    transform: translateY(0);   
+  } 
 }
 
 .input {
