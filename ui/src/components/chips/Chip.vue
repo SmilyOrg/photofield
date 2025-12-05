@@ -180,8 +180,6 @@ const handleRemove = (event) => {
 
 .chip--clickable:focus:not(.chip--disabled) {
   outline: none;
-  /* background-color: var(--mdc-theme-primary); */
-  /* color: var(--mdc-theme-on-primary, white); */
   box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.3);
 }
 
@@ -252,7 +250,6 @@ const handleRemove = (event) => {
 
 .chip__text {
   flex: 1;
-  /* overflow: hidden; */
   text-overflow: ellipsis;
 }
 

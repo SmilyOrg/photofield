@@ -1,7 +1,7 @@
 <template>
   <ui-form-field
     class="field"
-    :class="{ active: active, 'show-textual': showTextualParams }"
+    :class="{ active: active }"
   >
     <div class="searchbar">
       <ui-icon-button
@@ -38,7 +38,7 @@
       </div>
     </div>
     <div
-      v-if="active && !showTextualParams"
+      v-if="active"
       class="chips"
     >
       <SliderChip
@@ -77,13 +77,6 @@
         @change="handleBeforeDateChange"
       />
     </div>
-    <!-- <ui-icon-button
-      :aria-label="showTextualParams ? 'Show chips' : 'Show text params'"
-      class="toggle-params-button"
-      @click="showTextualParams = !showTextualParams"
-    >
-      {{ showTextualParams ? 'grid_view' : 'code' }}
-    </ui-icon-button> -->
   </ui-form-field>
 </template>
 
@@ -115,7 +108,6 @@ const emit = defineEmits([
 const input = shallowRef();
 const active = ref(false);
 const inputValue = ref("");
-const showTextualParams = ref(false);
 
 const toggle = async () => {
   active.value = !active.value;

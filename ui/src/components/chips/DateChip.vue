@@ -115,10 +115,6 @@ const initializeFlatpickr = (el) => {
   flatpickrInstance.value = flatpickr(el, flatpickrOptions);
 };
 
-onMounted(() => {
-//   initializeFlatpickr();
-});
-
 onBeforeUnmount(() => {
   if (flatpickrInstance.value) {
     flatpickrInstance.value.destroy();

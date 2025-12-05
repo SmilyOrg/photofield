@@ -30,30 +30,3 @@ highlightable-input {
 
   cursor: text;
 }
-
-highlightable-input[aria-multiline="true"] {
-  /* min-height: calc(1.5em + 0.75rem + 2px);
-  resize: vertical; */
-}
-
-highlightable-input[aria-placeholder]::before {
-  /* opacity: 0; */
-}
-
-highlightable-input[aria-placeholder]:empty::before {
-  /* color: #6c757d;
-  opacity: 1; */
-}
-
-highlightable-input:focus {
-  /* color: #212529;
-  background-color: #fff;
-  border-color: #86b7fe;
-  outline: 0;
-  box-shadow: 0 0 0 0.25rem rgb(13 110 253 / 25%); */
-}
-
-highlightable-input[aria-disabled="true"] {
-  /* background-color: #e9ecef;
-  opacity: 1; */
-}
