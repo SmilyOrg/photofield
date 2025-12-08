@@ -233,7 +233,7 @@ export function useScene({
       collection_id: collectionId.value,
       viewport_width: viewport.width.value,
       viewport_height: viewport.height.value,
-      search: search?.value || undefined,
+      search: (search?.value || "").trim() || undefined,
       tweaks: tweaks?.value,
       limit: 1,
     }

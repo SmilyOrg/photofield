@@ -197,7 +197,10 @@ const inject = (qualifier, value) => {
       .replace(qualifier.regex, str)
       .replace(/ +/g, ' ');
   } else if (str) {
-    newValue += str + " ";
+    if (newValue.length > 0 && newValue[newValue.length - 1] !== ' ') {
+      newValue += ' ';
+    }
+    newValue += str;
   }
   inputValue.value = newValue;
   emit("update:modelValue", newValue);
@@ -344,7 +347,7 @@ watchDebounced(
 
 highlightable-input {
   max-width: 100%;
-  white-space: nowrap;
+  white-space: pre;
   overflow-x: auto;
   padding: 4px 0;
 }
