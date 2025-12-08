@@ -125,43 +125,43 @@ const onBlur = () => {
 
 const createdAfterQualifier = {
   name: "createdAfter",
-  regex: / created:>=(\d{4}-\d{2}-\d{2})/,
+  regex: /created:>=(\d{4}-\d{2}-\d{2})/,
   parse: (str) => new Date(str),
   replace: (date) => {
     if (!date) return '';
-    return ` created:>=${dateFormat(date, 'yyyy-MM-dd')}`;
+    return `created:>=${dateFormat(date, 'yyyy-MM-dd')}`;
   },
 }
 
 const createdBeforeQualifier = {
   name: "createdBefore",
-  regex: / created:<=(\d{4}-\d{2}-\d{2})/,
+  regex: /created:<=(\d{4}-\d{2}-\d{2})/,
   parse: (str) => new Date(str),
   replace: (date) => {
     if (!date) return '';
-    return ` created:<=${dateFormat(date, 'yyyy-MM-dd')}`;
+    return `created:<=${dateFormat(date, 'yyyy-MM-dd')}`;
   },
 }
 
 const createdRangeQualifier = {
   name: "createdRange",
-  regex: / created:(\d{4}-\d{2}-\d{2})..(\d{4}-\d{2}-\d{2})/,
+  regex: /created:(\d{4}-\d{2}-\d{2})..(\d{4}-\d{2}-\d{2})/,
   parse: (a, b) => [new Date(a), new Date(b)],
   replace: ([a, b]) => {
     if (!a || !b) return '';
     const astr = dateFormat(a, 'yyyy-MM-dd');
     const bstr = dateFormat(b, 'yyyy-MM-dd');
-    return ` created:${astr}..${bstr}`;
+    return `created:${astr}..${bstr}`;
   },
 }
 
 const thresholdQualifier = {
   name: "threshold",
-  regex: / t:(\d+(\.\d+)?)/,
+  regex: /t:(\d+(\.\d+)?)/,
   parse: (str) => parseFloat(str),
   replace: (value) => {
     if (value === null || value === undefined) return '';
-    return ` t:${value.toFixed(3)}`;
+    return `t:${value.toFixed(3)}`;
   },
 }
 
@@ -195,7 +195,7 @@ const inject = (qualifier, value) => {
   if (newValue.match(qualifier.regex)) {
     newValue = inputValue.value
       .replace(qualifier.regex, str)
-      .replace('  ', ' ');
+      .replace(/ +/g, ' ');
   } else if (str) {
     newValue += str + " ";
   }
@@ -212,7 +212,7 @@ const threshold = computed({
     return Math.round((t - MIN_THRESHOLD) / (MAX_THRESHOLD - MIN_THRESHOLD) * 100);
   },
   set: (value) => {
-    const t = value ?
+    const t = value !== null ?
       MIN_THRESHOLD + (value / 100) * (MAX_THRESHOLD - MIN_THRESHOLD)
       : null;
     inject(thresholdQualifier, t);
@@ -226,7 +226,7 @@ const createdDateRange = computed(() => {
 const exactDate = computed(() => {
   const range = createdDateRange.value;
   if (!range) return null;
-  if (range[0].getTime() != range[1].getTime()) return null;
+  if (range[0].getTime() !== range[1].getTime()) return null;
   return range[0];
 });
 
@@ -350,7 +350,7 @@ highlightable-input {
 }
 
 highlightable-input.placeholder::after {
-  content: 'dogs';
+  content: 'sunset';
   color: var(--mdc-theme-text-secondary-on-background);
   pointer-events: none;
   opacity: 0.6;
@@ -429,11 +429,6 @@ highlightable-input :deep(mark) {
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-.field.show-textual highlightable-input :deep(mark) {
-  display: inline-block;
-  opacity: 1;
-  transform: translateX(0);
-}
 
 .chips {
   display: flex;
@@ -443,9 +438,6 @@ highlightable-input :deep(mark) {
   padding: 8px;
 }
 
-.toggle-params-button {
-  flex-shrink: 0;
-}
 
 .chips > * {
   animation: slideInFade 0.3s ease-out forwards;

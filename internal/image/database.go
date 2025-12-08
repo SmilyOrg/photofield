@@ -1905,10 +1905,16 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 					)`
 			}
 			if createdErr == nil {
-				sql += `
-					AND created_at_unix >= :created_from
-					AND created_at_unix <= :created_to
-				`
+				if !createdFrom.IsZero() {
+					sql += `
+						AND created_at_unix >= :created_from
+					`
+				}
+				if !createdTo.IsZero() {
+					sql += `
+						AND created_at_unix <= :created_to
+					`
+				}
 			}
 
 			sql += `
@@ -1968,10 +1974,14 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		}
 
 		if createdErr == nil {
-			stmt.BindInt64(bindIndex, createdFrom.Unix())
-			bindIndex++
-			stmt.BindInt64(bindIndex, createdTo.Unix())
-			bindIndex++
+			if !createdFrom.IsZero() {
+				stmt.BindInt64(bindIndex, createdFrom.Unix())
+				bindIndex++
+			}
+			if !createdTo.IsZero() {
+				stmt.BindInt64(bindIndex, createdTo.Unix())
+				bindIndex++
+			}
 		}
 
 		for _, prefixId := range prefixIds {
