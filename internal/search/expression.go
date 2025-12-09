@@ -9,7 +9,7 @@ type FieldMeta struct {
 	Token Token `json:"token"`
 
 	// Parse error if any (field may still have default/partial value)
-	Error error `json:"error"`
+	Error error `json:"error,omitempty"`
 
 	// Whether the field was explicitly set in the query
 	Present bool `json:"present"`
@@ -18,10 +18,10 @@ type FieldMeta struct {
 // Expression represents a validated and typed search query
 type Expression struct {
 	query   *Query
-	Created DateRange `json:"created"`
+	Created DateRange `json:"created,omitempty"`
 
 	// Aggregate errors for convenient iteration
-	Errors []FieldMeta `json:"errors"`
+	Errors []FieldMeta `json:"errors,omitempty"`
 
 	// Future fields:
 	// Tags                []string

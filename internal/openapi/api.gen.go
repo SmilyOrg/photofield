@@ -93,6 +93,9 @@ type DocsCapability struct {
 	Url string `json:"url"`
 }
 
+// A validated and typed search query expression, types omitted as this is subject to many changes.
+type Expression map[string]interface{}
+
 // FileBinary defines model for FileBinary.
 type FileBinary string
 
@@ -225,8 +228,10 @@ type Search string
 
 // SearchQuery defines model for SearchQuery.
 type SearchQuery struct {
-	Search Search        `json:"search"`
-	Tokens []SearchToken `json:"tokens"`
+	// A validated and typed search query expression, types omitted as this is subject to many changes.
+	Expression *Expression   `json:"expression,omitempty"`
+	Search     Search        `json:"search"`
+	Tokens     []SearchToken `json:"tokens"`
 }
 
 // SearchToken defines model for SearchToken.

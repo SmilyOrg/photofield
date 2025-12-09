@@ -1177,10 +1177,20 @@ func (*Api) GetScenesSceneIdSearchQueries(w http.ResponseWriter, r *http.Request
 		})
 	}
 
+	expression := q.Expression()
+	expr := make(map[string]interface{})
+	if !expression.Created.IsZero() {
+		expr["created"] = expression.Created
+	}
+	if expression.Errors != nil {
+		expr["errors"] = expression.Errors
+	}
+
 	queries := []openapi.SearchQuery{
 		{
-			Search: params.Search,
-			Tokens: apiTokens,
+			Search:     params.Search,
+			Tokens:     apiTokens,
+			Expression: expr,
 		},
 	}
 

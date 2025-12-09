@@ -1228,6 +1228,8 @@ components:
       properties:
         search:
           $ref: "#/components/schemas/Search"
+        expression:
+          $ref: "#/components/schemas/Expression"
         tokens:
           type: array
           items:
@@ -1249,6 +1251,10 @@ components:
           type: integer
         end:
           type: integer
+
+    Expression:
+      type: object
+      description: A validated and typed search query expression, types omitted as this is subject to many changes.
 
     Sort:
       type: string
