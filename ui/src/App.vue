@@ -68,9 +68,10 @@
         <search-input
           v-if="showSearch"
           :hide="selected"
-          :loading="query.search && scrollScene?.loading"
+          :loading="query.search && currentScene?.loading"
           :modelValue="selected && !searchActive ? '' : query.search"
-          :error="scrollScene?.error"
+          :scene="currentScene"
+          :error="currentScene?.error"
           @active="searchActive = $event"
           @update:modelValue="onSearch"
         ></search-input>
@@ -212,12 +213,12 @@ export default {
       collectionMenuOpen: false,
       scrollbar: null,
       scenes: [],
-      currentScene: null,
       viewerTasks: null,
       searchActive: false,
     }
   },
   setup(props) {
+    const currentScene = ref(null);
     const settingsExpanded = ref(false);
     const collectionId = toRef(props, "collectionId");
     const router = useRouter();
@@ -295,6 +296,7 @@ export default {
     });
 
     return {
+      currentScene,
       query,
       setQuery,
       selecting,
@@ -350,22 +352,8 @@ export default {
       }
       return null;
     },
-    scrollScene() {
-      return this.scenes?.find(scene => scene.name == "Scroll");
-    },
     showSearch() {
       return this.capabilities?.search.supported && this.collection && !this.selecting;
-    }
-  },
-  watch: {
-    currentScene: {
-      handler(newScene) {
-        // If the scene loads with 0 photos, open the collection panel
-        if (newScene && !newScene.loading && !newScene.search && newScene.file_count === 0) {
-          this.collectionExpanded = true;
-        }
-      },
-      immediate: false
     }
   },
   methods: {

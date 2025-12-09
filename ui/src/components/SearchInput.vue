@@ -21,13 +21,24 @@
         v-if="active"
         class="input-with-helper"
       >
-        <highlightable-input
+        <highlighted-input
+          v-if="active"
+          ref="input"
+          class="input"
+          placeholder="Search your photos"
+          outlined
+          v-model="inputValue"
+          :tokens="tokens"
+          @keyup.escape="inputValue = ''; onBlur($event)"
+          @blur="onBlur($event)"
+        />
+        <!-- <highlightable-input
           :class="{ placeholder: !leftoverText }"
           ref="input"
           :highlight="highlightRules"
           v-model="inputValue"
           @keyup.escape="inputValue = ''; onBlur($event)"
-        ></highlightable-input>
+        ></highlightable-input> -->
         <ui-textfield-helper
           v-if="error"
           class="helper"
@@ -86,16 +97,20 @@ import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
 import dateFormat from 'date-fns/format';
-import HighlightableInput from 'highlightable-input/vue'
+import HighlightedInput from './HighlightedInput.vue';
+import HighlightableInput from 'highlightable-input/vue';
+import { useApi } from '../api';
 
 const props = defineProps({
   modelValue: String,
+  scene: Object,
   loading: Boolean,
   error: String,
 });
 
 const {
   modelValue,
+  scene,
   loading,
   error,
 } = toRefs(props);
@@ -109,11 +124,27 @@ const input = shallowRef();
 const active = ref(false);
 const inputValue = ref("");
 
+const { items: searchQueries } = useApi(() => {
+  const q = inputValue.value;
+  const sceneId = scene.value?.id;
+  return q && sceneId && `/scenes/${sceneId}/search-queries?search=${encodeURIComponent(q)}`;
+});
+
+const query = computed(() => {
+  const items = searchQueries.value;
+  return items && items.length > 0 ? items[0] : null;
+});
+
+const tokens = computed(() => {
+  return query.value?.tokens || [];
+});
+
+
 const toggle = async () => {
   active.value = !active.value;
   if (active.value) {
     await nextTick();
-    input.value?.$el?.focus();
+    input.value?.focus();
   }
 }
 
@@ -340,7 +371,6 @@ watchDebounced(
   display: flex;
   flex-direction: column;
   flex-grow: 1;
-  padding: 10px;
   box-sizing: border-box;
   min-width: 60px;
 }
@@ -354,6 +384,7 @@ highlightable-input {
 
 highlightable-input.placeholder::after {
   content: 'sunset';
+  margin-left: 4px;
   color: var(--mdc-theme-text-secondary-on-background);
   pointer-events: none;
   opacity: 0.6;

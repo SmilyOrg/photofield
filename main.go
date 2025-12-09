@@ -66,6 +66,7 @@ import (
 	"photofield/internal/openapi"
 	"photofield/internal/render"
 	"photofield/internal/scene"
+	"photofield/internal/search"
 	"photofield/internal/tag"
 	"photofield/internal/test"
 )
@@ -1149,6 +1150,45 @@ func (*Api) GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sc
 	}
 
 	respond(w, r, http.StatusOK, region)
+}
+
+func (*Api) GetScenesSceneIdSearchQueries(w http.ResponseWriter, r *http.Request, sceneId openapi.SceneId, params openapi.GetScenesSceneIdSearchQueriesParams) {
+
+	scene := sceneSource.GetSceneById(string(sceneId), imageSource)
+	if scene == nil {
+		problem(w, r, http.StatusBadRequest, "Scene not found")
+		return
+	}
+
+	q, err := search.Parse(string(params.Search))
+	if err != nil {
+		problem(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	tokens := q.Tokens()
+	apiTokens := make([]openapi.SearchToken, 0, len(tokens))
+	for _, t := range tokens {
+		apiTokens = append(apiTokens, openapi.SearchToken{
+			Type:  t.Type,
+			Value: t.Value,
+			Start: t.Start,
+			End:   t.End,
+		})
+	}
+
+	queries := []openapi.SearchQuery{
+		{
+			Search: params.Search,
+			Tokens: apiTokens,
+		},
+	}
+
+	respond(w, r, http.StatusOK, struct {
+		Items []openapi.SearchQuery `json:"items"`
+	}{
+		Items: queries,
+	})
 }
 
 func (*Api) GetTags(w http.ResponseWriter, r *http.Request, params openapi.GetTagsParams) {

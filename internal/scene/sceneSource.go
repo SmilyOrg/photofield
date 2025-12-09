@@ -123,6 +123,8 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone()
 		}
 
+		scene.SearchTokens = query.Tokens()
+
 		if config.Layout.Type == layout.Highlights {
 			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{
 				OrderBy: image.ListOrder(config.Layout.Order),

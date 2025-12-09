@@ -464,6 +464,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /scenes/{scene_id}/search-queries:
+    get:
+      description: Get search query details for the scene
+      tags: ["Display"]
+      parameters:
+        - name: scene_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SceneId"
+        - name: search
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Search"
+      responses:
+        "200":
+          description: List of search queries
+          content:
+            "application/json":
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchQuery"
+
   /files/{id}:
     get:
       description: Get a file (referenced by region data)
@@ -1191,6 +1219,36 @@ components:
     
     Search:
       type: string
+
+    SearchQuery:
+      type: object
+      required:
+        - search
+        - tokens
+      properties:
+        search:
+          $ref: "#/components/schemas/Search"
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchToken"
+
+    SearchToken:
+      type: object
+      required:
+        - type
+        - value
+        - start
+        - end
+      properties:
+        type:
+          type: string
+        value:
+          type: string
+        start:
+          type: integer
+        end:
+          type: integer
 
     Sort:
       type: string

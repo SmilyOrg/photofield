@@ -17,6 +17,7 @@ import (
 	"photofield/internal/codec"
 	"photofield/internal/image"
 	"photofield/internal/io"
+	"photofield/internal/search"
 )
 
 type QualityPreset int
@@ -98,6 +99,7 @@ type Scene struct {
 	Id              SceneId        `json:"id"`
 	CreatedAt       time.Time      `json:"created_at"`
 	Search          string         `json:"search,omitempty"`
+	SearchTokens    []search.Token `json:"search_tokens,omitempty"`
 	SearchEmbedding clip.Embedding `json:"-"`
 	Loading         bool           `json:"loading"`
 	LoadCount       int            `json:"load_count,omitempty"`
