@@ -22,6 +22,10 @@ const props = defineProps({
     type: [Date, String, Number],
     default: null,
   },
+  defaultValue: {
+    type: [Date, String, Number],
+    default: null,
+  },
   icon: {
     type: String,
     default: 'event',
@@ -100,7 +104,7 @@ const initializeFlatpickr = (el) => {
     mode: props.mode,
     dateFormat: props.dateFormat,
     enableTime: props.enableTime,
-    defaultDate: props.modelValue,
+    defaultDate: props.modelValue || props.defaultValue,
     onChange: (selectedDates, dateStr, instance) => {
       const value = props.mode === 'single' ? selectedDates[0] : selectedDates;
       emit('update:modelValue', value);

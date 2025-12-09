@@ -43,6 +43,7 @@
       @selectTag="onSelectTag"
       @region="onRegion"
       @scene="mapScene = $event"
+      @viewport="emit('viewport', $event)"
       @search="onSearch"
       @viewer="mapTileViewer = $event"
       @swipeUp="onSwipeUp"
@@ -71,6 +72,7 @@
       @region="onRegion"
       @elementView="lastView = $event"
       @scene="scrollScene = $event"
+      @viewport="emit('viewport', $event)"
       @search="onSearch"
       @viewer="scrollTileViewer = $event"
       @swipeUp="onSwipeUp"
@@ -136,6 +138,7 @@ const emit = defineEmits({
   tasks: null,
   immersive: immersive => typeof immersive == "boolean",
   scene: null,
+  viewport: null,
   scenes: null,
   reindex: null,
 });

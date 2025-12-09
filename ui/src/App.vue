@@ -71,6 +71,7 @@
           :loading="query.search && currentScene?.loading"
           :modelValue="selected && !searchActive ? '' : query.search"
           :scene="currentScene"
+          :viewport="viewport"
           :error="currentScene?.error"
           @active="searchActive = $event"
           @update:modelValue="onSearch"
@@ -158,6 +159,7 @@
         :scrollbar="scrollbar"
         @load="onLoad"
         @scene="v => currentScene = v"
+        @viewport="v => viewport = v"
         @scenes="v => scenes = v"
         @immersive="onImmersive"
         @tasks="tasks => viewerTasks = tasks"
@@ -218,7 +220,9 @@ export default {
     }
   },
   setup(props) {
+    const contentRef = ref(null);
     const currentScene = ref(null);
+    const viewport = ref(null);
     const settingsExpanded = ref(false);
     const collectionId = toRef(props, "collectionId");
     const router = useRouter();
@@ -296,7 +300,9 @@ export default {
     });
 
     return {
+      contentRef,
       currentScene,
+      viewport,
       query,
       setQuery,
       selecting,

@@ -111,6 +111,7 @@ const emit = defineEmits({
   search: null,
   elementView: null,
   viewer: null,
+  viewport: null,
   swipeUp: null,
   focusFileId: null,
 })
@@ -175,6 +176,14 @@ watch(scene, async (newScene) => {
   }
   lastLoadedScene = newScene;
   emit("scene", newScene);
+});
+
+watch([viewport.width, viewport.height], () => {
+  if (viewport.width.value == 0 || viewport.height.value == 0) return;
+  emit("viewport", {
+    width: viewport.width.value,
+    height: viewport.height.value,
+  });
 });
 
 const {

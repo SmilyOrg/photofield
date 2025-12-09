@@ -88,6 +88,7 @@ const emit = defineEmits({
   selectTag: null,
   search: null,
   viewer: null,
+  viewport: null,
   swipeUp: null,
 })
 
@@ -153,6 +154,13 @@ useEventBus("recreate-scene").on(scene => {
 
 watch(scene, async (newScene, oldScene) => {
   emit("scene", newScene);
+});
+
+watch([viewport.width, viewport.height], () => {
+  emit("viewport", {
+    width: viewport.width.value,
+    height: viewport.height.value,
+  });
 });
 
 watch(region, async (newRegion, oldRegion) => {

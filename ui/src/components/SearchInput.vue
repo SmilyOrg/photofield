@@ -29,8 +29,7 @@
           outlined
           v-model="inputValue"
           :tokens="tokens"
-          @keyup.escape="inputValue = ''; onBlur($event)"
-          @blur="onBlur($event)"
+          @keyup.escape="inputValue = ''; active = false"
         />
         <!-- <highlightable-input
           :class="{ placeholder: !leftoverText }"
@@ -67,21 +66,22 @@
       />
       <DateChip
         :model-value="exactDate"
+        :default-value="beforeDate || afterDate || firstTimestamp"
         icon="event"
         placeholder="Date"
         @change="handleExactDateChange"
       />
       <DateChip
-        v-if="!exactDate"
         :model-value="afterDate"
+        :default-value="beforeDate || exactDate || firstTimestamp"
         icon="event"
         placeholder="After"
         suffix=" ➔"
         @change="handleAfterDateChange"
       />
       <DateChip
-        v-if="!exactDate"
         :model-value="beforeDate"
+        :default-value="afterDate || exactDate || lastTimestamp"
         icon="event"
         placeholder="Before"
         prefix="➔ "
@@ -100,10 +100,12 @@ import dateFormat from 'date-fns/format';
 import HighlightedInput from './HighlightedInput.vue';
 import HighlightableInput from 'highlightable-input/vue';
 import { useApi } from '../api';
+import { useTimestamps, useTimestampsDate } from '../use';
 
 const props = defineProps({
   modelValue: String,
   scene: Object,
+  viewport: Object,
   loading: Boolean,
   error: String,
 });
@@ -111,6 +113,7 @@ const props = defineProps({
 const {
   modelValue,
   scene,
+  viewport,
   loading,
   error,
 } = toRefs(props);
@@ -130,6 +133,11 @@ const { items: searchQueries } = useApi(() => {
   return q && sceneId && `/scenes/${sceneId}/search-queries?search=${encodeURIComponent(q)}`;
 });
 
+const viewportHeight = computed(() => viewport.value?.height);
+const timestamps = useTimestamps({ scene, height: viewportHeight });
+const firstTimestamp = useTimestampsDate({ timestamps, ratio: ref(0) })
+const lastTimestamp = useTimestampsDate({ timestamps, ratio: ref(1) })
+
 const query = computed(() => {
   const items = searchQueries.value;
   return items && items.length > 0 ? items[0] : null;
@@ -145,12 +153,6 @@ const toggle = async () => {
   if (active.value) {
     await nextTick();
     input.value?.focus();
-  }
-}
-
-const onBlur = () => {
-  if (!inputValue.value) {
-    active.value = false;
   }
 }
 
