@@ -243,10 +243,7 @@ const inject = (qualifier, value) => {
       .replace(qualifier.regex, str)
       .replace(/ +/g, ' ');
   } else if (str) {
-    if (newValue.length > 0 && newValue[newValue.length - 1] !== ' ') {
-      newValue += ' ';
-    }
-    newValue += str;
+    newValue = str + ' ' + newValue.trim();
   }
   inputValue.value = newValue;
   emit("update:modelValue", newValue);
@@ -391,94 +388,13 @@ watchDebounced(
   min-width: 60px;
 }
 
-highlightable-input {
-  max-width: 100%;
-  white-space: pre;
-  overflow-x: auto;
-  padding: 4px 0;
+.helper :deep(.mdc-text-field-helper-text) {
+  margin: -14px 8px 8px 0;
+  color: var(--mdc-theme-error) !important;
+  background-color: var(--mdc-theme-background);
+  outline: 8px solid var(--mdc-theme-background);
+  border-radius: 8px;
 }
-
-highlightable-input.placeholder::after {
-  content: 'sunset';
-  margin-left: 4px;
-  color: var(--mdc-theme-text-secondary-on-background);
-  pointer-events: none;
-  opacity: 0.6;
-  display: inline-block;
-  animation: cycleSearchPhrases 60s infinite;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-@keyframes cycleSearchPhrases {
-  0%, 4%      { opacity: 0.6; transform: translateY(0);    content: 'sunset'; }
-  4.5%, 5%    { opacity: 0;   transform: translateY(4px);  content: 'sunset'; }
-  5%          { opacity: 0;   transform: translateY(-4px); content: 'cats'; }
-  5.5%, 9%    { opacity: 0.6; transform: translateY(0);    content: 'cats'; }
-  9.5%, 10%   { opacity: 0;   transform: translateY(4px);  content: 'cats'; }
-  10%         { opacity: 0;   transform: translateY(-4px); content: 'night'; }
-  10.5%, 14%  { opacity: 0.6; transform: translateY(0);    content: 'night'; }
-  14.5%, 15%  { opacity: 0;   transform: translateY(4px);  content: 'night'; }
-  15%         { opacity: 0;   transform: translateY(-4px); content: 'beach'; }
-  15.5%, 19%  { opacity: 0.6; transform: translateY(0);    content: 'beach'; }
-  19.5%, 20%  { opacity: 0;   transform: translateY(4px);  content: 'beach'; }
-  20%         { opacity: 0;   transform: translateY(-4px); content: 'rain'; }
-  20.5%, 24%  { opacity: 0.6; transform: translateY(0);    content: 'rain'; }
-  24.5%, 25%  { opacity: 0;   transform: translateY(4px);  content: 'rain'; }
-  25%         { opacity: 0;   transform: translateY(-4px); content: 'snow'; }
-  25.5%, 29%  { opacity: 0.6; transform: translateY(0);    content: 'snow'; }
-  29.5%, 30%  { opacity: 0;   transform: translateY(4px);  content: 'snow'; }
-  30%         { opacity: 0;   transform: translateY(-4px); content: 'forest'; }
-  30.5%, 34%  { opacity: 0.6; transform: translateY(0);    content: 'forest'; }
-  34.5%, 35%  { opacity: 0;   transform: translateY(4px);  content: 'forest'; }
-  35%         { opacity: 0;   transform: translateY(-4px); content: 'city'; }
-  35.5%, 39%  { opacity: 0.6; transform: translateY(0);    content: 'city'; }
-  39.5%, 40%  { opacity: 0;   transform: translateY(4px);  content: 'city'; }
-  40%         { opacity: 0;   transform: translateY(-4px); content: 'food'; }
-  40.5%, 44%  { opacity: 0.6; transform: translateY(0);    content: 'food'; }
-  44.5%, 45%  { opacity: 0;   transform: translateY(4px);  content: 'food'; }
-  45%         { opacity: 0;   transform: translateY(-4px); content: 'car'; }
-  45.5%, 49%  { opacity: 0.6; transform: translateY(0);    content: 'car'; }
-  49.5%, 50%  { opacity: 0;   transform: translateY(4px);  content: 'car'; }
-  50%         { opacity: 0;   transform: translateY(-4px); content: 'dogs'; }
-  50.5%, 54%  { opacity: 0.6; transform: translateY(0);    content: 'dogs'; }
-  54.5%, 55%  { opacity: 0;   transform: translateY(4px);  content: 'dogs'; }
-  55%         { opacity: 0;   transform: translateY(-4px); content: 'bird'; }
-  55.5%, 59%  { opacity: 0.6; transform: translateY(0);    content: 'bird'; }
-  59.5%, 60%  { opacity: 0;   transform: translateY(4px);  content: 'bird'; }
-  60%         { opacity: 0;   transform: translateY(-4px); content: 'sky'; }
-  60.5%, 64%  { opacity: 0.6; transform: translateY(0);    content: 'sky'; }
-  64.5%, 65%  { opacity: 0;   transform: translateY(4px);  content: 'sky'; }
-  65%         { opacity: 0;   transform: translateY(-4px); content: 'water'; }
-  65.5%, 69%  { opacity: 0.6; transform: translateY(0);    content: 'water'; }
-  69.5%, 70%  { opacity: 0;   transform: translateY(4px);  content: 'water'; }
-  70%         { opacity: 0;   transform: translateY(-4px); content: 'party'; }
-  70.5%, 74%  { opacity: 0.6; transform: translateY(0);    content: 'party'; }
-  74.5%, 75%  { opacity: 0;   transform: translateY(4px);  content: 'party'; }
-  75%         { opacity: 0;   transform: translateY(-4px); content: 'happy'; }
-  75.5%, 79%  { opacity: 0.6; transform: translateY(0);    content: 'happy'; }
-  79.5%, 80%  { opacity: 0;   transform: translateY(4px);  content: 'happy'; }
-  80%         { opacity: 0;   transform: translateY(-4px); content: 'tree'; }
-  80.5%, 84%  { opacity: 0.6; transform: translateY(0);    content: 'tree'; }
-  84.5%, 85%  { opacity: 0;   transform: translateY(4px);  content: 'tree'; }
-  85%         { opacity: 0;   transform: translateY(-4px); content: 'smile'; }
-  85.5%, 89%  { opacity: 0.6; transform: translateY(0);    content: 'smile'; }
-  89.5%, 90%  { opacity: 0;   transform: translateY(4px);  content: 'smile'; }
-  90%         { opacity: 0;   transform: translateY(-4px); content: 'flower'; }
-  90.5%, 94%  { opacity: 0.6; transform: translateY(0);    content: 'flower'; }
-  94.5%, 95%  { opacity: 0;   transform: translateY(4px);  content: 'flower'; }
-  95%         { opacity: 0;   transform: translateY(-4px); content: 'art'; }
-  95.5%, 99%  { opacity: 0.6; transform: translateY(0);    content: 'art'; }
-  99.5%, 100% { opacity: 0;   transform: translateY(4px);  content: 'art'; }
-}
-
-highlightable-input :deep(mark) {
-  white-space: pre;
-  background: none;
-  color: var(--mdc-theme-text-secondary-on-background);
-  transform: translateX(4px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
 
 .chips {
   display: flex;
@@ -487,7 +403,6 @@ highlightable-input :deep(mark) {
   height: fit-content;
   padding: 8px;
 }
-
 
 .chips > * {
   animation: slideInFade 0.3s ease-out forwards;
@@ -539,10 +454,6 @@ highlightable-input :deep(mark) {
   position: absolute;
   top: 16px;
   left: 12px;
-}
-
-.helper :deep(.mdc-text-field-helper-text) {
-  color: var(--mdc-theme-text-secondary-on-background) !important;
 }
 
 </style>

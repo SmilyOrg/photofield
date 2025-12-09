@@ -69,13 +69,13 @@
           v-if="showSearch"
           :hide="selected"
           :loading="query.search && currentScene?.loading"
+          :error="currentScene?.error"
           :modelValue="selected && !searchActive ? '' : query.search"
           :scene="currentScene"
           :viewport="viewport"
-          :error="currentScene?.error"
           @active="searchActive = $event"
           @update:modelValue="onSearch"
-        ></search-input>
+          ></search-input>
 
         <ui-icon-button
           v-if="collection && capabilities?.tags?.supported && selecting"
@@ -417,6 +417,7 @@ export default {
 html.light {
   --mdc-theme-primary: #6782ff;
   --mdc-theme-surface: #f5f5f5;
+  --mdc-theme-error: #b00020;
 }
 html.dark {
   --mdc-theme-background: #222;
@@ -426,7 +427,7 @@ html.dark {
   --mdc-theme-primary: #6782ff;
   --mdc-theme-secondary: #018786;
   --mdc-theme-surface: #333;
-  --mdc-theme-error: #b00020;
+  --mdc-theme-error: #f18498;
   --mdc-theme-on-primary: #fff;
   --mdc-theme-on-secondary: #fff;
   --mdc-theme-on-surface: #fff;
