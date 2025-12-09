@@ -17,6 +17,59 @@ type DateWildcard struct {
 	Day   bool `json:"day"`
 }
 
+func (w DateWildcard) Any() bool {
+	return w.Year || w.Month || w.Day
+}
+
+func (w DateWildcard) All() bool {
+	return w.Year && w.Month && w.Day
+}
+
+func (w DateWildcard) Apply(reference time.Time, date time.Time) time.Time {
+	y, m, d := reference.Date()
+	if w.Year {
+		y = date.Year()
+	}
+	if w.Month {
+		m = date.Month()
+	}
+	if w.Day {
+		d = date.Day()
+	} else {
+		// Special case for February 29th on leap years
+		if w.Year && m == 2 && d == 28 && date.Day() == 29 {
+			d = 29
+		}
+	}
+	return time.Date(y, m, d, 0, 0, 0, 0, reference.Location())
+}
+
+func (w DateWildcard) GreaterThanOrEqual(reference time.Time, date time.Time) bool {
+	if !w.Year && reference.Year() < date.Year() {
+		return false
+	}
+	if !w.Month && reference.Month() < date.Month() {
+		return false
+	}
+	if !w.Day && reference.Day() < date.Day() {
+		return false
+	}
+	return true
+}
+
+func (w DateWildcard) LessThan(reference time.Time, date time.Time) bool {
+	if !w.Year && reference.Year() >= date.Year() {
+		return false
+	}
+	if !w.Month && reference.Month() >= date.Month() {
+		return false
+	}
+	if !w.Day && reference.Day() >= date.Day() {
+		return false
+	}
+	return true
+}
+
 // DateRange represents a date range for filtering
 type DateRange struct {
 	FieldMeta    `json:"meta"`
@@ -29,6 +82,25 @@ type DateRange struct {
 // IsZero returns true if both From and To are zero
 func (r DateRange) IsZero() bool {
 	return r.From.IsZero() && r.To.IsZero()
+}
+
+func (r DateRange) Match(date time.Time) bool {
+	if !r.Present {
+		return true
+	}
+	if r.FromWildcard.Any() && !r.FromWildcard.All() {
+		fromDate := r.FromWildcard.Apply(r.From, date)
+		if date.Before(fromDate) {
+			return false
+		}
+	}
+	if r.ToWildcard.Any() && !r.ToWildcard.All() {
+		toDate := r.ToWildcard.Apply(r.To, date)
+		if date.After(toDate) {
+			return false
+		}
+	}
+	return true
 }
 
 func (q *Query) ExpressionDateRange(key string) (r DateRange) {

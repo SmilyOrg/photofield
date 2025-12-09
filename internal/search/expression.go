@@ -35,12 +35,12 @@ type Expression struct {
 }
 
 // Expression validates the query and returns a typed Expression.
-func (q *Query) Expression() (*Expression, error) {
+func (q *Query) Expression() Expression {
 	if q == nil {
-		return nil, ErrNilQuery
+		return Expression{}
 	}
 
-	expr := &Expression{
+	expr := Expression{
 		query: q,
 	}
 
@@ -49,7 +49,7 @@ func (q *Query) Expression() (*Expression, error) {
 	expr.Created = q.ExpressionDateRange("created")
 	expr.addFieldError(expr.Created.FieldMeta)
 
-	return expr, nil
+	return expr
 }
 
 func (expr *Expression) addFieldError(meta FieldMeta) {

@@ -49,6 +49,7 @@ type ListOptions struct {
 	OrderBy    ListOrder
 	Limit      int
 	Query      *search.Query
+	Expression search.Expression
 	Embedding  clip.Embedding
 	Extensions []string
 	Batch      int
@@ -1858,7 +1859,6 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			SELECT * FROM (
 		`
 
-		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
 		for prefixIdx := range prefixIds {
 
 			sql += `
@@ -1904,17 +1904,15 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				sql += `
 					)`
 			}
-			if createdErr == nil {
-				if !createdFrom.IsZero() {
-					sql += `
-						AND created_at_unix >= :created_from
-					`
-				}
-				if !createdTo.IsZero() {
-					sql += `
-						AND created_at_unix <= :created_to
-					`
-				}
+			if !options.Expression.Created.From.IsZero() {
+				sql += `
+					AND created_at_unix >= :created_from
+				`
+			}
+			if !options.Expression.Created.To.IsZero() {
+				sql += `
+					AND created_at_unix < :created_to
+				`
 			}
 
 			sql += `
@@ -1973,15 +1971,13 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			bindIndex++
 		}
 
-		if createdErr == nil {
-			if !createdFrom.IsZero() {
-				stmt.BindInt64(bindIndex, createdFrom.Unix())
-				bindIndex++
-			}
-			if !createdTo.IsZero() {
-				stmt.BindInt64(bindIndex, createdTo.Unix())
-				bindIndex++
-			}
+		if !options.Expression.Created.From.IsZero() {
+			stmt.BindInt64(bindIndex, options.Expression.Created.From.Unix())
+			bindIndex++
+		}
+		if !options.Expression.Created.To.IsZero() {
+			stmt.BindInt64(bindIndex, options.Expression.Created.To.Unix())
+			bindIndex++
 		}
 
 		for _, prefixId := range prefixIds {
@@ -2014,6 +2010,13 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			unix := stmt.ColumnInt64(5)
 			timezoneOffset := stmt.ColumnInt(6)
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
+
+			// Search post-query expression filtering
+			if options.Query != nil {
+				if !options.Expression.Created.Match(info.DateTime) {
+					continue
+				}
+			}
 
 			latlngNull := stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
 			if latlngNull {

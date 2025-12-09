@@ -83,6 +83,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
 		var query *search.Query
+		var expression search.Expression
 		embFilter := false
 
 		if scene.Search != "" {
@@ -124,6 +125,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 		}
 
 		scene.SearchTokens = query.Tokens()
+		expression = query.Expression()
 
 		if config.Layout.Type == layout.Highlights {
 			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{
@@ -150,9 +152,10 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			filter, _ := query.QualifierString("filter")
 			if filter == "knn" {
 				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
-					OrderBy: image.ListOrder(config.Layout.Order),
-					Limit:   config.Collection.Limit,
-					Query:   query,
+					OrderBy:    image.ListOrder(config.Layout.Order),
+					Limit:      config.Collection.Limit,
+					Query:      query,
+					Expression: expression,
 				})
 			} else {
 				// Normal order
@@ -166,6 +169,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 					OrderBy:    image.ListOrder(config.Layout.Order),
 					Limit:      config.Collection.Limit,
 					Query:      query,
+					Expression: expression,
 					Embedding:  scene.SearchEmbedding,
 					Extensions: extensions,
 				})
