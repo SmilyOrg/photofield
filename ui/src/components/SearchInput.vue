@@ -174,11 +174,23 @@ const createdBeforeQualifier = {
   },
 }
 
+const createdExactQualifier = {
+  name: "createdExact",
+  regex: /created:(\d{4}-\d{2}-\d{2})(?!\.\.)/,
+  parse: (str) => new Date(str),
+  replace: (date) => {
+    if (!date) return '';
+    return `created:${dateFormat(date, 'yyyy-MM-dd')}`;
+  },
+}
+
 const createdRangeQualifier = {
   name: "createdRange",
-  regex: /created:(\d{4}-\d{2}-\d{2})..(\d{4}-\d{2}-\d{2})/,
+  regex: /created:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/,
   parse: (a, b) => [new Date(a), new Date(b)],
-  replace: ([a, b]) => {
+  replace: (range) => {
+    if (!range || range.length !== 2) return '';
+    const [a, b] = range;
     if (!a || !b) return '';
     const astr = dateFormat(a, 'yyyy-MM-dd');
     const bstr = dateFormat(b, 'yyyy-MM-dd');
@@ -200,6 +212,7 @@ const qualifiers = [
   createdAfterQualifier,
   createdBeforeQualifier,
   createdRangeQualifier,
+  createdExactQualifier,
   thresholdQualifier,
 ];
 
@@ -253,22 +266,14 @@ const threshold = computed({
   }
 });
 
+const exactDate = computed(() => {
+  return extract(createdExactQualifier);
+});
+
 const createdDateRange = computed(() => {
   return extract(createdRangeQualifier);
 });
 
-const exactDate = computed(() => {
-  const range = createdDateRange.value;
-  if (!range) return null;
-  if (range[0].getTime() !== range[1].getTime()) return null;
-  return range[0];
-});
-
-const handleExactDateChange = (date) => {
-  inject(createdAfterQualifier, null);
-  inject(createdBeforeQualifier, null);
-  inject(createdRangeQualifier, [date, date]);
-};
 
 const afterDate = computed(() => {
   const range = createdDateRange.value;
@@ -295,6 +300,7 @@ const leftoverText = computed(() => {
 });
 
 const handleAfterDateChange = (date) => {
+  inject(createdExactQualifier, null);
   const before = beforeDate.value;
   if (before) {
     inject(createdBeforeQualifier, date ? null : before);
@@ -305,6 +311,7 @@ const handleAfterDateChange = (date) => {
 };
 
 const handleBeforeDateChange = (date) => {
+  inject(createdExactQualifier, null);
   const after = afterDate.value;
   if (after) {
     inject(createdAfterQualifier, date ? null : after);
@@ -312,6 +319,13 @@ const handleBeforeDateChange = (date) => {
     return;
   }
   inject(createdBeforeQualifier, date);
+};
+
+const handleExactDateChange = (date) => {
+  inject(createdAfterQualifier, null);
+  inject(createdBeforeQualifier, null);
+  inject(createdRangeQualifier, null);
+  inject(createdExactQualifier, date);
 };
 
 

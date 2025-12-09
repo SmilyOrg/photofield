@@ -56,7 +56,10 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update:modelValue', 'change']);
+const emit = defineEmits([
+  'update:modelValue',
+  'change',
+]);
 
 const flatpickrInstance = ref(null);
 
