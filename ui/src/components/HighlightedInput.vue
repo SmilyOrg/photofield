@@ -58,8 +58,8 @@ const inputEl = ref(null);
 const lastScrollLeft = ref(0);
 const rafId = ref(null);
 
-const tokenTypeMap = {
-  qualifier: { color: 'var(--mdc-theme-primary)' },
+const enabledTokenTypes = {
+  qualifier: true,
 }
 
 // Extract native input element from BalmUI textfield and attach scroll listener
@@ -117,9 +117,8 @@ const highlightedHtml = computed(() => {
 
     // Add highlighted token
     const tokenText = text.substring(token.start, token.end);
-    const tokenConfig = tokenTypeMap[token.type] || tokenTypeMap.default;
-    if (tokenConfig) {
-      html += `<mark style="color: ${tokenConfig.color}">${escapeHtml(tokenText)}</mark>`;
+    if (enabledTokenTypes[token.type]) {
+      html += `<mark class="token-${token.type}">${escapeHtml(tokenText)}</mark>`;
     } else {
       html += escapeHtml(tokenText);
     }
@@ -199,10 +198,6 @@ defineExpose({ focus, $el: textfieldRef });
   display: none;
 }
 
-.highlighted-input.outlined .highlight-layer {
-  /* padding: 16px; */
-}
-
 /* Make input background transparent so highlights show through */
 .highlighted-input :deep(.mdc-text-field) {
   background-color: transparent;
@@ -220,11 +215,25 @@ defineExpose({ focus, $el: textfieldRef });
 
 /* Token type styles with CSS custom properties */
 .highlight-layer :deep(mark) {
-  background-color: transparent;
+  --highlight-text-color: transparent;
+  --highlight-shadow-color: transparent;
+  --highlight-underline-color: color-mix(in oklab, var(--mdc-theme-primary) 5%, transparent);
+
+  color: var(--highlight-text-color);
+  /* text-decoration: solid underline 4px var(--highlight-underline-color);
+  text-underline-offset: 2px; */
+  /* background-color: transparent; */
+  background-color: var(--highlight-underline-color);
   text-shadow:
-    -1px -1px 0 var(--mdc-theme-background),
-     1px -1px 0 var(--mdc-theme-background),
-    -1px  1px 0 var(--mdc-theme-background),
-     1px  1px 0 var(--mdc-theme-background);
+    -1px -1px 0 var(--highlight-shadow-color),
+     1px -1px 0 var(--highlight-shadow-color),
+    -1px  1px 0 var(--highlight-shadow-color),
+     1px  1px 0 var(--highlight-shadow-color);
 }
+
+.highlight-layer :deep(.token-qualifier) {
+  --highlight-shadow-color: var(--mdc-theme-background);
+  --highlight-text-color: var(--mdc-theme-primary);
+}
+
 </style>
