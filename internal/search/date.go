@@ -7,6 +7,110 @@ import (
 	"time"
 )
 
+const MIN_YEAR = 10
+const MAX_YEAR = 9000
+
+// DateWildcard indicates which components were wildcards ("*") in the parsed value.
+type DateWildcard struct {
+	Year  bool `json:"year"`
+	Month bool `json:"month"`
+	Day   bool `json:"day"`
+}
+
+// DateRange represents a date range for filtering
+type DateRange struct {
+	FieldMeta    `json:"meta"`
+	From         time.Time    `json:"from"`
+	To           time.Time    `json:"to"`
+	FromWildcard DateWildcard `json:"from_wildcard"`
+	ToWildcard   DateWildcard `json:"to_wildcard"`
+}
+
+// IsZero returns true if both From and To are zero
+func (r DateRange) IsZero() bool {
+	return r.From.IsZero() && r.To.IsZero()
+}
+
+func (q *Query) ExpressionDateRange(key string) (r DateRange) {
+	r.Name = key
+
+	if q == nil {
+		r.Error = ErrNilQuery
+		return
+	}
+
+	terms := q.QualifierTerms(key)
+	if len(terms) == 0 {
+		r.Error = ErrNotFound
+		return
+	}
+
+	if len(terms) > 1 {
+		r.Error = fmt.Errorf("multiple qualifiers %s", key)
+		return
+	}
+
+	term := terms[0]
+	value := term.Qualifier.Value
+	r.Present = true
+	r.Token = term.Token()
+
+	// Check for comparison operators
+	if strings.HasPrefix(value, ">=") {
+		r.From, r.FromWildcard, r.Error = parseFlexibleDate(value[2:], true)
+		return
+	}
+	if strings.HasPrefix(value, "<=") {
+		r.To, r.ToWildcard, r.Error = parseFlexibleDate(value[2:], false)
+		return
+	}
+	if strings.HasPrefix(value, ">") {
+		r.From, r.FromWildcard, r.Error = parseFlexibleDate(value[1:], true)
+		if r.Error != nil {
+			return
+		}
+		r.From = r.From.AddDate(0, 0, 1)
+		return
+	}
+	if strings.HasPrefix(value, "<") {
+		r.To, r.ToWildcard, r.Error = parseFlexibleDate(value[1:], false)
+		if r.Error != nil {
+			return
+		}
+		r.To = r.To.AddDate(0, 0, -1)
+		return
+	}
+
+	// Check for range format
+	dateRange := strings.SplitN(value, "..", 2)
+	if len(dateRange) == 2 {
+		r.From, r.FromWildcard, r.Error = parseFlexibleDate(dateRange[0], true)
+		if r.Error != nil {
+			r.Error = fmt.Errorf("failed to parse start date: %w", r.Error)
+			return
+		}
+
+		r.To, r.ToWildcard, r.Error = parseFlexibleDate(dateRange[1], false)
+		if r.Error != nil {
+			r.Error = fmt.Errorf("failed to parse end date: %w", r.Error)
+			return
+		}
+		return
+	}
+
+	// Single date/format
+	r.From, r.FromWildcard, r.Error = parseFlexibleDate(value, true)
+	if r.Error != nil {
+		return
+	}
+	r.To, r.ToWildcard, r.Error = parseFlexibleDate(value, false)
+	if r.Error != nil {
+		return
+	}
+
+	return
+}
+
 // QualifierDateRange extracts and parses a date range from a query qualifier.
 // It supports various date formats including comparison operators, ranges, wildcards, and partial dates.
 func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err error) {
@@ -30,21 +134,21 @@ func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err er
 
 	// Check for comparison operators
 	if strings.HasPrefix(value, ">=") {
-		a, err = parseFlexibleDate(value[2:], true)
+		a, _, err = parseFlexibleDate(value[2:], true)
 		if err != nil {
 			return
 		}
 		return a, time.Time{}, nil
 	}
 	if strings.HasPrefix(value, "<=") {
-		b, err = parseFlexibleDate(value[2:], false)
+		b, _, err = parseFlexibleDate(value[2:], false)
 		if err != nil {
 			return
 		}
 		return time.Time{}, b, nil
 	}
 	if strings.HasPrefix(value, ">") {
-		a, err = parseFlexibleDate(value[1:], true)
+		a, _, err = parseFlexibleDate(value[1:], true)
 		if err != nil {
 			return
 		}
@@ -52,7 +156,7 @@ func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err er
 		return a, time.Time{}, nil
 	}
 	if strings.HasPrefix(value, "<") {
-		b, err = parseFlexibleDate(value[1:], false)
+		b, _, err = parseFlexibleDate(value[1:], false)
 		if err != nil {
 			return
 		}
@@ -63,13 +167,13 @@ func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err er
 	// Check for range format
 	dateRange := strings.SplitN(value, "..", 2)
 	if len(dateRange) == 2 {
-		a, err = parseFlexibleDate(dateRange[0], true)
+		a, _, err = parseFlexibleDate(dateRange[0], true)
 		if err != nil {
 			err = fmt.Errorf("failed to parse start date: %v", err)
 			return
 		}
 
-		b, err = parseFlexibleDate(dateRange[1], false)
+		b, _, err = parseFlexibleDate(dateRange[1], false)
 		if err != nil {
 			err = fmt.Errorf("failed to parse end date: %v", err)
 			return
@@ -78,11 +182,11 @@ func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err er
 	}
 
 	// Single date/format
-	a, err = parseFlexibleDate(value, true)
+	a, _, err = parseFlexibleDate(value, true)
 	if err != nil {
 		return
 	}
-	b, err = parseFlexibleDate(value, false)
+	b, _, err = parseFlexibleDate(value, false)
 	if err != nil {
 		return
 	}
@@ -92,117 +196,123 @@ func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err er
 
 // parseFlexibleDate parses various date formats and wildcards
 // isStart determines how to interpret partial dates (start or end of period)
-func parseFlexibleDate(value string, isStart bool) (date time.Time, err error) {
+func parseFlexibleDate(value string, isStart bool) (date time.Time, w DateWildcard, err error) {
 	// Validate basic format before processing
 	if err := validateDateFormat(value); err != nil {
-		return time.Time{}, err
+		return time.Time{}, DateWildcard{}, err
 	}
 
 	// Try different date formats
 	parts := strings.SplitN(value, "-", 3)
 	if len(parts) == 0 {
-		return time.Time{}, fmt.Errorf("invalid date format")
+		return time.Time{}, DateWildcard{}, fmt.Errorf("invalid date format")
 	}
 	switch len(parts) {
 	case 1:
 		// Year-only: YYYY
-		year, err := parseYear(parts[0], isStart)
+		year, yearWildcard, err := parseYear(parts[0], isStart)
 		if err != nil {
-			return time.Time{}, err
+			return time.Time{}, DateWildcard{}, err
 		}
+		w.Year = yearWildcard
 		d := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
 		if !isStart {
 			d = d.AddDate(1, 0, 0)
 		}
-		return d, nil
+		return d, w, nil
 
 	case 2:
 		// Year-month: YYYY-MM
-		year, err := parseYear(parts[0], isStart)
+		year, yearWildcard, err := parseYear(parts[0], isStart)
 		if err != nil {
-			return time.Time{}, err
+			return time.Time{}, DateWildcard{}, err
 		}
-		month, err := parseMonth(parts[1], isStart)
+		month, monthWildcard, err := parseMonth(parts[1], isStart)
 		if err != nil {
-			return time.Time{}, err
+			return time.Time{}, DateWildcard{}, err
 		}
+		w.Year = yearWildcard
+		w.Month = monthWildcard
 		d := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 		if !isStart {
 			d = d.AddDate(0, 1, 0)
 		}
-		return d, nil
+		return d, w, nil
 
 	case 3:
 		// Year-month-day: YYYY-MM-DD
-		year, err := parseYear(parts[0], isStart)
+		year, yearWildcard, err := parseYear(parts[0], isStart)
 		if err != nil {
-			return time.Time{}, err
+			return time.Time{}, DateWildcard{}, err
 		}
-		month, err := parseMonth(parts[1], isStart)
+		month, monthWildcard, err := parseMonth(parts[1], isStart)
 		if err != nil {
-			return time.Time{}, err
+			return time.Time{}, DateWildcard{}, err
 		}
-		day, err := parseDay(parts[2], isStart)
+		day, dayWildcard, err := parseDay(parts[2], isStart)
 		if err != nil {
-			return time.Time{}, err
+			return time.Time{}, DateWildcard{}, err
 		}
+		w.Year = yearWildcard
+		w.Month = monthWildcard
+		w.Day = dayWildcard
 		day = normalizeDay(year, month, day)
 		d := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 		if !isStart {
 			d = d.AddDate(0, 0, 1)
 		}
-		return d, nil
+		return d, w, nil
 	}
 
-	return time.Time{}, fmt.Errorf("invalid date format")
+	return time.Time{}, DateWildcard{}, fmt.Errorf("invalid date format")
 }
 
 // parseYear parses a wildcard year format
-func parseYear(value string, isStart bool) (int, error) {
+func parseYear(value string, isStart bool) (int, bool, error) {
 	if value == "*" {
 		if isStart {
-			return 1, nil // Start at year 1
+			return 1, true, nil // Start at year 1
 		} else {
-			return 9999, nil // End at year 9999
+			return MAX_YEAR, true, nil // End at year MAX_YEAR
 		}
 	}
 	year, err := strconv.Atoi(value)
-	if err != nil || year < 1000 || year > 9999 {
-		return 0, fmt.Errorf("invalid year format")
+	if err != nil || year < MIN_YEAR || year > MAX_YEAR {
+		return 0, false, fmt.Errorf("invalid year format")
 	}
-	return year, nil
+	return year, false, nil
 }
 
 // parseMonth parses a wildcard month format
-func parseMonth(value string, isStart bool) (int, error) {
+func parseMonth(value string, isStart bool) (int, bool, error) {
 	if value == "*" {
 		if isStart {
-			return 1, nil // Start at January
+			return 1, true, nil // Start at January
 		} else {
-			return 12, nil // End at December
+			return 12, true, nil // End at December
 		}
 	}
 	month, err := strconv.Atoi(value)
 	if err != nil || month < 1 || month > 12 {
-		return 0, fmt.Errorf("invalid month format")
+		return 0, false, fmt.Errorf("invalid month format")
 	}
-	return month, nil
+	return month, false, nil
 }
 
 // parseDay parses a wildcard day format
-func parseDay(value string, isStart bool) (int, error) {
+func parseDay(value string, isStart bool) (int, bool, error) {
 	if value == "*" {
 		if isStart {
-			return 1, nil // Start at first day of month
+			return 1, true, nil // Start at first day of month
 		} else {
-			return 31, nil // End at last day of month
+			return 31, true, nil // End at last day of month (will be normalized)
 		}
 	}
 	day, err := strconv.Atoi(value)
 	if err != nil || day < 1 || day > 31 {
-		return 0, fmt.Errorf("invalid day format")
+		return 0, false, fmt.Errorf("invalid day format")
 	}
-	return day, nil
+	return day, false, nil
 }
 
 // normalizeDay adjusts invalid days to the last valid day of the month
@@ -227,7 +337,7 @@ func validateDateFormat(value string) error {
 		// Could be a year-only format
 		if len(value) == 4 {
 			year, err := strconv.Atoi(value)
-			if err != nil || year < 1000 || year > 9999 {
+			if err != nil || year < MIN_YEAR || year > MAX_YEAR {
 				return fmt.Errorf("invalid year format")
 			}
 			return nil
@@ -250,7 +360,7 @@ func validateDateFormat(value string) error {
 		// Year-Month format
 		if parts[0] != "*" {
 			year, err := strconv.Atoi(parts[0])
-			if err != nil || year < 1000 || year > 9999 {
+			if err != nil || year < MIN_YEAR || year > MAX_YEAR {
 				return fmt.Errorf("invalid year")
 			}
 		}
@@ -264,7 +374,7 @@ func validateDateFormat(value string) error {
 		// Full date format
 		if parts[0] != "*" {
 			year, err := strconv.Atoi(parts[0])
-			if err != nil || (year < 1000 && len(parts[0]) > 1) || year > 9999 {
+			if err != nil || (year < MIN_YEAR && len(parts[0]) > 1) || year > MAX_YEAR {
 				return fmt.Errorf("invalid year")
 			}
 		}

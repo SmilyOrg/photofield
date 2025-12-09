@@ -146,6 +146,19 @@ func (q *Query) QualifierValues(key string) []string {
 	return values
 }
 
+func (q *Query) QualifierTerms(key string) []*Term {
+	if q == nil {
+		return nil
+	}
+	var terms []*Term
+	for _, term := range q.Terms {
+		if term.Qualifier != nil && term.Qualifier.Key == key {
+			terms = append(terms, term)
+		}
+	}
+	return terms
+}
+
 func (q *Query) Words() string {
 	if q == nil {
 		return ""
