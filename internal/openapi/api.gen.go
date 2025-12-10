@@ -229,7 +229,7 @@ type Search string
 // SearchQuery defines model for SearchQuery.
 type SearchQuery struct {
 	// A validated and typed search query expression, types omitted as this is subject to many changes.
-	Expression *Expression   `json:"expression,omitempty"`
+	Expression Expression    `json:"expression"`
 	Search     Search        `json:"search"`
 	Tokens     []SearchToken `json:"tokens"`
 }

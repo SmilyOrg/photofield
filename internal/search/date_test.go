@@ -64,11 +64,11 @@ func TestDateRangeFormats(t *testing.T) {
 		{"created:2024-02-29", date("2024-02-29"), date("2024-03-01"), false},
 		{"created:2023-12-31", date("2023-12-31"), date("2024-01-01"), false},
 		// Wildcards - any day of specific month
-		{"created:*-12-10", date("0001-12-10"), date("9000-12-11"), false},
-		{"created:*-01-01", date("0001-01-01"), date("9000-01-02"), false},
-		{"created:*-02-29", date("0001-02-28"), date("9000-03-01"), false},
-		{"created:*-01-01", date("0001-01-01"), date("9000-01-02"), false},
-		{"created:*-12-31", date("0001-12-31"), date("9001-01-01"), false},
+		{"created:*-12-10", date("0010-12-10"), date("9000-12-11"), false},
+		{"created:*-01-01", date("0010-01-01"), date("9000-01-02"), false},
+		{"created:*-02-29", date("0010-02-28"), date("9000-03-01"), false},
+		{"created:*-01-01", date("0010-01-01"), date("9000-01-02"), false},
+		{"created:*-12-31", date("0010-12-31"), date("9001-01-01"), false},
 		// Wildcards - specific day across all months in year
 		{"created:2025-*-10", date("2025-01-10"), date("2025-12-11"), false},
 		{"created:2025-*-01", date("2025-01-01"), date("2025-12-02"), false},

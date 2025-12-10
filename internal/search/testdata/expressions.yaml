@@ -38,7 +38,7 @@
 - search: created:*-05-*
   expr:
     created:
-      from: 0001-05-01T00:00:00Z
+      from: 0010-05-01T00:00:00Z
       from_wildcard:
         year: true
         day: true
@@ -50,7 +50,7 @@
 - search: created:*-01-01
   expr:
     created:
-      from: 0001-01-01T00:00:00Z
+      from: 0010-01-01T00:00:00Z
       from_wildcard:
         year: true
       to: 9000-01-02T00:00:00Z
@@ -60,7 +60,7 @@
 - search: created:*-12-31
   expr:
     created:
-      from: 0001-12-31T00:00:00Z
+      from: 0010-12-31T00:00:00Z
       from_wildcard:
         year: true
       to: 9001-01-01T00:00:00Z

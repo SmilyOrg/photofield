@@ -1,26 +1,35 @@
 package search
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // FieldMeta contains metadata about a parsed field
 type FieldMeta struct {
 	// Name
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 
 	// Source token from the Query AST with position info
-	Token Token `json:"token"`
+	Token Token `json:"token,omitempty"`
 
 	// Parse error if any (field may still have default/partial value)
 	Error error `json:"error,omitempty"`
 
 	// Whether the field was explicitly set in the query
-	Present bool `json:"present"`
+	Present bool `json:"present,omitempty"`
+}
+
+type Float32 struct {
+	FieldMeta
+	Value float32 `json:"value,omitempty"`
 }
 
 // Expression represents a validated and typed search query
 type Expression struct {
-	query   *Query
-	Created DateRange `json:"created,omitempty"`
+	query     *Query
+	Created   DateRange `json:"created,omitempty"`
+	Threshold Float32   `json:"t,omitempty"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -36,6 +45,26 @@ type Expression struct {
 	// Words               string
 }
 
+func (q *Query) ExpressionFloat32(key string) (f Float32) {
+	f.Name = key
+	values := q.QualifierTerms(key)
+	if len(values) == 0 {
+		return
+	}
+
+	value := values[0]
+	f.Present = true
+
+	v, err := strconv.ParseFloat(value.Qualifier.Value, 32)
+	if err != nil {
+		f.Error = fmt.Errorf("invalid number: %w", err)
+		return
+	}
+	f.Value = float32(v)
+	f.Token = value.Token()
+	return
+}
+
 // Expression validates the query and returns a typed Expression.
 func (q *Query) Expression() (Expression, error) {
 	if q == nil {
@@ -46,9 +75,11 @@ func (q *Query) Expression() (Expression, error) {
 		query: q,
 	}
 
-	// Validate and parse "created" qualifier
 	expr.Created = q.ExpressionDateRange("created")
 	expr.addFieldError(expr.Created.FieldMeta)
+
+	expr.Threshold = q.ExpressionFloat32("t")
+	expr.addFieldError(expr.Threshold.FieldMeta)
 
 	var err error
 	if len(expr.Errors) > 0 {

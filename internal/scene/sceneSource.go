@@ -103,7 +103,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 					query = q
 				}
 			} else {
-				log.Printf("search parse failed: %s", err.Error())
+				scene.Error = fmt.Sprintf("Search parse failed: %s", err.Error())
 			}
 
 			// Fallback
@@ -121,11 +121,15 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				}
 				scene.SearchEmbedding = embedding
 			}
+
+			scene.SearchTokens = query.Tokens()
+			expression, err = query.Expression()
+			if err != nil {
+				scene.Error = err.Error()
+			}
+
 			searchDone()
 		}
-
-		scene.SearchTokens = query.Tokens()
-		expression = query.Expression()
 
 		if config.Layout.Type == layout.Highlights {
 			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{

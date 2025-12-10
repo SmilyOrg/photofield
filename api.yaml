@@ -1224,6 +1224,7 @@ components:
       type: object
       required:
         - search
+        - expression
         - tokens
       properties:
         search:
