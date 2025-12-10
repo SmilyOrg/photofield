@@ -1791,7 +1791,7 @@ func mergeSortedChannels(channels []<-chan SourcedInfo, order ListOrder, out cha
 func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions) (<-chan SourcedInfo, Dependencies) {
 	out := make(chan SourcedInfo, 1000)
 
-	tags := options.Query.QualifierValues("tag")
+	tags := options.Expression.Tags.Values()
 	deps := Dependencies{
 		Dependency{
 			db:       source,
@@ -2076,7 +2076,7 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan Sourced
 	}
 	log.Printf("list infos dirs %d batches %d\n", len(prefixIds), concurrent)
 	out := make(chan SourcedInfo, 1000)
-	tags := options.Query.QualifierValues("tag")
+	tags := options.Expression.Tags.Values()
 	deps := Dependencies{
 		Dependency{
 			db:       source,

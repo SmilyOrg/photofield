@@ -187,6 +187,8 @@ func (q *Query) ExpressionDateRange(key string) (r DateRange) {
 
 // QualifierDateRange extracts and parses a date range from a query qualifier.
 // It supports various date formats including comparison operators, ranges, wildcards, and partial dates.
+//
+// Deprecated: Use ExpressionDateRange instead.
 func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err error) {
 	if q == nil {
 		err = ErrNilQuery
