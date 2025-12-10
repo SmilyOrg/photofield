@@ -424,7 +424,7 @@ html.dark {
   --mdc-theme-on-background: white;
   --mdc-theme-text-primary-on-background: #fff;
 
-  --mdc-theme-primary: #6782ff;
+  --mdc-theme-primary: #7891ff;
   --mdc-theme-secondary: #018786;
   --mdc-theme-surface: #333;
   --mdc-theme-error: #f18498;
