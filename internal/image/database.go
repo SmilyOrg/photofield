@@ -1843,13 +1843,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			embInvNorm = options.Embedding.InvNormFloat32()
 		}
 
-		if options.Expression.Threshold.Present {
-			joinEmbeddings = true
-		}
-
-		embDedup := float32(0)
-		if f, err := options.Query.QualifierFloat32("dedup"); err == nil {
-			embDedup = f
+		if options.Expression.Threshold.Present || options.Expression.Deduplicate.Present {
 			joinEmbeddings = true
 		}
 
@@ -2041,14 +2035,14 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 						continue
 					}
 				}
-				if embDedup > 0 {
+				if options.Expression.Deduplicate.Present {
 					if lastEmb != nil {
 						sim, err := clip.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
 						if err != nil {
 							log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
 							continue
 						}
-						if sim >= embDedup {
+						if sim >= options.Expression.Deduplicate.Value {
 							continue
 						}
 					}
