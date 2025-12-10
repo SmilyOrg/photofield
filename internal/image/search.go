@@ -263,9 +263,9 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 			}
 		}
 
-		bias, err := options.Query.QualifierFloat32("bias")
-		if err != nil {
-			bias = 0
+		bias := 0.0
+		if options.Expression.Bias.Present {
+			bias = float64(options.Expression.Bias.Value)
 		}
 
 		// Get embeddings for all images with the specified tags
@@ -292,9 +292,9 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 			}
 		}
 
-		k, err := options.Query.QualifierInt("k")
-		if err != nil {
-			k = 5
+		k := 5
+		if options.Expression.K.Present {
+			k = int(options.Expression.K.Value)
 		}
 
 		done := metrics.Elapsed("list knn embeddings")

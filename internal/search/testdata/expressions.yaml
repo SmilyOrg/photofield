@@ -147,3 +147,33 @@
           qualVal: "0.9"
         present: true
       value: 0.9
+
+- search: bias:3
+  expr:
+    bias:
+      meta:
+        name: bias
+        token:
+          type: qualifier
+          value: bias:3
+          start: 0
+          end: 6
+          key: bias
+          qualVal: "3"
+        present: true
+      value: 3
+
+- search: "k:5"
+  expr:
+    k:
+      meta:
+        name: k
+        token:
+          type: qualifier
+          value: "k:5"
+          start: 0
+          end: 3
+          key: k
+          qualVal: "5"
+        present: true
+      value: 5

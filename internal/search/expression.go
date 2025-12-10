@@ -25,6 +25,8 @@ type Expression struct {
 	Created     DateRange `json:"created,omitempty"`
 	Threshold   Float32   `json:"t,omitempty"`
 	Deduplicate Float32   `json:"dedup,omitempty"`
+	Bias        Float32   `json:"bias,omitempty"`
+	K           Int64     `json:"k,omitempty"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -48,6 +50,12 @@ func (q *Query) Expression() (Expression, error) {
 
 	expr.Deduplicate = q.ExpressionFloat32("dedup")
 	expr.addFieldError(expr.Deduplicate.FieldMeta)
+
+	expr.Bias = q.ExpressionFloat32("bias")
+	expr.addFieldError(expr.Bias.FieldMeta)
+
+	expr.K = q.ExpressionInt("k")
+	expr.addFieldError(expr.K.FieldMeta)
 
 	var err error
 	if len(expr.Errors) > 0 {
