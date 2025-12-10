@@ -29,6 +29,7 @@ type Expression struct {
 	Bias        Float32   `json:"bias,omitempty"`
 	K           Int64     `json:"k,omitempty"`
 	Filter      String    `json:"filter,omitempty"`
+	Tags        Strings   `json:"tags,omitempty"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -63,6 +64,11 @@ func (q *Query) Expression() (Expression, error) {
 
 	expr.Filter = q.ExpressionEnum("filter", []string{"knn"})
 	expr.addFieldError(expr.Filter.FieldMeta)
+
+	expr.Tags = q.ExpressionStrings("tag")
+	for _, tag := range expr.Tags {
+		expr.addFieldError(tag.FieldMeta)
+	}
 
 	var err error
 	if len(expr.Errors) > 0 {

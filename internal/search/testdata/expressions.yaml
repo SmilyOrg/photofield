@@ -228,3 +228,44 @@
           qualVal: "0.123"
         present: true
       value: 0.123
+
+- search: tag:summer
+  expr:
+    tags:
+    - meta:
+        name: tag
+        token:
+          type: qualifier
+          value: tag:summer
+          start: 0
+          end: 10
+          key: tag
+          qualVal: summer
+        present: true
+      value: summer
+
+- search: tag:summer tag:vacation
+  expr:
+    tags:
+    - meta:
+        name: tag
+        token:
+          type: qualifier
+          value: tag:summer
+          start: 0
+          end: 10
+          key: tag
+          qualVal: summer
+        present: true
+      value: summer
+    - meta:
+        name: tag
+        token:
+          type: qualifier
+          value: tag:vacation
+          start: 11
+          end: 23
+          key: tag
+          qualVal: vacation
+        present: true
+      value: vacation

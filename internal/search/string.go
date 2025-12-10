@@ -10,6 +10,8 @@ type String struct {
 	Value     string `json:"value,omitempty"`
 }
 
+type Strings []String
+
 func (q *Query) ExpressionEnum(key string, validValues []string) (f String) {
 	values := q.QualifierTerms(key)
 	if len(values) == 0 {
@@ -29,4 +31,32 @@ func (q *Query) ExpressionEnum(key string, validValues []string) (f String) {
 	}
 	f.Error = fmt.Errorf("unsupported value: %s (use %s)", f.Value, strings.Join(validValues, ", "))
 	return
+}
+
+func (q *Query) ExpressionStrings(key string) (f Strings) {
+	values := q.QualifierTerms(key)
+	if len(values) == 0 {
+		return
+	}
+
+	for _, value := range values {
+		s := String{}
+		s.Present = true
+		s.Name = key
+		s.Value = value.Qualifier.Value
+		s.Token = value.Token()
+		if s.Value == "" {
+			s.Error = fmt.Errorf("value cannot be empty")
+		}
+		f = append(f, s)
+	}
+	return
+}
+
+func (f Strings) Values() []string {
+	var values []string
+	for _, s := range f {
+		values = append(values, s.Value)
+	}
+	return values
 }
