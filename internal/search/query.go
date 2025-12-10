@@ -163,7 +163,6 @@ func (q *Query) QualifierTerms(key string) []*Term {
 	return terms
 }
 
-// Deprecated: Use semantic Expression() instead.
 func (q *Query) Words() string {
 	if q == nil {
 		return ""

@@ -192,3 +192,39 @@
           qualVal: knn
         present: true
       value: knn
+
+- search: hello world
+  expr:
+    text: hello world
+
+- search: "t:0.123 hello world"
+  expr:
+    text: hello world
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.123"
+          start: 0
+          end: 7
+          key: t
+          qualVal: "0.123"
+        present: true
+      value: 0.123
+  
+- search: hello t:0.123 world
+  expr:
+    text: hello world
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.123"
+          start: 6
+          end: 13
+          key: t
+          qualVal: "0.123"
+        present: true
+      value: 0.123

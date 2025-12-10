@@ -22,6 +22,7 @@ type FieldMeta struct {
 // Expression represents a validated and typed search query
 type Expression struct {
 	query       *Query
+	Text        string    `json:"text,omitempty"`
 	Created     DateRange `json:"created,omitempty"`
 	Threshold   Float32   `json:"t,omitempty"`
 	Deduplicate Float32   `json:"dedup,omitempty"`
@@ -42,6 +43,8 @@ func (q *Query) Expression() (Expression, error) {
 	expr := Expression{
 		query: q,
 	}
+
+	expr.Text = q.Words()
 
 	expr.Created = q.ExpressionDateRange("created")
 	expr.addFieldError(expr.Created.FieldMeta)
