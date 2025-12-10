@@ -1,5 +1,7 @@
 package search
 
+import "fmt"
+
 // FieldMeta contains metadata about a parsed field
 type FieldMeta struct {
 	// Name
@@ -35,9 +37,9 @@ type Expression struct {
 }
 
 // Expression validates the query and returns a typed Expression.
-func (q *Query) Expression() Expression {
+func (q *Query) Expression() (Expression, error) {
 	if q == nil {
-		return Expression{}
+		return Expression{}, nil
 	}
 
 	expr := Expression{
@@ -45,11 +47,18 @@ func (q *Query) Expression() Expression {
 	}
 
 	// Validate and parse "created" qualifier
-	// from, to, err := q.QualifierDateRange("created")
 	expr.Created = q.ExpressionDateRange("created")
 	expr.addFieldError(expr.Created.FieldMeta)
 
-	return expr
+	var err error
+	if len(expr.Errors) > 0 {
+		more := ""
+		if len(expr.Errors) > 1 {
+			more = fmt.Sprintf(" (+%d more)", len(expr.Errors)-1)
+		}
+		err = fmt.Errorf("expression error: %w%s", expr.Errors[0].Error, more)
+	}
+	return expr, err
 }
 
 func (expr *Expression) addFieldError(meta FieldMeta) {

@@ -32,7 +32,10 @@ func TestExpression(t *testing.T) {
 			}
 
 			// Get the expression
-			expr := query.Expression()
+			expr, err := query.Expression()
+			if err != nil {
+				t.Fatalf("Test case %d: Failed to get expression for query '%s': %v", i, tc.Search, err)
+			}
 
 			// Check created field if specified in test case
 			if !tc.Expr.Created.From.IsZero() || !tc.Expr.Created.To.IsZero() {

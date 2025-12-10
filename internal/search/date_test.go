@@ -18,7 +18,7 @@ func TestDateRanges(t *testing.T) {
 		{"created:2020-06-15..2020-06-15", date("2020-06-15"), date("2020-06-16"), false},
 		{"created:2019-01-01..2019-01-31", date("2019-01-01"), date("2019-02-01"), false},
 		{"created:2021-12-01..2022-01-15", date("2021-12-01"), date("2022-01-16"), false},
-		{"hello world", time.Time{}, time.Time{}, true},
+		{"hello world", time.Time{}, time.Time{}, false},
 		{"created:2022-01-01..2022-12-31 created:2023-01-01..2023-12-31", time.Time{}, time.Time{}, true},
 	}
 
@@ -26,13 +26,13 @@ func TestDateRanges(t *testing.T) {
 		t.Run(tt.input, func(t *testing.T) {
 			query, err := Parse(tt.input)
 			assert.NoError(t, err)
-			start, end, err := query.QualifierDateRange("created")
+			expr, err := query.Expression()
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tt.start, start)
-				assert.Equal(t, tt.end, end)
+				assert.Equal(t, tt.start, expr.Created.From)
+				assert.Equal(t, tt.end, expr.Created.To)
 			}
 		})
 	}
@@ -51,7 +51,7 @@ func TestDateRangeFormats(t *testing.T) {
 		{"created:2019-01-01..2019-01-31", date("2019-01-01"), date("2019-02-01"), false},
 		{"created:2021-12-01..2022-01-15", date("2021-12-01"), date("2022-01-16"), false},
 		// No qualifier
-		{"hello world", time.Time{}, time.Time{}, true},
+		{"hello world", time.Time{}, time.Time{}, false},
 		// Multiple qualifiers
 		{"created:2022-01-01..2022-12-31 created:2023-01-01..2023-12-31", time.Time{}, time.Time{}, true},
 		// Comparison operators
@@ -124,14 +124,14 @@ func TestDateRangeFormats(t *testing.T) {
 		t.Run(tt.input, func(t *testing.T) {
 			query, err := Parse(tt.input)
 			assert.NoError(t, err)
-			start, end, err := query.QualifierDateRange("created")
+			expr, err := query.Expression()
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
 			assert.NoError(t, err)
-			assert.Equal(t, tt.start, start)
-			assert.Equal(t, tt.end, end)
+			assert.Equal(t, tt.start, expr.Created.From)
+			assert.Equal(t, tt.end, expr.Created.To)
 		})
 	}
 }
