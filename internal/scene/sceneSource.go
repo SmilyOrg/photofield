@@ -153,8 +153,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			}
 		} else {
 			var infos <-chan image.SourcedInfo
-			filter, _ := query.QualifierString("filter")
-			if filter == "knn" {
+			if expression.Filter.Value == "knn" {
 				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
 					OrderBy:    image.ListOrder(config.Layout.Order),
 					Limit:      config.Collection.Limit,

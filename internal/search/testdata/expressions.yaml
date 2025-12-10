@@ -177,3 +177,18 @@
           qualVal: "5"
         present: true
       value: 5
+
+- search: filter:knn
+  expr:
+    filter:
+      meta:
+        name: filter
+        token:
+          type: qualifier
+          value: filter:knn
+          start: 0
+          end: 10
+          key: filter
+          qualVal: knn
+        present: true
+      value: knn

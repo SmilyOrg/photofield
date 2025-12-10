@@ -27,6 +27,7 @@ type Expression struct {
 	Deduplicate Float32   `json:"dedup,omitempty"`
 	Bias        Float32   `json:"bias,omitempty"`
 	K           Int64     `json:"k,omitempty"`
+	Filter      String    `json:"filter,omitempty"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -56,6 +57,9 @@ func (q *Query) Expression() (Expression, error) {
 
 	expr.K = q.ExpressionInt("k")
 	expr.addFieldError(expr.K.FieldMeta)
+
+	expr.Filter = q.ExpressionEnum("filter", []string{"knn"})
+	expr.addFieldError(expr.Filter.FieldMeta)
 
 	var err error
 	if len(expr.Errors) > 0 {
