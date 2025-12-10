@@ -245,22 +245,19 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 		// Parse tags from query
 		tags := make([]knnTag, 0, 10)
 		searchTags := make(map[tag.Id]struct{})
-		for _, term := range options.Query.Terms {
-			if term.Qualifier != nil && term.Qualifier.Key == "tag" {
-				name := term.Qualifier.Value
-				id, ok := source.database.GetTagId(name)
-				if !ok {
-					continue
-				}
-				tags = append(tags, knnTag{
-					id:  id,
-					not: term.Not,
-				})
-				if !term.Not {
-					searchTags[id] = struct{}{}
-				}
-				println("tag", name, id, term.Not)
+		for _, tag := range options.Expression.Tags {
+			id, ok := source.database.GetTagId(tag.Value)
+			if !ok {
+				continue
 			}
+			tags = append(tags, knnTag{
+				id:  id,
+				not: tag.Token.Not,
+			})
+			if !tag.Token.Not {
+				searchTags[id] = struct{}{}
+			}
+			println("tag", tag.Value, id, tag.Token.Not)
 		}
 
 		bias := 0.0

@@ -48,7 +48,6 @@ const (
 type ListOptions struct {
 	OrderBy    ListOrder
 	Limit      int
-	Query      *search.Query
 	Expression search.Expression
 	Embedding  clip.Embedding
 	Extensions []string
@@ -2004,10 +2003,8 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
 
 			// Search post-query expression filtering
-			if options.Query != nil {
-				if !options.Expression.Created.Match(info.DateTime) {
-					continue
-				}
+			if !options.Expression.Created.Match(info.DateTime) {
+				continue
 			}
 
 			latlngNull := stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull

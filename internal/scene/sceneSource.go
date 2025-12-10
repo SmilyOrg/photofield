@@ -82,47 +82,38 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	go func() {
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
-		var query *search.Query
 		var expression search.Expression
-		embFilter := false
-
 		if scene.Search != "" {
 			searchDone := metrics.Elapsed("search")
 			q, err := search.Parse(scene.Search)
-			if err == nil {
-				scene.SearchTokens = query.Tokens()
-				expression, err = query.Expression()
-				if err != nil {
-					scene.Error = err.Error()
-				}
-				embFilter = expression.Threshold.Present || expression.Deduplicate.Present
-				if expression.Image.Present {
-					embedding, err := imageSource.GetImageEmbedding(image.ImageId(expression.Image.Value))
-					if err != nil {
-						log.Println("search get similar failed")
-						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
-					}
-					scene.SearchEmbedding = embedding
-					query = q
-				} else if len(expression.Tags.Values()) > 0 || expression.Created.Present || embFilter {
-					query = q
-				}
-			} else {
-				scene.Error = fmt.Sprintf("Search parse failed: %s", err.Error())
+			if err != nil && scene.Error == "" {
+				scene.Error = fmt.Sprintf("parse failed: %s", err.Error())
 			}
 
-			// Fallback
-			if scene.SearchEmbedding == nil && scene.Error == "" && (query == nil || embFilter) {
-				text := scene.Search
-				if expression.Text != "" {
-					text = expression.Text
+			scene.SearchTokens = q.Tokens()
+			expression, err = q.Expression()
+			if err != nil && scene.Error == "" {
+				scene.Error = err.Error()
+			}
+
+			// If an image is specified, get its embedding
+			if expression.Image.Present {
+				embedding, err := imageSource.GetImageEmbedding(image.ImageId(expression.Image.Value))
+				if err != nil {
+					scene.Error = fmt.Sprintf("image embed failed: %s", err.Error())
 				}
+				scene.SearchEmbedding = embedding
+			}
+
+			// If no embedding yet, embed the text
+			if scene.SearchEmbedding == nil && scene.Error == "" && expression.Text != "" {
+				text := expression.Text
 				done := metrics.Elapsed("search embed")
 				embedding, err := imageSource.Clip.EmbedText(text)
 				done()
 				if err != nil {
 					log.Println("search embed failed")
-					scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+					scene.Error = fmt.Sprintf("text embed failed: %s", err.Error())
 				}
 				scene.SearchEmbedding = embedding
 			}
@@ -130,15 +121,16 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone()
 		}
 
+		orderBySimilarity := scene.SearchEmbedding != nil && !expression.Threshold.Present && !expression.Deduplicate.Present
+
 		if config.Layout.Type == layout.Highlights {
 			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{
 				OrderBy: image.ListOrder(config.Layout.Order),
 				Limit:   config.Collection.Limit,
 			})
-
 			layout.LayoutHighlights(infos, config.Layout, &scene, imageSource)
-		} else if !embFilter && scene.SearchEmbedding != nil {
-			// Similarity order
+
+		} else if orderBySimilarity {
 			infos := config.Collection.GetSimilar(imageSource, scene.SearchEmbedding, image.ListOptions{
 				Limit: config.Collection.Limit,
 			})
@@ -156,7 +148,6 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
 					OrderBy:    image.ListOrder(config.Layout.Order),
 					Limit:      config.Collection.Limit,
-					Query:      query,
 					Expression: expression,
 				})
 			} else {
@@ -170,7 +161,6 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				infos, deps = config.Collection.GetInfos(imageSource, image.ListOptions{
 					OrderBy:    image.ListOrder(config.Layout.Order),
 					Limit:      config.Collection.Limit,
-					Query:      query,
 					Expression: expression,
 					Embedding:  scene.SearchEmbedding,
 					Extensions: extensions,
