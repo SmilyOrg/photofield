@@ -12,9 +12,13 @@ const MAX_YEAR = 9000
 
 // DateWildcard indicates which components were wildcards ("*") in the parsed value.
 type DateWildcard struct {
-	Year  bool `json:"year"`
-	Month bool `json:"month"`
-	Day   bool `json:"day"`
+	Year  bool `json:"year,omitempty"`
+	Month bool `json:"month,omitempty"`
+	Day   bool `json:"day,omitempty"`
+}
+
+func (w DateWildcard) IsZero() bool {
+	return !w.Year && !w.Month && !w.Day
 }
 
 func (w DateWildcard) Any() bool {
@@ -72,11 +76,11 @@ func (w DateWildcard) LessThan(reference time.Time, date time.Time) bool {
 
 // DateRange represents a date range for filtering
 type DateRange struct {
-	FieldMeta    `json:"meta"`
-	From         time.Time    `json:"from"`
-	To           time.Time    `json:"to"`
-	FromWildcard DateWildcard `json:"from_wildcard"`
-	ToWildcard   DateWildcard `json:"to_wildcard"`
+	FieldMeta    `json:"meta,omitempty"`
+	From         time.Time    `json:"from,omitempty"`
+	To           time.Time    `json:"to,omitempty"`
+	FromWildcard DateWildcard `json:"from_wildcard,omitempty"`
+	ToWildcard   DateWildcard `json:"to_wildcard,omitempty"`
 }
 
 // IsZero returns true if both From and To are zero
@@ -104,16 +108,13 @@ func (r DateRange) Match(date time.Time) bool {
 }
 
 func (q *Query) ExpressionDateRange(key string) (r DateRange) {
-	r.Name = key
 
 	if q == nil {
-		r.Error = ErrNilQuery
 		return
 	}
 
 	terms := q.QualifierTerms(key)
 	if len(terms) == 0 {
-		r.Error = ErrNotFound
 		return
 	}
 
@@ -125,6 +126,7 @@ func (q *Query) ExpressionDateRange(key string) (r DateRange) {
 	term := terms[0]
 	value := term.Qualifier.Value
 	r.Present = true
+	r.Name = key
 	r.Token = term.Token()
 
 	// Check for comparison operators

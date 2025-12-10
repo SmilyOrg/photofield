@@ -76,6 +76,7 @@ func ParseDebug(str string) (*Query, error) {
 	return par.ParseString("", str, participle.Trace(os.Stdout))
 }
 
+// Deprecated: Use semantic Expression() instead.
 func (q *Query) QualifierInt(key string) (int, error) {
 	if q == nil {
 		return 0, ErrNilQuery
@@ -98,6 +99,7 @@ func (q *Query) QualifierInt(key string) (int, error) {
 	return 0, fmt.Errorf("no qualifier")
 }
 
+// Deprecated: Use semantic Expression() instead.
 func (q *Query) QualifierFloat32(key string) (float32, error) {
 	if q == nil {
 		return 0, fmt.Errorf("nil query")
@@ -116,6 +118,7 @@ func (q *Query) QualifierFloat32(key string) (float32, error) {
 	return 0, fmt.Errorf("no qualifier")
 }
 
+// Deprecated: Use semantic Expression() instead.
 func (q *Query) QualifierString(key string) (string, error) {
 	if q == nil {
 		return "", fmt.Errorf("nil query")
@@ -133,6 +136,7 @@ func (q *Query) QualifierString(key string) (string, error) {
 	return "", fmt.Errorf("no qualifier")
 }
 
+// Deprecated: Use semantic Expression() instead.
 func (q *Query) QualifierValues(key string) []string {
 	if q == nil {
 		return nil
@@ -159,6 +163,7 @@ func (q *Query) QualifierTerms(key string) []*Term {
 	return terms
 }
 
+// Deprecated: Use semantic Expression() instead.
 func (q *Query) Words() string {
 	if q == nil {
 		return ""

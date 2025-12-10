@@ -1843,9 +1843,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			embInvNorm = options.Embedding.InvNormFloat32()
 		}
 
-		embThreshold := float32(0)
-		if f, err := options.Query.QualifierFloat32("t"); err == nil {
-			embThreshold = f
+		if options.Expression.Threshold.Present {
 			joinEmbeddings = true
 		}
 
@@ -2039,7 +2037,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 						continue
 					}
 					// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
-					if sim < embThreshold {
+					if sim < options.Expression.Threshold.Value {
 						continue
 					}
 				}

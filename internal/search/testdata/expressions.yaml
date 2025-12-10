@@ -3,46 +3,77 @@
 - search: created:2022-01-01..2022-12-31
   expr:
     created:
-      from: 2022-01-01T00:00:00Z
-      to: 2023-01-01T00:00:00Z
       meta:
         name: created
         token:
-          type: "qualifier"
-          value: "created:2022-01-01..2022-12-31"
+          type: qualifier
+          value: created:2022-01-01..2022-12-31
           start: 0
           end: 30
-          key: "created"
-          qualVal: "2022-01-01..2022-12-31"
+          key: created
+          qualVal: 2022-01-01..2022-12-31
+        present: true
+      from: 2022-01-01T00:00:00Z
+      to: 2023-01-01T00:00:00Z
 
 - search: created:2022-*-01
   expr:
     created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:2022-*-01
+          start: 0
+          end: 17
+          key: created
+          qualVal: 2022-*-01
+        present: true
       from: 2022-01-01T00:00:00Z
+      to: 2022-12-02T00:00:00Z
       from_wildcard:
         month: true
-      to: 2022-12-02T00:00:00Z
       to_wildcard:
         month: true
 
 - search: created:2022-05-*
   expr:
     created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:2022-05-*
+          start: 0
+          end: 17
+          key: created
+          qualVal: 2022-05-*
+        present: true
       from: 2022-05-01T00:00:00Z
+      to: 2022-06-01T00:00:00Z
       from_wildcard:
         day: true
-      to: 2022-06-01T00:00:00Z
       to_wildcard:
         day: true
 
 - search: created:*-05-*
   expr:
     created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:*-05-*
+          start: 0
+          end: 14
+          key: created
+          qualVal: "*-05-*"
+        present: true
       from: 0010-05-01T00:00:00Z
+      to: 9000-06-01T00:00:00Z
       from_wildcard:
         year: true
         day: true
-      to: 9000-06-01T00:00:00Z
       to_wildcard:
         year: true
         day: true
@@ -50,19 +81,69 @@
 - search: created:*-01-01
   expr:
     created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:*-01-01
+          start: 0
+          end: 15
+          key: created
+          qualVal: "*-01-01"
+        present: true
       from: 0010-01-01T00:00:00Z
+      to: 9000-01-02T00:00:00Z
       from_wildcard:
         year: true
-      to: 9000-01-02T00:00:00Z
       to_wildcard:
         year: true
 
 - search: created:*-12-31
   expr:
     created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:*-12-31
+          start: 0
+          end: 15
+          key: created
+          qualVal: "*-12-31"
+        present: true
       from: 0010-12-31T00:00:00Z
+      to: 9001-01-01T00:00:00Z
       from_wildcard:
         year: true
-      to: 9001-01-01T00:00:00Z
       to_wildcard:
         year: true
+
+- search: "t:0.3"
+  expr:
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.3"
+          start: 0
+          end: 5
+          key: t
+          qualVal: "0.3"
+        present: true
+      value: 0.3
+
+- search: dedup:0.9
+  expr:
+    dedup:
+      meta:
+        name: dedup
+        token:
+          type: qualifier
+          value: dedup:0.9
+          start: 0
+          end: 9
+          key: dedup
+          qualVal: "0.9"
+        present: true
+      value: 0.9

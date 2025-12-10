@@ -379,6 +379,11 @@ tasks:
     cmds:
       - go test -v -race -cover ./...
 
+  watch:test:
+    desc: Run go tests in watch mode
+    cmds:
+      - watchexec --exts go,yaml -r -- go test {{.CLI_ARGS}}
+
   docs:
     desc: Run the docs frontend in development mode
     dir: docs
