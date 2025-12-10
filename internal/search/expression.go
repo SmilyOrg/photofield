@@ -30,6 +30,7 @@ type Expression struct {
 	K           Int64     `json:"k,omitempty"`
 	Filter      String    `json:"filter,omitempty"`
 	Tags        Strings   `json:"tags,omitempty"`
+	Image       Int64     `json:"img,omitempty"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -69,6 +70,9 @@ func (q *Query) Expression() (Expression, error) {
 	for _, tag := range expr.Tags {
 		expr.addFieldError(tag.FieldMeta)
 	}
+
+	expr.Image = q.ExpressionInt("img")
+	expr.addFieldError(expr.Image.FieldMeta)
 
 	var err error
 	if len(expr.Errors) > 0 {

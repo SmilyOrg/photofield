@@ -90,16 +90,21 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone := metrics.Elapsed("search")
 			q, err := search.Parse(scene.Search)
 			if err == nil {
-				embFilter = len(q.QualifierValues("t")) > 0 || len(q.QualifierValues("dedup")) > 0
-				if similar, err := q.QualifierInt("img"); err == nil {
-					embedding, err := imageSource.GetImageEmbedding(image.ImageId(similar))
+				scene.SearchTokens = query.Tokens()
+				expression, err = query.Expression()
+				if err != nil {
+					scene.Error = err.Error()
+				}
+				embFilter = expression.Threshold.Present || expression.Deduplicate.Present
+				if expression.Image.Present {
+					embedding, err := imageSource.GetImageEmbedding(image.ImageId(expression.Image.Value))
 					if err != nil {
 						log.Println("search get similar failed")
 						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
 					}
 					scene.SearchEmbedding = embedding
 					query = q
-				} else if len(q.QualifierValues("tag")) > 0 || len(q.QualifierValues("created")) > 0 || embFilter {
+				} else if len(expression.Tags.Values()) > 0 || expression.Created.Present || embFilter {
 					query = q
 				}
 			} else {
@@ -109,8 +114,8 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			// Fallback
 			if scene.SearchEmbedding == nil && scene.Error == "" && (query == nil || embFilter) {
 				text := scene.Search
-				if query != nil {
-					text = query.Words()
+				if expression.Text != "" {
+					text = expression.Text
 				}
 				done := metrics.Elapsed("search embed")
 				embedding, err := imageSource.Clip.EmbedText(text)
@@ -120,12 +125,6 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 					scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
 				}
 				scene.SearchEmbedding = embedding
-			}
-
-			scene.SearchTokens = query.Tokens()
-			expression, err = query.Expression()
-			if err != nil {
-				scene.Error = err.Error()
 			}
 
 			searchDone()

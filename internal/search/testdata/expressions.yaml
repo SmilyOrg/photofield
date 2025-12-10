@@ -269,3 +269,47 @@
           qualVal: vacation
         present: true
       value: vacation
+
+- search: img:12345
+  expr:
+    text: 
+    img:
+      meta:
+        name: img
+        token:
+          type: qualifier
+          value: img:12345
+          start: 0
+          end: 9
+          key: img
+          qualVal: "12345"
+        present: true
+      value: 12345
+
+- search: "t:0.277 broken phone dedup:0.9"
+  expr:
+    text: broken phone
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.277"
+          start: 0
+          end: 7
+          key: t
+          qualVal: "0.277"
+        present: true
+      value: 0.277
+    dedup:
+      meta:
+        name: dedup
+        token:
+          type: qualifier
+          value: dedup:0.9
+          start: 21
+          end: 30
+          key: dedup
+          qualVal: "0.9"
+        present: true
+      value: 0.9
