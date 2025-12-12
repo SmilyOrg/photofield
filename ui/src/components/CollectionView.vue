@@ -365,7 +365,7 @@ const onRegion = async (region) => {
   right: 0;
   background: var(--bg-color);
   z-index: 5;
-  height: fit-content
+  height: fit-content;
 }
 
 .controls {

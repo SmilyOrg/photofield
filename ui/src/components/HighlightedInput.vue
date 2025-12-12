@@ -217,7 +217,7 @@ defineExpose({ focus, $el: textfieldRef });
 .highlight-layer :deep(mark) {
   --highlight-text-color: transparent;
   --highlight-shadow-color: transparent;
-  --highlight-underline-color: color-mix(in oklab, var(--mdc-theme-primary) 5%, transparent);
+  --highlight-underline-color: color-mix(in oklab, var(--mdc-theme-primary) 10%, transparent);
 
   color: var(--highlight-text-color);
   /* text-decoration: solid underline 4px var(--highlight-underline-color);

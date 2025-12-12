@@ -1,5 +1,6 @@
 <template>
   <button
+    :style="color ? { '--chip-color': color } : {}"
     class="chip"
     :class="{
       'chip--clickable': clickable,
@@ -33,7 +34,12 @@
       v-if="removable"
       class="chip__remove"
       :size="iconSize"
+      :aria-label="`Remove ${text || 'chip'}`"
+      role="button"
+      tabindex="0"
       @click.stop="handleRemove"
+      @keydown.enter.stop="handleRemove"
+      @keydown.space.prevent.stop="handleRemove"
     >
       close
     </ui-icon>
@@ -155,6 +161,7 @@ const handleRemove = (event) => {
   transition: background-color 0.2s, box-shadow 0.2s;
   height: fit-content;
   border: none;
+  --outline-color: var(--mdc-theme-primary, rgba(0, 0, 0, 0.12));
 }
 
 .chip--dense {
@@ -180,7 +187,7 @@ const handleRemove = (event) => {
 
 .chip--clickable:focus:not(.chip--disabled) {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.3);
+  box-shadow: 0 0 0 3px var(--outline-color);
 }
 
 .chip--clickable:active:not(.chip--disabled) {
@@ -201,7 +208,7 @@ const handleRemove = (event) => {
   background-color: rgba(98, 0, 238, 0.12);
   border-color: var(--mdc-theme-primary);
   color: var(--mdc-theme-primary);
-  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+  box-shadow: 0 0 0 3px var(--chip-outline-color);
 }
 
 .chip--outlined.chip--clickable:active:not(.chip--disabled) {
