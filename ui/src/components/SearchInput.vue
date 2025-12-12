@@ -31,13 +31,6 @@
           :tokens="tokens"
           @keyup.escape="inputValue = ''; active = false"
         />
-        <!-- <highlightable-input
-          :class="{ placeholder: !leftoverText }"
-          ref="input"
-          :highlight="highlightRules"
-          v-model="inputValue"
-          @keyup.escape="inputValue = ''; onBlur($event)"
-        ></highlightable-input> -->
         <ui-textfield-helper
           v-if="error"
           class="helper"
@@ -98,7 +91,6 @@ import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
 import dateFormat from 'date-fns/format';
 import HighlightedInput from './HighlightedInput.vue';
-import HighlightableInput from 'highlightable-input/vue';
 import { useApi } from '../api';
 import { useTimestamps, useTimestampsDate } from '../use';
 
