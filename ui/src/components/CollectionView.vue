@@ -19,12 +19,13 @@
       <p>This may be because:</p>
       <ul>
         <li v-if="search">Search filters excluding all photos (check tag:, created:, or t: filters)</li>
-        <li>The collection needs to be rescanned - click on the collection name to rescan</li>
+        <li>The collection needs to be rescanned for new or updated photos</li>
         <li>No supported image files (.jpg, .png, .avif, etc.) in the collection directories</li>
         <li>Collection directories are empty or don't exist</li>
         <li>File system errors preventing access to photo directories</li>
-        <li>Multiple tag filters require photos to have ALL specified tags</li>
+        <li v-if="search">Multiple tag filters require photos to have ALL specified tags</li>
       </ul>
+      <ui-button raised @click="emit('reindex')">Rescan photos</ui-button>
     </center-message>
 
     <map-viewer

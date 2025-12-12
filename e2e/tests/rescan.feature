@@ -10,12 +10,11 @@ Feature: Rescan
     When the user opens "/collections/vacation"
     # The page should open the dropdown on empty collections by default
     Then the page shows "0 files indexed"
-    And the page shows "Rescan"
+    And the page shows "Rescan photos"
 
-    When the user clicks "Rescan"
+    When the user clicks "Rescan photos"
     Then the page shows "1 file indexed"
 
-    When the user clicks "vacation"
-    And the user clicks on the first photo
+    When the user clicks on the first photo
     Then the photo is focused and zoomed in
 
