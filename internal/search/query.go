@@ -3,7 +3,6 @@ package search
 import (
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/alecthomas/participle/v2"
 	"github.com/alecthomas/participle/v2/lexer"
@@ -74,80 +73,6 @@ func Parse(str string) (*Query, error) {
 func ParseDebug(str string) (*Query, error) {
 	PrintTokens(str)
 	return par.ParseString("", str, participle.Trace(os.Stdout))
-}
-
-// Deprecated: Use semantic Expression() instead.
-func (q *Query) QualifierInt(key string) (int, error) {
-	if q == nil {
-		return 0, ErrNilQuery
-	}
-
-	values := q.QualifierValues(key)
-	if len(values) == 0 {
-		return 0, ErrNotFound
-	}
-
-	if len(q.Terms) == 0 {
-		return 0, fmt.Errorf("empty query")
-	}
-
-	for _, term := range q.Terms {
-		if term.Qualifier != nil && term.Qualifier.Key == key {
-			return strconv.Atoi(term.Qualifier.Value)
-		}
-	}
-	return 0, fmt.Errorf("no qualifier")
-}
-
-// Deprecated: Use semantic Expression() instead.
-func (q *Query) QualifierFloat32(key string) (float32, error) {
-	if q == nil {
-		return 0, fmt.Errorf("nil query")
-	}
-
-	if len(q.Terms) == 0 {
-		return 0, fmt.Errorf("empty query")
-	}
-
-	for _, term := range q.Terms {
-		if term.Qualifier != nil && term.Qualifier.Key == key {
-			f, err := strconv.ParseFloat(term.Qualifier.Value, 32)
-			return float32(f), err
-		}
-	}
-	return 0, fmt.Errorf("no qualifier")
-}
-
-// Deprecated: Use semantic Expression() instead.
-func (q *Query) QualifierString(key string) (string, error) {
-	if q == nil {
-		return "", fmt.Errorf("nil query")
-	}
-
-	if len(q.Terms) == 0 {
-		return "", fmt.Errorf("empty query")
-	}
-
-	for _, term := range q.Terms {
-		if term.Qualifier != nil && term.Qualifier.Key == key {
-			return term.Qualifier.Value, nil
-		}
-	}
-	return "", fmt.Errorf("no qualifier")
-}
-
-// Deprecated: Use semantic Expression() instead.
-func (q *Query) QualifierValues(key string) []string {
-	if q == nil {
-		return nil
-	}
-	var values []string
-	for _, term := range q.Terms {
-		if term.Qualifier != nil && term.Qualifier.Key == key {
-			values = append(values, term.Qualifier.Value)
-		}
-	}
-	return values
 }
 
 func (q *Query) QualifierTerms(key string) []*Term {

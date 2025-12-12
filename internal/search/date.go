@@ -185,99 +185,9 @@ func (q *Query) ExpressionDateRange(key string) (r DateRange) {
 	return
 }
 
-// QualifierDateRange extracts and parses a date range from a query qualifier.
-// It supports various date formats including comparison operators, ranges, wildcards, and partial dates.
-//
-// Deprecated: Use ExpressionDateRange instead.
-func (q *Query) QualifierDateRange(key string) (a time.Time, b time.Time, err error) {
-	if q == nil {
-		err = ErrNilQuery
-		return
-	}
-
-	values := q.QualifierValues(key)
-	if len(values) == 0 {
-		err = ErrNotFound
-		return
-	}
-
-	if len(values) > 1 {
-		err = fmt.Errorf("multiple qualifiers %s", key)
-		return
-	}
-
-	value := values[0]
-
-	// Check for comparison operators
-	if strings.HasPrefix(value, ">=") {
-		a, _, err = parseFlexibleDate(value[2:], true)
-		if err != nil {
-			return
-		}
-		return a, time.Time{}, nil
-	}
-	if strings.HasPrefix(value, "<=") {
-		b, _, err = parseFlexibleDate(value[2:], false)
-		if err != nil {
-			return
-		}
-		return time.Time{}, b, nil
-	}
-	if strings.HasPrefix(value, ">") {
-		a, _, err = parseFlexibleDate(value[1:], true)
-		if err != nil {
-			return
-		}
-		a = a.AddDate(0, 0, 1)
-		return a, time.Time{}, nil
-	}
-	if strings.HasPrefix(value, "<") {
-		b, _, err = parseFlexibleDate(value[1:], false)
-		if err != nil {
-			return
-		}
-		b = b.AddDate(0, 0, -1)
-		return time.Time{}, b, nil
-	}
-
-	// Check for range format
-	dateRange := strings.SplitN(value, "..", 2)
-	if len(dateRange) == 2 {
-		a, _, err = parseFlexibleDate(dateRange[0], true)
-		if err != nil {
-			err = fmt.Errorf("failed to parse start date: %v", err)
-			return
-		}
-
-		b, _, err = parseFlexibleDate(dateRange[1], false)
-		if err != nil {
-			err = fmt.Errorf("failed to parse end date: %v", err)
-			return
-		}
-		return
-	}
-
-	// Single date/format
-	a, _, err = parseFlexibleDate(value, true)
-	if err != nil {
-		return
-	}
-	b, _, err = parseFlexibleDate(value, false)
-	if err != nil {
-		return
-	}
-
-	return
-}
-
 // parseFlexibleDate parses various date formats and wildcards
 // isStart determines how to interpret partial dates (start or end of period)
 func parseFlexibleDate(value string, isStart bool) (date time.Time, w DateWildcard, err error) {
-	// Validate basic format before processing
-	// if err := validateDateFormat(value); err != nil {
-	// 	return time.Time{}, DateWildcard{}, err
-	// }
-
 	// Try different date formats
 	parts := strings.SplitN(value, "-", 3)
 	if len(parts) == 0 {
