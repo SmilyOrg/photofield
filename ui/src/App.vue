@@ -68,12 +68,14 @@
         <search-input
           v-if="showSearch"
           :hide="selected"
-          :loading="query.search && scrollScene?.loading"
+          :loading="query.search && currentScene?.loading"
+          :error="currentScene?.error"
           :modelValue="selected && !searchActive ? '' : query.search"
-          :error="scrollScene?.error"
+          :scene="currentScene"
+          :viewport="viewport"
           @active="searchActive = $event"
           @update:modelValue="onSearch"
-        ></search-input>
+          ></search-input>
 
         <ui-icon-button
           v-if="collection && capabilities?.tags?.supported && selecting"
@@ -157,6 +159,7 @@
         :scrollbar="scrollbar"
         @load="onLoad"
         @scene="v => currentScene = v"
+        @viewport="v => viewport = v"
         @scenes="v => scenes = v"
         @immersive="onImmersive"
         @tasks="tasks => viewerTasks = tasks"
@@ -212,12 +215,14 @@ export default {
       collectionMenuOpen: false,
       scrollbar: null,
       scenes: [],
-      currentScene: null,
       viewerTasks: null,
       searchActive: false,
     }
   },
   setup(props) {
+    const contentRef = ref(null);
+    const currentScene = ref(null);
+    const viewport = ref(null);
     const settingsExpanded = ref(false);
     const collectionId = toRef(props, "collectionId");
     const router = useRouter();
@@ -295,6 +300,9 @@ export default {
     });
 
     return {
+      contentRef,
+      currentScene,
+      viewport,
       query,
       setQuery,
       selecting,
@@ -350,22 +358,8 @@ export default {
       }
       return null;
     },
-    scrollScene() {
-      return this.scenes?.find(scene => scene.name == "Scroll");
-    },
     showSearch() {
       return this.capabilities?.search.supported && this.collection && !this.selecting;
-    }
-  },
-  watch: {
-    currentScene: {
-      handler(newScene) {
-        // If the scene loads with 0 photos, open the collection panel
-        if (newScene && !newScene.loading && !newScene.search && newScene.file_count === 0) {
-          this.collectionExpanded = true;
-        }
-      },
-      immediate: false
     }
   },
   methods: {
@@ -423,16 +417,17 @@ export default {
 html.light {
   --mdc-theme-primary: #6782ff;
   --mdc-theme-surface: #f5f5f5;
+  --mdc-theme-error: #b00020;
 }
 html.dark {
   --mdc-theme-background: #222;
   --mdc-theme-on-background: white;
   --mdc-theme-text-primary-on-background: #fff;
 
-  --mdc-theme-primary: #6782ff;
+  --mdc-theme-primary: #7891ff;
   --mdc-theme-secondary: #018786;
   --mdc-theme-surface: #333;
-  --mdc-theme-error: #b00020;
+  --mdc-theme-error: #f18498;
   --mdc-theme-on-primary: #fff;
   --mdc-theme-on-secondary: #fff;
   --mdc-theme-on-surface: #fff;
@@ -637,6 +632,10 @@ html .multiselect__spinner {
   padding-left: 0;
   padding-right: 0;
   overflow: hidden;
+}
+
+.top-bar.search :deep(.mdc-top-app-bar__section) {
+  align-items: start;
 }
 
 .tag-dialog :deep(.mdc-dialog__surface) {

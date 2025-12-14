@@ -48,7 +48,7 @@ const (
 type ListOptions struct {
 	OrderBy    ListOrder
 	Limit      int
-	Query      *search.Query
+	Expression search.Expression
 	Embedding  clip.Embedding
 	Extensions []string
 	Batch      int
@@ -1790,7 +1790,7 @@ func mergeSortedChannels(channels []<-chan SourcedInfo, order ListOrder, out cha
 func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions) (<-chan SourcedInfo, Dependencies) {
 	out := make(chan SourcedInfo, 1000)
 
-	tags := options.Query.QualifierValues("tag")
+	tags := options.Expression.Tags.Values()
 	deps := Dependencies{
 		Dependency{
 			db:       source,
@@ -1842,15 +1842,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			embInvNorm = options.Embedding.InvNormFloat32()
 		}
 
-		embThreshold := float32(0)
-		if f, err := options.Query.QualifierFloat32("t"); err == nil {
-			embThreshold = f
-			joinEmbeddings = true
-		}
-
-		embDedup := float32(0)
-		if f, err := options.Query.QualifierFloat32("dedup"); err == nil {
-			embDedup = f
+		if options.Expression.Threshold.Present || options.Expression.Deduplicate.Present {
 			joinEmbeddings = true
 		}
 
@@ -1858,7 +1850,6 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			SELECT * FROM (
 		`
 
-		createdFrom, createdTo, createdErr := options.Query.QualifierDateRange("created")
 		for prefixIdx := range prefixIds {
 
 			sql += `
@@ -1904,10 +1895,14 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				sql += `
 					)`
 			}
-			if createdErr == nil {
+			if !options.Expression.Created.From.IsZero() {
 				sql += `
 					AND created_at_unix >= :created_from
-					AND created_at_unix <= :created_to
+				`
+			}
+			if !options.Expression.Created.To.IsZero() {
+				sql += `
+					AND created_at_unix < :created_to
 				`
 			}
 
@@ -1967,10 +1962,12 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			bindIndex++
 		}
 
-		if createdErr == nil {
-			stmt.BindInt64(bindIndex, createdFrom.Unix())
+		if !options.Expression.Created.From.IsZero() {
+			stmt.BindInt64(bindIndex, options.Expression.Created.From.Unix())
 			bindIndex++
-			stmt.BindInt64(bindIndex, createdTo.Unix())
+		}
+		if !options.Expression.Created.To.IsZero() {
+			stmt.BindInt64(bindIndex, options.Expression.Created.To.Unix())
 			bindIndex++
 		}
 
@@ -2005,6 +2002,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			timezoneOffset := stmt.ColumnInt(6)
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
 
+			// Search post-query expression filtering
+			if !options.Expression.Created.Match(info.DateTime) {
+				continue
+			}
+
 			latlngNull := stmt.ColumnType(7) == sqlite.TypeNull || stmt.ColumnType(8) == sqlite.TypeNull
 			if latlngNull {
 				info.LatLng = NaNLatLng()
@@ -2026,18 +2028,18 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 						continue
 					}
 					// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
-					if sim < embThreshold {
+					if options.Expression.Threshold.Present && sim < options.Expression.Threshold.Value {
 						continue
 					}
 				}
-				if embDedup > 0 {
+				if options.Expression.Deduplicate.Present {
 					if lastEmb != nil {
 						sim, err := clip.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
 						if err != nil {
 							log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
 							continue
 						}
-						if sim >= embDedup {
+						if sim >= options.Expression.Deduplicate.Value {
 							continue
 						}
 					}
@@ -2071,7 +2073,7 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan Sourced
 	}
 	log.Printf("list infos dirs %d batches %d\n", len(prefixIds), concurrent)
 	out := make(chan SourcedInfo, 1000)
-	tags := options.Query.QualifierValues("tag")
+	tags := options.Expression.Tags.Values()
 	deps := Dependencies{
 		Dependency{
 			db:       source,

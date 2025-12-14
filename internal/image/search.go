@@ -245,27 +245,24 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 		// Parse tags from query
 		tags := make([]knnTag, 0, 10)
 		searchTags := make(map[tag.Id]struct{})
-		for _, term := range options.Query.Terms {
-			if term.Qualifier != nil && term.Qualifier.Key == "tag" {
-				name := term.Qualifier.Value
-				id, ok := source.database.GetTagId(name)
-				if !ok {
-					continue
-				}
-				tags = append(tags, knnTag{
-					id:  id,
-					not: term.Not,
-				})
-				if !term.Not {
-					searchTags[id] = struct{}{}
-				}
-				println("tag", name, id, term.Not)
+		for _, tag := range options.Expression.Tags {
+			id, ok := source.database.GetTagId(tag.Value)
+			if !ok {
+				continue
 			}
+			tags = append(tags, knnTag{
+				id:  id,
+				not: tag.Token.Not,
+			})
+			if !tag.Token.Not {
+				searchTags[id] = struct{}{}
+			}
+			println("tag", tag.Value, id, tag.Token.Not)
 		}
 
-		bias, err := options.Query.QualifierFloat32("bias")
-		if err != nil {
-			bias = 0
+		bias := 0.0
+		if options.Expression.Bias.Present {
+			bias = float64(options.Expression.Bias.Value)
 		}
 
 		// Get embeddings for all images with the specified tags
@@ -292,9 +289,9 @@ func (source *Source) ListKnn(dirs []string, options ListOptions) <-chan Sourced
 			}
 		}
 
-		k, err := options.Query.QualifierInt("k")
-		if err != nil {
-			k = 5
+		k := 5
+		if options.Expression.K.Present {
+			k = int(options.Expression.K.Value)
 		}
 
 		done := metrics.Elapsed("list knn embeddings")

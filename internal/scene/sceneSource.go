@@ -82,45 +82,54 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	go func() {
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
-		var query *search.Query
-		embFilter := false
-
+		var expression search.Expression
 		if scene.Search != "" {
 			searchDone := metrics.Elapsed("search")
 			q, err := search.Parse(scene.Search)
-			if err == nil {
-				embFilter = len(q.QualifierValues("t")) > 0 || len(q.QualifierValues("dedup")) > 0
-				if similar, err := q.QualifierInt("img"); err == nil {
-					embedding, err := imageSource.GetImageEmbedding(image.ImageId(similar))
-					if err != nil {
-						log.Println("search get similar failed")
-						scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
-					}
-					scene.SearchEmbedding = embedding
-					query = q
-				} else if len(q.QualifierValues("tag")) > 0 || len(q.QualifierValues("created")) > 0 || embFilter {
-					query = q
-				}
-			} else {
-				log.Printf("search parse failed: %s", err.Error())
+			if err != nil && scene.Error == "" {
+				scene.Error = fmt.Sprintf("parse failed: %s", err.Error())
 			}
 
-			// Fallback
-			if scene.SearchEmbedding == nil && scene.Error == "" && (query == nil || embFilter) {
-				text := scene.Search
-				if query != nil {
-					text = query.Words()
+			scene.SearchTokens = q.Tokens()
+			expression, err = q.Expression()
+			if err != nil && scene.Error == "" {
+				scene.Error = err.Error()
+			}
+
+			// If an image is specified, get its embedding
+			if expression.Image.Present {
+				embedding, err := imageSource.GetImageEmbedding(image.ImageId(expression.Image.Value))
+				if err != nil {
+					scene.Error = fmt.Sprintf("image embed failed: %s", err.Error())
 				}
+				scene.SearchEmbedding = embedding
+			}
+
+			// If no embedding yet, embed the text
+			if scene.SearchEmbedding == nil && scene.Error == "" && expression.Text != "" {
+				text := expression.Text
 				done := metrics.Elapsed("search embed")
 				embedding, err := imageSource.Clip.EmbedText(text)
 				done()
 				if err != nil {
 					log.Println("search embed failed")
-					scene.Error = fmt.Sprintf("Search failed: %s", err.Error())
+					scene.Error = fmt.Sprintf("text embed failed: %s", err.Error())
 				}
 				scene.SearchEmbedding = embedding
 			}
+
 			searchDone()
+		}
+
+		orderBySimilarity :=
+			scene.SearchEmbedding != nil &&
+				!expression.HasQualifiers &&
+				(config.Layout.Type != layout.Map)
+
+		// Default threshold for non-similarity-order search
+		if scene.SearchEmbedding != nil && !orderBySimilarity && !expression.Threshold.Present {
+			expression.Threshold.Present = true
+			expression.Threshold.Value = 0.262
 		}
 
 		if config.Layout.Type == layout.Highlights {
@@ -128,10 +137,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				OrderBy: image.ListOrder(config.Layout.Order),
 				Limit:   config.Collection.Limit,
 			})
-
 			layout.LayoutHighlights(infos, config.Layout, &scene, imageSource)
-		} else if !embFilter && scene.SearchEmbedding != nil {
-			// Similarity order
+
+		} else if orderBySimilarity {
 			infos := config.Collection.GetSimilar(imageSource, scene.SearchEmbedding, image.ListOptions{
 				Limit: config.Collection.Limit,
 			})
@@ -145,12 +153,11 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			}
 		} else {
 			var infos <-chan image.SourcedInfo
-			filter, _ := query.QualifierString("filter")
-			if filter == "knn" {
+			if expression.Filter.Value == "knn" {
 				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
-					OrderBy: image.ListOrder(config.Layout.Order),
-					Limit:   config.Collection.Limit,
-					Query:   query,
+					OrderBy:    image.ListOrder(config.Layout.Order),
+					Limit:      config.Collection.Limit,
+					Expression: expression,
 				})
 			} else {
 				// Normal order
@@ -163,7 +170,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				infos, deps = config.Collection.GetInfos(imageSource, image.ListOptions{
 					OrderBy:    image.ListOrder(config.Layout.Order),
 					Limit:      config.Collection.Limit,
-					Query:      query,
+					Expression: expression,
 					Embedding:  scene.SearchEmbedding,
 					Extensions: extensions,
 				})

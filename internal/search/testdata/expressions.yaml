@@ -1,0 +1,367 @@
+# Expression Test Cases
+
+- search: created:2022-01-01..2022-12-31
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:2022-01-01..2022-12-31
+          start: 0
+          end: 30
+          key: created
+          qualVal: 2022-01-01..2022-12-31
+        present: true
+      from: 2022-01-01T00:00:00Z
+      to: 2023-01-01T00:00:00Z
+
+- search: created:2022-*-01
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:2022-*-01
+          start: 0
+          end: 17
+          key: created
+          qualVal: 2022-*-01
+        present: true
+      from: 2022-01-01T00:00:00Z
+      to: 2022-12-02T00:00:00Z
+      from_wildcard:
+        month: true
+      to_wildcard:
+        month: true
+
+- search: created:2022-05-*
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:2022-05-*
+          start: 0
+          end: 17
+          key: created
+          qualVal: 2022-05-*
+        present: true
+      from: 2022-05-01T00:00:00Z
+      to: 2022-06-01T00:00:00Z
+      from_wildcard:
+        day: true
+      to_wildcard:
+        day: true
+
+- search: created:*-05-*
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:*-05-*
+          start: 0
+          end: 14
+          key: created
+          qualVal: "*-05-*"
+        present: true
+      from: 0010-05-01T00:00:00Z
+      to: 9000-06-01T00:00:00Z
+      from_wildcard:
+        year: true
+        day: true
+      to_wildcard:
+        year: true
+        day: true
+
+- search: created:*-01-01
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:*-01-01
+          start: 0
+          end: 15
+          key: created
+          qualVal: "*-01-01"
+        present: true
+      from: 0010-01-01T00:00:00Z
+      to: 9000-01-02T00:00:00Z
+      from_wildcard:
+        year: true
+      to_wildcard:
+        year: true
+
+- search: created:*-12-31
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:*-12-31
+          start: 0
+          end: 15
+          key: created
+          qualVal: "*-12-31"
+        present: true
+      from: 0010-12-31T00:00:00Z
+      to: 9001-01-01T00:00:00Z
+      from_wildcard:
+        year: true
+      to_wildcard:
+        year: true
+
+- search: "t:0.3"
+  expr:
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.3"
+          start: 0
+          end: 5
+          key: t
+          qualVal: "0.3"
+        present: true
+      value: 0.3
+
+- search: dedup:0.9
+  expr:
+    dedup:
+      meta:
+        name: dedup
+        token:
+          type: qualifier
+          value: dedup:0.9
+          start: 0
+          end: 9
+          key: dedup
+          qualVal: "0.9"
+        present: true
+      value: 0.9
+
+- search: bias:3
+  expr:
+    bias:
+      meta:
+        name: bias
+        token:
+          type: qualifier
+          value: bias:3
+          start: 0
+          end: 6
+          key: bias
+          qualVal: "3"
+        present: true
+      value: 3
+
+- search: "k:5"
+  expr:
+    k:
+      meta:
+        name: k
+        token:
+          type: qualifier
+          value: "k:5"
+          start: 0
+          end: 3
+          key: k
+          qualVal: "5"
+        present: true
+      value: 5
+
+- search: filter:knn
+  expr:
+    filter:
+      meta:
+        name: filter
+        token:
+          type: qualifier
+          value: filter:knn
+          start: 0
+          end: 10
+          key: filter
+          qualVal: knn
+        present: true
+      value: knn
+
+- search: hello world
+  expr:
+    text: hello world
+
+- search: "t:0.123 hello world"
+  expr:
+    text: hello world
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.123"
+          start: 0
+          end: 7
+          key: t
+          qualVal: "0.123"
+        present: true
+      value: 0.123
+  
+- search: hello t:0.123 world
+  expr:
+    text: hello world
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.123"
+          start: 6
+          end: 13
+          key: t
+          qualVal: "0.123"
+        present: true
+      value: 0.123
+
+- search: tag:summer
+  expr:
+    tags:
+    - meta:
+        name: tag
+        token:
+          type: qualifier
+          value: tag:summer
+          start: 0
+          end: 10
+          key: tag
+          qualVal: summer
+        present: true
+      value: summer
+
+- search: tag:summer tag:vacation
+  expr:
+    tags:
+    - meta:
+        name: tag
+        token:
+          type: qualifier
+          value: tag:summer
+          start: 0
+          end: 10
+          key: tag
+          qualVal: summer
+        present: true
+      value: summer
+    - meta:
+        name: tag
+        token:
+          type: qualifier
+          value: tag:vacation
+          start: 11
+          end: 23
+          key: tag
+          qualVal: vacation
+        present: true
+      value: vacation
+
+- search: img:12345
+  expr:
+    text: 
+    img:
+      meta:
+        name: img
+        token:
+          type: qualifier
+          value: img:12345
+          start: 0
+          end: 9
+          key: img
+          qualVal: "12345"
+        present: true
+      value: 12345
+
+- search: "t:0.277 broken phone dedup:0.9"
+  expr:
+    text: broken phone
+    t:
+      meta:
+        name: t
+        token:
+          type: qualifier
+          value: "t:0.277"
+          start: 0
+          end: 7
+          key: t
+          qualVal: "0.277"
+        present: true
+      value: 0.277
+    dedup:
+      meta:
+        name: dedup
+        token:
+          type: qualifier
+          value: dedup:0.9
+          start: 21
+          end: 30
+          key: dedup
+          qualVal: "0.9"
+        present: true
+      value: 0.9
+
+- search: unknown:value
+  expr:
+    errors:
+    - name: unknown
+      token:
+        type: qualifier
+        value: unknown:value
+        start: 0
+        end: 13
+        key: unknown
+        qualVal: value
+      present: true
+  error: 'unknown qualifier "unknown"'
+
+- search: foo:bar created:2022-01-01 baz:qux
+  error: 'unknown qualifier "foo"'
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:2022-01-01
+          start: 8
+          end: 26
+          key: created
+          qualVal: 2022-01-01
+        present: true
+      from: 2022-01-01T00:00:00Z
+      to: 2022-01-02T00:00:00Z
+    errors:
+      - name: foo
+        token:
+          type: qualifier
+          value: foo:bar
+          start: 0
+          end: 7
+          key: foo
+          qualVal: bar
+        error: 'unknown qualifier "foo"'
+        present: true
+      - name: baz
+        token:
+          type: qualifier
+          value: baz:qux
+          start: 27
+          end: 34
+          key: baz
+          qualVal: qux
+        error: 'unknown qualifier "baz"'
+        present: true

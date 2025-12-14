@@ -1,0 +1,77 @@
+# Token Position Test Cases
+# Format:
+#   Line 1: Query text
+#   Line 2+: Token annotations in format:
+#            ^-
+#            value (type) [flags]
+#            Where ^ marks the start column and - shows the span
+#   Empty line separates test cases
+#   Lines starting with # are comments
+
+hello world
+^----
+hello (word)
+      ^----
+      world (word)
+
+tag:foo
+^------
+tag:foo (qualifier)
+
+"hello world"
+^------------
+hello world (string)
+
+NOT hello
+^--------
+hello (word) NOT
+
+hello tag:world "test string" NOT bar
+^----
+hello (word)
+      ^--------
+      tag:world (qualifier)
+                ^------------
+                test string (string)
+                              ^------
+                              bar (word) NOT
+
+created:2022-01-01..2022-12-31
+^-----------------------------
+created:2022-01-01..2022-12-31 (qualifier)
+
+tag:me k:5 bias:0.01
+^-----
+tag:me (qualifier)
+       ^--
+       k:5 (qualifier)
+           ^--------
+           bias:0.01 (qualifier)
+
+photo tag:sunset "golden hour" NOT dark k:10
+^----
+photo (word)
+      ^---------
+      tag:sunset (qualifier)
+                 ^------------
+                 golden hour (string)
+                               ^-------
+                               dark (word) NOT
+                                        ^---
+                                        k:10 (qualifier)
+
+NOT tag:foo NOT "bar" word
+^----------
+tag:foo (qualifier) NOT
+            ^--------
+            bar (string) NOT
+                      ^---
+                      word (word)
+
+a:b c:d:e f
+^--
+a:b (qualifier)
+    ^----
+    c:d:e (qualifier)
+          ^
+          f (word)

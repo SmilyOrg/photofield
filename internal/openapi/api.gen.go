@@ -93,6 +93,9 @@ type DocsCapability struct {
 	Url string `json:"url"`
 }
 
+// A validated and typed search query expression, types omitted as this is subject to many changes.
+type Expression map[string]interface{}
+
 // FileBinary defines model for FileBinary.
 type FileBinary string
 
@@ -222,6 +225,22 @@ type SceneParams struct {
 
 // Search defines model for Search.
 type Search string
+
+// SearchQuery defines model for SearchQuery.
+type SearchQuery struct {
+	// A validated and typed search query expression, types omitted as this is subject to many changes.
+	Expression Expression    `json:"expression"`
+	Search     Search        `json:"search"`
+	Tokens     []SearchToken `json:"tokens"`
+}
+
+// SearchToken defines model for SearchToken.
+type SearchToken struct {
+	End   int    `json:"end"`
+	Start int    `json:"start"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
 
 // Sort defines model for Sort.
 type Sort string
@@ -376,6 +395,11 @@ type GetScenesSceneIdRegionsParams struct {
 // GetScenesSceneIdRegionsParamsFields defines parameters for GetScenesSceneIdRegions.
 type GetScenesSceneIdRegionsParamsFields string
 
+// GetScenesSceneIdSearchQueriesParams defines parameters for GetScenesSceneIdSearchQueries.
+type GetScenesSceneIdSearchQueriesParams struct {
+	Search Search `json:"search"`
+}
+
 // GetScenesSceneIdTilesParams defines parameters for GetScenesSceneIdTiles.
 type GetScenesSceneIdTilesParams struct {
 	TileSize         int       `json:"tile_size"`
@@ -477,6 +501,9 @@ type ServerInterface interface {
 
 	// (GET /scenes/{scene_id}/regions/{id})
 	GetScenesSceneIdRegionsId(w http.ResponseWriter, r *http.Request, sceneId SceneId, id RegionId)
+
+	// (GET /scenes/{scene_id}/search-queries)
+	GetScenesSceneIdSearchQueries(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdSearchQueriesParams)
 
 	// (GET /scenes/{scene_id}/tiles)
 	GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request, sceneId SceneId, params GetScenesSceneIdTilesParams)
@@ -1194,6 +1221,49 @@ func (siw *ServerInterfaceWrapper) GetScenesSceneIdRegionsId(w http.ResponseWrit
 	handler(w, r.WithContext(ctx))
 }
 
+// GetScenesSceneIdSearchQueries operation middleware
+func (siw *ServerInterfaceWrapper) GetScenesSceneIdSearchQueries(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "scene_id" -------------
+	var sceneId SceneId
+
+	err = runtime.BindStyledParameter("simple", false, "scene_id", chi.URLParam(r, "scene_id"), &sceneId)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter scene_id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetScenesSceneIdSearchQueriesParams
+
+	// ------------- Required query parameter "search" -------------
+	if paramValue := r.URL.Query().Get("search"); paramValue != "" {
+
+	} else {
+		http.Error(w, "Query argument search is required, but not found", http.StatusBadRequest)
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "search", r.URL.Query(), &params.Search)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter search: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetScenesSceneIdSearchQueries(w, r, sceneId, params)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
 // GetScenesSceneIdTiles operation middleware
 func (siw *ServerInterfaceWrapper) GetScenesSceneIdTiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -1626,6 +1696,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/regions/{id}", wrapper.GetScenesSceneIdRegionsId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/scenes/{scene_id}/search-queries", wrapper.GetScenesSceneIdSearchQueries)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/scenes/{scene_id}/tiles", wrapper.GetScenesSceneIdTiles)

@@ -10,9 +10,27 @@
       class="response"
       :response="collectionResponse"
     ></response-loader>
+    <center-message
+      v-if="currentScene?.file_count === 0 && !currentScene?.loading"
+      icon="image_not_supported"
+      class="center-message"
+    >
+      <h1>No photos found</h1>
+      <p>This may be because:</p>
+      <ul>
+        <li v-if="search">Search filters excluding all photos (check tag:, created:, or t: filters)</li>
+        <li>The collection needs to be rescanned for new or updated photos</li>
+        <li>No supported image files (.jpg, .png, .avif, etc.) in the collection directories</li>
+        <li>Collection directories are empty or don't exist</li>
+        <li>File system errors preventing access to photo directories</li>
+        <li v-if="search">Multiple tag filters require photos to have ALL specified tags</li>
+      </ul>
+      <ui-button raised @click="emit('reindex')">Rescan photos</ui-button>
+    </center-message>
 
     <map-viewer
       class="viewer"
+      :class="{ hidden: currentScene?.file_count === 0 }"
       v-if="layout == 'MAP'"
       ref="mapViewer"
       :interactive="interactive"
@@ -27,6 +45,7 @@
       @selectTag="onSelectTag"
       @region="onRegion"
       @scene="mapScene = $event"
+      @viewport="emit('viewport', $event)"
       @search="onSearch"
       @viewer="mapTileViewer = $event"
       @swipeUp="onSwipeUp"
@@ -55,6 +74,7 @@
       @region="onRegion"
       @elementView="lastView = $event"
       @scene="scrollScene = $event"
+      @viewport="emit('viewport', $event)"
       @search="onSearch"
       @viewer="scrollTileViewer = $event"
       @swipeUp="onSwipeUp"
@@ -104,9 +124,10 @@ import MapViewer from './MapViewer.vue';
 import PageTitle from './PageTitle.vue';
 import Overlays from './Overlays.vue';
 import PhotoDetails from './PhotoDetails.vue';
+import CenterMessage from './CenterMessage.vue';
 
 import { useApi } from '../api';
-import { refDebounced, useElementSize, watchDebounced } from '@vueuse/core';
+import { refDebounced, useElementSize } from '@vueuse/core';
 
 const props = defineProps([
   "collectionId",
@@ -119,6 +140,7 @@ const emit = defineEmits({
   tasks: null,
   immersive: immersive => typeof immersive == "boolean",
   scene: null,
+  viewport: null,
   scenes: null,
   reindex: null,
 });
@@ -159,20 +181,6 @@ const setDetails = (show) => {
 }
 
 const containerWidth = refDebounced(useElementSize(container).width, 200);
-
-const currentViewer = computed(() => {
-  if (layout.value === 'MAP') {
-    return mapTileViewer.value;
-  }
-  return scrollTileViewer.value;
-});
-
-const currentScene = computed(() => {
-  if (layout.value === 'MAP') {
-    return mapScene.value;
-  }
-  return scrollScene.value;
-});
 
 const mapViewer = ref(null);
 const lastView = ref(null);
@@ -215,6 +223,20 @@ const { data: collection } = collectionResponse;
 const layout = computed(() => {
   return route.query.layout || collection.value?.layout || undefined;
 })
+
+const currentViewer = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapTileViewer.value;
+  }
+  return scrollTileViewer.value;
+});
+
+const currentScene = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapScene.value;
+  }
+  return scrollScene.value;
+});
 
 watch(currentScene, scene => emit("scene", scene));
 
@@ -338,6 +360,19 @@ const onRegion = async (region) => {
   --details-width: 360px;
 }
 
+.hidden {
+  visibility: hidden;
+}
+
+.center-message {
+  position: fixed;
+  top: 100px;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  height: fit-content;
+}
+
 .controls {
   position: fixed;
   top: 0;
@@ -371,11 +406,6 @@ const onRegion = async (region) => {
 }
 
 @media (max-width: 700px) {
-
-  .controls, .viewer {
-    transition: top 0.2s;
-    top: 0;
-  }
 
   .showDetails .controls, .showDetails .viewer {
     max-width: 100vw;
