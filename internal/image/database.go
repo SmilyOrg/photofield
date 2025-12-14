@@ -2028,7 +2028,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 						continue
 					}
 					// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
-					if sim < options.Expression.Threshold.Value {
+					if options.Expression.Threshold.Present && sim < options.Expression.Threshold.Value {
 						continue
 					}
 				}

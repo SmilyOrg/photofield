@@ -119,7 +119,7 @@ func (q *Query) ExpressionDateRange(key string) (r DateRange) {
 	}
 
 	if len(terms) > 1 {
-		r.Error = fmt.Errorf("multiple qualifiers %s", key)
+		r.Error = fmt.Errorf("multiple qualifiers: %s", key)
 		return
 	}
 

@@ -90,6 +90,7 @@ import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
 import dateFormat from 'date-fns/format';
+import parseISO from 'date-fns/parseISO';
 import HighlightedInput from './HighlightedInput.vue';
 import { useApi } from '../api';
 import { useTimestamps, useTimestampsDate } from '../use';
@@ -147,41 +148,37 @@ const toggle = async () => {
     input.value?.focus();
   }
 }
-
 const createdAfterQualifier = {
   name: "createdAfter",
   regex: /created:>=(\d{4}-\d{2}-\d{2})/,
-  parse: (str) => new Date(str),
+  parse: (str) => parseISO(str),
   replace: (date) => {
     if (!date) return '';
     return `created:>=${dateFormat(date, 'yyyy-MM-dd')}`;
   },
 }
-
 const createdBeforeQualifier = {
   name: "createdBefore",
   regex: /created:<=(\d{4}-\d{2}-\d{2})/,
-  parse: (str) => new Date(str),
+  parse: (str) => parseISO(str),
   replace: (date) => {
     if (!date) return '';
     return `created:<=${dateFormat(date, 'yyyy-MM-dd')}`;
   },
 }
-
 const createdExactQualifier = {
   name: "createdExact",
   regex: /created:(\d{4}-\d{2}-\d{2})(?!\.\.)/,
-  parse: (str) => new Date(str),
+  parse: (str) => parseISO(str),
   replace: (date) => {
     if (!date) return '';
     return `created:${dateFormat(date, 'yyyy-MM-dd')}`;
   },
 }
-
 const createdRangeQualifier = {
   name: "createdRange",
   regex: /created:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/,
-  parse: (a, b) => [new Date(a), new Date(b)],
+  parse: (a, b) => [parseISO(a), parseISO(b)],
   replace: (range) => {
     if (!range || range.length !== 2) return '';
     const [a, b] = range;

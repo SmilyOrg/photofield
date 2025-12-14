@@ -1177,7 +1177,8 @@ func (*Api) GetScenesSceneIdSearchQueries(w http.ResponseWriter, r *http.Request
 		})
 	}
 
-	expression, err := q.Expression()
+	// Ignore error as it's an aggregation of the `errors` field
+	expression, _ := q.Expression()
 	expr := make(map[string]interface{})
 	if !expression.Created.IsZero() {
 		expr["created"] = expression.Created

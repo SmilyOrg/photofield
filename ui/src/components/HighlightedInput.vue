@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 
 /**
  * Props for HighlightedInput component
@@ -60,7 +60,7 @@ const rafId = ref(null);
 
 const enabledTokenTypes = {
   qualifier: true,
-}
+};
 
 // Extract native input element from BalmUI textfield and attach scroll listener
 onMounted(async () => {
@@ -71,6 +71,16 @@ onMounted(async () => {
       inputEl.value.addEventListener('scroll', syncScroll);
       syncScroll();
     }
+  }
+});
+
+// Cleanup scroll listener on unmount
+onBeforeUnmount(() => {
+  if (inputEl.value) {
+    inputEl.value.removeEventListener('scroll', syncScroll);
+  }
+  if (rafId.value) {
+    cancelAnimationFrame(rafId.value);
   }
 });
 
