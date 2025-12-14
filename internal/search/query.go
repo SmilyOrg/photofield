@@ -88,6 +88,18 @@ func (q *Query) QualifierTerms(key string) []*Term {
 	return terms
 }
 
+func (q *Query) HasQualifiers() bool {
+	if q == nil {
+		return false
+	}
+	for _, term := range q.Terms {
+		if term.Qualifier != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (q *Query) Words() string {
 	if q == nil {
 		return ""

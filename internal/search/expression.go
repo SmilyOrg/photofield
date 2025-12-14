@@ -21,16 +21,17 @@ type FieldMeta struct {
 
 // Expression represents a validated and typed search query
 type Expression struct {
-	query       *Query
-	Text        string    `json:"text,omitempty"`
-	Created     DateRange `json:"created,omitempty"`
-	Threshold   Float32   `json:"t,omitempty"`
-	Deduplicate Float32   `json:"dedup,omitempty"`
-	Bias        Float32   `json:"bias,omitempty"`
-	K           Int64     `json:"k,omitempty"`
-	Filter      String    `json:"filter,omitempty"`
-	Tags        Strings   `json:"tags,omitempty"`
-	Image       Int64     `json:"img,omitempty"`
+	query         *Query
+	Text          string    `json:"text,omitempty"`
+	Created       DateRange `json:"created,omitempty"`
+	Threshold     Float32   `json:"t,omitempty"`
+	Deduplicate   Float32   `json:"dedup,omitempty"`
+	Bias          Float32   `json:"bias,omitempty"`
+	K             Int64     `json:"k,omitempty"`
+	Filter        String    `json:"filter,omitempty"`
+	Tags          Strings   `json:"tags,omitempty"`
+	Image         Int64     `json:"img,omitempty"`
+	HasQualifiers bool      `json:"-"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -70,6 +71,7 @@ func (q *Query) Expression() (Expression, error) {
 
 	// Check for unknown qualifiers before processing known ones
 	expr.checkUnknownQualifiers()
+	expr.HasQualifiers = q.HasQualifiers()
 
 	expr.Created = q.ExpressionDateRange("created")
 	expr.addFieldError(expr.Created.FieldMeta)
@@ -117,7 +119,7 @@ func (expr *Expression) addFieldError(meta FieldMeta) {
 
 // checkUnknownQualifiers adds errors for any qualifiers not defined in Expression
 func (expr *Expression) checkUnknownQualifiers() {
-	if expr.query == nil {
+	if expr == nil || expr.query == nil {
 		return
 	}
 

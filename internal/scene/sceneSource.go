@@ -121,7 +121,16 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone()
 		}
 
-		orderBySimilarity := scene.SearchEmbedding != nil && !expression.Threshold.Present && !expression.Deduplicate.Present
+		orderBySimilarity :=
+			scene.SearchEmbedding != nil &&
+				!expression.HasQualifiers &&
+				(config.Layout.Type != layout.Map)
+
+		// Default threshold for non-similarity-order search
+		if scene.SearchEmbedding != nil && !orderBySimilarity && !expression.Threshold.Present {
+			expression.Threshold.Present = true
+			expression.Threshold.Value = 0.262
+		}
 
 		if config.Layout.Type == layout.Highlights {
 			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{
