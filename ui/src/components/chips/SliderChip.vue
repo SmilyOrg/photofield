@@ -12,7 +12,6 @@
     <div
       v-if="showSlider"
       class="slider-container"
-      ref="sliderContainer"
       @focusout="handleFocusOut"
     >
       <ui-slider
@@ -87,7 +86,6 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'change']);
 
 const showSlider = ref(false);
-const sliderContainer = ref(null);
 const slider = ref(null);
 const sliderValue = ref(props.modelValue ?? props.defaultValue);
 const sliderChip = ref(null);
@@ -114,6 +112,7 @@ const handleChipClick = async () => {
     sliderValue.value = props.defaultValue;
     emit('update:modelValue', props.defaultValue);
     emit('change', props.defaultValue);
+    return;
   }
 
   // If slider is already open, just refocus it instead of toggling
