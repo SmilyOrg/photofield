@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, onBeforeUnmount, nextTick } from 'vue';
 import flatpickr from 'flatpickr';
 import 'flatpickr/dist/flatpickr.css';
 import Chip from './Chip.vue';
