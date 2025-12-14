@@ -13,7 +13,7 @@ type FieldMeta struct {
 	Token Token `json:"token,omitempty"`
 
 	// Parse error if any (field may still have default/partial value)
-	Error error `json:"error,omitempty"`
+	Error error `json:"-"`
 
 	// Whether the field was explicitly set in the query
 	Present bool `json:"present,omitempty"`
@@ -36,6 +36,26 @@ type Expression struct {
 	Errors []FieldMeta `json:"errors,omitempty"`
 }
 
+var validQualifiers = []string{
+	"created",
+	"t",
+	"dedup",
+	"bias",
+	"k",
+	"filter",
+	"tag",
+	"img",
+}
+
+var validQualifiersMap map[string]bool
+
+func init() {
+	validQualifiersMap = make(map[string]bool)
+	for _, q := range validQualifiers {
+		validQualifiersMap[q] = true
+	}
+}
+
 // Expression validates the query and returns a typed Expression.
 func (q *Query) Expression() (Expression, error) {
 	if q == nil {
@@ -47,6 +67,9 @@ func (q *Query) Expression() (Expression, error) {
 	}
 
 	expr.Text = q.Words()
+
+	// Check for unknown qualifiers before processing known ones
+	expr.checkUnknownQualifiers()
 
 	expr.Created = q.ExpressionDateRange("created")
 	expr.addFieldError(expr.Created.FieldMeta)
@@ -90,4 +113,26 @@ func (expr *Expression) addFieldError(meta FieldMeta) {
 		return
 	}
 	expr.Errors = append(expr.Errors, meta)
+}
+
+// checkUnknownQualifiers adds errors for any qualifiers not defined in Expression
+func (expr *Expression) checkUnknownQualifiers() {
+	if expr.query == nil {
+		return
+	}
+
+	for _, term := range expr.query.Terms {
+		if term.Qualifier != nil {
+			key := term.Qualifier.Key
+			if !validQualifiersMap[key] {
+				token := term.Token()
+				expr.addFieldError(FieldMeta{
+					Name:    key,
+					Token:   token,
+					Error:   fmt.Errorf("unknown qualifier %q", key),
+					Present: true,
+				})
+			}
+		}
+	}
 }

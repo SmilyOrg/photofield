@@ -313,3 +313,55 @@
           qualVal: "0.9"
         present: true
       value: 0.9
+
+- search: unknown:value
+  expr:
+    errors:
+    - name: unknown
+      token:
+        type: qualifier
+        value: unknown:value
+        start: 0
+        end: 13
+        key: unknown
+        qualVal: value
+      present: true
+  error: 'unknown qualifier "unknown"'
+
+- search: foo:bar created:2022-01-01 baz:qux
+  error: 'unknown qualifier "foo"'
+  expr:
+    created:
+      meta:
+        name: created
+        token:
+          type: qualifier
+          value: created:2022-01-01
+          start: 8
+          end: 26
+          key: created
+          qualVal: 2022-01-01
+        present: true
+      from: 2022-01-01T00:00:00Z
+      to: 2022-01-02T00:00:00Z
+    errors:
+      - name: foo
+        token:
+          type: qualifier
+          value: foo:bar
+          start: 0
+          end: 7
+          key: foo
+          qualVal: bar
+        error: 'unknown qualifier "foo"'
+        present: true
+      - name: baz
+        token:
+          type: qualifier
+          value: baz:qux
+          start: 27
+          end: 34
+          key: baz
+          qualVal: qux
+        error: 'unknown qualifier "baz"'
+        present: true

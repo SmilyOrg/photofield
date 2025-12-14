@@ -12,6 +12,7 @@ import (
 type ExpressionTestCase struct {
 	Search string     `yaml:"search"`
 	Expr   Expression `yaml:"expr"`
+	Error  string     `yaml:"error,omitempty"`
 }
 
 func TestExpression(t *testing.T) {
@@ -36,13 +37,23 @@ func TestExpression(t *testing.T) {
 
 			expected := tc.Expr
 			actual, err := query.Expression()
-			if err != nil {
+
+			// Handle expected errors
+			if tc.Error != "" {
+				if err == nil {
+					t.Errorf("Test case %d: Expected an error but got none", i)
+				}
+				if tc.Error != "" && err != nil && !strings.Contains(err.Error(), tc.Error) {
+					t.Errorf("Test case %d: Expected error message to contain %q, got %q", i, tc.Error, err.Error())
+				}
+			} else if err != nil {
 				t.Fatalf("Test case %d: Failed to get expression for query '%s': %v", i, tc.Search, err)
 			}
 
 			actualCases = append(actualCases, ExpressionTestCase{
 				Search: tc.Search,
 				Expr:   actual,
+				Error:  tc.Error,
 			})
 
 			expectedStr, err := yaml.Marshal(expected)
@@ -61,10 +72,10 @@ func TestExpression(t *testing.T) {
 
 			assert.Equal(t, string(expectedStr), string(actualStr), "Test case %d: Expression mismatch\n--- SEARCH ---\n%s\n\n--- EXPECTED ---\n%s\n--- ACTUAL ---\n%s\n--- DIFF ---", i, tc.Search, string(expectedStr), string(actualStr))
 
-			// Check that there are no errors in the expression
-			if len(actual.Errors) > 0 {
+			// Check that there are no unexpected errors in the expression
+			if tc.Error == "" && len(expected.Errors) == 0 && len(actual.Errors) > 0 {
 				for _, fieldErr := range actual.Errors {
-					t.Errorf("Test case %d: Field %q error: %v", i, fieldErr.Name, fieldErr.Error)
+					t.Errorf("Test case %d: Unexpected field %q error: %v", i, fieldErr.Name, fieldErr.Error)
 				}
 			}
 		})
