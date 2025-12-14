@@ -230,9 +230,6 @@ defineExpose({ focus, $el: textfieldRef });
   --highlight-underline-color: color-mix(in oklab, var(--mdc-theme-primary) 10%, transparent);
 
   color: var(--highlight-text-color);
-  /* text-decoration: solid underline 4px var(--highlight-underline-color);
-  text-underline-offset: 2px; */
-  /* background-color: transparent; */
   background-color: var(--highlight-underline-color);
   text-shadow:
     -1px -1px 0 var(--highlight-shadow-color),

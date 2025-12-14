@@ -157,6 +157,7 @@ watch(scene, async (newScene, oldScene) => {
 });
 
 watch([viewport.width, viewport.height], () => {
+  if (viewport.width.value == 0 || viewport.height.value == 0) return;
   emit("viewport", {
     width: viewport.width.value,
     height: viewport.height.value,

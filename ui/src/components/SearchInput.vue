@@ -207,13 +207,6 @@ const qualifiers = [
   thresholdQualifier,
 ];
 
-const highlightRules = computed(() => {
-  return qualifiers.map(q => ({
-    pattern: q.regex,
-    class: q.name,
-  }));
-});
-
 const extract = (qualifier) => {
   const input = modelValue.value;
   if (!input) return null;
