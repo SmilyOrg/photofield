@@ -30,6 +30,7 @@
 
     <map-viewer
       class="viewer"
+      :class="{ hidden: currentScene?.file_count === 0 }"
       v-if="layout == 'MAP'"
       ref="mapViewer"
       :interactive="interactive"
@@ -181,20 +182,6 @@ const setDetails = (show) => {
 
 const containerWidth = refDebounced(useElementSize(container).width, 200);
 
-const currentViewer = computed(() => {
-  if (layout.value === 'MAP') {
-    return mapTileViewer.value;
-  }
-  return scrollTileViewer.value;
-});
-
-const currentScene = computed(() => {
-  if (layout.value === 'MAP') {
-    return mapScene.value;
-  }
-  return scrollScene.value;
-});
-
 const mapViewer = ref(null);
 const lastView = ref(null);
 
@@ -236,6 +223,20 @@ const { data: collection } = collectionResponse;
 const layout = computed(() => {
   return route.query.layout || collection.value?.layout || undefined;
 })
+
+const currentViewer = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapTileViewer.value;
+  }
+  return scrollTileViewer.value;
+});
+
+const currentScene = computed(() => {
+  if (layout.value === 'MAP') {
+    return mapScene.value;
+  }
+  return scrollScene.value;
+});
 
 watch(currentScene, scene => emit("scene", scene));
 
@@ -359,12 +360,15 @@ const onRegion = async (region) => {
   --details-width: 360px;
 }
 
+.hidden {
+  visibility: hidden;
+}
+
 .center-message {
   position: fixed;
   top: 100px;
   left: 0;
   right: 0;
-  background: var(--bg-color);
   z-index: 5;
   height: fit-content;
 }
@@ -402,11 +406,6 @@ const onRegion = async (region) => {
 }
 
 @media (max-width: 700px) {
-
-  .controls, .viewer {
-    transition: top 0.2s;
-    top: 0;
-  }
 
   .showDetails .controls, .showDetails .viewer {
     max-width: 100vw;
