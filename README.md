@@ -94,8 +94,8 @@ layouts.
   and thumbnails to be generated and stored. Uses FFmpeg for on-the-fly
   conversion, SQLite for caching, existing embedded JPEG thumbnails, Synology
   Moments / Photo Station thumbnails, and djpeg (libjpeg-turbo) for optimized JPEG processing.
-* **Single file binary**. Thanks to [Go] and [GoReleaser], all the dependencies
-are packed into a [single binary file](#binaries) for most major OSes.
+* **Single file binary**. The server is a single static binary with optional
+dependencies for optimized performance.
 * **Read-only file system based collections**. Photofield never changes your
 photos, thumbnails or directories. You are encouraged to even mount your photos
 as read-only to ensure this. The file system is the source of truth, everything
@@ -320,7 +320,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [watchexec]: https://github.com/watchexec/watchexec
 
 [Go]: https://golang.org/
-[GoReleaser]: https://github.com/goreleaser/goreleaser
 [godirwalk]: https://github.com/karrick/godirwalk
 [prominent color]: https://github.com/EdlinOrg/prominentcolor
 

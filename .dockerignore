@@ -14,8 +14,11 @@ photofield.exe~
 *.cache.db
 out.png
 tmp
-ui/dist/
-ui/node_modules/
+ui/
+!ui/dist/
+internal/testdata/
+test-tmp/
+.task/
 dist/
 e2e/
 docs/

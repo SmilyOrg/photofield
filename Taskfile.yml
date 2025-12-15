@@ -482,8 +482,7 @@ tasks:
       - go run ../../cmd/sha256 *.zip > checksums.txt
 
   docker:
-    desc: Build a Docker image with the latest git tag and EXTRA_ARGS
-    dir: dist/bin
+    desc: Build a Docker image with the latest git tag
     vars:
       TAGS: >-
         {{- if (regexMatch "^v[0-9]+\\.[0-9]+\\.[0-9]+$" .VERSION) }}
@@ -503,7 +502,13 @@ tasks:
       - sh: test -n "{{.TAGS}}"
         msg: "Git tag must be in the format vMAJOR.MINOR.PATCH* for docker build: {{.VERSION}}"
     cmds:
-      - docker build --build-arg VERSION={{.VERSION}} {{.TAGS | replace "\n" " "}} -f ../../Dockerfile-multiarch {{.EXTRA_ARGS}} .
+      - |
+        VERSION={{.VERSION}}
+        COMMIT=$(git rev-parse HEAD)
+        DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILT_BY=$(whoami)
+        LDFLAGS="-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE -X main.builtBy=$BUILT_BY"
+        docker build --build-arg LDFLAGS="$LDFLAGS" {{.TAGS | replace "\n" " "}} {{.EXTRA_ARGS}} .
 
   docker:multiarch:
     desc: Build multi-architecture Docker images

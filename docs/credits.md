@@ -44,7 +44,6 @@ Thanks to all the authors of the third party libraries used in this project.
 [watchexec]: https://github.com/watchexec/watchexec
 
 [Go]: https://golang.org/
-[GoReleaser]: https://github.com/goreleaser/goreleaser
 [godirwalk]: https://github.com/karrick/godirwalk
 [prominent color]: https://github.com/EdlinOrg/prominentcolor
 
