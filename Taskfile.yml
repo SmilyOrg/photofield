@@ -526,11 +526,17 @@ tasks:
       - task: docker:multiarch
         vars:
           EXTRA_ARGS: >-
-            --iidfile ../../.docker-image-id
+            --iidfile .docker-image-id
             --push {{ .DOCKER_ANNOTATIONS }}
+            {{.EXTRA_ARGS}}
           DOCKER_REPO: "{{.DOCKER_REPO}}"
 
-  docker:multiarch:push:local:
+  docker:multiarch:local:init:
+    desc: Initialize local Docker buildx builder
+    cmds:
+      - docker buildx create --name photofield-builder --driver docker-container
+
+  docker:multiarch:local:push:
     desc: Build and push multi-architecture Docker images to local registry
     preconditions:
       - sh: curl localhost:5000/v2/_catalog
@@ -539,3 +545,5 @@ tasks:
       - task: docker:multiarch:push
         vars:
           DOCKER_REPO: "{{.DOCKER_REPO_LOCAL}}"
+          EXTRA_ARGS: >-
+            --builder photofield-builder
