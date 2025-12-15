@@ -78,13 +78,6 @@ and the UI server on port `5173`.
 
 3. Open http://localhost:5173
 
-### Migration from `just`
-
-If you were previously using `just`, replace:
-- `just watch` → `task watch`
-- `just build` → `task build`
-- `just ui` → `task ui`
-
 Run `task` to see all available commands.
 
 [Go]: https://golang.org/

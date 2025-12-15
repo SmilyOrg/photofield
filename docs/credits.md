@@ -40,11 +40,10 @@ Thanks to all the authors of the third party libraries used in this project.
 [open-images-dataset]: https://opensource.google/projects/open-images-dataset
 
 [Scoop]: https://scoop.sh/
-[just]: https://github.com/casey/just
+[Task]: https://taskfile.dev/
 [watchexec]: https://github.com/watchexec/watchexec
 
 [Go]: https://golang.org/
-[GoReleaser]: https://github.com/goreleaser/goreleaser
 [godirwalk]: https://github.com/karrick/godirwalk
 [prominent color]: https://github.com/EdlinOrg/prominentcolor
 

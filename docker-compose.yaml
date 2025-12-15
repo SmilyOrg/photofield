@@ -8,8 +8,7 @@ services:
     labels:
       - "traefik.http.services.photofield.loadbalancer.server.port=8080"
     volumes:
-      - ./data/configuration.docker.yaml:/app/data/configuration.yaml:ro
-      - ./photos:/photos:ro
+      - ./docs/assets:/app/assets:ro
     restart: "no"
 
   prometheus:
@@ -38,7 +37,7 @@ services:
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
       - ./data/grafana:/var/lib/grafana
 
-  # Local Docker registry for "task docker:multiarch:push:local"
+  # Local Docker registry for "task docker:multiarch:local:push"
   registry:
     image: registry:2
     ports:
