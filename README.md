@@ -238,13 +238,12 @@ collections:
 
 * [Go] - for the backend / API server
 * [Node.js] - for the frontend
-* [just] - to run common commands conveniently
+* [Task] - to run common commands conveniently via Taskfile
 * [watchexec] - for auto-reloading the Go server
-* sh-like shell (e.g. sh, bash, busybox) - required by `just`
 * [exiftool] - for testing metadata extraction
 * **[djpeg (libjpeg-turbo)]** - for optimized JPEG decoding (optional but recommended for better performance)
 
-**[Scoop] (Windows)**: `scoop install busybox just exiftool watchexec`
+**[Scoop] (Windows)**: `scoop install go-task exiftool watchexec`
 
 ### Installation
 
@@ -268,16 +267,16 @@ Run both the API server and the UI server in separate terminals. They are set
 up to work with each other by default with the API server running at port `8080`
 and the UI server on port `5173`.
 
-`just` is [just] as defined in the [prerequisites](#prerequisites).
+`task` is [Task] as defined in the [prerequisites](#prerequisites).
 
 #### API
 
-* `just watch` the source files and auto-reload the server using [watchexec]
-* or `just run` the server
+* `task watch` the source files and auto-reload the server using [watchexec]
+* or `task run` the server
 
 #### UI
 
-* `just ui` to start a hot-reloading development server
+* `task ui` to start a hot-reloading development server
 * or run from within the `ui` folder
   ```sh
   cd ui
@@ -316,7 +315,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 [open-images-dataset]: https://opensource.google/projects/open-images-dataset
 
 [Scoop]: https://scoop.sh/
-[just]: https://github.com/casey/just
+[Task]: https://taskfile.dev/
 [watchexec]: https://github.com/watchexec/watchexec
 
 [Go]: https://golang.org/

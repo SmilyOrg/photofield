@@ -43,7 +43,7 @@ Key modules: `cached/`, `thumb/`, `djpeg/`, `exiftool/`, `ffmpeg/`, `sqlite/`
 
 ### Build Commands
 - **Development**: `task dev` (runs both API and UI in watch mode)
-- **API only**: `task watch` or `just watch` (auto-reload Go server)
+- **API only**: `task watch` (auto-reload Go server)
 - **UI only**: `task ui` or `cd ui && npm run dev`
 - **Production build**: `task build` (includes embedded UI)
 
