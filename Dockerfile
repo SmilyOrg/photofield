@@ -17,7 +17,7 @@ RUN \
     -o /build/photofield .
 
 # Runtime stage
-FROM alpine:latest
+FROM alpine:3.22
 
 RUN apk add --no-cache exiftool ffmpeg libjpeg-turbo-utils libwebp && \
     ln -s /usr/lib/libwebp.so.7 /usr/lib/libwebp.so
