@@ -22,4 +22,5 @@ test-tmp/
 dist/
 e2e/
 docs/
+!docs/.vitepress/dist/
 testdata/
