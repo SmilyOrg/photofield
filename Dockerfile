@@ -13,7 +13,7 @@ RUN \
   CGO_ENABLED=0 \
   go build \
     -ldflags "${LDFLAGS}" \
-    -tags embedui,embedgeo \
+    -tags embedui,embeddocs,embedgeo \
     -o /build/photofield .
 
 # Runtime stage
