@@ -8,20 +8,23 @@
   <h3 align="center">Photofield</h3>
 
   <p align="center">
-    Experimental <em>fast</em> photo viewer.
+    A self-hosted non-invasive single-binary photo gallery with a focus on speed and simplicity.
     <br />
     <br />
-    <a href="https://demo.photofield.dev"><img alt="live demo" src="https://img.shields.io/badge/live-demo-blue"></a>
-    <a href="https://photofield.dev"><img alt="docs" src="https://img.shields.io/badge/online-docs-yellow"></a>
-    <a href="https://github.com/SmilyOrg/photofield/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/SmilyOrg/photofield"></a>
-    <a href="https://github.com/SmilyOrg/photofield/releases"><img alt="Version" src="https://ghcr-badge.egpl.dev/SmilyOrg/photofield/latest_tag?color=%2344cc11&ignore=latest&label=version&trim="></a>
-    <a href="https://github.com/SmilyOrg/photofield/pkgs/container/photofield"><img alt="Image Size" src="https://ghcr-badge.egpl.dev/SmilyOrg/photofield/size?color=%2344cc11&tag=latest&label=image+size&trim="></a>
-    <a href="https://github.com/SmilyOrg/photofield/actions"><img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/SmilyOrg/photofield/.github%2Fworkflows%2Frelease.yml"></a>
-    <a href="https://discord.gg/qjMxfCMVqM" target="_blank"><img alt="Discord" src="https://img.shields.io/discord/1210642013997764619?logo=discord&logoColor=white"></a>
+    <a href="https://demo.photofield.dev">Demo</a> ·
+    <a href="https://photofield.dev/quick-start">Quick Start</a> ·
+    <a href="https://photofield.dev">Docs</a>
+    <br />
+    <br />
+    <a href="https://github.com/SmilyOrg/photofield/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/smilyorg/photofield?sort=date&display_name=release&style=flat-square&labelColor=%23dd8888&color=%23eee"></a>
+    <br />
+    <a href="https://github.com/SmilyOrg/photofield/actions"><img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/SmilyOrg/photofield/.github%2Fworkflows%2Fci.yml?style=flat-square&labelColor=%23dd8888&color=%23eee"></a>
+    <a href="#built-with"><img alt="Tech stack: Golang and Vue 3" src="https://img.shields.io/badge/tech-Go%20%26%20Vue-white?style=flat-square&labelColor=%23dd8888&color=%23eee&icon=go"></a>
+    <a href="https://github.com/SmilyOrg/photofield/stargazers"><img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/smilyorg/photofield?style=flat-square&labelColor=%23dd8888&color=%23eee"></a>
+    <a href="https://github.com/SmilyOrg/photofield/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/SmilyOrg/photofield?style=flat-square&logoColor=white&logoSize=auto&labelColor=%23dd8888&color=%23eee"></a>
+    <a href="https://discord.gg/qjMxfCMVqM"><img alt="Discord" src="https://img.shields.io/discord/1210642013997764619?style=flat-square&logo=discord&logoColor=white&logoSize=auto&label=chat&labelColor=%23dd8888&color=%23eee"></a>
   </p>
 </p>
-
-
 
 <!-- TABLE OF CONTENTS -->
 <details open="open">
@@ -64,17 +67,11 @@ photo gallery software.
 
 ### Features
 
-* **Seamless zoomable interface**. Thanks to tiled image loading supported by
-[OpenLayers] and the API implementing tile rendering, you can switch between
-levels of detail seamlessly without loading a special detailed or
-fullscreen view.
+* **Seamless zoomable interface**. Every view is zoomable if you ever need to see just a little more detail.
 
   ![Seamless zoom to giraffe face](docs/assets/seamless-zoom.gif)
 
-* **Progressive multi-resolution loading**. Not only are thumbnails used to show
-a single photo quicker, the whole layout is progressively loaded, so even if you
-move through photos quickly or zoom around, you will almost always have some
-form of feedback to not lose track.
+* **Progressive multi-resolution loading**. The whole layout is progressively loaded from a low-res preview to a full quality photo.
 
   ![Progressive load of a deer](docs/assets/progressive-load.gif)
 
@@ -88,42 +85,39 @@ layouts.
   enabled, tags are stored in the cache database and can be used to filter
   photos.
 * **Reverse geolocation**. Local, embedded reverse geolocation of ~50 thousand
-  places via [tinygpkg] with neglibile overhead supported in the Timeline and
+  places via [tinygpkg] with negligible overhead supported in the Timeline and
   Flex layouts.
-* **Flexible media/thumbnail system**. There are many different ways for images
-  and thumbnails to be generated and stored. Uses FFmpeg for on-the-fly
-  conversion, SQLite for caching, existing embedded JPEG thumbnails, Synology
-  Moments / Photo Station thumbnails, and djpeg (libjpeg-turbo) for optimized JPEG processing.
+* **Flexible media/thumbnail system**. Stores small thumbnails using SQLite,
+  uses FFmpeg for on-the-fly format conversion, extracts embedded thumbnails
+  from JPEG files, re-uses Synology Moments / Photo Station thumbnails, and
+  uses djpeg (libjpeg-turbo) to efficiently decode lower resolutions.
 * **Single file binary**. The server is a single static binary with optional
-dependencies for optimized performance.
-* **Read-only file system based collections**. Photofield never changes your
-photos, thumbnails or directories. You are encouraged to even mount your photos
-as read-only to ensure this. The file system is the source of truth, everything
-else is just a more or less stale cache.
+  dependencies for easy and flexible deployment (Docker images also available).
+* **Read-only file system based collections**. The original files are not
+  touched. You are encouraged to even mount your photos as read-only to ensure
+  this. The file system is the source of truth, everything else is just a more
+  or less stale cache.
 * **Fast indexing**. Thanks to [godirwalk], file indexing practically runs at
-the speed of the file system 1000-10000 files/sec on fast SSD and hot cache.
-EXIF metadata and [prominent color] are extracted as separate follow-up
-operations and run at up to ~200 files/sec and ~1000 files/sec on a fast system.
-* **Basic video support**. Videos are supported, however the user experience
-is not great yet as there are some usability quirks. Different resolutions are
-supported if they have been previously transcoded, but there is no on-the-fly
-transcoding supported right now.
+  the speed of the file system 1000-10000 files/sec on fast SSD and hot cache.
+  EXIF metadata and [prominent color] are extracted as separate follow-up
+  operations and run at up to ~200 files/sec and ~1000 files/sec on a fast system.
+* **Video support**. Videos are supported along with multiple resolutions
+  (if as pre-generated by e.g. Synology Moments), however on-the-fly transcoding
+  is not supported.
 
 ### Limitations
 
-* **No photo details (yet)**. There is no way to show metadata of a photo in the
-UI at this point.
 * **Not optimized for many clients**. As a lot of the normally client-side
-state is kept on the server, you will likely run into CPU or Memory problems
-with more than a few simultaneous users.
+  state is kept on the server, you will likely run into CPU or Memory problems
+  with more than a few simultaneous users.
 * **No user accounts**. Not the focus right now. You can define separate
-collections for separate users based on the directory structure, but there is no
-authentication or authorization support.
+  collections for separate users based on the directory structure, but there is
+  no authentication or authorization support.
 * **Initial load can be slow**. All the photos need to be laid out when you
-first load a page in a specific window size and configuration, which can take
-some time with a slow CPU and cold HDD cache.
-* **No permalinks**. Deep linking to images works, but it's currently not stable
-over time as IDs can change. 
+  first load a page in a specific window size and configuration, which can take
+  some time with a slow CPU and cold HDD cache.
+* **No permalinks**. Deep linking to images works, however if you remove the
+  database or move the files around, the links may break. 
 
 See the [documentation] for more information.
 
@@ -137,7 +131,7 @@ See the [documentation] for more information.
 * [Vue 3] - frontend framework
 * [BalmUI] - Material UI components
 * [OpenLayers] - in-browser tiled image rendering
-* [OpenSeadragon] (honorary mention) - tiled image rendering library used previously
+* [OpenSeadragon] (honorary mention) - tiled image rendering library used in the past
 * [+ more Go libraries](go.mod)
 * [+ more npm libraries](ui/package.json)
 
@@ -241,7 +235,7 @@ collections:
 * [Task] - to run common commands conveniently via Taskfile
 * [watchexec] - for auto-reloading the Go server
 * [exiftool] - for testing metadata extraction
-* **[djpeg (libjpeg-turbo)]** - for optimized JPEG decoding (optional but recommended for better performance)
+* [djpeg (libjpeg-turbo)] - for optimized JPEG decoding (optional but recommended for better performance)
 
 **[Scoop] (Windows)**: `scoop install go-task exiftool watchexec`
 
