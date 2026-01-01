@@ -71,7 +71,7 @@ photo gallery software.
 
   ![Seamless zoom to giraffe face](docs/assets/seamless-zoom.gif)
 
-* **Progressive multi-resolution loading**. The whole layout is progressively loaded from a low-res preview to a full quality photo. 
+* **Progressive multi-resolution loading**. The whole layout is progressively loaded from a low-res preview to a full quality photo.
 
   ![Progressive load of a deer](docs/assets/progressive-load.gif)
 
@@ -85,11 +85,11 @@ layouts.
   enabled, tags are stored in the cache database and can be used to filter
   photos.
 * **Reverse geolocation**. Local, embedded reverse geolocation of ~50 thousand
-  places via [tinygpkg] with neglibile overhead supported in the Timeline and
+  places via [tinygpkg] with negligible overhead supported in the Timeline and
   Flex layouts.
-* **Flexible media/thumbnail system**. Stores small thumbnails using SQLite.
-  Otherwise Uses FFmpeg for on-the-fly format conversion, extracts embedded
-  JPEG thumbnails, re-uses Synology Moments / Photo Station thumbnails, and
+* **Flexible media/thumbnail system**. Stores small thumbnails using SQLite,
+  uses FFmpeg for on-the-fly format conversion, extracts embedded thumbnails
+  from JPEG files, re-uses Synology Moments / Photo Station thumbnails, and
   uses djpeg (libjpeg-turbo) to efficiently decode lower resolutions.
 * **Single file binary**. The server is a single static binary with optional
   dependencies for easy and flexible deployment (Docker images also available).
