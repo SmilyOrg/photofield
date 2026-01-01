@@ -189,8 +189,8 @@ const navigate = computed(() => {
   return (scrollViewer.value || mapViewer.value)?.navigate;
 });
 
-const exit = () => {
-  (scrollViewer.value || mapViewer.value)?.exit();
+const exit = async () => {
+  await (scrollViewer.value || mapViewer.value)?.exit();
   lastView.value = null;
 }
 
@@ -314,7 +314,8 @@ const search = computed(() => {
   return route.query.search;
 })
 
-const onSearch = (search) => {
+const onSearch = async (search) => {
+  await exit();
   router.push({
     query: {
       ...route.query,
