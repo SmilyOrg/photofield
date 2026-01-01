@@ -123,7 +123,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 
 		orderBySimilarity :=
 			scene.SearchEmbedding != nil &&
-				!expression.HasQualifiers &&
+				!expression.HasQualifiers([]string{"img"}) &&
 				(config.Layout.Type != layout.Map)
 
 		// Default threshold for non-similarity-order search

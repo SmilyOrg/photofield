@@ -44,8 +44,13 @@
       v-if="active"
       class="chips"
     >
+      <ImageChip
+        v-if="imageId !== null"
+        v-model="imageId"
+        :scene="scene"
+      />
       <SliderChip
-        v-if="leftoverText.length > 0"
+        v-if="leftoverText.length > 0 || imageId !== null"
         v-model="threshold"
         icon="tune"
         placeholder="Filter"
@@ -89,6 +94,7 @@ import { computed, nextTick, ref, shallowRef, toRefs, watch } from 'vue';
 import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
+import ImageChip from './chips/ImageChip.vue';
 import dateFormat from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 import HighlightedInput from './HighlightedInput.vue';
@@ -199,12 +205,23 @@ const thresholdQualifier = {
   },
 }
 
+const imageIdQualifier = {
+  name: "imageId",
+  regex: /img:(\d+)/,
+  parse: (str) => str,
+  replace: (value) => {
+    if (!value) return '';
+    return `img:${value}`;
+  },
+}
+
 const qualifiers = [
   createdAfterQualifier,
   createdBeforeQualifier,
   createdRangeQualifier,
   createdExactQualifier,
   thresholdQualifier,
+  imageIdQualifier,
 ];
 
 const extract = (qualifier) => {
@@ -231,17 +248,21 @@ const inject = (qualifier, value) => {
   emit("update:modelValue", newValue);
 }
 
-const MIN_THRESHOLD = 0.15;
-const MAX_THRESHOLD = 0.30;
+const thresholdRange = computed(() => {
+  if (imageId.value !== null) {
+    return [0.500, 0.999];
+  }
+  return [0.15, 0.30];
+});
 const threshold = computed({
   get: () => {
     const t = extract(thresholdQualifier);
     if (t === null) return null;
-    return Math.round((t - MIN_THRESHOLD) / (MAX_THRESHOLD - MIN_THRESHOLD) * 100);
+    return Math.round((t - thresholdRange.value[0]) / (thresholdRange.value[1] - thresholdRange.value[0]) * 100);
   },
   set: (value) => {
     const t = value !== null ?
-      MIN_THRESHOLD + (value / 100) * (MAX_THRESHOLD - MIN_THRESHOLD)
+      thresholdRange.value[0] + (value / 100) * (thresholdRange.value[1] - thresholdRange.value[0])
       : null;
     inject(thresholdQualifier, t);
   }
@@ -270,6 +291,11 @@ const beforeDate = computed(() => {
     return range[1];
   }
   return extract(createdBeforeQualifier);
+});
+
+const imageId = computed({
+  get: () => extract(imageIdQualifier),
+  set: (value) => inject(imageIdQualifier, value),
 });
 
 const leftoverText = computed(() => {

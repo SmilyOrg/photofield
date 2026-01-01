@@ -21,17 +21,16 @@ type FieldMeta struct {
 
 // Expression represents a validated and typed search query
 type Expression struct {
-	query         *Query
-	Text          string    `json:"text,omitempty"`
-	Created       DateRange `json:"created,omitempty"`
-	Threshold     Float32   `json:"t,omitempty"`
-	Deduplicate   Float32   `json:"dedup,omitempty"`
-	Bias          Float32   `json:"bias,omitempty"`
-	K             Int64     `json:"k,omitempty"`
-	Filter        String    `json:"filter,omitempty"`
-	Tags          Strings   `json:"tags,omitempty"`
-	Image         Int64     `json:"img,omitempty"`
-	HasQualifiers bool      `json:"-"`
+	query       *Query
+	Text        string    `json:"text,omitempty"`
+	Created     DateRange `json:"created,omitempty"`
+	Threshold   Float32   `json:"t,omitempty"`
+	Deduplicate Float32   `json:"dedup,omitempty"`
+	Bias        Float32   `json:"bias,omitempty"`
+	K           Int64     `json:"k,omitempty"`
+	Filter      String    `json:"filter,omitempty"`
+	Tags        Strings   `json:"tags,omitempty"`
+	Image       Int64     `json:"img,omitempty"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -71,7 +70,6 @@ func (q *Query) Expression() (Expression, error) {
 
 	// Check for unknown qualifiers before processing known ones
 	expr.checkUnknownQualifiers()
-	expr.HasQualifiers = q.HasQualifiers()
 
 	expr.Created = q.ExpressionDateRange("created")
 	expr.addFieldError(expr.Created.FieldMeta)
@@ -108,6 +106,26 @@ func (q *Query) Expression() (Expression, error) {
 		err = fmt.Errorf("expression error: %w%s", expr.Errors[0].Error, more)
 	}
 	return expr, err
+}
+
+func (expr *Expression) HasQualifiers(exclude []string) bool {
+	if expr == nil || expr.query == nil {
+		return false
+	}
+
+	excludeMap := make(map[string]bool)
+	for _, e := range exclude {
+		excludeMap[e] = true
+	}
+
+	for _, term := range expr.query.Terms {
+		if term.Qualifier != nil {
+			if !excludeMap[term.Qualifier.Key] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (expr *Expression) addFieldError(meta FieldMeta) {

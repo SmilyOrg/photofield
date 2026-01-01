@@ -166,13 +166,17 @@ const qualityPreset = computed(() => {
   return null;
 });
 
+watch(search, (newSearch, oldSearch) => {
+  if (oldSearch && newSearch != oldSearch) {
+    updateFocusFile(null);
+    scrollToPixels(0);
+  }
+})
+
 watch(scene, async (newScene) => {
   if (!newScene || newScene.loading) return;
   if (newScene?.id == lastLoadedScene?.id && newScene?.loading == lastLoadedScene?.loading) {
     return;
-  }
-  if (lastLoadedScene && newScene.search != lastLoadedScene.search) {
-    scrollToPixels(0);
   }
   lastLoadedScene = newScene;
   emit("scene", newScene);
@@ -482,7 +486,7 @@ const {
 
 const onClick = async (event) => {
   if (contextEvent.value) {
-    closeContextMenu();
+    closeContextMenu(event);
     return;
   }
   if (!event) return false;

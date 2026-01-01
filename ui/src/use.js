@@ -404,7 +404,6 @@ export function useViewDelta(viewHistory, viewport, now) {
 export function useContextMenu(menu, viewer, scene) {
   
   const openEvent = ref(null);
-  const flip = ref({ x: false, y: false });
   const lastPointerDown = ref(0);
   const menuOpenedAt = ref(0);
 
@@ -413,11 +412,11 @@ export function useContextMenu(menu, viewer, scene) {
     menuOpenedAt.value = Date.now();
   }
 
-  const close = () => {
+  const close = (event) => {
     if (!openEvent.value) return false;
     // Don't close if the menu was opened from a long-press
     // (meaning that there was a pointerdown event before contextmenu)
-    if (lastPointerDown.value < menuOpenedAt.value) {
+    if (event && lastPointerDown.value < menuOpenedAt.value) {
       return false;
     }
     openEvent.value = null;
@@ -468,7 +467,6 @@ export function useContextMenu(menu, viewer, scene) {
   return {
     onContextMenu,
     onPointerDown,
-    // flip,
     openEvent,
     close,
     region,

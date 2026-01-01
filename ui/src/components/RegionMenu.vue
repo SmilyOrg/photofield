@@ -146,11 +146,11 @@ export default {
       await navigator.clipboard.writeText(this.fileUrl);
       this.$emit("close");
     },
-    findSimilar() {
+    async findSimilar() {
       const id = this.region?.data?.id;
       if (!id) return;
-      this.$emit("search", `img:${id}`);
       this.$emit("close");
+      this.$emit("search", `img:${id}`);
     },
   }
 };
