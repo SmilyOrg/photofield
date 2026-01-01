@@ -66,6 +66,7 @@
         </collection-panel>
 
         <search-input
+          class="search-input"
           v-if="showSearch"
           :hide="selected"
           :loading="query.search && currentScene?.loading"
@@ -614,8 +615,16 @@ html .multiselect__spinner {
   transition: transform 0.2s;
 }
 
+.search-input {
+  transition: transform 0.2s;
+}
+
 .top-bar.immersive {
-  transform: translateY(-80px);
+  transform: translateY(-100%);
+}
+
+.top-bar.immersive .search-input {
+  transform: translateY(-100%);
 }
 
 .top-bar :deep(.mdc-top-app-bar__title) {
