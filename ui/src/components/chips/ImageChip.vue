@@ -41,10 +41,6 @@ const props = defineProps({
     type: String,
     default: null,
   },
-  icon: {
-    type: String,
-    default: 'image',
-  },
   scene: {
     type: Object,
     default: null,

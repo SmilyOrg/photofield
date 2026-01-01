@@ -48,7 +48,6 @@
         v-if="imageId !== null"
         v-model="imageId"
         :scene="scene"
-        placeholder="Image"
       />
       <SliderChip
         v-if="leftoverText.length > 0 || imageId !== null"
