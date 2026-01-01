@@ -5,7 +5,7 @@
 1. [Download] and unpack a release to a folder with folders of photos.
 2. Run `./photofield` or double-click on `photofield.exe` to start the server.
 3. Open http://localhost:8080 and you should see folders in the directory displayed as collections.
-5. You're done 🥳
+4. You're done 🥳
 
 [Download]: https://github.com/SmilyOrg/photofield/releases
 
