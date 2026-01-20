@@ -66,7 +66,7 @@ const props = defineProps({
     required: true
   },
   timestamps: {
-    type: Uint32Array,
+    type: Int32Array,
   },
 });
 
@@ -113,15 +113,9 @@ watchDebounced(timestamps, () => {
   isRecentChange.value = false
 }, { debounce: 2000 });
 
-function timezoneOffsetNow() {
-  const date = new Date();
-  return date.getTimezoneOffset() * 60;
-}
-
 const marker = computed(() => {
   if (!timestamps.value) return { level: 0, markers: [] };
 
-  const offset = timezoneOffsetNow();
   const date = new Date();
   const ts = timestamps.value;
 
@@ -140,7 +134,7 @@ const marker = computed(() => {
 
   for (let i = 0; i < maxY; i++) {
     const t = ts[i];
-    date.setTime(t * 1000 + offset);
+    date.setTime(t * 60000);
     const yr = date.getFullYear();
     const mo = date.getMonth();
     const dy = date.getDate();
@@ -198,7 +192,6 @@ const thumbTopPx = computed(() => {
 const thumbLabel = computed(() => {
   if (!timestamps.value?.length) return "";
   if (!marker.value) return "";
-  const offset = timezoneOffsetNow();
   const ratio =
     isHovering.value && !isDragging.value ?
       hoverY.value / containerSize.height.value :
@@ -206,7 +199,7 @@ const thumbLabel = computed(() => {
   if (isNaN(ratio)) return "";
   const index = Math.max(0, Math.min(timestamps.value.length - 1, Math.round(ratio * timestamps.value.length)));
   const t = timestamps.value[index];
-  const date = new Date(t * 1000 + offset);
+  const date = new Date(t * 60000);
   if (isNaN(Number(date))) return "";
   let level = marker.value.level;
   const precise = preciseAnchor.value !== null;

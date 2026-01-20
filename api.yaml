@@ -326,9 +326,10 @@ paths:
                 type: string
                 format: binary
                 description: |
-                  List of `height` uint32-encoded "local" timestamps of photos
+                  List of `height` int32-encoded "local" timestamps of photos
                   in the layout. This is similar to a Unix timestamp, except
-                  that it is offset by the local time zone of the photo.
+                  that it is offset by the local time zone of the photo and
+                  defined as minutes (instead of seconds) since 1970.
 
 
   /scenes/{scene_id}/regions:

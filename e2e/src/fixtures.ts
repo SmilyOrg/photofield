@@ -159,21 +159,26 @@ export class App {
       gps?: boolean;
       gpsClumps?: number;
       gpsSpreadKm?: number;
+      dateYears?: number[];
     }
   ): Promise<void> {
     // Use global cache to generate test data only once per run
     const widthKey = widths.join('_');
     const heightKey = heights.join('_');
     const gpsKey = options?.gps ? `-gps-${options.gpsClumps || 5}-${options.gpsSpreadKm || 2.0}` : '';
+    const dateKey = options?.dateYears ? `-dates-${options.dateYears.join('_')}` : '';
+    // Use dateKey in hash for uniqueness but not in the cache key name
+    const hashInput = `e2e-test-${count}-${widthKey}-${heightKey}-${seed}${gpsKey}${dateKey}`;
     const cacheKey = `e2e-test-${count}-${widthKey}-${heightKey}-${seed}${gpsKey}`;
 
     console.log("Using generated photos cache key:", cacheKey);
     
-    const cache = await globalCache.get(cacheKey, async () => {
+    const cache = await globalCache.get(hashInput, async () => {
       const gpsInfo = options?.gps 
         ? ` with GPS (${options.gpsClumps || 5} clumps, ${options.gpsSpreadKm || 2.0}km spread)` 
         : '';
-      console.log(`Generating ${count} test ${widths.join(',')} x ${heights.join(',')} photos with seed ${seed}${gpsInfo}...`);
+      const dateInfo = options?.dateYears ? ` with dates (${options.dateYears.join(',')})` : '';
+      console.log(`Generating ${count} test ${widths.join(',')} x ${heights.join(',')} photos with seed ${seed}${gpsInfo}${dateInfo}...`);
       
       const exe = process.platform === 'win32' ? '.exe' : '';
       const command = join(process.cwd(), '..', 'photofield' + exe);
@@ -200,6 +205,10 @@ export class App {
         if (options.gpsSpreadKm !== undefined) {
           args.push('-gen-photos.gps-spread-km', options.gpsSpreadKm.toString());
         }
+      }
+      
+      if (options?.dateYears && options.dateYears.length > 0) {
+        args.push('-gen-photos.date-years', options.dateYears.join(','));
       }
       
       console.log("Generating photos:", command, args);
