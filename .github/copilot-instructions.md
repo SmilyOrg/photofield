@@ -1,91 +1,169 @@
 # Photofield AI Coding Agent Instructions
 
 ## Project Overview
-Photofield is a high-performance photo viewer that emphasizes speed and handling massive photo collections. It's a Go backend serving tiled image data via HTTP API to a Vue.js frontend using OpenLayers for seamless zooming. The architecture prioritizes read-only filesystem operations and SQLite caching for metadata.
+Photofield is a high-performance photo viewer built to display massive photo collections (40k+ images) with seamless zooming and progressive loading. A monolithic Go HTTP server (`main.go` - 2400+ lines) renders photo tiles server-side using the Canvas library, serving them to a Vue.js + OpenLayers frontend. The architecture prioritizes read-only filesystem operations and SQLite caching.
 
-## Architecture & Core Components
+## Critical Architecture Patterns
 
-### Backend (Go)
-- **`main.go`**: Monolithic HTTP server handling all API routes, tile rendering, and static file serving
-- **`internal/collection/`**: Photo collection management and filesystem scanning
-- **`internal/render/`**: Server-side tile rendering using Canvas library for progressive loading
-- **`internal/layout/`**: Different photo arrangement algorithms (album, timeline, wall, map)
-- **`io/`**: Pluggable I/O abstraction layer for thumbnails, caching, and image processing
-- **SQLite databases**: Two separate DBs for metadata (`photofield.cache.db`) and thumbnails (`photofield.thumbs.db`)
+### Monolithic HTTP Server Design
+**`main.go` contains everything** - no separate server package. All HTTP handlers, tile rendering, and business logic live in a single file:
+- OpenAPI-generated routes via `//go:generate` directive (line 76)
+- Manual route registration using `chi` router
+- Direct tile rendering in request handlers (not middleware)
+- Global state: `imageSource`, `sceneSource`, `collections`, `globalGeo`
 
-### Frontend (Vue.js)
-- **`ui/src/components/CollectionView.vue`**: Main photo grid component using OpenLayers for tiled rendering
-- **`ui/src/api.js`**: API client for backend communication
-- **OpenLayers integration**: Handles progressive multi-resolution loading and seamless zoom
+When adding endpoints: implement handler methods on `Api` struct, regenerate OpenAPI code with `task gen`.
 
-## Key Development Patterns
+### Configuration Hot-Reload System
+`config.go` implements **dual filesystem watchers**:
+1. Main config file watcher (`configuration.yaml`)
+2. Expanded paths watcher (for `expand_subdirs: true` collections)
 
-### Configuration System
-- `defaults.yaml` defines default settings merged with `configuration.yaml`
-- Collections are the primary abstraction - each represents a set of directories with layout and metadata
-- Configuration supports dynamic collection expansion from subdirectories
-- Hot-reload via filesystem watchers in `config.go`
+Changes trigger full reload via callback - don't cache config values in long-lived goroutines.
 
-### I/O Abstraction Layer
-The `io/` package provides a powerful abstraction for image processing:
+**Collection expansion**: Single collection definition can spawn multiple collections from subdirectories (see `defaults.yaml` line 4). The `ExpandedPaths` field tracks directories to watch.
+
+### I/O Abstraction Layer (`internal/io/`)
+**Composable image sources** - chain modules like middleware:
 ```go
-// Common pattern: chain I/O modules for different processing steps
-reader := io.NewCached(io.NewThumb(io.NewGoImage()))
+// Real pattern from codebase - wrapping sources
+cached := &Cached{Source: thumb, Cache: ristrettoCache}
 ```
-Key modules: `cached/`, `thumb/`, `djpeg/`, `exiftool/`, `ffmpeg/`, `sqlite/`
+Each module implements `Source` interface:
+- `Get(ctx, id, path) Result` - fetch image
+- `Size(original) Size` - calculate target dimensions
+- `GetDurationEstimate(size)` - for source selection optimization
+- `Exists()`, `Close()` - lifecycle management
+
+**Module composition order matters**:
+1. `cached/` - check memory/disk cache first
+2. `thumb/` - extract embedded JPEG thumbnails
+3. `djpeg/` - efficient JPEG decoding via libjpeg-turbo
+4. `goimage/` - fallback Go image decoder
+
+Cost-based source selection: sources compete to provide images, winner determined by `SizeCost()` calculation balancing speed vs quality.
 
 ### Database Migrations
-- Use numbered migration files in `db/migrations/` (up/down pattern)
-- Separate thumbnail database with its own migrations in `db/migrations-thumbs/`
-- Key tables: `infos` (photo metadata), `tag` (tagging system), `infos_tag` (many-to-many)
+**Two separate SQLite databases** with independent migration chains:
+- `photofield.cache.db` - metadata, tags, AI embeddings (`db/migrations/`)
+- `photofield.thumbs.db` - cached thumbnails (`db/migrations-thumbs/`)
 
-## Development Workflow
+Migration naming: `{sequence}_{description}.{up|down}.sql`
+- Use `task db:add {description}` to create template
+- Always include both up AND down migrations
+- Key tables: `infos` (photos), `tag`, `infos_tag`, `clip_emb` (AI), `prefix` (path deduplication)
 
-### Build Commands
-- **Development**: `task dev` (runs both API and UI in watch mode)
-- **API only**: `task watch` (auto-reload Go server)
-- **UI only**: `task ui` or `cd ui && npm run dev`
-- **Production build**: `task build` (includes embedded UI)
+## Development Workflows
 
-### Testing & Debugging
-- End-to-end tests in `e2e/` using Playwright
-- Profiling tools included: `tools/profile-*.ps1` scripts
-- Built-in pprof endpoint at `/debug/pprof/`
-- SQLite databases are human-readable for debugging
+### Build System (Taskfile.yml)
+**Conditional compilation with build tags**:
+- `embedui` - embeds `ui/dist/` into binary (requires `task build:ui` first)
+- `embedgeo` - embeds `data/geo/*.gpkg` file (~50MB, requires `task assets` to download)
+- `embeddocs` - embeds documentation site
 
-### Build Tags & Embedding
-- `//go:embed` directives conditionally compile features:
-  - `-tags embedui`: Embeds Vue.js UI build
-  - `-tags embedgeo`: Embeds geolocation data
-  - `-tags embeddocs`: Embeds documentation
-- Use `task assets` to download required geo data before building with embedgeo
+Common workflows:
+```bash
+task dev           # Run API + UI in watch mode (two terminals)
+task watch         # API only with hot-reload via watchexec
+task ui            # UI dev server (Vite)
+task run:embed     # Build with embedded UI+docs, run locally
+task test          # Run Go tests with race detector
+```
 
-## Project-Specific Conventions
+**Important**: Default `task build` does NOT embed UI - you get a backend-only binary. Use `task run:embed` for full-stack development or `go build -tags embedui` for production.
 
-### File Organization
-- No subdirectories in main package - keep `main.go` focused on HTTP routing
-- Internal packages should be focused and avoid circular dependencies
-- UI components mirror the layout types: album, timeline, wall, map views
+### Profiling & Debugging
+Built-in profiling infrastructure (always enabled):
+- `http://localhost:8080/debug/pprof/` - standard Go profiling
+- `task prof:cpu` - opens interactive pprof UI
+- `task prof:heap` - memory profiling
+- `task prof:trace` - execution trace
+- Pyroscope integration when `PHOTOFIELD_PYROSCOPE_SERVER` env set
 
-### Performance Considerations
-- Tile-based rendering requires careful coordinate system handling
-- SQLite WAL mode for better concurrent access
-- Prefer readonly filesystem operations - Photofield never modifies source photos
-- Use `godirwalk` for fast directory scanning (1000-10000 files/sec)
+**Tile request debugging**: Set `tile_requests.log_stats: true` in config for per-request timing logs (format: `priority, start_ms, end_ms, duration_ms`).
 
-### API Design
-- RESTful endpoints with collection-scoped operations
-- Tile coordinates follow standard web mercator pattern `/tiles/{z}/{x}/{y}`
-- Support for progressive image quality via tile pyramids
-- Search integration with optional AI backend for semantic search
+## Project-Specific Patterns
 
-## Common Tasks
-- **Adding new layout**: Implement in `internal/layout/`, add to config options, create corresponding Vue component
-- **New I/O module**: Follow the `io.Reader` interface pattern in the `io/` package
-- **Database schema changes**: Create numbered migration files with both up and down SQL
-- **Configuration options**: Add to struct in `config.go` and document in `defaults.yaml`
+### Layout System (`internal/layout/`)
+Four layout types (album, timeline, wall/flex, map) implement different photo arrangement algorithms:
+- **Album**: traditional photo grid with aspect ratio preservation
+- **Timeline**: chronological with date headers and reverse geocoding
+- **Wall/Flex**: Pinterest-style masonry layout
+- **Map**: geographic clustering based on GPS coords
+
+Layout selection via:
+1. Collection config `layout:` field
+2. Scene creation parameter
+3. Falls back to `defaults.yaml` `layout.type`
+
+**Order/Sort confusion**: `sort: +date` in collection config → `Order` enum in Go. Prefix `+` or `-` required in YAML, enum values are `DateAsc`, `DateDesc`, etc.
+
+### Scene Management (`internal/scene/`)
+Scenes are **ephemeral cached layouts** - not persisted to DB:
+- Created via `POST /scenes` with viewport dimensions and layout params
+- Stored in `sceneSource` map with TTL
+- `scene.Loading` flag indicates incomplete indexing
+- Tiles reference scenes by ID: `GET /scenes/{id}/tiles?x={x}&y={y}&zoom={z}`
+
+**Viewport dimensions matter** for cache keys - different viewport = different scene ID (except album/timeline which ignore viewport height).
+
+### API Route Organization
+OpenAPI spec (`api.yaml`) generates types + server interface → implement on `Api` struct in `main.go`:
+```go
+func (*Api) GetScenesSceneIdTiles(w, r, sceneId, params) {
+    // Tile rendering logic ~100 lines
+}
+```
+Regenerate with `task gen` after editing `api.yaml`. Don't edit `internal/openapi/api.gen.go` directly.
+
+### Testing Approach
+**End-to-end tests** are primary testing strategy (`e2e/` using Playwright):
+- Real browser automation, not mocked
+- Tests live photo collections in `testdata/`
+- Run with `task e2e` for watch mode
+- Go unit tests exist but limited - focus on e2e
+
+No test helpers in `testing` package - use `internal/test/` for test image generation utilities.
+
+## Common Tasks Reference
+
+### Adding a Database Migration
+```bash
+task db:add add_video_duration  # Creates numbered template in db/migrations/
+# Edit .up.sql and .down.sql files
+# Test with: task db up
+```
+
+### Adding a New I/O Module
+1. Create `internal/io/mymodule/mymodule.go`
+2. Implement `io.Source` interface (copy pattern from `cached/cached.go`)
+3. Compose in `internal/image/source.go` where sources are initialized
+4. Add to config if user-configurable
+
+### Adding a Collection Layout
+1. Implement layout logic in `internal/layout/{name}.go` (see `album.go` as template)
+2. Add layout type to `Type` enum in `layout/common.go`
+3. Create Vue component in `ui/src/components/{Name}Viewer.vue`
+4. Wire up in `CollectionView.vue` component switcher
+5. Add to `defaults.yaml` documentation
+
+### Modifying Tile Rendering
+Tile rendering happens in `main.go` `drawTile()` function:
+- Uses `tdewolff/canvas` library for drawing
+- Pools `image.Image` objects via `sync.Pool` (see `getImagePool()`)
+- Coordinate system: Y-up (canvas convention), but tiles are Y-down (web mercator)
+- Always return pooled images with `putPoolImage()`
 
 ## External Dependencies
-- **Required**: `exiftool` for metadata extraction, optionally `djpeg` for optimized JPEG processing
-- **AI features**: Requires separate `photofield-ai` service for semantic search
-- **Geo features**: Downloads boundary data from `tinygpkg-data` releases
+
+**Runtime dependencies** (all optional):
+- `exiftool` - metadata extraction (highly recommended, 10x faster than Go EXIF)
+- `djpeg` - libjpeg-turbo for efficient JPEG decoding
+- `ffmpeg` - video thumbnail extraction
+- `photofield-ai` - separate Python service for semantic search (CLIP embeddings)
+
+**Build-time only**:
+- `tinygpkg-data` releases - reverse geocoding database (download via `task assets`)
+- `watchexec` - for `task watch` auto-reload (install with `brew install watchexec`)
+
+**Do not require** Node.js at runtime - UI is pre-built and embedded (or served separately in dev mode).
