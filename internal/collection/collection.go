@@ -17,6 +17,7 @@ type Collection struct {
 	Id            string     `json:"id"`
 	Name          string     `json:"name"`
 	Layout        string     `json:"layout"`
+	Sort          string     `json:"sort"`
 	Limit         int        `json:"limit"`
 	IndexLimit    int        `json:"index_limit"`
 	ExpandSubdirs bool       `json:"expand_subdirs"`

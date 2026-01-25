@@ -7,6 +7,13 @@
     >
       Layout
     </ui-select>
+    <ui-select
+      :modelValue="shuffleInterval"
+      @update:modelValue="onShuffleChange"
+      :options="shuffleOptions"
+    >
+      Shuffle
+    </ui-select>
     <div>
       <ui-icon-button
         icon="photo_size_select_small"
@@ -58,7 +65,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import ExpandButton from './ExpandButton.vue';
 import ColorModeSwitch from './ColorModeSwitch.vue';
 
@@ -72,6 +79,14 @@ const layoutOptions = ref([
     { label: "Flex", value: "FLEX" },
 ]);
 
+const shuffleOptions = ref([
+    { label: "None", value: "none" },
+    { label: "Hourly", value: "+shuffle-hourly" },
+    { label: "Daily", value: "+shuffle-daily" },
+    { label: "Weekly", value: "+shuffle-weekly" },
+    { label: "Monthly", value: "+shuffle-monthly" },
+]);
+
 const extra = ref(false);
 
 const props = defineProps({
@@ -81,6 +96,21 @@ const props = defineProps({
 const emit = defineEmits([
     "query"
 ]);
+
+const shuffleInterval = computed(() => {
+    const sort = props.query?.sort;
+    if (sort && sort.startsWith('+shuffle-')) {
+        return sort;
+    }
+    return "none";
+});
+
+const onShuffleChange = (value) => {
+    if (!value || value === 'none') {
+        value = undefined;
+    }
+    emit('query', { sort: value });
+};
 
 </script>
 

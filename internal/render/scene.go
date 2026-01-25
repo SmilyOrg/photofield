@@ -95,6 +95,49 @@ type Dependency interface {
 	UpdatedAt() time.Time
 }
 
+// Shuffle order constants matching layout.Order
+const (
+	ShuffleHourly  = 3
+	ShuffleDaily   = 4
+	ShuffleWeekly  = 5
+	ShuffleMonthly = 6
+)
+
+type ShuffleDependency struct {
+	Order int
+}
+
+func (d *ShuffleDependency) UpdatedAt() time.Time {
+	// Return truncated current time based on order type
+	// When time crosses into a new period, this will be after scene creation
+	now := time.Now()
+	switch d.Order {
+	case ShuffleHourly:
+		return now.Truncate(time.Hour)
+	case ShuffleDaily:
+		y, m, day := now.Date()
+		loc := now.Location()
+		return time.Date(y, m, day, 0, 0, 0, 0, loc)
+	case ShuffleWeekly:
+		// Truncate to Monday at midnight local time
+		y, m, day := now.Date()
+		loc := now.Location()
+		weekday := now.Weekday()
+		daysFromMonday := int(weekday) - 1
+		if daysFromMonday < 0 {
+			daysFromMonday = 6 // Sunday
+		}
+		mondayDate := time.Date(y, m, day-daysFromMonday, 0, 0, 0, 0, loc)
+		return mondayDate
+	case ShuffleMonthly:
+		y, m, _ := now.Date()
+		loc := now.Location()
+		return time.Date(y, m, 1, 0, 0, 0, 0, loc)
+	default:
+		return time.Time{}
+	}
+}
+
 type Scene struct {
 	Id              SceneId        `json:"id"`
 	CreatedAt       time.Time      `json:"created_at"`

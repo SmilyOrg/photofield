@@ -40,18 +40,23 @@ func toUnixMs(t time.Time) int64 {
 type ListOrder int32
 
 const (
-	None     ListOrder = iota
-	DateAsc  ListOrder = iota
-	DateDesc ListOrder = iota
+	None           ListOrder = iota
+	DateAsc        ListOrder = iota
+	DateDesc       ListOrder = iota
+	ShuffleHourly  ListOrder = iota
+	ShuffleDaily   ListOrder = iota
+	ShuffleWeekly  ListOrder = iota
+	ShuffleMonthly ListOrder = iota
 )
 
 type ListOptions struct {
-	OrderBy    ListOrder
-	Limit      int
-	Expression search.Expression
-	Embedding  clip.Embedding
-	Extensions []string
-	Batch      int
+	OrderBy     ListOrder
+	ShuffleSeed int64
+	Limit       int
+	Expression  search.Expression
+	Embedding   clip.Embedding
+	Extensions  []string
+	Batch       int
 }
 
 type DirsFunc func(dirs []string)
@@ -1751,6 +1756,16 @@ func mergeSortedChannels(channels []<-chan SourcedInfo, order ListOrder, out cha
 		q = (*DateAscQueue)(&s)
 	case DateDesc:
 		q = (*DateDescQueue)(&s)
+	case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
+		// Shuffle is already done at SQL level, no need for sorted merge
+		// Just concatenate the channels
+		for _, ch := range channels {
+			for info := range ch {
+				out <- info
+			}
+		}
+		close(out)
+		return nil
 	default:
 		return fmt.Errorf("unsupported listing order")
 	}
@@ -1930,6 +1945,10 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			sql += `
 			ORDER BY created_at_unix DESC
 			`
+		case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
+			sql += `
+			ORDER BY ((6364136223846793005 * (id + ?)) + 1442695040888963407) & 9223372036854775807
+			`
 		default:
 			panic("Unsupported listing order")
 		}
@@ -1973,6 +1992,13 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 
 		for _, prefixId := range prefixIds {
 			stmt.BindInt64(bindIndex, (int64)(prefixId))
+			bindIndex++
+		}
+
+		// Bind shuffle seed if needed
+		switch options.OrderBy {
+		case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
+			stmt.BindInt64(bindIndex, options.ShuffleSeed)
 			bindIndex++
 		}
 
@@ -2152,6 +2178,10 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 			sql += `
 			ORDER BY created_at_unix DESC
 			`
+		case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
+			sql += `
+			ORDER BY ((6364136223846793005 * (id + ?)) + 1442695040888963407) & 9223372036854775807
+			`
 		default:
 			panic("Unsupported listing order")
 		}
@@ -2171,6 +2201,13 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		// Bind shuffle seed if needed
+		switch options.OrderBy {
+		case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
+			stmt.BindInt64(bindIndex, options.ShuffleSeed)
 			bindIndex++
 		}
 

@@ -31,9 +31,13 @@ const (
 type Order int
 
 const (
-	None     Order = iota
-	DateAsc  Order = iota
-	DateDesc Order = iota
+	None           Order = iota
+	DateAsc        Order = iota
+	DateDesc       Order = iota
+	ShuffleHourly  Order = iota
+	ShuffleDaily   Order = iota
+	ShuffleWeekly  Order = iota
+	ShuffleMonthly Order = iota
 )
 
 func OrderFromSort(s string) Order {
@@ -42,8 +46,43 @@ func OrderFromSort(s string) Order {
 		return DateAsc
 	case "-date":
 		return DateDesc
+	case "+shuffle-hourly":
+		return ShuffleHourly
+	case "+shuffle-daily":
+		return ShuffleDaily
+	case "+shuffle-weekly":
+		return ShuffleWeekly
+	case "+shuffle-monthly":
+		return ShuffleMonthly
 	default:
 		return None
+	}
+}
+
+// ComputeShuffleSeed computes a deterministic seed based on the order type and given time
+func ComputeShuffleSeed(order Order, t time.Time) int64 {
+	switch order {
+	case ShuffleHourly:
+		return t.Truncate(time.Hour).Unix()
+	case ShuffleDaily:
+		return t.Truncate(24 * time.Hour).Unix()
+	case ShuffleWeekly:
+		// Truncate to Monday
+		weekday := t.Weekday()
+		// Sunday is 0, Monday is 1, so we need to adjust
+		daysFromMonday := int(weekday) - 1
+		if daysFromMonday < 0 {
+			daysFromMonday = 6 // Sunday
+		}
+		monday := t.AddDate(0, 0, -daysFromMonday)
+		return monday.Truncate(24 * time.Hour).Unix()
+	case ShuffleMonthly:
+		y, m, _ := t.Date()
+		loc := t.Location()
+		firstOfMonth := time.Date(y, m, 1, 0, 0, 0, 0, loc)
+		return firstOfMonth.Unix()
+	default:
+		return 0
 	}
 }
 
