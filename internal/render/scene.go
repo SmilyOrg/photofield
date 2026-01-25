@@ -260,10 +260,10 @@ func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context,
 // better range of years within int32 (2115 BC - 6055 AD instead of 1901 - 2038).
 //
 // For a given height, it maps each row (y-coordinate) to the timestamp of the photo that
-// occupies that row in the scene layout. The timestamps are adjusted to UTC by adding
-// the timezone offset. If a photo has no valid DateTime, the previous photo's timestamp
-// is reused. The height parameter specifies the output resolution, and source provides
-// access to photo metadata.
+// occupies that row in the scene layout. The timestamps represent local photo time,
+// converted from UTC by adding the timezone offset. If a photo has no valid DateTime,
+// the previous photo's timestamp is reused. The height parameter specifies the output
+// resolution, and source provides access to photo metadata.
 func (scene *Scene) GetTimestamps(height int, source *image.Source) []int32 {
 	scale := float64(height) / scene.Bounds.H
 	timestamps := make([]int32, height)
