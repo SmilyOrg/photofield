@@ -201,11 +201,11 @@ jobs:
             | tar xz -C /usr/local/bin changie
             && chmod +x /usr/local/bin/changie
 
-      - name: Check dependencies & generated files
-        run: task check
-
       - name: Build/download dependencies
         run: task deps
+
+      - name: Check dependencies & generated files
+        run: task check
 
       - name: Test built binary
         run: ./photofield -version
