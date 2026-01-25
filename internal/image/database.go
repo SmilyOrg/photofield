@@ -1947,7 +1947,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			`
 		case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
 			sql += `
-			ORDER BY ((6364136223846793005 * (id + ?)) + 1442695040888963407) & 9223372036854775807
+			ORDER BY (id * 2654435761 + ? * 1664525) % 4294967296
 			`
 		default:
 			panic("Unsupported listing order")
@@ -2180,7 +2180,7 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 			`
 		case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
 			sql += `
-			ORDER BY ((6364136223846793005 * (id + ?)) + 1442695040888963407) & 9223372036854775807
+			ORDER BY (id * 2654435761 + ? * 1664525) % 4294967296
 			`
 		default:
 			panic("Unsupported listing order")

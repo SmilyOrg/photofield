@@ -109,10 +109,10 @@ const sortOptions = computed(() => {
             label: def === '-date' ? "Oldest First" : "Newest First", 
             value: def === '-date' ? '+date' : '-date' 
         },
-        { label: "Shuffle (Hour)", value: "+shuffle-hourly" },
-        { label: "Shuffle (Day)", value: "+shuffle-daily" },
-        { label: "Shuffle (Week)", value: "+shuffle-weekly" },
-        { label: "Shuffle (Month)", value: "+shuffle-monthly" },
+        { label: "Shuffle (Hourly)", value: "+shuffle-hourly" },
+        { label: "Shuffle (Daily)", value: "+shuffle-daily" },
+        { label: "Shuffle (Weekly)", value: "+shuffle-weekly" },
+        { label: "Shuffle (Monthly)", value: "+shuffle-monthly" },
     ];
 });
 
