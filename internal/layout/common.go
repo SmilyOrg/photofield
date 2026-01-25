@@ -69,35 +69,6 @@ func IsShuffleOrder(order Order) bool {
 	}
 }
 
-// ComputeShuffleSeed computes a deterministic seed based on the order type and given time
-//
-// UnixMilli is important as nanoseconds can potentially break the LCG random shuffling in SQL
-func ComputeShuffleSeed(order Order, t time.Time) int64 {
-	switch order {
-	case ShuffleHourly:
-		return t.Truncate(time.Hour).UnixMilli()
-	case ShuffleDaily:
-		return t.Truncate(24 * time.Hour).UnixMilli()
-	case ShuffleWeekly:
-		// Truncate to Monday
-		weekday := t.Weekday()
-		// Sunday is 0, Monday is 1, so we need to adjust
-		daysFromMonday := int(weekday) - 1
-		if daysFromMonday < 0 {
-			daysFromMonday = 6 // Sunday
-		}
-		monday := t.AddDate(0, 0, -daysFromMonday)
-		return monday.Truncate(24 * time.Hour).UnixMilli()
-	case ShuffleMonthly:
-		y, m, _ := t.Date()
-		loc := t.Location()
-		firstOfMonth := time.Date(y, m, 1, 0, 0, 0, 0, loc)
-		return firstOfMonth.UnixMilli()
-	default:
-		return 0
-	}
-}
-
 type Layout struct {
 	Type           Type  `json:"type"`
 	Order          Order `json:"order"`

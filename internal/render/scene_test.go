@@ -1,6 +1,7 @@
 package render
 
 import (
+	"photofield/internal/layout/shuffle"
 	"testing"
 	"time"
 )
@@ -11,7 +12,7 @@ func TestShuffleDependency_UpdatedAt(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		order         int
+		order         shuffle.Order
 		currentTime   time.Time
 		expectedAfter time.Time // The returned time should be >= this
 		expectedEqual time.Time // For exact matches
@@ -99,7 +100,7 @@ func TestShuffleDependency_UpdatedAt_Consistency(t *testing.T) {
 	// returns the same truncated time
 	tests := []struct {
 		name  string
-		order int
+		order shuffle.Order
 	}{
 		{"hourly", ShuffleHourly},
 		{"daily", ShuffleDaily},
@@ -135,7 +136,7 @@ func TestShuffleDependency_UpdatedAt_Staleness(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		order       int
+		order       shuffle.Order
 		sceneTime   time.Time
 		description string
 	}{

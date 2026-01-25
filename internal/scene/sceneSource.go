@@ -14,6 +14,7 @@ import (
 	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/layout"
+	"photofield/internal/layout/shuffle"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
 	"photofield/internal/search"
@@ -79,13 +80,14 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	scene.Loading = true
 	scene.Search = config.Scene.Search
 
-	shuffleSeed := layout.ComputeShuffleSeed(config.Layout.Order, scene.CreatedAt)
+	// Compute shuffle seed for SQL ordering (UnixMilli is important for LCG random shuffling)
+	shuffleSeed := shuffle.TruncateTime(shuffle.Order(config.Layout.Order), scene.CreatedAt).UnixMilli()
 
 	// Add shuffle dependency if order is a shuffle type
 	switch config.Layout.Order {
 	case layout.ShuffleHourly, layout.ShuffleDaily, layout.ShuffleWeekly, layout.ShuffleMonthly:
 		scene.Dependencies = append(scene.Dependencies, &render.ShuffleDependency{
-			Order: int(config.Layout.Order),
+			Order: shuffle.Order(config.Layout.Order),
 		})
 	}
 
