@@ -122,11 +122,16 @@ const marker = computed(() => {
   let year = -1;
   let month = -1;
   let day = -1;
-  let level = 3; // 3: days, 2: months, 1: years
+  let hour = -1;
+  let level = 4; // 4: hours, 3: days, 2: months, 1: years
+
+  const maxCount = 3;
+  let count = 0;
 
   const years = [];
   const months = [];
   const days = [];
+  const hours = [];
 
   const minDist = 20;
   const maxDist = 100;
@@ -135,13 +140,18 @@ const marker = computed(() => {
   for (let i = 0; i < maxY; i++) {
     const t = ts[i];
     date.setTime(t * 60000);
-    const yr = date.getFullYear();
-    const mo = date.getMonth();
-    const dy = date.getDate();
+    const yr = date.getUTCFullYear();
+    const mo = date.getUTCMonth();
+    const dy = date.getUTCDate();
+    const hr = date.getUTCHours();
 
     if (yr !== year && level >= 1) {
       if (year !== -1 && level > 1) {
-        level = 1;
+        count++;
+        if (count >= maxCount) {
+          count = 0;
+          level = 1;
+        }
       }
       const minY = years.length > 0 ? years[years.length - 1].y + minDist : 0;
       if (minY > maxY) continue;
@@ -150,7 +160,11 @@ const marker = computed(() => {
     }
     if (mo !== month && level >= 2) {
       if (month !== -1 && level > 2) {
-        level = 2;
+        count++;
+        if (count >= maxCount) {
+          count = 0;
+          level = 2;
+        }
       }
       const minY = months.length > 0 ? months[months.length - 1].y + minDist : 0;
       if (minY > maxY) continue;
@@ -158,10 +172,23 @@ const marker = computed(() => {
       month = mo;
     }
     if (dy !== day && level >= 3) {
+      if (day !== -1 && level > 3) {
+        count++;
+        if (count >= maxCount) {
+          count = 0;
+          level = 3;
+        }
+      }
       const minY = days.length > 0 ? days[days.length - 1].y + minDist : 0;
       if (minY > maxY) continue;
       if (minY - i < maxDist) days.push({ y: Math.max(minY, i), t, label: dateFormat(date, "d MMM") });
       day = dy;
+    }
+    if (hr !== hour && level >= 4) {
+      const minY = hours.length > 0 ? hours[hours.length - 1].y + minDist : 0;
+      if (minY > maxY) continue;
+      if (minY - i < maxDist) hours.push({ y: Math.max(minY, i), t, label: dateFormat(date, "HH:")+"00" });
+      hour = hr;
     }
   }
 
@@ -172,6 +199,8 @@ const marker = computed(() => {
       return { level, items: months };
     case 3:
       return { level, items: days };
+    case 4:
+      return { level, items: hours };
   }
   return { level, items: [] };
 });
@@ -201,18 +230,19 @@ const thumbLabel = computed(() => {
   const t = timestamps.value[index];
   const date = new Date(t * 60000);
   if (isNaN(Number(date))) return "";
+
   let level = marker.value.level;
   const precise = preciseAnchor.value !== null;
   if (precise) level++;
   switch (level) {
     case 1:
-      return dateFormat(date, "MMM yyyy");
+      return dateFormat(date, "d MMM yyyy");
     case 2:
-      return dateFormat(date, "d MMM");
+      return dateFormat(date, "d MMM yyyy");
     case 3:
-      return dateFormat(date, "EEE HH:mm");
+      return dateFormat(date, "d MMM HH:mm");
     case 4:
-      return dateFormat(date, "HH:mm:ss");
+      return dateFormat(date, "HH:mm");
   }
   return "";
 });
