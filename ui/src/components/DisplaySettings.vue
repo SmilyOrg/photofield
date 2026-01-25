@@ -82,15 +82,21 @@ const layoutOptions = ref([
 const extra = ref(false);
 
 const props = defineProps({
-    query: Object
+    query: Object,
+    collection: Object
 });
 
 const emit = defineEmits([
     "query"
 ]);
 
-// Determine the default sort based on current layout
+// Determine the default sort based on collection config, then layout
 const defaultSort = computed(() => {
+    // Use collection's configured sort if available
+    if (props.collection?.sort) {
+        return props.collection.sort;
+    }
+    // Fall back to layout-based defaults
     const layout = props.query?.layout;
     if (layout === 'TIMELINE') {
         return '-date'; // Newest first for timeline
@@ -100,19 +106,22 @@ const defaultSort = computed(() => {
 
 const sortOptions = computed(() => {
     const def = defaultSort.value;
-    return [
-        { 
-            label: def === '-date' ? "Newest First*" : "Oldest First*", 
-            value: "DEFAULT" 
-        },
-        { 
-            label: def === '-date' ? "Oldest First" : "Newest First", 
-            value: def === '-date' ? '+date' : '-date' 
-        },
+    
+    const options = [
+        { label: "Oldest First", value: '+date' },
+        { label: "Newest First", value: '-date' },
         { label: "Shuffle (Hourly)", value: "+shuffle-hourly" },
         { label: "Shuffle (Daily)", value: "+shuffle-daily" },
         { label: "Shuffle (Weekly)", value: "+shuffle-weekly" },
         { label: "Shuffle (Monthly)", value: "+shuffle-monthly" },
+    ];
+    
+    const defaultOption = options.find(opt => opt.value === def);
+    const defaultLabel = defaultOption ? defaultOption.label : "Default";
+    
+    return [
+        { label: `${defaultLabel}*`, value: "DEFAULT" },
+        ...options,
     ];
 });
 

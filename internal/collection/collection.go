@@ -31,6 +31,10 @@ type Collection struct {
 func (collection *Collection) MakeValid() {
 	collection.Id = slug.Make(collection.Name)
 	collection.Layout = strings.ToUpper(collection.Layout)
+	// Add "+" prefix to sort if it doesn't have "+" or "-"
+	if collection.Sort != "" && !strings.HasPrefix(collection.Sort, "+") && !strings.HasPrefix(collection.Sort, "-") {
+		collection.Sort = "+" + collection.Sort
+	}
 	if collection.Limit > 0 && collection.IndexLimit == 0 {
 		collection.IndexLimit = collection.Limit
 	}

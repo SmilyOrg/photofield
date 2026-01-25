@@ -302,6 +302,10 @@ const sort = computed(() => {
   if (route.query.sort) {
     return route.query.sort;
   }
+  // Use collection's configured sort if available
+  if (collection.value?.sort) {
+    return collection.value.sort;
+  }
   // Default sorting by layout
   switch (layout.value) {
     case "TIMELINE":
