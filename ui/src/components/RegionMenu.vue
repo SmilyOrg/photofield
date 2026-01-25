@@ -72,7 +72,7 @@
 </template>
 
 <script>
-import copyImg from 'copy-image-clipboard';
+import { copyImageToClipboard } from 'copy-image-clipboard';
 
 import TileViewer from './TileViewer.vue';
 import ExpandButton from './ExpandButton.vue';
@@ -139,7 +139,7 @@ export default {
     async copyImage() {
       const id = this.region?.data?.id;
       if (!id) return;
-      await copyImg(this.fileUrl);
+      await copyImageToClipboard(this.fileUrl);
       this.$emit("close");
     },
     async copyImageLink() {
