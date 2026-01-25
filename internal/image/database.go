@@ -40,13 +40,13 @@ func toUnixMs(t time.Time) int64 {
 type ListOrder int32
 
 const (
-	None           ListOrder = iota
-	DateAsc        ListOrder = iota
-	DateDesc       ListOrder = iota
-	ShuffleHourly  ListOrder = iota
-	ShuffleDaily   ListOrder = iota
-	ShuffleWeekly  ListOrder = iota
-	ShuffleMonthly ListOrder = iota
+	None ListOrder = iota
+	DateAsc
+	DateDesc
+	ShuffleHourly
+	ShuffleDaily
+	ShuffleWeekly
+	ShuffleMonthly
 )
 
 type ListOptions struct {
@@ -1764,7 +1764,7 @@ func mergeSortedChannels(channels []<-chan SourcedInfo, order ListOrder, out cha
 				out <- info
 			}
 		}
-		close(out)
+
 		return nil
 	default:
 		return fmt.Errorf("unsupported listing order")

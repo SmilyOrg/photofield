@@ -31,13 +31,13 @@ const (
 type Order int
 
 const (
-	None           Order = iota
-	DateAsc        Order = iota
-	DateDesc       Order = iota
-	ShuffleHourly  Order = iota
-	ShuffleDaily   Order = iota
-	ShuffleWeekly  Order = iota
-	ShuffleMonthly Order = iota
+	None Order = iota
+	DateAsc
+	DateDesc
+	ShuffleHourly
+	ShuffleDaily
+	ShuffleWeekly
+	ShuffleMonthly
 )
 
 func OrderFromSort(s string) Order {

@@ -175,7 +175,7 @@ const onSortChange = (value) => {
     } else if (value.startsWith('+shuffle-')) {
         // If shuffle is selected and layout is DEFAULT, switch to FLEX
         const updates = { sort: value };
-        if (!props.query.layout || props.query.layout === 'DEFAULT') {
+        if (!props.query?.layout || props.query.layout === 'DEFAULT') {
             updates.layout = 'FLEX';
         }
         emit('query', updates);
