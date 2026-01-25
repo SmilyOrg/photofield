@@ -8,11 +8,11 @@
       Layout
     </ui-select>
     <ui-select
-      :modelValue="shuffleInterval"
-      @update:modelValue="onShuffleChange"
-      :options="shuffleOptions"
+      :modelValue="sortValue"
+      @update:modelValue="onSortChange"
+      :options="sortOptions"
     >
-      Shuffle
+      Sort
     </ui-select>
     <div>
       <ui-icon-button
@@ -79,14 +79,6 @@ const layoutOptions = ref([
     { label: "Flex", value: "FLEX" },
 ]);
 
-const shuffleOptions = ref([
-    { label: "None", value: "none" },
-    { label: "Hourly", value: "+shuffle-hourly" },
-    { label: "Daily", value: "+shuffle-daily" },
-    { label: "Weekly", value: "+shuffle-weekly" },
-    { label: "Monthly", value: "+shuffle-monthly" },
-]);
-
 const extra = ref(false);
 
 const props = defineProps({
@@ -97,19 +89,59 @@ const emit = defineEmits([
     "query"
 ]);
 
-const shuffleInterval = computed(() => {
-    const sort = props.query?.sort;
-    if (sort && sort.startsWith('+shuffle-')) {
-        return sort;
+// Determine the default sort based on current layout
+const defaultSort = computed(() => {
+    const layout = props.query?.layout;
+    if (layout === 'TIMELINE') {
+        return '-date'; // Newest first for timeline
     }
-    return "none";
+    return '+date'; // Oldest first for others
 });
 
-const onShuffleChange = (value) => {
-    if (!value || value === 'none') {
-        value = undefined;
+const sortOptions = computed(() => {
+    const def = defaultSort.value;
+    return [
+        { 
+            label: def === '-date' ? "Newest First*" : "Oldest First*", 
+            value: "DEFAULT" 
+        },
+        { 
+            label: def === '-date' ? "Oldest First" : "Newest First", 
+            value: def === '-date' ? '+date' : '-date' 
+        },
+        { label: "Shuffle (Hour)", value: "+shuffle-hourly" },
+        { label: "Shuffle (Day)", value: "+shuffle-daily" },
+        { label: "Shuffle (Week)", value: "+shuffle-weekly" },
+        { label: "Shuffle (Month)", value: "+shuffle-monthly" },
+    ];
+});
+
+const sortValue = computed(() => {
+    const sort = props.query?.sort;
+    if (!sort) {
+        return "DEFAULT";
     }
-    emit('query', { sort: value });
+    return sort;
+});
+
+const onSortChange = (value) => {
+    if (!value || value === 'DEFAULT') {
+        // Clear sort to use default
+        const updates = { sort: undefined };
+        
+        // No need to change layout when going back to default
+        emit('query', updates);
+    } else if (value.startsWith('+shuffle-')) {
+        // If shuffle is selected and layout is DEFAULT, switch to FLEX
+        const updates = { sort: value };
+        if (!props.query.layout || props.query.layout === 'DEFAULT') {
+            updates.layout = 'FLEX';
+        }
+        emit('query', updates);
+    } else {
+        // Regular sort (date ascending/descending)
+        emit('query', { sort: value });
+    }
 };
 
 </script>
