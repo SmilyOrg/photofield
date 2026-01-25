@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   build:
-    # Skip builds on main branch if this commit has a tag
+    # Skip main branch push events for release commits since they will be built when the tag is pushed
     if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Release v')
     runs-on: ubuntu-latest
     steps:
