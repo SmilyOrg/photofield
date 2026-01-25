@@ -35,6 +35,18 @@ Given('{int} generated {int} x {int} geo test photos', async ({ app }, count: nu
   });
 });
 
+Given('{int} generated {int} x {int} test photos with dates from {string}', async ({ app }, count: number, width: number, height: number, years: string) => {
+  if (!app.cwd) {
+    await app.useTempDir();
+    console.log("CWD:", app.cwd);
+  }
+  // Parse years string like "1950,1960,1970,2000,2010,2020,2030"
+  const dateYears = years.split(',').map(y => parseInt(y.trim(), 10));
+  await app.generatePhotos(count, 12345, [width], [height], {
+    dateYears: dateYears,
+  });
+});
+
 Given('the config {string}', async ({ app }, p: string) => {
   const configPath = path.resolve(__dirname, "..", "configs", p);
   await fs.copyFile(configPath, app.path("configuration.yaml"));

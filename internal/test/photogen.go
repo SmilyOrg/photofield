@@ -460,7 +460,7 @@ func (g *TestImageGenerator) setExifTags(images []GeneratedImage) error {
 
 		cmd := exec.Command("exiftool", args...)
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to set EXIF tags for %s: %w", img.Name, err)
+			return fmt.Errorf("failed to set EXIF tags for %s: %s: %w", img.Name, strings.Join(args, " "), err)
 		}
 	}
 

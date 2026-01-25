@@ -255,13 +255,22 @@ func (scene *Scene) Draw(ctx context.Context, config *Render, c *canvas.Context,
 
 }
 
-func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
+// GetTimestamps generates a slice of Unix-like timestamps for each row in the
+// rendered scene. The timestamp is defined in minutes instead of seconds for
+// better range of years within int32 (2115 BC - 6055 AD instead of 1901 - 2038).
+//
+// For a given height, it maps each row (y-coordinate) to the timestamp of the photo that
+// occupies that row in the scene layout. The timestamps represent local photo time,
+// converted from UTC by adding the timezone offset. If a photo has no valid DateTime,
+// the previous photo's timestamp is reused. The height parameter specifies the output
+// resolution, and source provides access to photo metadata.
+func (scene *Scene) GetTimestamps(height int, source *image.Source) []int32 {
 	scale := float64(height) / scene.Bounds.H
-	timestamps := make([]uint32, height)
+	timestamps := make([]int32, height)
 
 	i := 0
 	ty := -1.
-	t := uint32(0)
+	t := int32(0)
 	var photo Photo
 	for y := 0; y < height; y++ {
 		frac := (float64(y) + 0.5) / float64(height)
@@ -276,7 +285,7 @@ func (scene *Scene) GetTimestamps(height int, source *image.Source) []uint32 {
 		info := photo.GetInfo(source)
 		if !info.DateTime.IsZero() {
 			_, timezoneOffsetSeconds := info.DateTime.Zone()
-			t = uint32(info.DateTime.Unix() + int64(timezoneOffsetSeconds))
+			t = int32((info.DateTime.Unix() + int64(timezoneOffsetSeconds)) / 60)
 		}
 		timestamps[y] = t
 	}

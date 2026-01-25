@@ -486,7 +486,7 @@ export function useTimestamps({ scene, height }) {
   )
 
   const timestamps = computed(() => {
-    return new Uint32Array(datesBuffer.value);
+    return new Int32Array(datesBuffer.value);
   });
 
   return timestamps;
@@ -504,9 +504,7 @@ export function useTimestampsDate({ timestamps, ratio }) {
         )
       );
     const timestamp = timestamps.value[index];
-    const now = new Date();
-    const offset = now.getTimezoneOffset()*60;
-    const d = new Date((timestamp + offset) * 1000);
+    const d = new Date(timestamp*60000);
     if (isNaN(Number(d))) return null;
     return d;
   })

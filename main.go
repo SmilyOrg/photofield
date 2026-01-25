@@ -1830,7 +1830,7 @@ func createDummyEntries(count int, seed int64) {
 }
 
 // generateTestPhotos creates test images using the internal test package
-func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr, heightsStr string, enableGPS bool, gpsClumps int, gpsSpreadKm float64) error {
+func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr, heightsStr string, enableGPS bool, gpsClumps int, gpsSpreadKm float64, dateYearsStr string) error {
 	// Parse widths and heights from comma-separated strings
 	widths, err := parseIntList(widthsStr)
 	if err != nil {
@@ -1840,6 +1840,16 @@ func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr
 	heights, err := parseIntList(heightsStr)
 	if err != nil {
 		return fmt.Errorf("invalid heights: %w", err)
+	}
+
+	// Parse date years if provided
+	var dateYears []int
+	if dateYearsStr != "" {
+		dateYears, err = parseIntList(dateYearsStr)
+		if err != nil {
+			return fmt.Errorf("invalid date years: %w", err)
+		}
+		log.Printf("Distributing photos across years: %v", dateYears)
 	}
 
 	// Generate GPS coordinates if enabled
@@ -1858,6 +1868,18 @@ func generateTestPhotos(count int, outputDir string, seed int64, name, widthsStr
 		spec := test.ImageSpec{
 			Width:  width,
 			Height: height,
+		}
+
+		// Add date as EXIF tag if date years are provided
+		if len(dateYears) > 0 {
+			if spec.ExifTags == nil {
+				spec.ExifTags = make(map[string]string)
+			}
+			// Distribute photos evenly across the years
+			year := dateYears[i%len(dateYears)]
+			// Create a date within that year (use mid-year for consistency)
+			dateStr := fmt.Sprintf("%04d:06:15 12:00:00", year)
+			spec.ExifTags["DateTimeOriginal"] = dateStr
 		}
 
 		// Add GPS coordinates as EXIF tags if enabled
@@ -2031,6 +2053,7 @@ func main() {
 	genPhotosGPS := flag.Bool("gen-photos.gps", false, "add GPS coordinates to generated photos")
 	genPhotosGPSClumps := flag.Int("gen-photos.gps-clumps", 5, "number of geographic clusters for GPS coordinates")
 	genPhotosGPSSpreadKm := flag.Float64("gen-photos.gps-spread-km", 2.0, "spread of each GPS cluster in kilometers")
+	genPhotosDateYears := flag.String("gen-photos.date-years", "", "comma-separated list of years to distribute photos across (e.g., '1950,1960,1970,2000')")
 
 	// Scan collection flag
 	scanFlag := flag.String("scan", "", "scan specified collection and exit")
@@ -2048,7 +2071,7 @@ func main() {
 
 	if *genPhotosFlag {
 		log.Printf("generating %d test photos", *genPhotosCount)
-		err := generateTestPhotos(*genPhotosCount, *genPhotosOutput, *genPhotosSeed, *genPhotosName, *genPhotosWidths, *genPhotosHeights, *genPhotosGPS, *genPhotosGPSClumps, *genPhotosGPSSpreadKm)
+		err := generateTestPhotos(*genPhotosCount, *genPhotosOutput, *genPhotosSeed, *genPhotosName, *genPhotosWidths, *genPhotosHeights, *genPhotosGPS, *genPhotosGPSClumps, *genPhotosGPSSpreadKm, *genPhotosDateYears)
 		if err != nil {
 			log.Fatalf("failed to generate test photos: %v", err)
 		}
