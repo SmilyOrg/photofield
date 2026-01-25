@@ -1,0 +1,6 @@
+kind: Added
+body: |-
+    Add shuffle sorting to browse photos in a fresh randomized order
+
+    Browse your photo collection with shuffle sorting that can change hourly, daily, weekly, or monthly. Each shuffle is deterministic, so the same time period always produces the same order. The scene automatically updates with a new shuffle when the time interval changes, either on page refresh or when the browser regains focus. Configure shuffle intervals in the collection YAML config or in the UI display settings. Date and time information is hidden when shuffle is active since photos are no longer in chronological order.
+time: 2026-01-25T19:35:45.183215592+01:00
