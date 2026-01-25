@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - '*'
+      - 'v*'
   pull_request:
     types: [opened, synchronize]
 
@@ -21,6 +21,8 @@ permissions:
 
 jobs:
   build:
+    # Skip builds on main branch if this commit has a tag
+    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/') || !startsWith(github.event.head_commit.message, 'Release v')
     runs-on: ubuntu-latest
     steps:
 
