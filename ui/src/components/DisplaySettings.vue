@@ -1,8 +1,8 @@
 <template>
   <ui-card class="settings">
     <ui-select
-      :modelValue="query.layout"
-      @update:modelValue="emit('query', { layout: $event })"
+      :modelValue="layoutValue"
+      @update:modelValue="onLayoutChange"
       :options="layoutOptions"
     >
       Layout
@@ -69,16 +69,6 @@ import { ref, computed } from 'vue';
 import ExpandButton from './ExpandButton.vue';
 import ColorModeSwitch from './ColorModeSwitch.vue';
 
-const layoutOptions = ref([
-    { label: `Default`, value: "DEFAULT" },
-    { label: "Album", value: "ALBUM" },
-    { label: "Timeline", value: "TIMELINE" },
-    { label: "Wall", value: "WALL" },
-    { label: "Map", value: "MAP" },
-    { label: "Highlights", value: "HIGHLIGHTS" },
-    { label: "Flex", value: "FLEX" },
-]);
-
 const extra = ref(false);
 
 const props = defineProps({
@@ -89,6 +79,48 @@ const props = defineProps({
 const emit = defineEmits([
     "query"
 ]);
+
+// Determine the default layout from collection config
+const defaultLayout = computed(() => {
+    return props.collection?.layout || "ALBUM";
+});
+
+const layoutOptions = computed(() => {
+    const def = defaultLayout.value;
+    
+    const options = [
+        { label: "Album", value: "ALBUM" },
+        { label: "Timeline", value: "TIMELINE" },
+        { label: "Wall", value: "WALL" },
+        { label: "Map", value: "MAP" },
+        { label: "Highlights", value: "HIGHLIGHTS" },
+        { label: "Flex", value: "FLEX" },
+    ];
+    
+    const defaultOption = options.find(opt => opt.value === def);
+    const defaultLabel = defaultOption ? defaultOption.label : "Default";
+    
+    return [
+        { label: `${defaultLabel}*`, value: "DEFAULT" },
+        ...options,
+    ];
+});
+
+const layoutValue = computed(() => {
+    const layout = props.query?.layout;
+    if (!layout || layout === 'DEFAULT') {
+        return "DEFAULT";
+    }
+    return layout;
+});
+
+const onLayoutChange = (value) => {
+    if (!value || value === 'DEFAULT') {
+        emit('query', { layout: undefined });
+    } else {
+        emit('query', { layout: value });
+    }
+};
 
 // Determine the default sort based on collection config, then layout
 const defaultSort = computed(() => {
