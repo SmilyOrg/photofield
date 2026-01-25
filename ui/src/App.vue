@@ -114,6 +114,7 @@
         <div class="settings" :class="{ hidden: !collection || !settingsExpanded, toolbarItemClass }">
           <display-settings
             :query="query"
+            :collection="collection"
             @query="setQuery($event)"
           ></display-settings>
         </div>

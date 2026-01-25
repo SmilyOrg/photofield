@@ -298,6 +298,15 @@ const onSelectTag = async (tag) => {
 }
 
 const sort = computed(() => {
+  // Use query param if provided (shuffle or explicit sort)
+  if (route.query.sort) {
+    return route.query.sort;
+  }
+  // Use collection's configured sort if available
+  if (collection.value?.sort) {
+    return collection.value.sort;
+  }
+  // Default sorting by layout
   switch (layout.value) {
     case "TIMELINE":
       return "-date";

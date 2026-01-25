@@ -401,6 +401,14 @@ func (*Api) PostScenes(w http.ResponseWriter, r *http.Request) {
 	if data.Layout != "" {
 		sceneConfig.Layout.Type = layout.Type(data.Layout)
 	}
+	// Apply collection default sort if no query param provided
+	if data.Sort == nil && sceneConfig.Collection.Sort != "" {
+		sceneConfig.Layout.Order = layout.OrderFromSort(sceneConfig.Collection.Sort)
+		if sceneConfig.Layout.Order == layout.None {
+			problem(w, r, http.StatusBadRequest, "Invalid sort")
+			return
+		}
+	}
 	if data.Sort != nil {
 		sceneConfig.Layout.Order = layout.OrderFromSort(string(*data.Sort))
 		if sceneConfig.Layout.Order == layout.None {
@@ -432,13 +440,6 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 	if params.Layout != nil {
 		sceneConfig.Layout.Type = layout.Type(*params.Layout)
 	}
-	if params.Sort != nil {
-		sceneConfig.Layout.Order = layout.OrderFromSort(string(*params.Sort))
-		if sceneConfig.Layout.Order == layout.None {
-			problem(w, r, http.StatusBadRequest, "Invalid sort")
-			return
-		}
-	}
 	if params.Search != nil {
 		sceneConfig.Scene.Search = string(*params.Search)
 	}
@@ -451,6 +452,22 @@ func (*Api) GetScenes(w http.ResponseWriter, r *http.Request, params openapi.Get
 		return
 	}
 	sceneConfig.Collection = collection
+
+	// Apply collection default sort if no query param provided
+	if params.Sort == nil && collection.Sort != "" {
+		sceneConfig.Layout.Order = layout.OrderFromSort(collection.Sort)
+		if sceneConfig.Layout.Order == layout.None {
+			problem(w, r, http.StatusBadRequest, "Invalid sort")
+			return
+		}
+	}
+	if params.Sort != nil {
+		sceneConfig.Layout.Order = layout.OrderFromSort(string(*params.Sort))
+		if sceneConfig.Layout.Order == layout.None {
+			problem(w, r, http.StatusBadRequest, "Invalid sort")
+			return
+		}
+	}
 
 	// Disregard viewport height for album and timeline layouts
 	// as they are invariant to it

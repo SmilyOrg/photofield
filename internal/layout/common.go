@@ -31,9 +31,13 @@ const (
 type Order int
 
 const (
-	None     Order = iota
-	DateAsc  Order = iota
-	DateDesc Order = iota
+	None Order = iota
+	DateAsc
+	DateDesc
+	ShuffleHourly
+	ShuffleDaily
+	ShuffleWeekly
+	ShuffleMonthly
 )
 
 func OrderFromSort(s string) Order {
@@ -42,8 +46,26 @@ func OrderFromSort(s string) Order {
 		return DateAsc
 	case "-date":
 		return DateDesc
+	case "+shuffle-hourly":
+		return ShuffleHourly
+	case "+shuffle-daily":
+		return ShuffleDaily
+	case "+shuffle-weekly":
+		return ShuffleWeekly
+	case "+shuffle-monthly":
+		return ShuffleMonthly
 	default:
 		return None
+	}
+}
+
+// IsShuffleOrder returns true if the order is any shuffle type
+func IsShuffleOrder(order Order) bool {
+	switch order {
+	case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
+		return true
+	default:
+		return false
 	}
 }
 

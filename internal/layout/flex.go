@@ -65,7 +65,8 @@ func LayoutFlex(infos <-chan image.SourcedInfo, layout Layout, scene *render.Sce
 	var prevAuxTime time.Time
 	nogeo := strings.Contains(layout.Tweaks, "nogeo")
 	for info := range infos {
-		if !nogeo && source.Geo.Available() {
+		// Skip date/location headers when shuffle sort is active (dates are meaningless)
+		if !nogeo && source.Geo.Available() && !IsShuffleOrder(layout.Order) {
 			photoTime := info.DateTime
 			lastLocCheck := prevLocTime.Sub(photoTime)
 			if lastLocCheck < 0 {

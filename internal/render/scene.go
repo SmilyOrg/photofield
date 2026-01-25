@@ -17,6 +17,7 @@ import (
 	"photofield/internal/codec"
 	"photofield/internal/image"
 	"photofield/internal/io"
+	"photofield/internal/layout/shuffle"
 	"photofield/internal/search"
 )
 
@@ -93,6 +94,24 @@ type SceneId = string
 
 type Dependency interface {
 	UpdatedAt() time.Time
+}
+
+// Shuffle order constants matching layout.Order and shuffle package constants
+const (
+	ShuffleHourly  = shuffle.Hourly
+	ShuffleDaily   = shuffle.Daily
+	ShuffleWeekly  = shuffle.Weekly
+	ShuffleMonthly = shuffle.Monthly
+)
+
+type ShuffleDependency struct {
+	Order shuffle.Order
+}
+
+func (d *ShuffleDependency) UpdatedAt() time.Time {
+	// Return truncated current time based on order type
+	// When time crosses into a new period, this will be after scene creation
+	return shuffle.TruncateTime(d.Order, time.Now())
 }
 
 type Scene struct {

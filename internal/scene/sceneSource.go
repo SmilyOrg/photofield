@@ -14,6 +14,7 @@ import (
 	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/layout"
+	"photofield/internal/layout/shuffle"
 	"photofield/internal/metrics"
 	"photofield/internal/render"
 	"photofield/internal/search"
@@ -79,6 +80,17 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 	scene.Loading = true
 	scene.Search = config.Scene.Search
 
+	// Compute shuffle seed for SQL ordering (UnixMilli is important for LCG random shuffling)
+	shuffleSeed := shuffle.TruncateTime(shuffle.Order(config.Layout.Order), scene.CreatedAt).UnixMilli()
+
+	// Add shuffle dependency if order is a shuffle type
+	switch config.Layout.Order {
+	case layout.ShuffleHourly, layout.ShuffleDaily, layout.ShuffleWeekly, layout.ShuffleMonthly:
+		scene.Dependencies = append(scene.Dependencies, &render.ShuffleDependency{
+			Order: shuffle.Order(config.Layout.Order),
+		})
+	}
+
 	go func() {
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
@@ -134,8 +146,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 
 		if config.Layout.Type == layout.Highlights {
 			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{
-				OrderBy: image.ListOrder(config.Layout.Order),
-				Limit:   config.Collection.Limit,
+				OrderBy:     image.ListOrder(config.Layout.Order),
+				ShuffleSeed: shuffleSeed,
+				Limit:       config.Collection.Limit,
 			})
 			layout.LayoutHighlights(infos, config.Layout, &scene, imageSource)
 
@@ -155,9 +168,10 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			var infos <-chan image.SourcedInfo
 			if expression.Filter.Value == "knn" {
 				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
-					OrderBy:    image.ListOrder(config.Layout.Order),
-					Limit:      config.Collection.Limit,
-					Expression: expression,
+					OrderBy:     image.ListOrder(config.Layout.Order),
+					ShuffleSeed: shuffleSeed,
+					Limit:       config.Collection.Limit,
+					Expression:  expression,
 				})
 			} else {
 				// Normal order
@@ -168,11 +182,12 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 					extensions = imageSource.Images.Extensions
 				}
 				infos, deps = config.Collection.GetInfos(imageSource, image.ListOptions{
-					OrderBy:    image.ListOrder(config.Layout.Order),
-					Limit:      config.Collection.Limit,
-					Expression: expression,
-					Embedding:  scene.SearchEmbedding,
-					Extensions: extensions,
+					OrderBy:     image.ListOrder(config.Layout.Order),
+					ShuffleSeed: shuffleSeed,
+					Limit:       config.Collection.Limit,
+					Expression:  expression,
+					Embedding:   scene.SearchEmbedding,
+					Extensions:  extensions,
 				})
 				for _, dep := range deps {
 					scene.Dependencies = append(scene.Dependencies, render.Dependency(&dep))

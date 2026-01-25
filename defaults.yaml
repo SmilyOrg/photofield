@@ -6,7 +6,8 @@ collections:
     dirs: ["./"]
 
   # - name: Collection Name
-  #   layout: album | timeline | wall
+  #   layout: album | timeline | wall | flex | map | highlights
+  #   sort: +date | -date | +shuffle-hourly | +shuffle-daily | +shuffle-weekly | +shuffle-monthly
   #   limit: integer number of photos to limit to (for testing large collections)
   #   expand_subdirs: true | false (expand subdirs of `dirs` to collections)
   #   expand_sort: asc | desc (order of expanded subdirs)
