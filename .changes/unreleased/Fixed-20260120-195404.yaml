@@ -1,3 +1,0 @@
-kind: Fixed
-body: Fix scrollbar dates before 1970 or after 2038 and their timezone handling
-time: 2026-01-20T19:54:04.863264098+01:00
