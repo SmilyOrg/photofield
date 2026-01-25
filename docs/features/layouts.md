@@ -7,6 +7,23 @@ You can set the default layout for each collection in the
 [configuration](../configuration), or change the currently displayed layout
 through the cog icon in the top right corner.
 
+## Sorting
+
+Photos can be sorted in different ways:
+
+* **Date (Ascending/Descending)** - Sort photos chronologically
+* **Shuffle** - Randomize the order of photos with deterministic shuffles that change at specified intervals:
+  * **Hourly** - New shuffle every hour
+  * **Daily** - New shuffle every day
+  * **Weekly** - New shuffle every week
+  * **Monthly** - New shuffle every month
+
+Shuffle sorting is useful for rediscovering forgotten photos in your collection. Each shuffle is deterministic, meaning the same time period always produces the same order. The scene automatically updates with a new shuffle when the time interval changes, either on page refresh or when the browser regains focus.
+
+When shuffle is active, date and time information is hidden since photos are no longer in chronological order.
+
+You can configure the default sort order in the [configuration](../configuration) or change it dynamically through the display settings (cog icon).
+
 ## Album
 
 The **Album** layout groups photos chronologically by event. This layout is

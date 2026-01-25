@@ -24,6 +24,12 @@ collections:
       - /photo/myphotos
       - /exampleuser
 
+  # Shuffle collection that changes daily
+  - name: Daily Shuffle
+    sort: +shuffle-daily
+    dirs:
+      - /photo/all-photos
+
   # Create collections from sub-directories based on their name
   - expand_subdirs: true
     expand_sort: desc
