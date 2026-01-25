@@ -59,6 +59,16 @@ func OrderFromSort(s string) Order {
 	}
 }
 
+// IsShuffleOrder returns true if the order is any shuffle type
+func IsShuffleOrder(order Order) bool {
+	switch order {
+	case ShuffleHourly, ShuffleDaily, ShuffleWeekly, ShuffleMonthly:
+		return true
+	default:
+		return false
+	}
+}
+
 // ComputeShuffleSeed computes a deterministic seed based on the order type and given time
 func ComputeShuffleSeed(order Order, t time.Time) int64 {
 	switch order {

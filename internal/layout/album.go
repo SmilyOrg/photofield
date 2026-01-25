@@ -26,11 +26,30 @@ type AlbumEvent struct {
 
 func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene *render.Scene, source *image.Source) render.Rect {
 
-	if event.FirstOnDay {
-		dateFormat := "Monday, Jan 2"
-		if event.First {
-			dateFormat = "Monday, Jan 2, 2006"
+	// Skip date/time headers when shuffle sort is active (dates are meaningless)
+	if !IsShuffleOrder(layout.Order) {
+		if event.FirstOnDay {
+			dateFormat := "Monday, Jan 2"
+			if event.First {
+				dateFormat = "Monday, Jan 2, 2006"
+			}
+			text := render.NewTextFromRect(
+				render.Rect{
+					X: rect.X,
+					Y: rect.Y,
+					W: rect.W,
+					H: 40,
+				},
+				&scene.Fonts.Header,
+				event.StartTime.Format(dateFormat),
+			)
+			text.VAlign = canvas.Bottom
+			scene.Texts = append(scene.Texts, text)
+			rect.Y += text.Sprite.Rect.H
 		}
+
+		font := scene.Fonts.Main.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+		time := event.StartTime.Format("15:00")
 		text := render.NewTextFromRect(
 			render.Rect{
 				X: rect.X,
@@ -38,29 +57,13 @@ func LayoutAlbumEvent(layout Layout, rect render.Rect, event *AlbumEvent, scene 
 				W: rect.W,
 				H: 40,
 			},
-			&scene.Fonts.Header,
-			event.StartTime.Format(dateFormat),
+			&font,
+			time,
 		)
 		text.VAlign = canvas.Bottom
 		scene.Texts = append(scene.Texts, text)
 		rect.Y += text.Sprite.Rect.H
 	}
-
-	font := scene.Fonts.Main.Face(50, canvas.Black, canvas.FontRegular, canvas.FontNormal)
-	time := event.StartTime.Format("15:00")
-	text := render.NewTextFromRect(
-		render.Rect{
-			X: rect.X,
-			Y: rect.Y,
-			W: rect.W,
-			H: 40,
-		},
-		&font,
-		time,
-	)
-	text.VAlign = canvas.Bottom
-	scene.Texts = append(scene.Texts, text)
-	rect.Y += text.Sprite.Rect.H
 
 	newBounds := addSectionToScene(&event.Section, scene, rect, layout, source)
 

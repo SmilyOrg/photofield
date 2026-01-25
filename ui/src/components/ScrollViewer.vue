@@ -41,6 +41,7 @@
     ></Spinner>
 
     <DateStrip
+      v-if="!isShuffleSort"
       class="date-strip"
       :class="{ visible: Math.abs(scrollDelta) > viewport.height.value * 8 }"
       :date="scrollDate"
@@ -56,7 +57,7 @@
       class="scrollbar"
       :y="scrollY"
       :max="scrollMax"
-      :timestamps="timestamps"
+      :timestamps="isShuffleSort ? null : timestamps"
       @change="scrollToPixels"
     ></Scrollbar>
 
@@ -287,6 +288,9 @@ const nativeScroll = computed(() => {
   return true;
 });
 
+const isShuffleSort = computed(() => {
+  return sort.value?.startsWith('+shuffle-') || false;
+});
 
 
 const centerToBounds = async (bounds) => {

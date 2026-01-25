@@ -36,29 +36,32 @@ func LayoutTimelineEvent(
 
 	// log.Println("layout event", len(event.Section.photos), rect.X, rect.Y)
 
-	textBounds := render.Rect{
-		X: rect.X,
-		Y: rect.Y,
-		W: rect.W,
-		H: 30.,
+	// Skip date/time headers when shuffle sort is active (dates are meaningless)
+	if !IsShuffleOrder(layout.Order) {
+		textBounds := render.Rect{
+			X: rect.X,
+			Y: rect.Y,
+			W: rect.W,
+			H: 30.,
+		}
+
+		headerText := event.StartTime.Format(timeFormat) + " " + event.Location
+
+		duration := event.EndTime.Sub(event.StartTime)
+		if duration >= 1*time.Minute {
+			dur := durafmt.Parse(duration)
+			headerText += "   " + dur.LimitFirstN(1).String()
+		}
+
+		text := render.NewTextFromRect(
+			textBounds,
+			headerFont,
+			headerText,
+		)
+		text.VAlign = canvas.Bottom
+		scene.Texts = append(scene.Texts, text)
+		rect.Y += textBounds.H + 4
 	}
-
-	headerText := event.StartTime.Format(timeFormat) + " " + event.Location
-
-	duration := event.EndTime.Sub(event.StartTime)
-	if duration >= 1*time.Minute {
-		dur := durafmt.Parse(duration)
-		headerText += "   " + dur.LimitFirstN(1).String()
-	}
-
-	text := render.NewTextFromRect(
-		textBounds,
-		headerFont,
-		headerText,
-	)
-	text.VAlign = canvas.Bottom
-	scene.Texts = append(scene.Texts, text)
-	rect.Y += textBounds.H + 4
 
 	newBounds := addSectionToScene(&event.Section, scene, rect, layout, source)
 

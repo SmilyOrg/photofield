@@ -76,7 +76,8 @@ func LayoutHighlights(infos <-chan image.InfoEmb, layout Layout, scene *render.S
 	var prevInvNorm float32
 
 	for info := range infos {
-		if source.Geo.Available() {
+		// Skip date/location headers when shuffle sort is active (dates are meaningless)
+		if source.Geo.Available() && !IsShuffleOrder(layout.Order) {
 			photoTime := info.DateTime
 			lastLocCheck := prevLocTime.Sub(photoTime)
 			if lastLocCheck < 0 {
