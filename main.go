@@ -2292,6 +2292,10 @@ func main() {
 		mime.AddExtensionType(".png", "image/png")
 		mime.AddExtensionType(".jpg", "image/jpg")
 		mime.AddExtensionType(".jpeg", "image/jpeg")
+		mime.AddExtensionType(".heic", "image/heic")
+		mime.AddExtensionType(".heif", "image/heif")
+		mime.AddExtensionType(".gif", "image/gif")
+		mime.AddExtensionType(".mov", "video/quicktime")
 		mime.AddExtensionType(".ico", "image/vnd.microsoft.icon")
 
 		uifs, err := fs.Sub(StaticFs, "ui/dist")
