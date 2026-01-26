@@ -265,12 +265,35 @@ tasks:
           wget -q -O "$gpkg_path" https://github.com/SmilyOrg/tinygpkg-data/releases/download/{{ .GPKG_VER }}/{{ .GPKG_FILE }} 
           echo "downloaded to $PWD/$gpkg_path"
 
+  setup:ui:
+    desc: Install UI dependencies
+    dir: ui
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules/.package-lock.json
+    cmds:
+      - npm install
+
+  setup:
+    desc: Setup minimal dependencies for development (UI npm packages and geo assets)
+    deps:
+      - setup:ui
+      - assets
+
   dev:
+    desc: Run the API and UI in watch mode
+    cmds:
+      - task: setup
+      - task: dev:watch
+
+  dev:watch:
     desc: Run the API and UI in watch mode
     deps:
       - watch
       - ui
-
+      
   ui:
     desc: Run the UI in watch mode
     dir: ui

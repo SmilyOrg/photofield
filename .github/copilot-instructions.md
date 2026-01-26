@@ -55,6 +55,14 @@ Migration naming: `{sequence}_{description}.{up|down}.sql`
 
 ## Development Workflows
 
+### Getting Started (Fresh Worktree or Clone)
+**First time setup** - `task dev` automatically installs dependencies:
+- Installs UI npm packages (cached based on package.json)
+- Downloads geo assets for reverse geocoding (~50MB)
+- Starts API + UI in watch mode
+
+**Working in worktrees**: Set `PHOTOFIELD_DATA_DIR=~/code/photofield/data` to share the data directory (config, databases, caches) with the main repo. Without this, each worktree has isolated data.
+
 ### Build System (Taskfile.yml)
 **Conditional compilation with build tags**:
 - `embedui` - embeds `ui/dist/` into binary (requires `task build:ui` first)
@@ -63,7 +71,8 @@ Migration naming: `{sequence}_{description}.{up|down}.sql`
 
 Common workflows:
 ```bash
-task dev           # Run API + UI in watch mode (two terminals)
+task dev           # Run API + UI in watch mode (auto-setup on first run)
+task setup         # Manually install UI deps + geo assets
 task watch         # API only with hot-reload via watchexec
 task ui            # UI dev server (Vite)
 task run:embed     # Build with embedded UI+docs, run locally
