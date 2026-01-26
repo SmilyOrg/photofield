@@ -127,8 +127,8 @@ media:
     
   # File extensions to index on the file system
   extensions: [
-    ".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng",
-    ".mp4",
+    ".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng", ".heic", ".heif", ".gif",
+    ".mp4", ".mov",
   ]
 
   # Used to extract dates from file names as a heuristic in case of missing or
@@ -137,11 +137,10 @@ media:
   date_formats: ["20060201_150405"]
   images:
     # Extensions to use to understand a file to be an image
-    # extensions: [".jpg", ".jpeg", ".png", ".gif"]
-    extensions: [".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng"]
+    extensions: [".jpg", ".jpeg", ".png", ".avif", ".bmp", ".pam", ".ppm", ".jxl", ".exr", ".cr2", ".dng", ".heic", ".heif", ".gif"]
 
   videos:
-    extensions: [".mp4"]
+    extensions: [".mp4", ".mov"]
 
   # 
   # Media source configuration

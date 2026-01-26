@@ -3,7 +3,7 @@
 These tools are not strictly required, but if they are installed in your system, Photofield will use them to improve performance, metadata extraction, thumbnail generation, and video previews.
 
 - [ExifTool]: Extracts metadata from many more formats than the embedded [goexif].
-- [FFmpeg]: Generates video thumbnails and previews and adds support for more image formats (even basic RAW).
+- [FFmpeg]: Generates video thumbnails and previews and adds support for more image formats including HEIC/HEIF (iOS photos), MOV (QuickTime videos), and basic RAW formats. **(v7.0+ recommended)**
 - [djpeg (libjpeg-turbo)]: Accelerates JPEG decoding of big images in cases where there are no other appropriate thumbnails available.
 - [libwebp]: Enables high-performance WebP encoding via dynamic library loading. When available, the [go-libwebp] encoder can use the native libwebp dynamic shared library for faster encoding (`webp-jackdyn`) compared to pure Go implementations (`webp-jacktra`).
 

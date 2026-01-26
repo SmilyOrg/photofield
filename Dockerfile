@@ -17,8 +17,13 @@ RUN \
     -o /build/photofield .
 
 # Runtime stage
-FROM alpine:3.22
+FROM alpine:3.23
 
+# Install runtime dependencies
+# - exiftool: metadata extraction
+# - ffmpeg: video thumbnails, HEIC/HEIF/MOV/GIF support (requires build with HEVC/H.265 decoder + libheif; v7.0+ recommended, see docs)
+# - libjpeg-turbo-utils: fast JPEG decoding via djpeg
+# - libwebp: WebP encoding support
 RUN apk add --no-cache exiftool ffmpeg libjpeg-turbo-utils libwebp && \
     ln -s /usr/lib/libwebp.so.7 /usr/lib/libwebp.so
 
