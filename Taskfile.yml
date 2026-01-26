@@ -284,11 +284,16 @@ tasks:
 
   dev:
     desc: Run the API and UI in watch mode
+    cmds:
+      - task: setup
+      - task: dev:watch
+
+  dev:watch:
+    desc: Run the API and UI in watch mode
     deps:
-      - setup
       - watch
       - ui
-
+      
   ui:
     desc: Run the UI in watch mode
     dir: ui
