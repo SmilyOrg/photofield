@@ -2281,22 +2281,25 @@ func main() {
 	r.Mount("/debug", middleware.Profiler())
 	r.Handle("/debug/fgprof", fgprof.Handler())
 
+	// Register media MIME types for both UI+API and API-only modes
+	// (needed for /files/{id} endpoint in all modes)
+	mime.AddExtensionType(".png", "image/png")
+	mime.AddExtensionType(".jpg", "image/jpg")
+	mime.AddExtensionType(".jpeg", "image/jpeg")
+	mime.AddExtensionType(".heic", "image/heic")
+	mime.AddExtensionType(".heif", "image/heif")
+	mime.AddExtensionType(".gif", "image/gif")
+	mime.AddExtensionType(".mov", "video/quicktime")
+	mime.AddExtensionType(".ico", "image/vnd.microsoft.icon")
+
 	msg := ""
 	if apiPrefix != "/" {
-		// Hardcode well-known mime types, see https://github.com/golang/go/issues/32350
+		// Hardcode well-known mime types for UI assets, see https://github.com/golang/go/issues/32350
 		mime.AddExtensionType(".js", "text/javascript")
 		mime.AddExtensionType(".css", "text/css")
 		mime.AddExtensionType(".html", "text/html")
 		mime.AddExtensionType(".woff", "font/woff")
 		mime.AddExtensionType(".woff2", "font/woff2")
-		mime.AddExtensionType(".png", "image/png")
-		mime.AddExtensionType(".jpg", "image/jpg")
-		mime.AddExtensionType(".jpeg", "image/jpeg")
-		mime.AddExtensionType(".heic", "image/heic")
-		mime.AddExtensionType(".heif", "image/heif")
-		mime.AddExtensionType(".gif", "image/gif")
-		mime.AddExtensionType(".mov", "video/quicktime")
-		mime.AddExtensionType(".ico", "image/vnd.microsoft.icon")
 
 		uifs, err := fs.Sub(StaticFs, "ui/dist")
 		if err != nil {
