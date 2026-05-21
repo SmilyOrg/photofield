@@ -307,8 +307,8 @@ func (c *Coordinator) addTask(t *task.Task) (*task.Task, bool) {
 }
 
 // AddFiles queues a file scan task for the given collection.
-// On success the coordinator automatically enqueues metadata, contents, and
-// face detection tasks so callers only need to trigger this single stage.
+// On success the coordinator automatically enqueues metadata and contents
+// tasks so callers only need to trigger this single stage.
 func (c *Coordinator) AddFiles(collectionId, collectionName string, dirs []string, maxPhotos int) (*task.Task, bool) {
 	return c.addTask(task.NewFilesTask(collectionId, collectionName, dirs, maxPhotos))
 }

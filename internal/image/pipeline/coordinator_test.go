@@ -124,8 +124,8 @@ func TestCoordinatorList(t *testing.T) {
 	}
 }
 
-// TestCoordinatorPriorityOrder verifies metadata tasks are dequeued before contents,
-// contents before faces, and within a stage newer tasks are dequeued first.
+// TestCoordinatorPriorityOrder verifies metadata tasks are dequeued before
+// contents, and within a stage newer tasks are dequeued first.
 func TestCoordinatorPriorityOrder(t *testing.T) {
 	// Build the queue directly without running the worker
 	c := &Coordinator{
