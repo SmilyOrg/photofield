@@ -17,7 +17,7 @@
         :collection="collection"
         :scenes="scenes"
         :tasks="tasks"
-        @reload="emit('reload', $event)"
+        @reload="(type, force) => emit('reload', type, force)"
       >
       </collection-debug>
 

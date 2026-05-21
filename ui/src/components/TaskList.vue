@@ -29,12 +29,20 @@
             active
           ></ui-progress>
         </ui-item-text-content>
+        <ui-icon-button
+          v-if="task.id"
+          icon="close"
+          class="stop-button"
+          title="Stop task"
+          @click="stopTask(task.id)"
+        ></ui-icon-button>
       </ui-item>
     </ui-list>
   </div>
 </template>
 
 <script setup>
+import { stopTask } from '../api.js';
 
 const props = defineProps({
     tasks: Array
@@ -52,6 +60,10 @@ const props = defineProps({
 
 .task-content {
   width: 100%;
+}
+
+.stop-button {
+  flex-shrink: 0;
 }
 
 </style>

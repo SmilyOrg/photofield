@@ -378,8 +378,8 @@ export default {
       await this.remoteTasksUpdateUntilDone();
       this.recreateScene();
     },
-    async reload(type) {
-      await createTask(type, this.collection?.id);
+    async reload(type, force) {
+      await createTask(type, this.collection?.id, force ? { force: true } : undefined);
       this.drawer = false;
       await this.remoteTasksUpdateUntilDone();
       this.recreateScene();
