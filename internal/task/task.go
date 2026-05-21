@@ -124,7 +124,7 @@ func New(taskType, id, name, collectionId string) *Task {
 
 // NewIndexTask creates a task for indexing a collection
 //
-// Deprecated: use NewMetadataTask, NewContentsTask, or NewFacesTask instead.
+// Deprecated: use NewMetadataTask or NewContentsTask instead.
 func NewIndexTask(collectionId, collectionName string, dirs []string, maxPhotos int, intent interface{}) *Task {
 	t := New(
 		"INDEX",
@@ -172,4 +172,3 @@ func NewContentsTask(collectionId, collectionName string, dirs []string, maxPhot
 func NewFilesTask(collectionId, collectionName string, dirs []string, maxPhotos int) *Task {
 	return newStageTask(TypeIndexFiles, collectionId, collectionName, dirs, maxPhotos, false)
 }
-
