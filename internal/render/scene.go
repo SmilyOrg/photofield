@@ -13,7 +13,7 @@ import (
 	"github.com/tdewolff/canvas"
 	"golang.org/x/image/draw"
 
-	"photofield/internal/clip"
+	"photofield/internal/ai"
 	"photofield/internal/codec"
 	"photofield/internal/image"
 	"photofield/internal/io"
@@ -119,7 +119,7 @@ type Scene struct {
 	CreatedAt       time.Time      `json:"created_at"`
 	Search          string         `json:"search,omitempty"`
 	SearchTokens    []search.Token `json:"search_tokens,omitempty"`
-	SearchEmbedding clip.Embedding `json:"-"`
+	SearchEmbedding ai.Embedding `json:"-"`
 	Loading         bool           `json:"loading"`
 	LoadCount       int            `json:"load_count,omitempty"`
 	LoadUnit        string         `json:"load_unit,omitempty"`

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"photofield/internal/clip"
+	"photofield/internal/ai"
 	"photofield/internal/metrics"
 	"photofield/internal/search"
 	"photofield/internal/tag"
@@ -54,7 +54,7 @@ type ListOptions struct {
 	ShuffleSeed int64
 	Limit       int
 	Expression  search.Expression
-	Embedding   clip.Embedding
+	Embedding   ai.Embedding
 	Extensions  []string
 	Batch       int
 }
@@ -107,7 +107,7 @@ const (
 type InfoWrite struct {
 	Path      string
 	Id        int64
-	Embedding clip.Embedding
+	Embedding ai.Embedding
 	Type      InfoWriteType
 	Ids       Ids
 	Done      chan any
@@ -134,7 +134,7 @@ type InfoListResult struct {
 
 type EmbeddingsResult struct {
 	Id ImageId
-	clip.Embedding
+	ai.Embedding
 }
 
 type TagIdRange struct {
@@ -144,18 +144,18 @@ type TagIdRange struct {
 
 type tagSet map[tag.Id]struct{}
 
-func readEmbedding(stmt *sqlite.Stmt, invnormIndex int, embeddingIndex int) (clip.Embedding, error) {
+func readEmbedding(stmt *sqlite.Stmt, invnormIndex int, embeddingIndex int) (ai.Embedding, error) {
 	if stmt.ColumnType(invnormIndex) == sqlite.TypeNull || stmt.ColumnType(embeddingIndex) == sqlite.TypeNull {
-		return clip.FromRaw(nil, 0), ErrNotFound
+		return ai.FromRaw(nil, 0), ErrNotFound
 	}
-	invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(invnormIndex))
+	invnorm := uint16(ai.InvNormMean + stmt.ColumnInt64(invnormIndex))
 	size := stmt.ColumnLen(embeddingIndex)
 	bytes := make([]byte, size)
 	read := stmt.ColumnBytes(embeddingIndex, bytes)
 	if read != size {
-		return clip.FromRaw(nil, 0), fmt.Errorf("unable to read embedding bytes, expected %d, got %d", size, read)
+		return ai.FromRaw(nil, 0), fmt.Errorf("unable to read embedding bytes, expected %d, got %d", size, read)
 	}
-	return clip.FromRaw(bytes, invnorm), nil
+	return ai.FromRaw(bytes, invnorm), nil
 }
 
 func (tags *tagSet) Add(id tag.Id) {
@@ -653,7 +653,7 @@ func (source *Database) writePendingInfosSqlite() {
 
 			case UpdateAI:
 				updateAI.BindInt64(1, int64(imageInfo.Id))
-				updateAI.BindInt64(2, int64(imageInfo.Embedding.InvNormUint16())-clip.InvNormMean)
+				updateAI.BindInt64(2, int64(imageInfo.Embedding.InvNormUint16())-ai.InvNormMean)
 				updateAI.BindBytes(3, imageInfo.Embedding.Byte())
 
 				_, err := updateAI.Step()
@@ -1165,7 +1165,7 @@ func (source *Database) Delete(id ImageId) error {
 	return nil
 }
 
-func (source *Database) WriteAI(id ImageId, embedding clip.Embedding) error {
+func (source *Database) WriteAI(id ImageId, embedding ai.Embedding) error {
 	source.pending <- &InfoWrite{
 		Id:        int64(id),
 		Type:      UpdateAI,
@@ -2065,7 +2065,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				ee := e.Float32()
 				einv := e.InvNormFloat32()
 				if emb != nil {
-					sim, err := clip.CosineSimilarityFloat32Float32(emb, embInvNorm, ee, einv)
+					sim, err := ai.CosineSimilarityFloat32Float32(emb, embInvNorm, ee, einv)
 					if err != nil {
 						log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
 						continue
@@ -2077,7 +2077,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				}
 				if options.Expression.Deduplicate.Present {
 					if lastEmb != nil {
-						sim, err := clip.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
+						sim, err := ai.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
 						if err != nil {
 							log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
 							continue
@@ -2273,7 +2273,7 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 	return out
 }
 
-func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
+func (source *Database) GetImageEmbedding(id ImageId) (ai.Embedding, error) {
 	conn := source.pool.Get(context.TODO())
 	defer source.pool.Put(conn)
 
@@ -2291,7 +2291,7 @@ func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
 		return nil, nil
 	}
 
-	invnorm := uint16(clip.InvNormMean + stmt.ColumnInt64(0))
+	invnorm := uint16(ai.InvNormMean + stmt.ColumnInt64(0))
 
 	size := stmt.ColumnLen(1)
 	bytes := make([]byte, size)
@@ -2300,7 +2300,7 @@ func (source *Database) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
 		return nil, fmt.Errorf("error reading embedding: buffer underrun, expected %d actual %d bytes", size, read)
 	}
 
-	return clip.FromRaw(bytes, invnorm), nil
+	return ai.FromRaw(bytes, invnorm), nil
 }
 
 func (source *Database) ListEmbeddings(dirs []string, options ListOptions) <-chan EmbeddingsResult {
@@ -2622,6 +2622,76 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 		close(out)
 	}()
 	return out
+}
+
+func (source *Database) CountMissing(dirs []string, opts Missing) (int, bool) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `SELECT COUNT(DISTINCT infos.id) FROM infos
+		INNER JOIN prefix ON prefix.id = path_prefix_id`
+
+	if opts.Embedding {
+		sql += `
+		LEFT JOIN clip_emb ON clip_emb.file_id = infos.id`
+	}
+
+	sql += `
+		WHERE path_prefix_id IN (
+			SELECT id
+			FROM prefix
+			WHERE `
+
+	for i := range dirs {
+		sql += `str LIKE ? `
+		if i < len(dirs)-1 {
+			sql += "OR "
+		}
+	}
+
+	sql += `)`
+
+	// Build conditions for missing data
+	conditions := make([]string, 0)
+	if opts.Metadata {
+		conditions = append(conditions,
+			"(width IS NULL OR height IS NULL OR orientation IS NULL OR created_at_unix IS NULL)")
+	}
+	if opts.Color {
+		conditions = append(conditions, "color IS NULL")
+	}
+	if opts.Embedding {
+		conditions = append(conditions, "file_id IS NULL")
+	}
+
+	if len(conditions) > 0 {
+		sql += ` AND (`
+		for i, cond := range conditions {
+			sql += cond
+			if i < len(conditions)-1 {
+				sql += " OR "
+			}
+		}
+		sql += `)`
+	}
+
+	stmt := conn.Prep(sql)
+	bindIndex := 1
+	defer stmt.Reset()
+
+	for _, dir := range dirs {
+		stmt.BindText(bindIndex, dir+"%")
+		bindIndex++
+	}
+
+	if exists, err := stmt.Step(); err != nil {
+		log.Printf("error counting missing files: %s\n", err.Error())
+		return 0, false
+	} else if !exists {
+		return 0, false
+	}
+
+	return stmt.ColumnInt(0), true
 }
 
 func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-chan MissingInfo {

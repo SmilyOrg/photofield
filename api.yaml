@@ -729,20 +729,33 @@ paths:
                   $ref: "#/components/schemas/TaskType"
                 collection_id:
                   $ref: "#/components/schemas/CollectionId"
+                force:
+                  type: boolean
+                  description: "When true, reprocesses all files even if data already exists. When false or omitted, only processes files with missing data."
       responses:
         "202":
           description: Accepted, it might take some time for the task to finish.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
         "409":
           description: Conflict, task already in progress for the 
             specified parameters.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Task"
     get:
       description: Get currently running tasks.
       tags: ["System"]
@@ -769,6 +782,18 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Task"
+
+  /tasks/{id}:
+    delete:
+      description: Stop and remove a task by ID.
+      tags: ["System"]
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPathParam"
+      responses:
+        "204":
+          description: Task stopped successfully.
+        "404":
+          description: Task not found.
 
   /capabilities:
     get:
@@ -815,6 +840,14 @@ components:
       description: Tag ID
       schema:
         $ref: "#/components/schemas/TagId"
+
+    TaskIdPathParam:
+      name: id
+      in: path
+      required: true
+      description: Task ID
+      schema:
+        $ref: "#/components/schemas/TaskId"
 
     FileIdPathParam:
       name: id
@@ -1123,12 +1156,22 @@ components:
           
     TaskType:
       type: string
+      description: |
+        Task type for background operations.
+
+        Use `force: true` to reprocess all files, `force: false` (default) to only
+        process files with missing data.
+        
+        Deprecated (old queue-based path, use the pipeline types instead):
+        - INDEX_CONTENTS_COLOR
+        - INDEX_CONTENTS_AI
       enum:
         - INDEX_FILES
         - INDEX_METADATA
         - INDEX_CONTENTS
         - INDEX_CONTENTS_COLOR
         - INDEX_CONTENTS_AI
+        - INDEX_ALL
     
     CollectionId:
       type: string

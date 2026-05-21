@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"photofield/internal/clip"
+	"photofield/internal/ai"
 	"photofield/internal/collection"
 	"photofield/internal/fs"
 	"photofield/internal/geo"
@@ -24,7 +24,7 @@ type AppConfig struct {
 	Layout        layout.Layout           `json:"layout"`
 	Render        render.Render           `json:"render"`
 	Media         image.Config            `json:"media"`
-	AI            clip.AI                 `json:"ai"`
+	AI            ai.AI                 `json:"ai"`
 	Geo           geo.Config              `json:"geo"`
 	Tags          tag.Config              `json:"tags"`
 	TileRequests  TileRequestConfig       `json:"tile_requests"`

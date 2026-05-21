@@ -13,7 +13,7 @@ import (
 
 	goio "io"
 
-	"photofield/internal/clip"
+	"photofield/internal/ai"
 	"photofield/internal/geo"
 	"photofield/internal/io"
 	"photofield/internal/io/djpeg"
@@ -22,7 +22,6 @@ import (
 	"photofield/internal/io/ristretto"
 	"photofield/internal/io/sqlite"
 	"photofield/internal/metrics"
-	"photofield/internal/queue"
 	"photofield/internal/tag"
 
 	"github.com/docker/go-units"
@@ -40,17 +39,6 @@ func IdsToUint32(ids <-chan ImageId) <-chan uint32 {
 	go func() {
 		for id := range ids {
 			out <- uint32(id)
-		}
-		close(out)
-	}()
-	return out
-}
-
-func MissingInfoToInterface(c <-chan MissingInfo) <-chan interface{} {
-	out := make(chan interface{})
-	go func() {
-		for m := range c {
-			out <- interface{}(m)
 		}
 		close(out)
 	}()
@@ -86,7 +74,7 @@ type SimilarityInfo struct {
 
 type InfoEmb struct {
 	SourcedInfo
-	Embedding clip.Embedding
+	Embedding ai.Embedding
 }
 
 func SimilarityInfosToSourcedInfos(sinfos <-chan SimilarityInfo) <-chan SourcedInfo {
@@ -118,7 +106,7 @@ type Caches struct {
 
 type Config struct {
 	DataDir   string
-	AI        clip.AI
+	AI        ai.AI
 	TagConfig tag.Config `json:"-"`
 
 	// Binary paths for external tools
@@ -164,14 +152,11 @@ type Source struct {
 	imageInfoCache InfoCache
 	pathCache      PathCache
 
-	metadataQueue queue.Queue
-	contentsQueue queue.Queue
-
 	thumbnailSources    []io.ReadDecoderSource
 	thumbnailGenerators io.Sources
 	thumbnailSink       *sqlite.Source
 
-	Clip clip.Clip
+	Clip ai.AI
 	Geo  *geo.Geo
 }
 
@@ -280,25 +265,29 @@ func NewSource(config Config, migrations embed.FS, geo *geo.Geo) *Source {
 	} else {
 
 		source.Clip = config.AI
-
-		source.metadataQueue = queue.Queue{
-			ID:          "index_metadata",
-			Name:        "index metadata",
-			Worker:      source.indexMetadata,
-			WorkerCount: config.ConcurrentMetaLoads,
-		}
-		go source.metadataQueue.Run()
-
-		source.contentsQueue = queue.Queue{
-			ID:          "index_contents",
-			Name:        "index contents",
-			Worker:      source.indexContents,
-			WorkerCount: 8,
-		}
-		go source.contentsQueue.Run()
 	}
 
 	return &source
+}
+
+func (source *Source) DB() *Database {
+	return source.database
+}
+
+func (source *Source) Decoder() *Decoder {
+	return source.decoder
+}
+
+func (source *Source) ThumbSources() []io.ReadDecoderSource {
+	return source.thumbnailSources
+}
+
+func (source *Source) ThumbGenerators() io.Sources {
+	return source.thumbnailGenerators
+}
+
+func (source *Source) ThumbSink() *sqlite.Source {
+	return source.thumbnailSink
 }
 
 func (source *Source) HandleDirUpdates(fn DirsFunc) {
@@ -309,14 +298,7 @@ func (source *Source) Vacuum() error {
 	return source.database.vacuum()
 }
 
-func (source *Source) WaitOnQueue() {
-	source.metadataQueue.Wait()
-	source.contentsQueue.Wait()
-}
-
 func (source *Source) Close() {
-	source.metadataQueue.Close()
-	source.contentsQueue.Close()
 	source.decoder.Close()
 	source.database.Close()
 	source.imageCache.Close()
@@ -365,44 +347,6 @@ func (source *Source) ListMissingEmbeddingIds(dirs []string, maxPhotos int) <-ch
 	return source.database.ListIds(dirs, maxPhotos, true)
 }
 
-func (source *Source) ListMissingMetadata(dirs []string, maxPhotos int, force Missing) <-chan MissingInfo {
-	opts := Missing{
-		Metadata: true,
-	}
-	if force.Metadata {
-		opts = Missing{}
-	}
-	out := make(chan MissingInfo)
-	go func() {
-		for m := range source.database.ListMissing(dirs, maxPhotos, opts) {
-			m.Metadata = m.Metadata || force.Metadata
-			out <- m
-		}
-		close(out)
-	}()
-	return out
-}
-
-func (source *Source) ListMissingContents(dirs []string, maxPhotos int, force Missing) <-chan MissingInfo {
-	opts := Missing{
-		Color:     true,
-		Embedding: source.AI.Available(),
-	}
-	if force.Color || force.Embedding {
-		opts = Missing{}
-	}
-	out := make(chan MissingInfo)
-	go func() {
-		for m := range source.database.ListMissing(dirs, maxPhotos, opts) {
-			m.Color = m.Color || force.Color
-			m.Embedding = m.Embedding || force.Embedding
-			out <- m
-		}
-		close(out)
-	}()
-	return out
-}
-
 func (source *Source) ListInfos(dirs []string, options ListOptions) (<-chan SourcedInfo, Dependencies) {
 	defer metrics.Elapsed("list infos")()
 	return source.database.List(dirs, options)
@@ -428,34 +372,8 @@ func (source *Source) GetImagePath(id ImageId) (string, error) {
 	return path, nil
 }
 
-func (source *Source) GetImageEmbedding(id ImageId) (clip.Embedding, error) {
+func (source *Source) GetImageEmbedding(id ImageId) (ai.Embedding, error) {
 	return source.database.GetImageEmbedding(id)
-}
-
-func (source *Source) IndexFiles(dir string, max int, counter chan<- int) {
-	indexed := make(map[string]struct{})
-	for path := range walkFiles(dir, source.ListExtensions, max) {
-		source.database.Write(path, Info{}, AppendPath)
-		indexed[path] = struct{}{}
-		// Uncomment to test slow indexing
-		// time.Sleep(10 * time.Millisecond)
-		counter <- 1
-	}
-	<-source.database.CommitBarrier()
-	for ip := range source.database.ListNonexistent(dir, indexed) {
-		source.database.Delete(ip.Id)
-		source.thumbnailSink.Delete(uint32(ip.Id))
-	}
-	source.database.SetIndexed(dir)
-	<-source.database.CommitBarrier()
-}
-
-func (source *Source) IndexMetadata(dirs []string, maxPhotos int, force Missing) {
-	source.metadataQueue.AppendItems(MissingInfoToInterface(source.ListMissingMetadata(dirs, maxPhotos, force)))
-}
-
-func (source *Source) IndexContents(dirs []string, maxPhotos int, force Missing) {
-	source.contentsQueue.AppendItems(MissingInfoToInterface(source.ListMissingContents(dirs, maxPhotos, force)))
 }
 
 func (source *Source) GetDir(dir string) Info {
