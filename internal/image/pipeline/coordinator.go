@@ -35,6 +35,10 @@ type Config struct {
 	MetadataWorkers  int
 	ThumbnailWorkers int
 	ContentsWorkers  int
+
+	// TaskRunner overrides task execution. When non-nil it is called instead of
+	// the built-in stage runners. Intended for tests only.
+	TaskRunner func(ctx context.Context, cfg Config, t *task.Task) error
 }
 
 // stagePriority returns the queue priority for a task type.
@@ -222,21 +226,25 @@ func (c *Coordinator) processTask(t *task.Task) {
 	log.Printf("index task start %s\n", t.Id)
 
 	var err error
-	switch t.Type {
-	case task.TypeIndexFiles:
-		err = RunFiles(t.Context(), c.cfg, t)
-		if err == nil {
-			// Auto-enqueue follow-up pipeline stages after file scan
-			c.AddMetadata(t.CollectionId, t.CollectionName, t.Dirs, t.MaxPhotos, false)
-			c.AddContents(t.CollectionId, t.CollectionName, t.Dirs, t.MaxPhotos, false)
+	if c.cfg.TaskRunner != nil {
+		err = c.cfg.TaskRunner(t.Context(), c.cfg, t)
+	} else {
+		switch t.Type {
+		case task.TypeIndexFiles:
+			err = RunFiles(t.Context(), c.cfg, t)
+			if err == nil {
+				// Auto-enqueue follow-up pipeline stages after file scan
+				c.AddMetadata(t.CollectionId, t.CollectionName, t.Dirs, t.MaxPhotos, false)
+				c.AddContents(t.CollectionId, t.CollectionName, t.Dirs, t.MaxPhotos, false)
+			}
+		case task.TypeIndexMetadata:
+			err = RunMetadata(t.Context(), c.cfg, t)
+		case task.TypeIndexContents:
+			err = RunContents(t.Context(), c.cfg, t)
+		default:
+			log.Printf("index task error: unknown type: %q: %s\n", t.Id, t.Type)
+			return
 		}
-	case task.TypeIndexMetadata:
-		err = RunMetadata(t.Context(), c.cfg, t)
-	case task.TypeIndexContents:
-		err = RunContents(t.Context(), c.cfg, t)
-	default:
-		log.Printf("index task error: unknown type: %q: %s\n", t.Id, t.Type)
-		return
 	}
 
 	if err != nil {
