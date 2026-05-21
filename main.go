@@ -61,6 +61,7 @@ import (
 	"photofield/internal/image/pipeline"
 	pfio "photofield/internal/io"
 	"photofield/internal/io/bench"
+	iogoimage "photofield/internal/io/goimage"
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
 	"photofield/internal/openapi"
@@ -551,7 +552,8 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 			if params.CollectionId != nil && pt.CollectionId != string(*params.CollectionId) {
 				continue
 			}
-			pending := pt.Total - pt.Done
+			done, total := pt.Progress()
+			pending := total - done
 			if pending < 0 {
 				pending = 0
 			}
@@ -560,7 +562,7 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 				Type:         pt.Type,
 				Name:         pt.Name,
 				CollectionId: pt.CollectionId,
-				Done:         pt.Done,
+				Done:         done,
 				Pending:      pending,
 				enqueuedAt:   pt.EnqueuedAt,
 			})
@@ -1789,7 +1791,7 @@ func applyConfig(appConfig *AppConfig) {
 		ThumbnailGenerators: pipelineThumbGens,
 		ThumbnailSink:       imageSource.ThumbSink(),
 		AIService:           imageSource.Clip,
-		ImageDecoder:        imageSource.ThumbSink(),
+		ImageDecoder:        iogoimage.Image{},
 		MetadataWorkers:     appConfig.Media.ConcurrentMetaLoads,
 		ThumbnailWorkers:    appConfig.Media.ConcurrentColorLoads,
 		ContentsWorkers:     appConfig.Media.ConcurrentAILoads,

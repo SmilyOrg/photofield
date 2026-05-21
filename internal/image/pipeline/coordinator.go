@@ -69,7 +69,7 @@ func RunMetadata(ctx context.Context, cfg Config, t *task.Task) error {
 			if maxPhotos > 0 && count > maxPhotos {
 				count = maxPhotos
 			}
-			t.Total = count
+			t.SetTotal(count)
 			log.Printf("index metadata extract %d files\n", count)
 		}
 	} else {
@@ -77,7 +77,7 @@ func RunMetadata(ctx context.Context, cfg Config, t *task.Task) error {
 			if maxPhotos > 0 && count > maxPhotos {
 				count = maxPhotos
 			}
-			t.Total = count
+			t.SetTotal(count)
 			if count > 0 {
 				log.Printf("index metadata extract %d files\n", count)
 			}
@@ -103,6 +103,8 @@ func RunContents(ctx context.Context, cfg Config, t *task.Task) error {
 	dirs := t.Dirs
 	maxPhotos := t.MaxPhotos
 	force := t.Force
+	includeEmbedding := cfg.AIService != nil && cfg.AIService.Available()
+	missing := img.Missing{Color: true, Embedding: includeEmbedding}
 
 	counter := t.Counter()
 	defer close(counter)
@@ -112,22 +114,22 @@ func RunContents(ctx context.Context, cfg Config, t *task.Task) error {
 			if maxPhotos > 0 && count > maxPhotos {
 				count = maxPhotos
 			}
-			t.Total = count
+			t.SetTotal(count)
 			log.Printf("index contents extract %d files\n", count)
 		}
 	} else {
-		if count, ok := cfg.DB.CountMissing(dirs, img.Missing{Color: true, Embedding: true}); ok {
+		if count, ok := cfg.DB.CountMissing(dirs, missing); ok {
 			if maxPhotos > 0 && count > maxPhotos {
 				count = maxPhotos
 			}
-			t.Total = count
+			t.SetTotal(count)
 			if count > 0 {
 				log.Printf("index contents extract %d files\n", count)
 			}
 		}
 	}
 
-	metaOut := fileSourceWithMetadata(ctx, cfg.DB, dirs, maxPhotos, force)
+	metaOut := fileSourceWithMetadata(ctx, cfg.DB, dirs, maxPhotos, force, includeEmbedding)
 
 	contents := newContentsProcessor(cfg.DB, cfg.AIService, cfg.ImageDecoder, force)
 	processThumbnails(ctx, cfg.ThumbnailSources, cfg.ThumbnailGenerators,

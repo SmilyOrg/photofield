@@ -340,10 +340,10 @@ Always tries to reuse cached thumbnails, even during force reindex.
 
 ### Error Handling
 
-All stages return error channels. Coordinator collects all errors:
-- Logs first 10 errors
-- Continues processing remaining items
-- Returns error if any occurred
+Stages log per-item errors inline (for example metadata decode, thumbnail generation,
+color extraction, and embedding extraction failures). Processing continues for
+remaining items so partial progress is preserved. Stage-level cancellation and
+fatal errors are returned directly through `Run*` function return values.
 
 ### Worker Pools
 

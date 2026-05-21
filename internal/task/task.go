@@ -36,6 +36,7 @@ type Task struct {
 	// Context for cancellation and completion signaling
 	ctx    context.Context    `json:"-"`
 	cancel context.CancelFunc `json:"-"`
+	mu     sync.RWMutex       `json:"-"`
 }
 
 // Counter returns a channel for incrementing the task's Done counter
@@ -43,10 +44,32 @@ func (t *Task) Counter() chan<- int {
 	counter := make(chan int, 10)
 	go func() {
 		for add := range counter {
-			t.Done += add
+			t.AddDone(add)
 		}
 	}()
 	return counter
+}
+
+// AddDone adds to the Done count in a thread-safe way.
+func (t *Task) AddDone(add int) {
+	t.mu.Lock()
+	t.Done += add
+	t.mu.Unlock()
+}
+
+// SetTotal sets the Total count in a thread-safe way.
+func (t *Task) SetTotal(total int) {
+	t.mu.Lock()
+	t.Total = total
+	t.mu.Unlock()
+}
+
+// Progress returns a consistent snapshot of Done and Total.
+func (t *Task) Progress() (done int, total int) {
+	t.mu.RLock()
+	done, total = t.Done, t.Total
+	t.mu.RUnlock()
+	return
 }
 
 // Completed returns a channel that closes when the task is complete

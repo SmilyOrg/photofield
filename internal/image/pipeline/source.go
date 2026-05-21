@@ -56,8 +56,8 @@ func fileSource(ctx context.Context, db *img.Database, dirs []string, maxPhotos 
 }
 
 // fileSourceWithMetadata produces fileWithMeta items from database with metadata already loaded.
-// If force is true, all files are sourced; otherwise only files missing color or embedding are sourced.
-func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string, maxPhotos int, force bool) <-chan fileWithMeta {
+// If force is true, all files are sourced; otherwise only files missing requested contents are sourced.
+func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string, maxPhotos int, force bool, includeEmbedding bool) <-chan fileWithMeta {
 	out := make(chan fileWithMeta, 100)
 	started := make(chan struct{})
 
@@ -80,7 +80,7 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 						Path: ip.Path,
 						Missing: img.Missing{
 							Color:     true,
-							Embedding: true,
+							Embedding: includeEmbedding,
 						},
 					}
 				}
@@ -88,8 +88,9 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 			candidates = c
 		} else {
 			// Query for missing contents
-			log.Println("index source files missing contents")
-			candidates = db.ListMissing(dirs, maxPhotos, img.Missing{Color: true, Embedding: true})
+			missing := img.Missing{Color: true, Embedding: includeEmbedding}
+			log.Printf("index source files missing %+v\n", missing)
+			candidates = db.ListMissing(dirs, maxPhotos, missing)
 		}
 
 		// Signal we're ready to start processing
@@ -113,9 +114,7 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 			if len(ids) >= batchSize {
 				log.Printf("index source batch %d files\n", len(ids))
 				results := db.GetBatch(ids)
-				resultCount := 0
 				for result := range results {
-					resultCount++
 					missingInfo := idToMissing[result.Id]
 					select {
 					case out <- fileWithMeta{
@@ -128,6 +127,10 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 						return
 					}
 				}
+				for _, id := range ids {
+					delete(idToPath, id)
+					delete(idToMissing, id)
+				}
 				ids = ids[:0]
 			}
 		}
@@ -138,9 +141,7 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 		if len(ids) > 0 {
 			log.Printf("index source batch %d files (last)\n", len(ids))
 			results := db.GetBatch(ids)
-			resultCount := 0
 			for result := range results {
-				resultCount++
 				missingInfo := idToMissing[result.Id]
 				select {
 				case out <- fileWithMeta{
@@ -152,6 +153,10 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 				case <-ctx.Done():
 					return
 				}
+			}
+			for _, id := range ids {
+				delete(idToPath, id)
+				delete(idToMissing, id)
 			}
 		}
 	}()
