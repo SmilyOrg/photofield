@@ -67,6 +67,20 @@ export async function post(endpoint, body, def) {
   return await response.json();
 }
 
+async function del(endpoint) {
+  const response = await fetch(host() + endpoint, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    console.error(response);
+    throw new Error(response.statusText);
+  }
+}
+
+export async function stopTask(id) {
+  return del(`/tasks/${id}`);
+}
+
 export async function getRegions(sceneId, x, y, w, h, minimal = false) {
   if (!sceneId) return null;
   const fields = minimal ? '&fields=(id,bounds)' : '';
@@ -132,11 +146,22 @@ export async function getCollection(id) {
   return get(`/collections/` + id);
 }
 
-export async function createTask(type, id) {
-  return await post(`/tasks`, {
+/**
+ * Create a new task for a collection.
+ * @param {string} type - Task type (e.g., 'INDEX_METADATA', 'INDEX_ALL')
+ * @param {string} id - Collection ID
+ * @param {Object} [options] - Optional task parameters
+ * @param {boolean} [options.force] - When true, reprocesses all files even if data exists
+ * @returns {Promise} Task creation response
+ */
+export async function createTask(type, id, options) {
+  const body = {
     type,
-    collection_id: id
-  });
+    collection_id: id,
+    ...options,
+  };
+  
+  return await post(`/tasks`, body);
 }
 
 export function getTileUrl(sceneId, level, x, y, tileSize, extraParams) {
