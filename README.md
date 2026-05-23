@@ -189,7 +189,7 @@ displayed as collections. 🎉
 * ⚡ Install [djpeg (libjpeg-turbo)] for faster JPEG processing (optional but recommended)
 * ⚪ Set environment variables to override defaults:
   * `PHOTOFIELD_ADDRESS=:1200` – listen on a different port (default `:8080`)
-  * `PHOTOFIELD_DATA_DIR=/path/to/data` – change the directory where `configuration.yaml` and the cache database are stored
+  * `PHOTOFIELD_DATA_DIR=/path/to/data` – change the directory where `configuration.yaml` and the cache databases are stored
 
 [Download and unpack a release]: https://github.com/SmilyOrg/photofield/releases
 [exiftool]: https://exiftool.org/
