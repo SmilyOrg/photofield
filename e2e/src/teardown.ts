@@ -1,5 +1,7 @@
+import { execFile } from "child_process";
 import { promisify } from "util";
-const exec = promisify(require("child_process").exec);
+
+const execFileAsync = promisify(execFile);
 
 async function globalTeardown() {
   if (process.platform === "win32") {
@@ -9,7 +11,7 @@ async function globalTeardown() {
 
 // Workaround of photofield not cleaning up exiftool.exe properly
 async function killExiftool() {
-  await exec("taskkill /F /IM exiftool.exe");
+  await execFileAsync("taskkill", ["/F", "/IM", "exiftool.exe"]);
 }
 
 export default globalTeardown;
