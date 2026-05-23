@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"photofield/internal/clip"
+	"photofield/internal/ai"
 	"photofield/internal/image"
 	"sort"
 	"strings"
@@ -119,7 +119,7 @@ func (collection *Collection) GetInfos(source *image.Source, options image.ListO
 	return source.ListInfos(collection.Dirs, options)
 }
 
-func (collection *Collection) GetSimilar(source *image.Source, embedding clip.Embedding, options image.ListOptions) <-chan image.SimilarityInfo {
+func (collection *Collection) GetSimilar(source *image.Source, embedding ai.Embedding, options image.ListOptions) <-chan image.SimilarityInfo {
 	return source.ListSimilar(collection.Dirs, embedding, options)
 }
 

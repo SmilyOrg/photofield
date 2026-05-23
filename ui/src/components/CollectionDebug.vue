@@ -2,12 +2,16 @@
   <div class="collection-debug">
     <h3>Index</h3>
     <p>
-      <ui-button @click="emit('reload', 'INDEX_METADATA')">Reindex metadata</ui-button>
-      <ui-button @click="emit('reload', 'INDEX_CONTENTS')">Reindex color & AI</ui-button>
-      <ui-button @click="emit('reload', 'INDEX_CONTENTS_COLOR')">Reindex color</ui-button>
-      <ui-button @click="emit('reload', 'INDEX_CONTENTS_AI')">Reindex AI</ui-button>
-      <task-list :tasks="indexTasks"></task-list>
+      <ui-button @click="emit('reload', 'INDEX_METADATA', force)">Index metadata</ui-button>
+      <ui-button @click="emit('reload', 'INDEX_CONTENTS', force)">Index color & AI</ui-button>
+      <ui-button @click="emit('reload', 'INDEX_ALL', force)">Index all</ui-button>
     </p>
+    <label class="checkbox-label">
+      <input type="checkbox" v-model="force" />
+      Force reindex (overwrite existing data)
+    </label>
+
+    <task-list :tasks="indexTasks"></task-list>
     
     <h3>Display Layout</h3>
     <ui-button @click="recreateEvent.emit()">Refresh all</ui-button>
@@ -33,7 +37,7 @@
 </template>
 
 <script setup>
-import { computed, inject, ref, toRefs } from 'vue';
+import { computed, ref, toRefs } from 'vue';
 import dateParseISO from 'date-fns/parseISO';
 import formatDistance from 'date-fns/formatDistance';
 import TaskList from './TaskList.vue';
@@ -63,6 +67,8 @@ const ago = (at) => {
 
 const recreateEvent = useEventBus("recreate-scene");
 
+const force = ref(false);
+
 const emit = defineEmits([
     "reindex",
     "reload",
@@ -91,8 +97,17 @@ h3 {
   margin-bottom: 10px;
 }
 
-h4 {
-  margin-bottom: 6px;
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+  margin: 8px 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
 }
 
 p {

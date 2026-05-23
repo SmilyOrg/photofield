@@ -4,7 +4,7 @@ import (
 	"container/heap"
 	"log"
 	"math"
-	"photofield/internal/clip"
+	"photofield/internal/ai"
 	"photofield/internal/metrics"
 	"photofield/internal/rangetree"
 	"photofield/internal/tag"
@@ -59,7 +59,7 @@ func (w similarityBatchWorker) close() {
 	close(w.input)
 }
 
-func (source *Source) ListSimilar(dirs []string, embedding clip.Embedding, options ListOptions) <-chan SimilarityInfo {
+func (source *Source) ListSimilar(dirs []string, embedding ai.Embedding, options ListOptions) <-chan SimilarityInfo {
 	out := make(chan SimilarityInfo, 1000)
 	go func() {
 		defer metrics.Elapsed("list similar")()
@@ -78,7 +78,7 @@ func (source *Source) ListSimilar(dirs []string, embedding clip.Embedding, optio
 		done := metrics.Elapsed("list similar embeddings")
 		embeddings := source.database.ListEmbeddings(dirs, options)
 		for emb := range embeddings {
-			dot, err := clip.DotProductFloat32Float(search, emb.Float())
+			dot, err := ai.DotProductFloat32Float(search, emb.Float())
 			if err != nil {
 				log.Printf("Unable to compute dot product for %d: %s", emb.Id, err.Error())
 				continue
@@ -195,10 +195,10 @@ func (h *knnImageHeap) Pop() interface{} {
 	return x
 }
 
-func (source *Source) classifyEmbedding(timgs []taggedImage, emb clip.Embedding, k int) (tag.Id, float32, error) {
+func (source *Source) classifyEmbedding(timgs []taggedImage, emb ai.Embedding, k int) (tag.Id, float32, error) {
 	topk := make(knnImageHeap, 0, k)
 	for _, timg := range timgs {
-		dot, err := clip.DotProductFloat32Float(timg.Emb, emb.Float())
+		dot, err := ai.DotProductFloat32Float(timg.Emb, emb.Float())
 		if err != nil {
 			log.Printf("Unable to compute dot product for %d: %s", timg.Id, err.Error())
 			continue

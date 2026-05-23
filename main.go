@@ -52,15 +52,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	io_prometheus_client "github.com/prometheus/client_model/go"
 
 	"photofield/internal/codec"
 	"photofield/internal/collection"
 	"photofield/internal/fs/rewrite"
 	"photofield/internal/geo"
 	"photofield/internal/image"
+	"photofield/internal/image/pipeline"
 	pfio "photofield/internal/io"
 	"photofield/internal/io/bench"
+	iogoimage "photofield/internal/io/goimage"
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
 	"photofield/internal/openapi"
@@ -68,6 +69,7 @@ import (
 	"photofield/internal/scene"
 	"photofield/internal/search"
 	"photofield/internal/tag"
+	inttask "photofield/internal/task"
 	"photofield/internal/test"
 )
 
@@ -112,8 +114,7 @@ var imageSource *image.Source
 var globalGeo *geo.Geo
 var sceneSource *scene.SceneSource
 var collections []collection.Collection
-
-var globalTasks sync.Map
+var pipelineCoordinator *pipeline.Coordinator
 
 var requestsOut chan struct{}
 var requests []ApiRequest
@@ -138,29 +139,13 @@ func instrumentationMiddleware(next http.Handler) http.Handler {
 }
 
 type Task struct {
-	Id           string        `json:"id"`
-	Type         string        `json:"type"`
-	Name         string        `json:"name"`
-	CollectionId string        `json:"collection_id"`
-	Done         int           `json:"done"`
-	Pending      int           `json:"pending,omitempty"`
-	Offset       int           `json:"-"`
-	Queue        string        `json:"-"`
-	completed    chan struct{} `json:"-"`
-}
-
-func (t *Task) Counter() chan<- int {
-	counter := make(chan int, 10)
-	go func() {
-		for add := range counter {
-			t.Done += add
-		}
-	}()
-	return counter
-}
-
-func (t *Task) Completed() <-chan struct{} {
-	return t.completed
+	Id           string    `json:"id"`
+	Type         string    `json:"type"`
+	Name         string    `json:"name"`
+	CollectionId string    `json:"collection_id"`
+	Done         int       `json:"done"`
+	Pending      int       `json:"pending,omitempty"`
+	enqueuedAt   time.Time `json:"-"`
 }
 
 type TileWriter func(w io.Writer) error
@@ -281,17 +266,6 @@ func getCollectionById(id string) *collection.Collection {
 		}
 	}
 	return nil
-}
-
-func newFileIndexTask(collection *collection.Collection) *Task {
-	return &Task{
-		Type:         string(openapi.TaskTypeINDEXFILES),
-		Id:           fmt.Sprintf("index-files-%v", collection.Id),
-		Name:         fmt.Sprintf("Indexing files %v", collection.Name),
-		CollectionId: collection.Id,
-		Done:         0,
-		completed:    make(chan struct{}),
-	}
 }
 
 func pushApiRequest(request ApiRequest) {
@@ -535,79 +509,80 @@ func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.
 	problem(w, r, http.StatusNotFound, "Scene not found")
 }
 
-func gatherIntFromMetric(value *int, metric *io_prometheus_client.MetricFamily, name string) {
-	if metric.Name == nil || metric.Type == nil || *metric.Name != name {
-		return
-	}
-	switch *metric.Type {
-	case io_prometheus_client.MetricType_GAUGE:
-		m := metric.Metric[0]
-		if m == nil {
-			return
-		}
-		g := m.Gauge
-		if g == nil {
-			return
-		}
-		*value = int(*g.Value)
-	case io_prometheus_client.MetricType_COUNTER:
-		m := metric.Metric[0]
-		if m == nil {
-			return
-		}
-		c := m.Counter
-		if c == nil {
-			return
-		}
-		*value = int(*c.Value)
+func taskDisplayOrder(taskType string) int {
+	switch taskType {
+	case string(openapi.TaskTypeINDEXMETADATA):
+		return 0
+	case string(openapi.TaskTypeINDEXCONTENTS):
+		return 1
 	default:
-		panic("Unsupported gather metric type")
+		return 2
 	}
+}
+
+// pipelineTaskResponse converts a pipeline task to an API Task for HTTP responses.
+func pipelineTaskResponse(pt *inttask.Task, taskType, collectionId string) *Task {
+	return &Task{
+		Id:           pt.Id,
+		Type:         taskType,
+		Name:         pt.Name,
+		CollectionId: collectionId,
+		enqueuedAt:   pt.EnqueuedAt,
+	}
+}
+
+// taskItems wraps tasks in the standard items response envelope.
+func taskItems(tasks ...*Task) struct {
+	Items []*Task `json:"items"`
+} {
+	return struct {
+		Items []*Task `json:"items"`
+	}{Items: tasks}
 }
 
 func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetTasksParams) {
 
-	metrics, err := prometheus.DefaultGatherer.Gather()
-	if err != nil {
-		problem(w, r, http.StatusInternalServerError, "Unable to gather metrics")
-		return
-	}
-
 	tasks := make([]*Task, 0)
-	globalTasks.Range(func(key, value interface{}) bool {
-		t := value.(*Task)
 
-		add := true
-		if params.Type != nil && t.Type != string(*params.Type) {
-			add = false
-		}
-		if params.CollectionId != nil && t.CollectionId != string(*params.CollectionId) {
-			add = false
-		}
-
-		if t.Queue != "" {
-			for _, m := range metrics {
-				gatherIntFromMetric(&t.Pending, m, fmt.Sprintf("pf_%s_pending", t.Queue))
-				gatherIntFromMetric(&t.Done, m, fmt.Sprintf("pf_%s_done", t.Queue))
+	if pipelineCoordinator != nil {
+		for _, pt := range pipelineCoordinator.List() {
+			if params.Type != nil && pt.Type != string(*params.Type) {
+				continue
 			}
-			if t.Pending > 0 {
-				t.Done -= t.Offset
-			} else {
-				t.Offset = t.Done
-				globalTasks.Store(t.Id, t)
-				add = false
+			if params.CollectionId != nil && pt.CollectionId != string(*params.CollectionId) {
+				continue
 			}
+			done, total := pt.Progress()
+			pending := total - done
+			if pending < 0 {
+				pending = 0
+			}
+			tasks = append(tasks, &Task{
+				Id:           pt.Id,
+				Type:         pt.Type,
+				Name:         pt.Name,
+				CollectionId: pt.CollectionId,
+				Done:         done,
+				Pending:      pending,
+				enqueuedAt:   pt.EnqueuedAt,
+			})
 		}
-
-		if add {
-			tasks = append(tasks, t)
-		}
-		return true
-	})
+	}
 
 	sort.Slice(tasks, func(i, j int) bool {
 		a := tasks[i]
 		b := tasks[j]
+		ap, bp := a.Pending > 0, b.Pending > 0
+		if ap != bp {
+			return ap
+		}
+		ao, bo := taskDisplayOrder(a.Type), taskDisplayOrder(b.Type)
+		if ao != bo {
+			return ao < bo
+		}
+		if !a.enqueuedAt.Equal(b.enqueuedAt) {
+			return a.enqueuedAt.After(b.enqueuedAt)
+		}
 		return a.Id < b.Id
 	})
 
@@ -634,49 +609,83 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 	switch data.Type {
 
 	case openapi.TaskTypeINDEXFILES:
-		task, existing := indexCollection(collection)
-		if existing {
-			respond(w, r, http.StatusConflict, task)
+		pt, isNew := pipelineCoordinator.AddFiles(
+			string(data.CollectionId), collection.Name,
+			collection.Dirs, collection.IndexLimit,
+		)
+		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXFILES), string(data.CollectionId))
+		if isNew {
+			respond(w, r, http.StatusAccepted, taskItems(t))
 		} else {
-			respond(w, r, http.StatusAccepted, task)
+			respond(w, r, http.StatusConflict, taskItems(t))
 		}
 
 	case openapi.TaskTypeINDEXMETADATA:
-		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{
-			Metadata: true,
-		})
-		stored, _ := globalTasks.Load("index-metadata")
-		task := stored.(*Task)
-		respond(w, r, http.StatusAccepted, task)
+		force := data.Force != nil && *data.Force
+		pt, isNew := pipelineCoordinator.AddMetadata(
+			string(data.CollectionId), collection.Name,
+			collection.Dirs, collection.IndexLimit, force,
+		)
+		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXMETADATA), string(data.CollectionId))
+		if isNew {
+			respond(w, r, http.StatusAccepted, taskItems(t))
+		} else {
+			respond(w, r, http.StatusConflict, taskItems(t))
+		}
 
 	case openapi.TaskTypeINDEXCONTENTS:
-		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
-			Color:     true,
-			Embedding: true,
-		})
-		stored, _ := globalTasks.Load("index-contents")
-		task := stored.(*Task)
-		respond(w, r, http.StatusAccepted, task)
+		force := data.Force != nil && *data.Force
+		pt, isNew := pipelineCoordinator.AddContents(
+			string(data.CollectionId), collection.Name,
+			collection.Dirs, collection.IndexLimit, force,
+		)
+		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXCONTENTS), string(data.CollectionId))
+		if isNew {
+			respond(w, r, http.StatusAccepted, taskItems(t))
+		} else {
+			respond(w, r, http.StatusConflict, taskItems(t))
+		}
 
-	case openapi.TaskTypeINDEXCONTENTSCOLOR:
-		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
-			Color: true,
-		})
-		stored, _ := globalTasks.Load("index-contents")
-		task := stored.(*Task)
-		respond(w, r, http.StatusAccepted, task)
-
-	case openapi.TaskTypeINDEXCONTENTSAI:
-		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{
-			Embedding: true,
-		})
-		stored, _ := globalTasks.Load("index-contents")
-		task := stored.(*Task)
-		respond(w, r, http.StatusAccepted, task)
+	case openapi.TaskTypeINDEXALL:
+		force := data.Force != nil && *data.Force
+		pts, areNew := pipelineCoordinator.AddAll(
+			string(data.CollectionId), collection.Name,
+			collection.Dirs, collection.IndexLimit, force,
+		)
+		typeNames := [2]string{
+			string(openapi.TaskTypeINDEXMETADATA),
+			string(openapi.TaskTypeINDEXCONTENTS),
+		}
+		anyNew := false
+		tasks := make([]*Task, 0, 2)
+		for i, pt := range pts {
+			t := pipelineTaskResponse(pt, typeNames[i], string(data.CollectionId))
+			tasks = append(tasks, t)
+			if areNew[i] {
+				anyNew = true
+			}
+		}
+		if anyNew {
+			respond(w, r, http.StatusAccepted, taskItems(tasks...))
+		} else {
+			respond(w, r, http.StatusConflict, taskItems(tasks...))
+		}
 
 	default:
 		problem(w, r, http.StatusBadRequest, "Unsupported task type")
 	}
+}
+
+func (*Api) DeleteTasksId(w http.ResponseWriter, r *http.Request, id openapi.TaskIdPathParam) {
+	if pipelineCoordinator == nil {
+		problem(w, r, http.StatusNotFound, "Task not found")
+		return
+	}
+	if !pipelineCoordinator.StopTask(string(id)) {
+		problem(w, r, http.StatusNotFound, "Task not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (*Api) GetCapabilities(w http.ResponseWriter, r *http.Request) {
@@ -1602,37 +1611,6 @@ type TileRequestConfig struct {
 	LogStats    bool `json:"log_stats"`
 }
 
-func indexCollection(collection *collection.Collection) (task *Task, existing bool) {
-	task = newFileIndexTask(collection)
-	stored, existing := globalTasks.LoadOrStore(task.Id, task)
-	task = stored.(*Task)
-	if existing {
-		return
-	}
-
-	counter := task.Counter()
-
-	go func() {
-		log.Printf("indexing files %s\n", collection.Id)
-		for _, dir := range collection.Dirs {
-			log.Printf("indexing files %s dir %s\n", collection.Id, dir)
-			imageSource.IndexFiles(dir, collection.IndexLimit, counter)
-		}
-		log.Printf("indexing files %s done\n", collection.Id)
-		// imageSource.IndexAI(collection.Dirs, collection.IndexLimit)
-		imageSource.IndexMetadata(collection.Dirs, collection.IndexLimit, image.Missing{})
-		imageSource.IndexContents(collection.Dirs, collection.IndexLimit, image.Missing{})
-		globalTasks.Delete(task.Id)
-		close(counter)
-
-		now := time.Now()
-		collection.IndexedAt = &now
-		collection.IndexedCount = task.Done
-		close(task.completed)
-	}()
-	return
-}
-
 func addExampleScene() {
 	sceneConfig := defaultSceneConfig
 	sceneConfig.Scene.Id = "Tqcqtc6h69"
@@ -1788,6 +1766,37 @@ func applyConfig(appConfig *AppConfig) {
 	if oldSource != nil {
 		oldSource.Close()
 	}
+
+	// Initialize pipeline coordinator
+	if pipelineCoordinator != nil {
+		pipelineCoordinator.Close()
+	}
+	// Convert thumbnail sources and generators to pipeline interface slices
+	rawThumbSources := imageSource.ThumbSources()
+	pipelineThumbSources := make([]pipeline.ThumbnailSource, len(rawThumbSources))
+	for i, s := range rawThumbSources {
+		pipelineThumbSources[i] = s
+	}
+	rawThumbGens := imageSource.ThumbGenerators()
+	pipelineThumbGens := make([]pipeline.ThumbnailGenerator, len(rawThumbGens))
+	for i, g := range rawThumbGens {
+		pipelineThumbGens[i] = g
+	}
+	pipelineCfg := pipeline.Config{
+		DB:                  imageSource.DB(),
+		MetadataExtractor:   imageSource.Decoder(),
+		EnableTags:          appConfig.Tags.Enable,
+		Extensions:          appConfig.Media.ListExtensions,
+		ThumbnailSources:    pipelineThumbSources,
+		ThumbnailGenerators: pipelineThumbGens,
+		ThumbnailSink:       imageSource.ThumbSink(),
+		AIService:           imageSource.Clip,
+		ImageDecoder:        iogoimage.Image{},
+		MetadataWorkers:     appConfig.Media.ConcurrentMetaLoads,
+		ThumbnailWorkers:    appConfig.Media.ConcurrentColorLoads,
+		ContentsWorkers:     appConfig.Media.ConcurrentAILoads,
+	}
+	pipelineCoordinator = pipeline.NewCoordinator(context.Background(), pipelineCfg)
 
 	imageSource.HandleDirUpdates(invalidateDirs)
 	if tileRequestConfig.Concurrency > 0 {
@@ -2204,38 +2213,21 @@ func main() {
 		}
 
 		// Perform the scan
-		task, existing := indexCollection(c)
-		if existing {
-			log.Printf("collection %s scan already in progress", *scanFlag)
-		} else {
-			log.Printf("collection %s scan started", *scanFlag)
-		}
+		filePt, _ := pipelineCoordinator.AddFiles(c.Id, c.Name, c.Dirs, c.IndexLimit)
+		metaPt, _ := pipelineCoordinator.AddMetadata(c.Id, c.Name, c.Dirs, c.IndexLimit, false)
+		contentsPt, _ := pipelineCoordinator.AddContents(c.Id, c.Name, c.Dirs, c.IndexLimit, false)
+		log.Printf("collection %s scan started", *scanFlag)
 
-		// Wait for the task to complete using the completion channel
-		<-task.Completed()
+		// Wait for all pipeline stages to complete sequentially
+		<-filePt.Completed()
+		<-metaPt.Completed()
+		<-contentsPt.Completed()
 
 		log.Printf("collection %s scan finished", *scanFlag)
 
-		imageSource.WaitOnQueue()
 		imageSource.Close()
 		return
 	}
-
-	metadataTask := &Task{
-		Type:  string(openapi.TaskTypeINDEXMETADATA),
-		Id:    "index-metadata",
-		Name:  "Indexing metadata",
-		Queue: "index_metadata",
-	}
-	globalTasks.Store(metadataTask.Id, metadataTask)
-
-	contentsTask := &Task{
-		Type:  string(openapi.TaskTypeINDEXCONTENTS),
-		Id:    "index-contents",
-		Name:  "Indexing contents",
-		Queue: "index_contents",
-	}
-	globalTasks.Store(contentsTask.Id, contentsTask)
 
 	// renderSample(defaultSceneConfig.Config, sceneSource.GetScene(defaultSceneConfig, imageSource))
 

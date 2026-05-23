@@ -36,6 +36,8 @@ const (
 
 // Defines values for TaskType.
 const (
+	TaskTypeINDEXALL TaskType = "INDEX_ALL"
+
 	TaskTypeINDEXCONTENTS TaskType = "INDEX_CONTENTS"
 
 	TaskTypeINDEXCONTENTSAI TaskType = "INDEX_CONTENTS_AI"
@@ -286,14 +288,30 @@ type Task struct {
 	Name string `json:"name"`
 
 	// Number of items pending as part of the task.
-	Pending *int      `json:"pending,omitempty"`
-	Type    *TaskType `json:"type,omitempty"`
+	Pending *int `json:"pending,omitempty"`
+
+	// Task type for background operations.
+	//
+	// Use `force: true` to reprocess all files, `force: false` (default) to only
+	// process files with missing data.
+	//
+	// Deprecated (old queue-based path, use the pipeline types instead):
+	// - INDEX_CONTENTS_COLOR
+	// - INDEX_CONTENTS_AI
+	Type *TaskType `json:"type,omitempty"`
 }
 
 // TaskId defines model for TaskId.
 type TaskId string
 
-// TaskType defines model for TaskType.
+// Task type for background operations.
+//
+// Use `force: true` to reprocess all files, `force: false` (default) to only
+// process files with missing data.
+//
+// Deprecated (old queue-based path, use the pipeline types instead):
+// - INDEX_CONTENTS_COLOR
+// - INDEX_CONTENTS_AI
 type TaskType string
 
 // TileCoord defines model for TileCoord.
@@ -322,6 +340,9 @@ type SizePathParam string
 
 // TagIdPathParam defines model for TagIdPathParam.
 type TagIdPathParam TagId
+
+// TaskIdPathParam defines model for TaskIdPathParam.
+type TaskIdPathParam TaskId
 
 // GetFilesIdPreviewsFilenameParams defines parameters for GetFilesIdPreviewsFilename.
 type GetFilesIdPreviewsFilenameParams struct {
@@ -442,7 +463,19 @@ type GetTasksParams struct {
 // PostTasksJSONBody defines parameters for PostTasks.
 type PostTasksJSONBody struct {
 	CollectionId CollectionId `json:"collection_id"`
-	Type         TaskType     `json:"type"`
+
+	// When true, reprocesses all files even if data already exists. When false or omitted, only processes files with missing data.
+	Force *bool `json:"force,omitempty"`
+
+	// Task type for background operations.
+	//
+	// Use `force: true` to reprocess all files, `force: false` (default) to only
+	// process files with missing data.
+	//
+	// Deprecated (old queue-based path, use the pipeline types instead):
+	// - INDEX_CONTENTS_COLOR
+	// - INDEX_CONTENTS_AI
+	Type TaskType `json:"type"`
 }
 
 // PostScenesJSONRequestBody defines body for PostScenes for application/json ContentType.
@@ -528,6 +561,9 @@ type ServerInterface interface {
 
 	// (POST /tasks)
 	PostTasks(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /tasks/{id})
+	DeleteTasksId(w http.ResponseWriter, r *http.Request, id TaskIdPathParam)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -1618,6 +1654,32 @@ func (siw *ServerInterfaceWrapper) PostTasks(w http.ResponseWriter, r *http.Requ
 	handler(w, r.WithContext(ctx))
 }
 
+// DeleteTasksId operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTasksId(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id TaskIdPathParam
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTasksId(w, r, id)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
 // Handler creates http.Handler with routing matching OpenAPI spec.
 func Handler(si ServerInterface) http.Handler {
 	return HandlerWithOptions(si, ChiServerOptions{})
@@ -1723,6 +1785,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tasks", wrapper.PostTasks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/tasks/{id}", wrapper.DeleteTasksId)
 	})
 
 	return r
