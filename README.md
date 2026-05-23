@@ -187,8 +187,9 @@ displayed as collections. 🎉
 * 🕵️‍♀️ Install [exiftool] and add it to PATH for better metadata support
 (esp. for video)
 * ⚡ Install [djpeg (libjpeg-turbo)] for faster JPEG processing (optional but recommended)
-* ⚪ Set the `PHOTOFIELD_DATA_DIR` environment variable to change the path where
-the app looks for the `configuration.yaml` and cache database
+* ⚪ Set environment variables to override defaults:
+  * `PHOTOFIELD_ADDRESS=:1200` – listen on a different port (default `:8080`)
+  * `PHOTOFIELD_DATA_DIR=/path/to/data` – change the directory where `configuration.yaml` and the cache database are stored
 
 [Download and unpack a release]: https://github.com/SmilyOrg/photofield/releases
 [exiftool]: https://exiftool.org/
