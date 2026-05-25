@@ -133,56 +133,41 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			searchDone()
 		}
 
-		orderBySimilarity :=
-			scene.SearchEmbedding != nil &&
-				!expression.HasQualifiers([]string{"img"}) &&
-				(config.Layout.Type != layout.Map)
+		order := image.ListOrder(config.Layout.Order)
+		isSimilarity := image.IsSimilarityOrder(order)
 
-		// Default threshold for non-similarity-order search
-		if scene.SearchEmbedding != nil && !orderBySimilarity && !expression.Threshold.Present {
+		// Default threshold for non-similarity-order search (when embedding present but not ordering by similarity)
+		if scene.SearchEmbedding != nil && !isSimilarity && !expression.Threshold.Present {
 			expression.Threshold.Present = true
 			expression.Threshold.Value = 0.262
 		}
 
+		var extensions []string
+		if strings.Contains(config.Layout.Tweaks, "imageonly") {
+			extensions = imageSource.Images.Extensions
+		}
+
 		if config.Layout.Type == layout.Highlights {
 			infos := imageSource.ListInfosEmb(config.Collection.Dirs, image.ListOptions{
-				OrderBy:     image.ListOrder(config.Layout.Order),
+				OrderBy:     order,
 				ShuffleSeed: shuffleSeed,
 				Limit:       config.Collection.Limit,
 			})
 			layout.LayoutHighlights(infos, config.Layout, &scene, imageSource)
 
-		} else if orderBySimilarity {
-			infos := config.Collection.GetSimilar(imageSource, scene.SearchEmbedding, image.ListOptions{
-				Limit: config.Collection.Limit,
-			})
-
-			switch config.Layout.Type {
-			case layout.Strip:
-				sinfos := image.SimilarityInfosToSourcedInfos(infos)
-				layout.LayoutStrip(sinfos, config.Layout, &scene, imageSource)
-			default:
-				layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
-			}
 		} else {
 			var infos <-chan image.SourcedInfo
 			if expression.Filter.Value == "knn" {
 				infos = imageSource.ListKnn(config.Collection.Dirs, image.ListOptions{
-					OrderBy:     image.ListOrder(config.Layout.Order),
+					OrderBy:     order,
 					ShuffleSeed: shuffleSeed,
 					Limit:       config.Collection.Limit,
 					Expression:  expression,
 				})
 			} else {
-				// Normal order
 				var deps image.Dependencies
-				// Normal order
-				var extensions []string
-				if strings.Contains(config.Layout.Tweaks, "imageonly") {
-					extensions = imageSource.Images.Extensions
-				}
 				infos, deps = config.Collection.GetInfos(imageSource, image.ListOptions{
-					OrderBy:     image.ListOrder(config.Layout.Order),
+					OrderBy:     order,
 					ShuffleSeed: shuffleSeed,
 					Limit:       config.Collection.Limit,
 					Expression:  expression,
@@ -209,7 +194,11 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			case layout.Flex:
 				layout.LayoutFlex(infos, config.Layout, &scene, imageSource)
 			default:
-				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
+				if isSimilarity {
+					layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
+				} else {
+					layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
+				}
 			}
 		}
 

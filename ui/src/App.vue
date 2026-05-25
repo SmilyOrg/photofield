@@ -614,6 +614,7 @@ html .multiselect__spinner {
   color: var(--mdc-theme-text-primary-on-background);
   vertical-align: baseline;
   transition: transform 0.2s;
+  z-index: 10;
 }
 
 .search-input {

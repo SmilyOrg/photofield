@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"photofield/internal/ai"
 	"photofield/internal/image"
 	"sort"
 	"strings"
@@ -117,10 +116,6 @@ func (collection *Collection) UpdateIndexedCount(source *image.Source) {
 
 func (collection *Collection) GetInfos(source *image.Source, options image.ListOptions) (<-chan image.SourcedInfo, image.Dependencies) {
 	return source.ListInfos(collection.Dirs, options)
-}
-
-func (collection *Collection) GetSimilar(source *image.Source, embedding ai.Embedding, options image.ListOptions) <-chan image.SimilarityInfo {
-	return source.ListSimilar(collection.Dirs, embedding, options)
 }
 
 func (collection *Collection) GetIds(source *image.Source) <-chan image.ImageId {

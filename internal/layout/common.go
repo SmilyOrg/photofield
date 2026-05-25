@@ -38,8 +38,13 @@ const (
 	ShuffleDaily
 	ShuffleWeekly
 	ShuffleMonthly
+	SimilarityDesc
+	SimilarityAsc
 )
 
+func IsSimilarityOrder(order Order) bool {
+	return order == SimilarityDesc || order == SimilarityAsc
+}
 func OrderFromSort(s string) Order {
 	switch s {
 	case "+date":
@@ -54,6 +59,10 @@ func OrderFromSort(s string) Order {
 		return ShuffleWeekly
 	case "+shuffle-monthly":
 		return ShuffleMonthly
+	case "-similarity":
+		return SimilarityDesc
+	case "+similarity":
+		return SimilarityAsc
 	default:
 		return None
 	}

@@ -90,7 +90,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, shallowRef, toRefs, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, toRefs, watch, watchEffect } from 'vue';
 import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
@@ -100,6 +100,7 @@ import parseISO from 'date-fns/parseISO';
 import HighlightedInput from './HighlightedInput.vue';
 import { useApi } from '../api';
 import { useTimestamps, useTimestampsDate } from '../use';
+import { useRoute, useRouter } from 'vue-router';
 
 const props = defineProps({
   modelValue: String,
@@ -335,8 +336,31 @@ const handleExactDateChange = (date) => {
   inject(createdExactQualifier, date);
 };
 
+const route = useRoute();
+const router = useRouter();
+const sort = computed(() => route.query.sort);
+watchEffect(() => {
+  let newSort = sort.value;
+  const textOrImage = leftoverText.value.length > 0 || imageId.value !== null;
+  const hasThreshold = threshold.value !== null;
+  if (!sort.value && textOrImage && !hasThreshold) {
+    newSort = "-similarity";
+  } else if (sort.value == "-similarity" && textOrImage && hasThreshold) {
+    newSort = undefined;
+  }
+  if (newSort != sort.value) {
+   router.replace({
+      ...route,
+      query: {
+        ...route.query,
+        sort: newSort,
+      },
+    });
+  }
+});
 
 watch(modelValue, value => {
+  console.log("modelValue changed:", value, scene.value);
   if (value === undefined) {
     return;
   }

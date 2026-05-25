@@ -52,7 +52,6 @@
 
 <script setup>
 import { ref, computed, toRefs, onUnmounted, watch } from 'vue';
-import { defineProps } from 'vue';
 import { useElementSize, watchDebounced } from '@vueuse/core';
 import dateFormat from 'date-fns/format';
 
