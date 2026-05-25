@@ -127,6 +127,10 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 						return
 					}
 				}
+				for _, id := range ids {
+					delete(idToPath, id)
+					delete(idToMissing, id)
+				}
 				ids = ids[:0]
 			}
 		}
@@ -149,6 +153,10 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 				case <-ctx.Done():
 					return
 				}
+			}
+			for _, id := range ids {
+				delete(idToPath, id)
+				delete(idToMissing, id)
 			}
 		}
 	}()
