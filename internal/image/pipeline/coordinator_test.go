@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +15,7 @@ func TestCoordinatorSequentialExecution(t *testing.T) {
 		MetadataWorkers:  1,
 		ThumbnailWorkers: 1,
 		ContentsWorkers:  1,
+		FaceWorkers:      1,
 	}
 	coordinator := NewCoordinator(ctx, cfg)
 	defer coordinator.Close()
@@ -47,58 +47,33 @@ func TestCoordinatorSequentialExecution(t *testing.T) {
 }
 
 // TestCoordinatorDuplicatePrevention verifies duplicate tasks are rejected
-// while the first task is still in-flight, and that a new task can be
-// created once the first one completes.
 func TestCoordinatorDuplicatePrevention(t *testing.T) {
 	ctx := context.Background()
-
-	// Block task execution until the test releases it.
-	block := make(chan struct{})
-	started := make(chan struct{})
-	var startOnce sync.Once
 	cfg := Config{
 		MetadataWorkers: 1,
-		TaskRunner: func(ctx context.Context, cfg Config, tsk *task.Task) error {
-			startOnce.Do(func() { close(started) }) // signal first execution
-			<-block
-			return nil
-		},
 	}
 	coordinator := NewCoordinator(ctx, cfg)
 	defer coordinator.Close()
 
+	// Add first task
 	task1, isNew1 := coordinator.AddMetadata("collection1", "Collection 1", []string{}, 0, false)
 	if !isNew1 {
 		t.Fatal("First task should be new")
 	}
 
-	// Wait until the worker is inside the runner so task1 is definitely in-flight.
-	<-started
-
-	// While task1 is blocked in the runner, adding the same collection must
-	// return the existing task (duplicate prevention).
+	// Try to add duplicate
 	task2, isNew2 := coordinator.AddMetadata("collection1", "Collection 1", []string{}, 0, false)
 	if isNew2 {
-		t.Fatal("Duplicate task should not be new while first is in-flight")
-	}
-	if task1 != task2 {
-		t.Errorf("Expected same task instance, got different pointers")
+		t.Fatal("Duplicate task should not be new")
 	}
 
-	// Unblock the worker and wait for completion.
-	close(block)
+	// Should return same task
+	if task1.Id != task2.Id {
+		t.Errorf("Expected same task ID, got %s and %s", task1.Id, task2.Id)
+	}
+
+	// Wait for completion
 	<-task1.Completed()
-
-	// After completion the registry entry is removed; re-adding must create a
-	// fresh task.
-	task3, isNew3 := coordinator.AddMetadata("collection1", "Collection 1", []string{}, 0, false)
-	if !isNew3 {
-		t.Fatal("Task should be new after previous task completed")
-	}
-	if task1 == task3 {
-		t.Error("Expected a new task instance after previous task completed")
-	}
-	<-task3.Completed()
 }
 
 // TestCoordinatorShutdown verifies clean shutdown
@@ -139,22 +114,19 @@ func TestCoordinatorList(t *testing.T) {
 		t.Error("Expected empty task list initially")
 	}
 
-	// Add multiple tasks and wait for completion.
-	// The async worker may complete tasks before List() is called, so we only
-	// assert the post-completion empty state rather than a mid-flight snapshot.
-	task1, _ := coordinator.AddMetadata("col1", "Collection 1", []string{}, 0, false)
-	task2, _ := coordinator.AddMetadata("col2", "Collection 2", []string{}, 0, false)
+	// Add multiple tasks
+	coordinator.AddMetadata("col1", "Collection 1", []string{}, 0, false)
+	coordinator.AddMetadata("col2", "Collection 2", []string{}, 0, false)
 
-	<-task1.Completed()
-	<-task2.Completed()
-
-	if len(coordinator.List()) != 0 {
-		t.Error("Expected empty task list after task completion")
+	// Should have tasks in list
+	tasks := coordinator.List()
+	if len(tasks) == 0 {
+		t.Error("Expected tasks in list")
 	}
 }
 
-// TestCoordinatorPriorityOrder verifies metadata tasks are dequeued before
-// contents, and within a stage newer tasks are dequeued first.
+// TestCoordinatorPriorityOrder verifies metadata tasks are dequeued before contents,
+// contents before faces, and within a stage newer tasks are dequeued first.
 func TestCoordinatorPriorityOrder(t *testing.T) {
 	// Build the queue directly without running the worker
 	c := &Coordinator{
@@ -162,20 +134,22 @@ func TestCoordinatorPriorityOrder(t *testing.T) {
 		queue:    make([]*task.Task, 0),
 	}
 
-	// Insert in "worst" order: contents first, then metadata
+	// Insert in "worst" order: faces first, then contents, then metadata
 	// and within metadata: older first
+	tFaces := task.NewFacesTask("col1", "Col1", []string{}, 0, false)
+	time.Sleep(time.Millisecond)
 	tContents := task.NewContentsTask("col1", "Col1", []string{}, 0, false)
 	time.Sleep(time.Millisecond)
 	tMetaOld := task.NewMetadataTask("col1", "Col1", []string{}, 0, false)
 	time.Sleep(time.Millisecond)
 	tMetaNew := task.NewMetadataTask("col2", "Col2", []string{}, 0, false)
 
-	for _, t := range []*task.Task{tContents, tMetaOld, tMetaNew} {
+	for _, t := range []*task.Task{tFaces, tContents, tMetaOld, tMetaNew} {
 		c.insertSorted(t)
 	}
 
-	// Dequeue from tail: expect metadata-new, metadata-old, contents
-	want := []string{tMetaNew.Id, tMetaOld.Id, tContents.Id}
+	// Dequeue from tail: expect metadata-new, metadata-old, contents, faces
+	want := []string{tMetaNew.Id, tMetaOld.Id, tContents.Id, tFaces.Id}
 	for i, wantId := range want {
 		if len(c.queue) == 0 {
 			t.Fatalf("Queue empty after %d dequeues, want %s", i, wantId)

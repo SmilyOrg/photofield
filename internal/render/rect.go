@@ -24,6 +24,13 @@ func (rect Rect) ToCanvasRect() canvas.Rect {
 	return canvas.Rect{X: rect.X, Y: rect.Y, W: rect.W, H: rect.H}
 }
 
+func (rect Rect) ImageRect() goimage.Rectangle {
+	return goimage.Rectangle{
+		Min: goimage.Point{X: int(rect.X), Y: int(rect.Y)},
+		Max: goimage.Point{X: int(rect.X + rect.W), Y: int(rect.Y + rect.H)},
+	}
+}
+
 func (rect Rect) Move(offset Point) Rect {
 	rect.X += offset.X
 	rect.Y += offset.Y

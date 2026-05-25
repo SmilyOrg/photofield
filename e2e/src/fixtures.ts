@@ -123,6 +123,8 @@ export class App {
   public uiUrl: string = "http://localhost:5173";
   public collectionPath: string = "";
   public testScrollPosition: number = 0;
+  public lastTaskStatus: number = 0;
+  public lastTaskItems: any[] = [];
 
   constructor(
     public page: Page,

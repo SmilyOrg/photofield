@@ -95,6 +95,7 @@ const layoutOptions = computed(() => {
         { label: "Map", value: "MAP" },
         { label: "Highlights", value: "HIGHLIGHTS" },
         { label: "Flex", value: "FLEX" },
+        { label: "Faces", value: "FACES" },
     ];
     
     const defaultOption = options.find(opt => opt.value === def);

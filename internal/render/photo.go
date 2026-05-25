@@ -44,7 +44,7 @@ func (photo *Photo) Place(x float64, y float64, width float64, height float64, s
 	photo.Sprite.PlaceFit(x, y, width, height, imageWidth, imageHeight)
 }
 
-func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool) {
+func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *canvas.Context, scales Scales, source *image.Source, selected bool, crop Rect) {
 	defer trace.StartRegion(ctx, "photo.Draw").End()
 
 	pixelArea := photo.Sprite.Rect.GetPixelArea(c, image.Size{X: 1, Y: 1})
@@ -99,6 +99,10 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 	}
 
 	size := info.Size()
+	if crop.W != 0 {
+		size.X = int(crop.W)
+		size.Y = int(crop.H)
+	}
 	rsize := photo.Sprite.Rect.RenderedSize(c, size)
 
 	srcs := source.Sources
@@ -134,6 +138,19 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 				errs = append(errs, err)
 			}
 			continue
+		}
+
+		if crop.W != 0 {
+			if subimg, ok := img.(SubImager); ok {
+				// Get resize scale
+				scale := math.Min(
+					float64(img.Bounds().Dx())/float64(info.Width),
+					float64(img.Bounds().Dy())/float64(info.Height),
+				)
+				// Scale crop to resized image dimensions
+				imgcrop := crop.ScalePoint(Point{X: scale, Y: scale})
+				img = subimg.SubImage(imgcrop.ImageRect())
+			}
 		}
 
 		if !r.FromCache {
@@ -187,7 +204,7 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 				srcstext += fmt.Sprintf("%02d %s %4dx%4d %4.0f %4.0f %4.0f %s\n", si, s.Name(), estsize.X, estsize.Y, s.Cost*1e-6, s.SizeCost*1e-6, s.DurationCost*1e-6, srcerr)
 			}
 			estsize := s.Size(io.Size(size))
-			text := fmt.Sprintf("%dx%d %d %4.0f\n%s est %dx%d fit to %dx%d\n%s", size.X, size.Y, i, s.Cost, s.Name(), estsize.X, estsize.Y, rsize.X, rsize.Y, srcstext)
+			text := fmt.Sprintf("%dx%d %dx%d %dx%d %d %4.0f\n%s est %dx%d fit to %dx%d\n%s", size.X, size.Y, rsize.X, rsize.Y, int(crop.W), int(crop.H), i, s.Cost, s.Name(), estsize.X, estsize.Y, rsize.X, rsize.Y, srcstext)
 			font := scene.Fonts.Debug
 			font.Color = canvas.Yellow
 			s := bitmap.Sprite

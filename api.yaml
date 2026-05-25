@@ -1171,6 +1171,7 @@ components:
         - INDEX_CONTENTS
         - INDEX_CONTENTS_COLOR
         - INDEX_CONTENTS_AI
+        - INDEX_FACES
         - INDEX_ALL
     
     CollectionId:

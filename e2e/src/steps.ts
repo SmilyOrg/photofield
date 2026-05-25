@@ -449,3 +449,38 @@ Then('the scroll position is roughly the same', async ({ page, app }) => {
 Then('the scroll position is {int}px', async ({ page }, expectedScrollY: number) => {
   expect(await page.evaluate(() => window.scrollY)).toBe(expectedScrollY);
 });
+
+When('the user posts a task {string} for collection {string}', async ({ app }, taskType: string, collectionId: string) => {
+  const apiHost = `http://${app.listenHost}`;
+  const response = await app.page.request.post(`${apiHost}/tasks`, {
+    data: { type: taskType, collection_id: collectionId },
+  });
+  app.lastTaskStatus = response.status();
+  const body = await response.json();
+  app.lastTaskItems = Array.isArray(body?.items) ? body.items : (body?.id ? [body] : []);
+});
+
+When('the user posts a forced task {string} for collection {string}', async ({ app }, taskType: string, collectionId: string) => {
+  const apiHost = `http://${app.listenHost}`;
+  const response = await app.page.request.post(`${apiHost}/tasks`, {
+    data: { type: taskType, collection_id: collectionId, force: true },
+  });
+  app.lastTaskStatus = response.status();
+  const body = await response.json();
+  app.lastTaskItems = Array.isArray(body?.items) ? body.items : (body?.id ? [body] : []);
+});
+
+Then('the task response has status {int}', async ({ app }, status: number) => {
+  expect(app.lastTaskStatus).toBe(status);
+});
+
+Then('the tasks complete', async ({ app }) => {
+  const apiHost = `http://${app.listenHost}`;
+  const taskIds = new Set(app.lastTaskItems.map((t: any) => t.id));
+  await expect(async () => {
+    const response = await app.page.request.get(`${apiHost}/tasks`);
+    const data = await response.json();
+    const activeTasks = (data.items ?? []).filter((t: any) => taskIds.has(t.id));
+    expect(activeTasks).toHaveLength(0);
+  }).toPass({ timeout: 30000, intervals: [500] });
+});

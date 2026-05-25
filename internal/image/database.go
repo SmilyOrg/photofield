@@ -93,6 +93,7 @@ const (
 	UpdateMeta    InfoWriteType = iota
 	UpdateColor   InfoWriteType = iota
 	UpdateAI      InfoWriteType = iota
+	UpdateFaces   InfoWriteType = iota
 	Delete        InfoWriteType = iota
 	Index         InfoWriteType = iota
 	AddTag        InfoWriteType = iota
@@ -108,6 +109,7 @@ type InfoWrite struct {
 	Path      string
 	Id        int64
 	Embedding ai.Embedding
+	Faces     []ai.Face
 	Type      InfoWriteType
 	Ids       Ids
 	Done      chan any
@@ -315,6 +317,21 @@ func (source *Database) writePendingInfosSqlite() {
 		INSERT OR REPLACE INTO clip_emb(file_id, inv_norm, embedding)
 		VALUES (?, ?, ?);`)
 	defer updateAI.Finalize()
+
+	insertFace := conn.Prep(`
+		INSERT INTO face(file_id, x, y, w, h, confidence, embedding, person_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, NULL);`)
+	defer insertFace.Finalize()
+
+	deleteFaces := conn.Prep(`
+		DELETE FROM face
+		WHERE file_id = ?;`)
+	defer deleteFaces.Finalize()
+
+	updateFacesDone := conn.Prep(`
+		UPDATE infos SET faces_done = 1
+		WHERE id = ?;`)
+	defer updateFacesDone.Finalize()
 
 	appendPath := conn.Prep(`
 		INSERT OR IGNORE INTO infos(path_prefix_id, filename)
@@ -662,6 +679,51 @@ func (source *Database) writePendingInfosSqlite() {
 					continue
 				}
 				err = updateAI.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case UpdateFaces:
+				// Delete existing faces for this image
+				deleteFaces.BindInt64(1, int64(imageInfo.Id))
+				_, err := deleteFaces.Step()
+				if err != nil {
+					log.Printf("Unable to delete faces for %d: %s\n", imageInfo.Id, err.Error())
+					continue
+				}
+				err = deleteFaces.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Insert new faces
+				for _, face := range imageInfo.Faces {
+					insertFace.BindInt64(1, int64(imageInfo.Id))
+					insertFace.BindInt64(2, int64(face.X))
+					insertFace.BindInt64(3, int64(face.Y))
+					insertFace.BindInt64(4, int64(face.W))
+					insertFace.BindInt64(5, int64(face.H))
+					insertFace.BindInt64(6, int64(face.Confidence))
+					insertFace.BindBytes(7, face.Embedding)
+
+					_, err := insertFace.Step()
+					if err != nil {
+						log.Printf("Unable to insert face for %d: %s\n", imageInfo.Id, err.Error())
+						continue
+					}
+					err = insertFace.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				// Mark faces as done for this image (even if no faces were found)
+				updateFacesDone.BindInt64(1, int64(imageInfo.Id))
+				_, err = updateFacesDone.Step()
+				if err != nil {
+					log.Printf("Unable to mark faces done for %d: %s\n", imageInfo.Id, err.Error())
+				}
+				err = updateFacesDone.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -1122,6 +1184,80 @@ func (source *Database) GetDirsCount(dirs []string) (int, bool) {
 	return stmt.ColumnInt(0), true
 }
 
+// CountMissing counts files with missing data based on given criteria
+func (source *Database) CountMissing(dirs []string, opts Missing) (int, bool) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `SELECT COUNT(DISTINCT infos.id) FROM infos
+		INNER JOIN prefix ON prefix.id = path_prefix_id`
+
+	if opts.Embedding {
+		sql += `
+		LEFT JOIN clip_emb ON clip_emb.file_id = infos.id`
+	}
+
+	sql += `
+		WHERE path_prefix_id IN (
+			SELECT id
+			FROM prefix
+			WHERE `
+
+	for i := range dirs {
+		sql += `str LIKE ? `
+		if i < len(dirs)-1 {
+			sql += "OR "
+		}
+	}
+
+	sql += `)`
+
+	// Build conditions for missing data
+	conditions := make([]string, 0)
+	if opts.Metadata {
+		conditions = append(conditions,
+			"(width IS NULL OR height IS NULL OR orientation IS NULL OR created_at_unix IS NULL)")
+	}
+	if opts.Color {
+		conditions = append(conditions, "color IS NULL")
+	}
+	if opts.Embedding {
+		conditions = append(conditions, "file_id IS NULL")
+	}
+	if opts.Faces {
+		conditions = append(conditions, "faces_done IS NULL")
+	}
+
+	if len(conditions) > 0 {
+		sql += ` AND (`
+		for i, cond := range conditions {
+			sql += cond
+			if i < len(conditions)-1 {
+				sql += " OR "
+			}
+		}
+		sql += `)`
+	}
+
+	stmt := conn.Prep(sql)
+	bindIndex := 1
+	defer stmt.Reset()
+
+	for _, dir := range dirs {
+		stmt.BindText(bindIndex, dir+"%")
+		bindIndex++
+	}
+
+	if exists, err := stmt.Step(); err != nil {
+		log.Printf("error counting missing files: %s\n", err.Error())
+		return 0, false
+	} else if !exists {
+		return 0, false
+	}
+
+	return stmt.ColumnInt(0), true
+}
+
 func (source *Database) Write(path string, info Info, writeType InfoWriteType) error {
 	source.pending <- &InfoWrite{
 		Path: path,
@@ -1170,6 +1306,15 @@ func (source *Database) WriteAI(id ImageId, embedding ai.Embedding) error {
 		Id:        int64(id),
 		Type:      UpdateAI,
 		Embedding: embedding,
+	}
+	return nil
+}
+
+func (source *Database) WriteFaces(id ImageId, faces []ai.Face) error {
+	source.pending <- &InfoWrite{
+		Id:    int64(id),
+		Type:  UpdateFaces,
+		Faces: faces,
 	}
 	return nil
 }
@@ -2624,76 +2769,6 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 	return out
 }
 
-func (source *Database) CountMissing(dirs []string, opts Missing) (int, bool) {
-	conn := source.pool.Get(context.TODO())
-	defer source.pool.Put(conn)
-
-	sql := `SELECT COUNT(DISTINCT infos.id) FROM infos
-		INNER JOIN prefix ON prefix.id = path_prefix_id`
-
-	if opts.Embedding {
-		sql += `
-		LEFT JOIN clip_emb ON clip_emb.file_id = infos.id`
-	}
-
-	sql += `
-		WHERE path_prefix_id IN (
-			SELECT id
-			FROM prefix
-			WHERE `
-
-	for i := range dirs {
-		sql += `str LIKE ? `
-		if i < len(dirs)-1 {
-			sql += "OR "
-		}
-	}
-
-	sql += `)`
-
-	// Build conditions for missing data
-	conditions := make([]string, 0)
-	if opts.Metadata {
-		conditions = append(conditions,
-			"(width IS NULL OR height IS NULL OR orientation IS NULL OR created_at_unix IS NULL)")
-	}
-	if opts.Color {
-		conditions = append(conditions, "color IS NULL")
-	}
-	if opts.Embedding {
-		conditions = append(conditions, "file_id IS NULL")
-	}
-
-	if len(conditions) > 0 {
-		sql += ` AND (`
-		for i, cond := range conditions {
-			sql += cond
-			if i < len(conditions)-1 {
-				sql += " OR "
-			}
-		}
-		sql += `)`
-	}
-
-	stmt := conn.Prep(sql)
-	bindIndex := 1
-	defer stmt.Reset()
-
-	for _, dir := range dirs {
-		stmt.BindText(bindIndex, dir+"%")
-		bindIndex++
-	}
-
-	if exists, err := stmt.Step(); err != nil {
-		log.Printf("error counting missing files: %s\n", err.Error())
-		return 0, false
-	} else if !exists {
-		return 0, false
-	}
-
-	return stmt.ColumnInt(0), true
-}
-
 func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-chan MissingInfo {
 	out := make(chan MissingInfo, 1000)
 	go func() {
@@ -2732,6 +2807,12 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 			conds = append(conds, condition{
 				inputs: []string{"file_id"},
 				output: "missing_embedding",
+			})
+		}
+		if opts.Faces {
+			conds = append(conds, condition{
+				inputs: []string{"faces_done"},
+				output: "missing_faces",
 			})
 		}
 
@@ -2845,6 +2926,10 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 				r.Embedding = stmt.ColumnBool(i)
 				i++
 			}
+			if opts.Faces {
+				r.Faces = stmt.ColumnBool(i)
+				i++
+			}
 			out <- r
 		}
 
@@ -2852,3 +2937,95 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 	}()
 	return out
 }
+
+type FaceInfo struct {
+	Id         int
+	FileId     ImageId
+	X          int
+	Y          int
+	W          int
+	H          int
+	Confidence int
+	PersonId   *int
+}
+
+func (source *Database) ListFaces(dirs []string, limit int) <-chan FaceInfo {
+	out := make(chan FaceInfo, 1000)
+	go func() {
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
+		sql := `
+			SELECT face.id, face.file_id, face.x, face.y, face.w, face.h, 
+			       face.confidence, face.person_id
+			FROM face
+			INNER JOIN infos ON infos.id = face.file_id
+			INNER JOIN prefix ON prefix.id = infos.path_prefix_id
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `
+			)
+			ORDER BY face.id ASC
+		`
+
+		if limit > 0 {
+			sql += `LIMIT ? `
+		}
+
+		sql += ";"
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		bindIndex := 1
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, (int64)(limit))
+		}
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing faces: %s\n", err.Error())
+				break
+			} else if !exists {
+				break
+			}
+
+			face := FaceInfo{
+				Id:         stmt.ColumnInt(0),
+				FileId:     ImageId(stmt.ColumnInt64(1)),
+				X:          stmt.ColumnInt(2),
+				Y:          stmt.ColumnInt(3),
+				W:          stmt.ColumnInt(4),
+				H:          stmt.ColumnInt(5),
+				Confidence: stmt.ColumnInt(6),
+			}
+
+			if stmt.ColumnType(7) != sqlite.TypeNull {
+				personId := stmt.ColumnInt(7)
+				face.PersonId = &personId
+			}
+
+			out <- face
+		}
+
+		close(out)
+	}()
+	return out
+}
+

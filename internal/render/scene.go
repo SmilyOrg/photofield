@@ -119,7 +119,7 @@ type Scene struct {
 	CreatedAt       time.Time      `json:"created_at"`
 	Search          string         `json:"search,omitempty"`
 	SearchTokens    []search.Token `json:"search_tokens,omitempty"`
-	SearchEmbedding ai.Embedding `json:"-"`
+	SearchEmbedding ai.Embedding   `json:"-"`
 	Loading         bool           `json:"loading"`
 	LoadCount       int            `json:"load_count,omitempty"`
 	LoadUnit        string         `json:"load_unit,omitempty"`
@@ -127,6 +127,7 @@ type Scene struct {
 	Fonts           Fonts          `json:"-"`
 	Bounds          Rect           `json:"bounds"`
 	Photos          []Photo        `json:"-"`
+	PhotoCrops      []Rect         `json:"-"`
 	PhotoIndex      *rtree.RTree   `json:"-"`
 	FileCount       int            `json:"file_count"`
 	Solids          []Solid        `json:"-"`
@@ -176,7 +177,11 @@ func drawPhotoRefs(ctx context.Context, id int, photoRefs <-chan PhotoRef, confi
 	trace.WithRegion(ctx, "drawPhotoRefs", func() {
 		for photoRef := range photoRefs {
 			selected := config.Selected.Contains(int(photoRef.Photo.Id))
-			photoRef.Photo.Draw(ctx, config, scene, c, scales, source, selected)
+			crop := Rect{}
+			if len(scene.PhotoCrops) != 0 {
+				crop = scene.PhotoCrops[photoRef.Index]
+			}
+			photoRef.Photo.Draw(ctx, config, scene, c, scales, source, selected, crop)
 		}
 		wg.Done()
 	})

@@ -17,7 +17,7 @@ import (
 
 var errSkip = errors.New("skipping the rest")
 
-func walkFiles(ctx context.Context, dir string, extensions []string, maxFiles int) <-chan string {
+func walkFiles(dir string, extensions []string, maxFiles int) <-chan string {
 	out := make(chan string)
 	go func() {
 		finished := metrics.Elapsed(fmt.Sprintf("index %s", dir))
@@ -47,11 +47,7 @@ func walkFiles(ctx context.Context, dir string, extensions []string, maxFiles in
 
 				files++
 				progress.Inc(1)
-				select {
-				case out <- path:
-				case <-ctx.Done():
-					return errSkip
-				}
+				out <- path
 				if maxFiles > 0 && files >= maxFiles {
 					return errSkip
 				}
@@ -82,7 +78,7 @@ func RunFiles(ctx context.Context, cfg Config, t *task.Task) error {
 		log.Printf("index files %s\n", dir)
 		indexed := make(map[string]struct{})
 
-		for path := range walkFiles(ctx, dir, cfg.Extensions, t.MaxPhotos) {
+		for path := range walkFiles(dir, cfg.Extensions, t.MaxPhotos) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

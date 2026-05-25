@@ -24,6 +24,10 @@ type Bitmap struct {
 	Orientation image.Orientation
 }
 
+type SubImager interface {
+	SubImage(r goimage.Rectangle) goimage.Image
+}
+
 func fitInside(cw float64, ch float64, w float64, h float64) (float64, float64) {
 	r := w / h
 	cr := cw / ch
@@ -90,7 +94,9 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 	aro := float64(bitmap.Sprite.Rect.W) / float64(bitmap.Sprite.Rect.H)
 	ard := math.Abs(arb - aro)
 	crop := ard > 0.05
-	// crop = false
+
+	// TODO: restore cropping based on aspect ratio difference
+	crop = false
 
 	var croprect goimage.Rectangle
 	if crop || cover {
@@ -111,6 +117,8 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 	} else {
 		model = bitmap.Sprite.Rect.GetMatrixFitBoundsRotate(bounds, bitmap.Orientation)
 	}
+
+	model = model.Translate(-float64(bounds.Min.X), float64(bounds.Min.Y))
 
 	m := c.View().Mul(model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5))
 

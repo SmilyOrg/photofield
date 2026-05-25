@@ -26,6 +26,7 @@ const (
 	Strip      Type = "STRIP"
 	Highlights Type = "HIGHLIGHTS"
 	Flex       Type = "FLEX"
+	Faces      Type = "FACES"
 )
 
 type Order int

@@ -208,6 +208,27 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				layout.LayoutStrip(infos, config.Layout, &scene, imageSource)
 			case layout.Flex:
 				layout.LayoutFlex(infos, config.Layout, &scene, imageSource)
+			case layout.Faces:
+				// Convert face infos to layout.FacePhoto
+				faces := make(chan layout.FacePhoto, 100)
+				go func() {
+					for face := range imageSource.ListFaces(config.Collection.Dirs, config.Collection.Limit) {
+						info := imageSource.GetInfo(face.FileId)
+						faces <- layout.FacePhoto{
+							FileId:     face.FileId,
+							FaceId:     face.Id,
+							X:          face.X,
+							Y:          face.Y,
+							W:          face.W,
+							H:          face.H,
+							Confidence: face.Confidence,
+							PersonId:   face.PersonId,
+							Info:       info,
+						}
+					}
+					close(faces)
+				}()
+				layout.LayoutFaces(faces, config.Layout, &scene, imageSource)
 			default:
 				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
 			}
