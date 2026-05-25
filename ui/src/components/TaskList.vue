@@ -34,7 +34,7 @@
           icon="close"
           class="stop-button"
           title="Stop task"
-          @click="stopTask(task.id)"
+          @click="onStopTask(task.id)"
         ></ui-icon-button>
       </ui-item>
     </ui-list>
@@ -47,6 +47,14 @@ import { stopTask } from '../api.js';
 const props = defineProps({
     tasks: Array
 });
+
+async function onStopTask(id) {
+  try {
+    await stopTask(id);
+  } catch (error) {
+    console.error(error);
+  }
+}
 
 </script>
 

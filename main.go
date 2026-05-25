@@ -553,7 +553,8 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 			if params.CollectionId != nil && pt.CollectionId != string(*params.CollectionId) {
 				continue
 			}
-			pending := pt.Total - pt.Done
+			done, total := pt.Progress()
+			pending := total - done
 			if pending < 0 {
 				pending = 0
 			}
@@ -562,7 +563,7 @@ func (*Api) GetTasks(w http.ResponseWriter, r *http.Request, params openapi.GetT
 				Type:         pt.Type,
 				Name:         pt.Name,
 				CollectionId: pt.CollectionId,
-				Done:         pt.Done,
+				Done:         done,
 				Pending:      pending,
 				enqueuedAt:   pt.EnqueuedAt,
 			})
