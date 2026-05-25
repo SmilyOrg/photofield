@@ -114,9 +114,7 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 			if len(ids) >= batchSize {
 				log.Printf("index source batch %d files\n", len(ids))
 				results := db.GetBatch(ids)
-				resultCount := 0
 				for result := range results {
-					resultCount++
 					missingInfo := idToMissing[result.Id]
 					select {
 					case out <- fileWithMeta{
@@ -139,9 +137,7 @@ func fileSourceWithMetadata(ctx context.Context, db *img.Database, dirs []string
 		if len(ids) > 0 {
 			log.Printf("index source batch %d files (last)\n", len(ids))
 			results := db.GetBatch(ids)
-			resultCount := 0
 			for result := range results {
-				resultCount++
 				missingInfo := idToMissing[result.Id]
 				select {
 				case out <- fileWithMeta{
