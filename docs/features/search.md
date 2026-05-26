@@ -68,6 +68,19 @@ example, you can search for `tag:fav` to only show favorited photos, or
 
 See the [tags documentation](tags.md) for more on tags.
 
+## Filename Search
+
+You can filter photos by filename using the `filename` qualifier. Plain text matches
+anywhere in the filename, while `*` matches zero or more characters and `?` matches
+exactly one character.
+
+| Query | Description |
+|-------|-------------|
+| `filename:mexico` | Show photos with `mexico` anywhere in the filename. |
+| `filename:*map*` | Show photos with `map` anywhere in the filename. |
+| `filename:new*` | Show photos whose filenames start with `new`. |
+| `filename:*.png` | Show all PNG files. |
+
 ## Date Filtering
 
 You can search for photos based on when they were taken using the `created`

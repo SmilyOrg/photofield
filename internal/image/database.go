@@ -1806,6 +1806,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 	out := make(chan SourcedInfo, 1000)
 
 	tags := options.Expression.Tags.Values()
+	filenames := options.Expression.Filenames.Values()
 	deps := Dependencies{
 		Dependency{
 			db:       source,
@@ -1920,6 +1921,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 					AND created_at_unix < :created_to
 				`
 			}
+			for range filenames {
+				sql += `
+					AND filename LIKE ? ESCAPE '\'
+				`
+			}
 
 			sql += `
 				AND path_prefix_id = ?
@@ -2004,6 +2010,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		}
 		if !options.Expression.Created.To.IsZero() {
 			stmt.BindInt64(bindIndex, options.Expression.Created.To.Unix())
+			bindIndex++
+		}
+
+		for _, filename := range filenames {
+			stmt.BindText(bindIndex, filenameToLikePattern(filename))
 			bindIndex++
 		}
 
@@ -2097,6 +2108,30 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		close(out)
 	}()
 	return out, deps
+}
+
+func filenameToLikePattern(filename string) string {
+	var b strings.Builder
+	hasWildcard := false
+	for _, r := range filename {
+		switch r {
+		case '\\', '%', '_':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case '*':
+			b.WriteByte('%')
+			hasWildcard = true
+		case '?':
+			b.WriteByte('_')
+			hasWildcard = true
+		default:
+			b.WriteRune(r)
+		}
+	}
+	if hasWildcard {
+		return b.String()
+	}
+	return "%" + b.String() + "%"
 }
 
 func (source *Database) List(dirs []string, options ListOptions) (<-chan SourcedInfo, Dependencies) {
