@@ -60,6 +60,7 @@ func isSimilarityOrder(order ListOrder) bool {
 func IsSimilarityOrder(order ListOrder) bool {
 	return isSimilarityOrder(order)
 }
+
 type ListOptions struct {
 	OrderBy     ListOrder
 	ShuffleSeed int64
@@ -1868,7 +1869,8 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			embInvNorm = options.Embedding.InvNormFloat32()
 		}
 
-		if options.Expression.Threshold.Present || options.Expression.Deduplicate.Present || isSimilarityOrder(options.OrderBy) {
+		similarityOrder := isSimilarityOrder(options.OrderBy)
+		if options.Expression.Threshold.Present || options.Expression.Deduplicate.Present || similarityOrder {
 			joinEmbeddings = true
 		}
 
@@ -1981,7 +1983,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			// No SQL ordering — similarity sort happens in Go after all results are collected.
 		}
 
-		if options.Limit > 0 {
+		if options.Limit > 0 && !similarityOrder {
 			sql += `
 				LIMIT ?
 			`
@@ -2030,7 +2032,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			bindIndex++
 		}
 
-		if options.Limit > 0 {
+		if options.Limit > 0 && !similarityOrder {
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
 
@@ -2110,21 +2112,25 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				}
 			}
 
-			if isSimilarityOrder(options.OrderBy) {
+			if similarityOrder {
 				similarityBuffer = append(similarityBuffer, info)
 			} else {
 				out <- info
 			}
 		}
 
-		if isSimilarityOrder(options.OrderBy) {
+		if similarityOrder {
 			sort.Slice(similarityBuffer, func(i, j int) bool {
 				if options.OrderBy == SimilarityAsc {
 					return similarityBuffer[i].Similarity < similarityBuffer[j].Similarity
 				}
 				return similarityBuffer[i].Similarity > similarityBuffer[j].Similarity
 			})
-			for _, info := range similarityBuffer {
+			limit := len(similarityBuffer)
+			if options.Limit > 0 && options.Limit < limit {
+				limit = options.Limit
+			}
+			for _, info := range similarityBuffer[:limit] {
 				out <- info
 			}
 		}
@@ -2175,6 +2181,9 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan Sourced
 			}
 			opts := options
 			opts.Batch = 1 + i
+			if isSimilarityOrder(options.OrderBy) {
+				opts.Limit = 0
+			}
 			ch, _ := source.listWithPrefixIds(prefixIds[start:end], opts)
 			channels = append(channels, ch)
 		}
@@ -2191,7 +2200,11 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan Sourced
 				}
 				return all[i].Similarity > all[j].Similarity
 			})
-			for _, info := range all {
+			limit := len(all)
+			if options.Limit > 0 && options.Limit < limit {
+				limit = options.Limit
+			}
+			for _, info := range all[:limit] {
 				out <- info
 			}
 		} else {

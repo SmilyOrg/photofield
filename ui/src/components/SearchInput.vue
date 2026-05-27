@@ -349,18 +349,17 @@ watchEffect(() => {
     newSort = undefined;
   }
   if (newSort != sort.value) {
-   router.replace({
-      ...route,
+    router.replace({
       query: {
         ...route.query,
         sort: newSort,
       },
+      hash: route.hash,
     });
   }
 });
 
 watch(modelValue, value => {
-  console.log("modelValue changed:", value, scene.value);
   if (value === undefined) {
     return;
   }
