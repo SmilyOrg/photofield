@@ -1927,7 +1927,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				`
 				for i := range filenames {
 					sql += fmt.Sprintf(
-						`filename LIKE :filename%[1]d `,
+						`filename LIKE :filename%[1]d ESCAPE '\'`,
 						i,
 					)
 					if i < len(filenames)-1 {
@@ -1996,7 +1996,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 
 		sql += ";"
 
-		// println(sql)
+		println(sql)
 
 		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)

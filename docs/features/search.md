@@ -80,6 +80,7 @@ exactly one character.
 | `filename:*map*` | Show photos with `map` anywhere in the filename. |
 | `filename:new*` | Show photos whose filenames start with `new`. |
 | `filename:*.png` | Show all PNG files. |
+| `filename:???_*` | Show photos with a 3-character prefix followed by an underscore. |
 
 ## Date Filtering
 
