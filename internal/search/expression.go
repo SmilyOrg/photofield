@@ -30,6 +30,7 @@ type Expression struct {
 	K           Int64     `json:"k,omitempty"`
 	Filter      String    `json:"filter,omitempty"`
 	Tags        Strings   `json:"tags,omitempty"`
+	Filenames   Strings   `json:"filename,omitempty"`
 	Image       Int64     `json:"img,omitempty"`
 
 	// Aggregate errors for convenient iteration
@@ -44,6 +45,7 @@ var validQualifiers = []string{
 	"k",
 	"filter",
 	"tag",
+	"filename",
 	"img",
 }
 
@@ -92,6 +94,11 @@ func (q *Query) Expression() (Expression, error) {
 	expr.Tags = q.ExpressionStrings("tag")
 	for _, tag := range expr.Tags {
 		expr.addFieldError(tag.FieldMeta)
+	}
+
+	expr.Filenames = q.ExpressionStrings("filename")
+	for _, filename := range expr.Filenames {
+		expr.addFieldError(filename.FieldMeta)
 	}
 
 	expr.Image = q.ExpressionInt("img")

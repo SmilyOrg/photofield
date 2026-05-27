@@ -270,6 +270,36 @@
         present: true
       value: vacation
 
+- search: filename:mexico
+  expr:
+    filename:
+    - meta:
+        name: filename
+        token:
+          type: qualifier
+          value: filename:mexico
+          start: 0
+          end: 15
+          key: filename
+          qualVal: mexico
+        present: true
+      value: mexico
+
+- search: filename:new*.png
+  expr:
+    filename:
+    - meta:
+        name: filename
+        token:
+          type: qualifier
+          value: filename:new*.png
+          start: 0
+          end: 17
+          key: filename
+          qualVal: new*.png
+        present: true
+      value: new*.png
+
 - search: img:12345
   expr:
     text: 
