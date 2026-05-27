@@ -1921,9 +1921,21 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 					AND created_at_unix < :created_to
 				`
 			}
-			for range filenames {
+			if len(filenames) > 0 {
 				sql += `
-					AND filename LIKE ? ESCAPE '\'
+					AND (
+				`
+				for i := range filenames {
+					sql += fmt.Sprintf(
+						`filename LIKE :filename%[1]d `,
+						i,
+					)
+					if i < len(filenames)-1 {
+						sql += "OR "
+					}
+				}
+				sql += `
+					)
 				`
 			}
 
