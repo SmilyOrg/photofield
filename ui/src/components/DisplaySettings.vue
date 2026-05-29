@@ -146,6 +146,8 @@ const sortOptions = computed(() => {
         { label: "Shuffle (Daily)", value: "+shuffle-daily" },
         { label: "Shuffle (Weekly)", value: "+shuffle-weekly" },
         { label: "Shuffle (Monthly)", value: "+shuffle-monthly" },
+        { label: "Most Similar First", value: "-similarity" },
+        { label: "Least Similar First", value: "+similarity" },
     ];
     
     const defaultOption = options.find(opt => opt.value === def);
