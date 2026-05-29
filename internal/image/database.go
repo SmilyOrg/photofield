@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,7 +48,18 @@ const (
 	ShuffleDaily
 	ShuffleWeekly
 	ShuffleMonthly
+	SimilarityDesc
+	SimilarityAsc
 )
+
+func isSimilarityOrder(order ListOrder) bool {
+	return order == SimilarityDesc || order == SimilarityAsc
+}
+
+// IsSimilarityOrder returns true if order is SimilarityDesc or SimilarityAsc.
+func IsSimilarityOrder(order ListOrder) bool {
+	return isSimilarityOrder(order)
+}
 
 type ListOptions struct {
 	OrderBy     ListOrder
@@ -1951,6 +1963,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 	out := make(chan SourcedInfo, 1000)
 
 	tags := options.Expression.Tags.Values()
+	filenames := options.Expression.Filenames.Values()
 	deps := Dependencies{
 		Dependency{
 			db:       source,
@@ -2002,7 +2015,8 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			embInvNorm = options.Embedding.InvNormFloat32()
 		}
 
-		if options.Expression.Threshold.Present || options.Expression.Deduplicate.Present {
+		similarityOrder := isSimilarityOrder(options.OrderBy)
+		if options.Expression.Threshold.Present || options.Expression.Deduplicate.Present || similarityOrder {
 			joinEmbeddings = true
 		}
 
@@ -2065,6 +2079,23 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 					AND created_at_unix < :created_to
 				`
 			}
+			if len(filenames) > 0 {
+				sql += `
+					AND (
+				`
+				for i := range filenames {
+					sql += fmt.Sprintf(
+						`filename LIKE :filename%[1]d ESCAPE '\' `,
+						i,
+					)
+					if i < len(filenames)-1 {
+						sql += "OR "
+					}
+				}
+				sql += `
+					)
+				`
+			}
 
 			sql += `
 				AND path_prefix_id = ?
@@ -2111,11 +2142,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			sql += `
 			ORDER BY (id * 2654435761 + ? * 1664525) % 4294967296
 			`
-		default:
-			panic("Unsupported listing order")
+		case SimilarityDesc, SimilarityAsc:
+			// No SQL ordering — similarity sort happens in Go after all results are collected.
 		}
 
-		if options.Limit > 0 {
+		if options.Limit > 0 && !similarityOrder {
 			sql += `
 				LIMIT ?
 			`
@@ -2152,6 +2183,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			bindIndex++
 		}
 
+		for _, filename := range filenames {
+			stmt.BindText(bindIndex, filenameToLikePattern(filename))
+			bindIndex++
+		}
+
 		for _, prefixId := range prefixIds {
 			stmt.BindInt64(bindIndex, (int64)(prefixId))
 			bindIndex++
@@ -2164,12 +2200,13 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			bindIndex++
 		}
 
-		if options.Limit > 0 {
+		if options.Limit > 0 && !similarityOrder {
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
 
 		var lastEmb []float32
 		var lastEmbInvNorm float32
+		var similarityBuffer []SourcedInfo
 
 		for {
 			if exists, err := stmt.Step(); err != nil {
@@ -2205,6 +2242,10 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			if joinEmbeddings {
 				e, err := readEmbedding(stmt, 9, 10)
 				if err != nil {
+					if isSimilarityOrder(options.OrderBy) {
+						// Photos without embeddings can't be ranked by similarity — skip them.
+						continue
+					}
 					continue
 				}
 				ee := e.Float32()
@@ -2218,6 +2259,9 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 					// fmt.Printf("id %d sim %f %f\n", info.Id, sim, embThreshold)
 					if options.Expression.Threshold.Present && sim < options.Expression.Threshold.Value {
 						continue
+					}
+					if isSimilarityOrder(options.OrderBy) {
+						info.Similarity = sim
 					}
 				}
 				if options.Expression.Deduplicate.Present {
@@ -2236,12 +2280,56 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				}
 			}
 
-			out <- info
+			if similarityOrder {
+				similarityBuffer = append(similarityBuffer, info)
+			} else {
+				out <- info
+			}
+		}
+
+		if similarityOrder {
+			sort.Slice(similarityBuffer, func(i, j int) bool {
+				if options.OrderBy == SimilarityAsc {
+					return similarityBuffer[i].Similarity < similarityBuffer[j].Similarity
+				}
+				return similarityBuffer[i].Similarity > similarityBuffer[j].Similarity
+			})
+			limit := len(similarityBuffer)
+			if options.Limit > 0 && options.Limit < limit {
+				limit = options.Limit
+			}
+			for _, info := range similarityBuffer[:limit] {
+				out <- info
+			}
 		}
 
 		close(out)
 	}()
 	return out, deps
+}
+
+func filenameToLikePattern(filename string) string {
+	var b strings.Builder
+	hasWildcard := false
+	for _, r := range filename {
+		switch r {
+		case '\\', '%', '_':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case '*':
+			b.WriteByte('%')
+			hasWildcard = true
+		case '?':
+			b.WriteByte('_')
+			hasWildcard = true
+		default:
+			b.WriteRune(r)
+		}
+	}
+	if hasWildcard {
+		return b.String()
+	}
+	return "%" + b.String() + "%"
 }
 
 func (source *Database) List(dirs []string, options ListOptions) (<-chan SourcedInfo, Dependencies) {
@@ -2285,12 +2373,37 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan Sourced
 			}
 			opts := options
 			opts.Batch = 1 + i
+			if isSimilarityOrder(options.OrderBy) {
+				opts.Limit = 0
+			}
 			ch, _ := source.listWithPrefixIds(prefixIds[start:end], opts)
 			channels = append(channels, ch)
 		}
-		err := mergeSortedChannels(channels, options.OrderBy, out)
-		if err != nil {
-			log.Printf("Error merging sorted channels: %s\n", err.Error())
+		if isSimilarityOrder(options.OrderBy) {
+			var all []SourcedInfo
+			for _, ch := range channels {
+				for info := range ch {
+					all = append(all, info)
+				}
+			}
+			sort.Slice(all, func(i, j int) bool {
+				if options.OrderBy == SimilarityAsc {
+					return all[i].Similarity < all[j].Similarity
+				}
+				return all[i].Similarity > all[j].Similarity
+			})
+			limit := len(all)
+			if options.Limit > 0 && options.Limit < limit {
+				limit = options.Limit
+			}
+			for _, info := range all[:limit] {
+				out <- info
+			}
+		} else {
+			err := mergeSortedChannels(channels, options.OrderBy, out)
+			if err != nil {
+				log.Printf("Error merging sorted channels: %s\n", err.Error())
+			}
 		}
 		close(out)
 	}()
@@ -2345,6 +2458,8 @@ func (source *Database) ListWithEmbeddings(dirs []string, options ListOptions) <
 			sql += `
 			ORDER BY (id * 2654435761 + ? * 1664525) % 4294967296
 			`
+		case SimilarityDesc, SimilarityAsc:
+			// No SQL ordering needed; caller is responsible for sorting by similarity.
 		default:
 			panic("Unsupported listing order")
 		}

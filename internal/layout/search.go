@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func LayoutSearch(infos <-chan image.SimilarityInfo, layout Layout, scene *render.Scene, source *image.Source) {
+func LayoutSearch(infos <-chan image.SourcedInfo, layout Layout, scene *render.Scene, source *image.Source) {
 
 	layout.ImageSpacing = 0.02 * layout.ImageHeight
 	layout.LineSpacing = 0.02 * layout.ImageHeight

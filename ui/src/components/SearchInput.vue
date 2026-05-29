@@ -90,7 +90,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, shallowRef, toRefs, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, toRefs, watch, watchEffect } from 'vue';
 import { watchDebounced } from '@vueuse/core'
 import DateChip from './chips/DateChip.vue';
 import SliderChip from './chips/SliderChip.vue';
@@ -100,6 +100,7 @@ import parseISO from 'date-fns/parseISO';
 import HighlightedInput from './HighlightedInput.vue';
 import { useApi } from '../api';
 import { useTimestamps, useTimestampsDate } from '../use';
+import { useRoute, useRouter } from 'vue-router';
 
 const props = defineProps({
   modelValue: String,
@@ -225,7 +226,7 @@ const qualifiers = [
 ];
 
 const extract = (qualifier) => {
-  const input = modelValue.value;
+  const input = inputValue.value;
   if (!input) return null;
   const match = input.match(qualifier.regex);
   if (match) {
@@ -335,6 +336,14 @@ const handleExactDateChange = (date) => {
   inject(createdExactQualifier, date);
 };
 
+const searchAttributes = computed(() => {
+  return {
+    hasFreeText: leftoverText.value.length > 0,
+    hasImage: imageId.value !== null,
+    hasFreeTextOrImage: leftoverText.value.length > 0 || imageId.value !== null,
+    hasThreshold: threshold.value !== null,
+  }
+});
 
 watch(modelValue, value => {
   if (value === undefined) {
@@ -358,7 +367,7 @@ watch(active, async value => {
 watchDebounced(
   inputValue,
   newValue => {
-    emit("update:modelValue", newValue);
+    emit("update:modelValue", newValue, searchAttributes.value);
   },
   { debounce: 1000 },
 );

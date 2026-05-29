@@ -46,7 +46,8 @@ func IdsToUint32(ids <-chan ImageId) <-chan uint32 {
 }
 
 type SourcedInfo struct {
-	Id ImageId
+	Id         ImageId
+	Similarity float32
 	Info
 }
 
@@ -68,25 +69,9 @@ type MissingInfo struct {
 	Missing
 }
 
-type SimilarityInfo struct {
-	SourcedInfo
-	Similarity float32
-}
-
 type InfoEmb struct {
 	SourcedInfo
 	Embedding ai.Embedding
-}
-
-func SimilarityInfosToSourcedInfos(sinfos <-chan SimilarityInfo) <-chan SourcedInfo {
-	out := make(chan SourcedInfo)
-	go func() {
-		for sinfo := range sinfos {
-			out <- sinfo.SourcedInfo
-		}
-		close(out)
-	}()
-	return out
 }
 
 type CacheConfig struct {

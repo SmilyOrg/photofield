@@ -35,6 +35,25 @@ func TestTag(t *testing.T) {
 	}
 }
 
+func TestFilename(t *testing.T) {
+	query, err := Parse("filename:new*.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(query.Terms) != 1 {
+		t.Fatal("Expected 1 term")
+	}
+	if query.Terms[0].Qualifier == nil {
+		t.Fatal("Expected qualifier")
+	}
+	if query.Terms[0].Qualifier.Key != "filename" {
+		t.Fatalf("Expected 'filename', got '%s'", query.Terms[0].Qualifier.Key)
+	}
+	if query.Terms[0].Qualifier.Value != "new*.png" {
+		t.Fatalf("Expected 'new*.png', got '%s'", query.Terms[0].Qualifier.Value)
+	}
+}
+
 func TestWords(t *testing.T) {
 	query, err := Parse("hello   world created:2016-04-29..2016-07-04")
 	if err != nil {
