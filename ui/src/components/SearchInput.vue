@@ -226,7 +226,7 @@ const qualifiers = [
 ];
 
 const extract = (qualifier) => {
-  const input = modelValue.value;
+  const input = inputValue.value;
   if (!input) return null;
   const match = input.match(qualifier.regex);
   if (match) {
@@ -336,26 +336,12 @@ const handleExactDateChange = (date) => {
   inject(createdExactQualifier, date);
 };
 
-const route = useRoute();
-const router = useRouter();
-const sort = computed(() => route.query.sort);
-watchEffect(() => {
-  let newSort = sort.value;
-  const textOrImage = leftoverText.value.length > 0 || imageId.value !== null;
-  const hasThreshold = threshold.value !== null;
-  if (!sort.value && textOrImage && !hasThreshold) {
-    newSort = "-similarity";
-  } else if (sort.value == "-similarity" && textOrImage && hasThreshold) {
-    newSort = undefined;
-  }
-  if (newSort != sort.value) {
-    router.replace({
-      query: {
-        ...route.query,
-        sort: newSort,
-      },
-      hash: route.hash,
-    });
+const searchAttributes = computed(() => {
+  return {
+    hasFreeText: leftoverText.value.length > 0,
+    hasImage: imageId.value !== null,
+    hasFreeTextOrImage: leftoverText.value.length > 0 || imageId.value !== null,
+    hasThreshold: threshold.value !== null,
   }
 });
 
@@ -381,7 +367,7 @@ watch(active, async value => {
 watchDebounced(
   inputValue,
   newValue => {
-    emit("update:modelValue", newValue);
+    emit("update:modelValue", newValue, searchAttributes.value);
   },
   { debounce: 1000 },
 );

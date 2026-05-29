@@ -9,6 +9,7 @@ import (
 	"photofield/internal/rangetree"
 	"photofield/internal/tag"
 )
+
 type taggedImage struct {
 	Id         ImageId
 	TagId      tag.Id

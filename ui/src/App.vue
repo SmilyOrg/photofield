@@ -402,14 +402,22 @@ export default {
         },
       })
     },
-    onSearch(query) {
+    onSearch(query, attrs) {
       if (this.selected) {
         if (!this.searchActive && query == "") {
           this.setQuery({ search: this.selected, f: undefined });
           return;
         }
       }
-      this.setQuery({ search: query, f: undefined });
+      let sort = this.query.sort;
+      if (attrs) {
+        if (!sort && attrs.hasFreeTextOrImage && !attrs.hasThreshold) {
+          sort = "-similarity";
+        } else if (sort == "-similarity" && ((attrs.hasFreeTextOrImage && attrs.hasThreshold) || !attrs.hasFreeTextOrImage)) {
+          sort = undefined;
+        }
+      }
+      this.setQuery({ search: query, f: undefined, sort });
     },
   }
 }

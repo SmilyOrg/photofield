@@ -68,12 +68,10 @@ type MissingInfo struct {
 	Missing
 }
 
-
 type InfoEmb struct {
 	SourcedInfo
 	Embedding ai.Embedding
 }
-
 
 type CacheConfig struct {
 	MaxSize string `json:"max_size"`
