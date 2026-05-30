@@ -378,6 +378,10 @@ func (source *Source) GetFaceEmbedding(faceId int) (ai.Embedding, error) {
 	return source.database.GetFaceEmbedding(faceId)
 }
 
+func (source *Source) GetFacesByFileId(fileId ImageId) []FaceInfo {
+	return source.database.GetFacesByFileId(fileId)
+}
+
 func (source *Source) ListFaces(dirs []string, options FaceListOptions) <-chan FaceInfo {
 	return source.database.ListFaces(dirs, options)
 }

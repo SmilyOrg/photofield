@@ -3223,3 +3223,28 @@ func readFaceInfo(stmt *sqlite.Stmt) FaceInfo {
 	return face
 }
 
+func (source *Database) GetFacesByFileId(fileId ImageId) []FaceInfo {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+		SELECT id, file_id, x, y, w, h, confidence, person_id
+		FROM face
+		WHERE file_id = ?
+		ORDER BY id ASC;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(fileId))
+
+	var faces []FaceInfo
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error getting faces for file %d: %s\n", fileId, err.Error())
+			break
+		} else if !exists {
+			break
+		}
+		faces = append(faces, readFaceInfo(stmt))
+	}
+	return faces
+}
