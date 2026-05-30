@@ -63,6 +63,10 @@ func CosineSimilarityFloat32Float32(a []float32, ainvnorm float32, b []float32, 
 // the inverse vector norm as an offset of this number.
 const InvNormMean = 11843
 
+// FaceEmbeddingInvNorm is the inverse norm for pre-normalized face embeddings (L2 norm = 1).
+// float16(1.0) = 0x3C00 = 15360.
+const FaceEmbeddingInvNorm = uint16(0x3C00)
+
 type Clip interface {
 	EmbedImagePath(path string) (Embedding, error)
 	EmbedImageReader(r io.Reader) (Embedding, error)

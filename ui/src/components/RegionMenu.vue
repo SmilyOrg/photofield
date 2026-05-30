@@ -50,6 +50,9 @@
         <ui-item @click="findSimilar()">
           Find Similar Images
         </ui-item>
+        <ui-item v-if="region.data.face_id" @click="findSimilarFaces()">
+          Find Similar Faces
+        </ui-item>
       </ui-nav>
       <div v-if="expanded" class="thumbnails">
         <a
@@ -100,6 +103,7 @@ export default {
       if (!fileId) return null;
       const url = new URL(route.fullPath, window.location.origin);
       url.searchParams.set("f", fileId);
+      url.searchParams.set("zoom", "1");
       url.searchParams.set("layout", "ALBUM");
       url.searchParams.delete("search");
       url.pathname = url.pathname.replace(/(.*\/collections\/[^/]+)\/.*$/, "$1");
@@ -151,6 +155,12 @@ export default {
       if (!id) return;
       this.$emit("close");
       this.$emit("search", `img:${id}`);
+    },
+    async findSimilarFaces() {
+      const faceId = this.region?.data?.face_id;
+      if (!faceId) return;
+      this.$emit("close");
+      this.$emit("search", `face:${faceId}`);
     },
   }
 };

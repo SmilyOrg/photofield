@@ -3064,15 +3064,58 @@ type FaceInfo struct {
 	PersonId   *int
 }
 
-func (source *Database) ListFaces(dirs []string, limit int) <-chan FaceInfo {
+type FaceListOptions struct {
+	Limit         int
+	FaceEmbedding ai.Embedding // if set, sort results by cosine similarity to this face embedding
+}
+
+// readFaceEmbedding reads the face embedding from the statement at the given column index.
+// Face embeddings are pre-normalized (L2 norm = 1), so inv_norm is always 1.0.
+func readFaceEmbedding(stmt *sqlite.Stmt, embeddingIndex int) (ai.Embedding, error) {
+	if stmt.ColumnType(embeddingIndex) == sqlite.TypeNull {
+		return ai.FromRaw(nil, 0), fmt.Errorf("face embedding is null")
+	}
+	size := stmt.ColumnLen(embeddingIndex)
+	bytes := make([]byte, size)
+	read := stmt.ColumnBytes(embeddingIndex, bytes)
+	if read != size {
+		return ai.FromRaw(nil, 0), fmt.Errorf("unable to read face embedding bytes, expected %d, got %d", size, read)
+	}
+	return ai.FromRaw(bytes, ai.FaceEmbeddingInvNorm), nil
+}
+
+func (source *Database) GetFaceEmbedding(faceId int) (ai.Embedding, error) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`SELECT embedding FROM face WHERE id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(faceId))
+	if exists, err := stmt.Step(); err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, nil
+	}
+	return readFaceEmbedding(stmt, 0)
+}
+
+func (source *Database) ListFaces(dirs []string, options FaceListOptions) <-chan FaceInfo {
 	out := make(chan FaceInfo, 1000)
 	go func() {
 		conn := source.pool.Get(context.TODO())
 		defer source.pool.Put(conn)
 
-		sql := `
-			SELECT face.id, face.file_id, face.x, face.y, face.w, face.h, 
-			       face.confidence, face.person_id
+		refEmb := options.FaceEmbedding
+		limit := options.Limit
+
+		selectCols := `face.id, face.file_id, face.x, face.y, face.w, face.h, face.confidence, face.person_id`
+		if refEmb != nil {
+			selectCols += `, face.embedding`
+		}
+
+		sql := fmt.Sprintf(`
+			SELECT %s
 			FROM face
 			INNER JOIN infos ON infos.id = face.file_id
 			INNER JOIN prefix ON prefix.id = infos.path_prefix_id
@@ -3080,7 +3123,7 @@ func (source *Database) ListFaces(dirs []string, limit int) <-chan FaceInfo {
 				SELECT id
 				FROM prefix
 				WHERE
-		`
+		`, selectCols)
 
 		for i := range dirs {
 			sql += `str LIKE ? `
@@ -3089,13 +3132,10 @@ func (source *Database) ListFaces(dirs []string, limit int) <-chan FaceInfo {
 			}
 		}
 
-		sql += `
-			)
-			ORDER BY face.id ASC
-		`
+		sql += `) ORDER BY face.id ASC`
 
-		if limit > 0 {
-			sql += `LIMIT ? `
+		if limit > 0 && refEmb == nil {
+			sql += ` LIMIT ?`
 		}
 
 		sql += ";"
@@ -3109,38 +3149,77 @@ func (source *Database) ListFaces(dirs []string, limit int) <-chan FaceInfo {
 			bindIndex++
 		}
 
-		if limit > 0 {
-			stmt.BindInt64(bindIndex, (int64)(limit))
+		if limit > 0 && refEmb == nil {
+			stmt.BindInt64(bindIndex, int64(limit))
 		}
 
-		for {
-			if exists, err := stmt.Step(); err != nil {
-				log.Printf("Error listing faces: %s\n", err.Error())
-				break
-			} else if !exists {
-				break
+		type faceWithSim struct {
+			face FaceInfo
+			sim  float32
+		}
+
+		if refEmb != nil {
+			refFloat32 := refEmb.Float32()
+			refInvNorm := refEmb.InvNormFloat32()
+			var collected []faceWithSim
+			for {
+				if exists, err := stmt.Step(); err != nil {
+					log.Printf("Error listing faces: %s\n", err.Error())
+					break
+				} else if !exists {
+					break
+				}
+				face := readFaceInfo(stmt)
+				sim := float32(0)
+				if emb, err := readFaceEmbedding(stmt, 8); err == nil {
+					sim, _ = ai.CosineSimilarityEmbeddingFloat32(emb, refFloat32, refInvNorm)
+				}
+				collected = append(collected, faceWithSim{face: face, sim: sim})
 			}
 
-			face := FaceInfo{
-				Id:         stmt.ColumnInt(0),
-				FileId:     ImageId(stmt.ColumnInt64(1)),
-				X:          stmt.ColumnInt(2),
-				Y:          stmt.ColumnInt(3),
-				W:          stmt.ColumnInt(4),
-				H:          stmt.ColumnInt(5),
-				Confidence: stmt.ColumnInt(6),
-			}
+			sort.Slice(collected, func(i, j int) bool {
+				return collected[i].sim > collected[j].sim
+			})
 
-			if stmt.ColumnType(7) != sqlite.TypeNull {
-				personId := stmt.ColumnInt(7)
-				face.PersonId = &personId
+			count := 0
+			for _, item := range collected {
+				out <- item.face
+				count++
+				if limit > 0 && count >= limit {
+					break
+				}
 			}
-
-			out <- face
+		} else {
+			for {
+				if exists, err := stmt.Step(); err != nil {
+					log.Printf("Error listing faces: %s\n", err.Error())
+					break
+				} else if !exists {
+					break
+				}
+				out <- readFaceInfo(stmt)
+			}
 		}
 
 		close(out)
 	}()
 	return out
+}
+
+func readFaceInfo(stmt *sqlite.Stmt) FaceInfo {
+	face := FaceInfo{
+		Id:         stmt.ColumnInt(0),
+		FileId:     ImageId(stmt.ColumnInt64(1)),
+		X:          stmt.ColumnInt(2),
+		Y:          stmt.ColumnInt(3),
+		W:          stmt.ColumnInt(4),
+		H:          stmt.ColumnInt(5),
+		Confidence: stmt.ColumnInt(6),
+	}
+	if stmt.ColumnType(7) != sqlite.TypeNull {
+		personId := stmt.ColumnInt(7)
+		face.PersonId = &personId
+	}
+	return face
 }
 

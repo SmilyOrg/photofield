@@ -117,6 +117,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				scene.SearchEmbedding = embedding
 			}
 
+
 			// If no embedding yet, embed the text
 			if scene.SearchEmbedding == nil && scene.Error == "" && expression.Text != "" {
 				text := expression.Text
@@ -194,10 +195,20 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			case layout.Flex:
 				layout.LayoutFlex(infos, config.Layout, &scene, imageSource)
 			case layout.Faces:
-				// Convert face infos to layout.FacePhoto
+				faceOpts := image.FaceListOptions{
+					Limit: config.Collection.Limit,
+				}
+				if expression.Face.Present {
+					faceId := int(expression.Face.Value)
+					if emb, err := imageSource.GetFaceEmbedding(faceId); err != nil {
+						scene.Error = fmt.Sprintf("face embed failed: %s", err.Error())
+					} else {
+						faceOpts.FaceEmbedding = emb
+					}
+				}
 				faces := make(chan layout.FacePhoto, 100)
 				go func() {
-					for face := range imageSource.ListFaces(config.Collection.Dirs, config.Collection.Limit) {
+					for face := range imageSource.ListFaces(config.Collection.Dirs, faceOpts) {
 						info := imageSource.GetInfo(face.FileId)
 						faces <- layout.FacePhoto{
 							FileId:     face.FileId,

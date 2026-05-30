@@ -374,8 +374,12 @@ func (source *Source) GetImageEmbedding(id ImageId) (ai.Embedding, error) {
 	return source.database.GetImageEmbedding(id)
 }
 
-func (source *Source) ListFaces(dirs []string, limit int) <-chan FaceInfo {
-	return source.database.ListFaces(dirs, limit)
+func (source *Source) GetFaceEmbedding(faceId int) (ai.Embedding, error) {
+	return source.database.GetFaceEmbedding(faceId)
+}
+
+func (source *Source) ListFaces(dirs []string, options FaceListOptions) <-chan FaceInfo {
+	return source.database.ListFaces(dirs, options)
 }
 
 func (source *Source) GetDir(dir string) Info {
