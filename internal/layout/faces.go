@@ -45,13 +45,21 @@ func (regionSource FaceRegionSource) getRegionFromFace(
 
 	photo := &scene.Photos[id-1]
 
+	// For minimal responses, skip the expensive photo data lookup
+	if regionConfig.Minimal {
+		return render.Region{
+			Id:     id,
+			Bounds: photo.Sprite.Rect,
+		}
+	}
+
 	// Get standard photo region data
 	photoRegion := PhotoRegionSource{Source: regionSource.Source}.getRegionFromPhoto(
 		id, photo, scene, regionConfig,
 	)
 
 	// Extend with face-specific data
-	photoData := photoRegion.Data.(PhotoRegionData)
+	photoData, _ := photoRegion.Data.(PhotoRegionData)
 	return render.Region{
 		Id:     id,
 		Bounds: photo.Sprite.Rect,
