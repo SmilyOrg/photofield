@@ -28,12 +28,14 @@
           <span class="faces-count">{{ faces.length }} face{{ faces.length === 1 ? '' : 's' }}</span>
         </div>
         <div class="faces-grid">
-          <div
+          <img
             v-for="face in faces"
             :key="face.id"
             class="face-crop"
-            :style="getFaceCropStyle(face)"
-          ></div>
+            :src="getFacePreviewUrl(face)"
+            :width="FACES_IMAGE_HEIGHT"
+            :height="FACES_IMAGE_HEIGHT"
+          />
         </div>
       </div>
       <detail-item
@@ -78,10 +80,10 @@ import { useRegion, useRegionTags } from '../use';
 import DetailItem from './DetailItem.vue';
 import Map from './Map.vue';
 import Tags from './Tags.vue';
-import { useApi, getThumbnailUrl } from '../api';
+import { useApi, getPreviewUrl } from '../api';
 
-const FACE_THUMB_SIZE = 72; // px, display size of each face crop
-const FACE_BUFFER = 1.2;    // matches server-side faceBuffer in faces.go
+const FACES_IMAGE_HEIGHT = 72; // px, display size of each face crop
+const FACES_BUFFER = 1.2;      // matches server-side faceBuffer in faces.go
 
 const props = defineProps({
   scene: Object,
@@ -139,6 +141,21 @@ const faces = computed(() => {
   return photo.value?.faces ?? [];
 });
 
+function getFacePreviewUrl(face) {
+  if (!photo.value?.id) return '';
+  const cropSize = Math.round(Math.max(face.w, face.h) * FACES_BUFFER);
+  const cropX = Math.max(0, Math.round(face.x + face.w * 0.5 - cropSize * 0.5));
+  const cropY = Math.max(0, Math.round(face.y + face.h * 0.5 - cropSize * 0.5));
+  return getPreviewUrl(photo.value.id, 'face.jpg', {
+    w: FACES_IMAGE_HEIGHT,
+    h: FACES_IMAGE_HEIGHT,
+    crop_x: cropX,
+    crop_y: cropY,
+    crop_w: cropSize,
+    crop_h: cropSize,
+  });
+}
+
 const date = computed(() => {
   if (!createdAt.value) return "";
   return dateFormat(createdAt.value, "MMM d, yyyy");
@@ -176,54 +193,6 @@ const geoview = computed(() => {
     12,
   ];
 });
-
-// Finds the smallest available thumbnail for face crops
-const smallestThumbnail = computed(() => {
-  const thumbs = photo.value?.thumbnails;
-  if (!thumbs || thumbs.length === 0) return null;
-  return thumbs[0]; // already sorted smallest-first by server
-});
-
-function getFaceCropStyle(face) {
-  const thumb = smallestThumbnail.value;
-  if (!thumb || !photo.value) return {};
-
-  const photoW = photo.value.width;
-  const photoH = photo.value.height;
-  if (!photoW || !photoH) return {};
-
-  // Scale factor from original image to thumbnail
-  const scale = thumb.width / photoW;
-
-  // Crop region in original coords (matches server faceBuffer logic)
-  const cropSize = Math.max(face.w, face.h) * FACE_BUFFER;
-  const cropX = face.x + face.w * 0.5 - cropSize * 0.5;
-  const cropY = face.y + face.h * 0.5 - cropSize * 0.5;
-
-  // Crop region in thumbnail coords
-  const tCropX = cropX * scale;
-  const tCropY = cropY * scale;
-  const tCropSize = cropSize * scale;
-
-  // Scale the thumbnail so the crop fills FACE_THUMB_SIZE
-  const displayScale = FACE_THUMB_SIZE / tCropSize;
-
-  const bgWidth = Math.round(thumb.width * displayScale);
-  const bgHeight = Math.round(thumb.height * displayScale);
-  const bgOffsetX = Math.round(-tCropX * displayScale);
-  const bgOffsetY = Math.round(-tCropY * displayScale);
-
-  const url = getThumbnailUrl(photo.value.id, thumb.name, thumb.filename);
-
-  return {
-    width: `${FACE_THUMB_SIZE}px`,
-    height: `${FACE_THUMB_SIZE}px`,
-    backgroundImage: `url(${url})`,
-    backgroundSize: `${bgWidth}px ${bgHeight}px`,
-    backgroundPosition: `${bgOffsetX}px ${bgOffsetY}px`,
-    backgroundRepeat: 'no-repeat',
-  };
-}
 
 </script>
 
@@ -294,9 +263,9 @@ function getFaceCropStyle(face) {
 
 .face-crop {
   border-radius: 4px;
-  overflow: hidden;
-  background-color: var(--mdc-theme-surface);
+  object-fit: cover;
   flex-shrink: 0;
+  display: block;
 }
 
 </style>

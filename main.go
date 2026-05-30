@@ -1543,8 +1543,27 @@ func (*Api) GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request, i
 		H: contentH,
 	}
 
+	// Build optional crop rect from crop_x/y/w/h params
+	var crop render.Rect
+	if params.CropW != nil && params.CropH != nil {
+		cropX := 0
+		if params.CropX != nil {
+			cropX = *params.CropX
+		}
+		cropY := 0
+		if params.CropY != nil {
+			cropY = *params.CropY
+		}
+		crop = render.Rect{
+			X: float64(cropX),
+			Y: float64(cropY),
+			W: float64(*params.CropW),
+			H: float64(*params.CropH),
+		}
+	}
+
 	// Draw photo on top of border using existing rendering logic
-	photo.Draw(ctx, &rn, nil, c, render.Scales{Tile: 1.0}, imageSource, false, render.Rect{})
+	photo.Draw(ctx, &rn, nil, c, render.Scales{Tile: 1.0}, imageSource, false, crop)
 
 	w.Header().Add("Content-Type", encoder.ContentType)
 	w.Header().Add("Vary", "Accept")

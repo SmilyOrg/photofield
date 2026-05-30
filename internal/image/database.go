@@ -3066,6 +3066,7 @@ type FaceInfo struct {
 
 type FaceListOptions struct {
 	Limit         int
+	FileId        *ImageId  // if set, only return faces from this file
 	FaceEmbedding ai.Embedding // if set, sort results by cosine similarity to this face embedding
 }
 
@@ -3132,7 +3133,13 @@ func (source *Database) ListFaces(dirs []string, options FaceListOptions) <-chan
 			}
 		}
 
-		sql += `) ORDER BY face.id ASC`
+		sql += `)`
+
+		if options.FileId != nil {
+			sql += ` AND face.file_id = ?`
+		}
+
+		sql += ` ORDER BY face.id ASC`
 
 		if limit > 0 && refEmb == nil {
 			sql += ` LIMIT ?`
@@ -3146,6 +3153,11 @@ func (source *Database) ListFaces(dirs []string, options FaceListOptions) <-chan
 		bindIndex := 1
 		for _, dir := range dirs {
 			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if options.FileId != nil {
+			stmt.BindInt64(bindIndex, int64(*options.FileId))
 			bindIndex++
 		}
 

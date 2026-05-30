@@ -4,6 +4,7 @@ import (
 	"context"
 	"photofield/internal/image"
 	"photofield/internal/render"
+	"strings"
 )
 
 type FacePhoto struct {
@@ -170,8 +171,16 @@ func (regionSource FaceRegionSource) GetRegionClosestTo(p render.Point, scene *r
 func LayoutFaces(faces <-chan FacePhoto, layout Layout, scene *render.Scene, source *image.Source) {
 	spacing := 10.0
 	padding := 20.0
+	topMargin := 64.0
 	faceSize := layout.ImageHeight
 	faceBuffer := 1.2
+
+	if strings.Contains(layout.Tweaks, "nomargin") {
+		padding = 0
+		topMargin = 0
+	} else if strings.Contains(layout.Tweaks, "notopmargin") {
+		topMargin = 0
+	}
 
 	layoutWidth := layout.ViewportWidth - 2*padding
 
@@ -181,7 +190,7 @@ func LayoutFaces(faces <-chan FacePhoto, layout Layout, scene *render.Scene, sou
 	}
 
 	x := padding
-	y := padding + 64
+	y := padding + topMargin
 
 	// Collect all faces for region source
 	var allFaces []FacePhoto

@@ -78,9 +78,11 @@ func cropRect(bitmap *Bitmap, bounds goimage.Rectangle) goimage.Rectangle {
 		rect.W, rect.H = rect.H, rect.W
 	}
 	cropr := rect.FitInside(brect)
+	// Offset by bounds.Min so the rect is in the image's actual coordinate space.
+	// This is important when img is a SubImage with a non-zero origin.
 	croprect := goimage.Rectangle{
-		Min: goimage.Point{X: int(math.Round(cropr.X)), Y: int(math.Round(cropr.Y))},
-		Max: goimage.Point{X: int(math.Round(cropr.X + cropr.W)), Y: int(math.Round(cropr.Y + cropr.H))},
+		Min: goimage.Point{X: bounds.Min.X + int(math.Round(cropr.X)), Y: bounds.Min.Y + int(math.Round(cropr.Y))},
+		Max: goimage.Point{X: bounds.Min.X + int(math.Round(cropr.X + cropr.W)), Y: bounds.Min.Y + int(math.Round(cropr.Y + cropr.H))},
 	}
 	return croprect
 }

@@ -33,6 +33,7 @@ type Expression struct {
 	Filenames   Strings   `json:"filename,omitempty"`
 	Image       Int64     `json:"img,omitempty"`
 	Face        Int64     `json:"face,omitempty"`
+	Imgf        Int64     `json:"imgf,omitempty"`
 
 	// Aggregate errors for convenient iteration
 	Errors []FieldMeta `json:"errors,omitempty"`
@@ -49,6 +50,7 @@ var validQualifiers = []string{
 	"filename",
 	"img",
 	"face",
+	"imgf",
 }
 
 var validQualifiersMap map[string]bool
@@ -108,6 +110,9 @@ func (q *Query) Expression() (Expression, error) {
 
 	expr.Face = q.ExpressionInt("face")
 	expr.addFieldError(expr.Face.FieldMeta)
+
+	expr.Imgf = q.ExpressionInt("imgf")
+	expr.addFieldError(expr.Imgf.FieldMeta)
 
 	var err error
 	if len(expr.Errors) > 0 {

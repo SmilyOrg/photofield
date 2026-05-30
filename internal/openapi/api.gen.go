@@ -359,6 +359,18 @@ type GetFilesIdPreviewsFilenameParams struct {
 
 	// Border color in hexadecimal format (with or without
 	BorderColor *Color `json:"border_color,omitempty"`
+
+	// Crop left edge in original image pixels. Requires crop_w and crop_h.
+	CropX *int `json:"crop_x,omitempty"`
+
+	// Crop top edge in original image pixels. Requires crop_w and crop_h.
+	CropY *int `json:"crop_y,omitempty"`
+
+	// Crop width in original image pixels.
+	CropW *int `json:"crop_w,omitempty"`
+
+	// Crop height in original image pixels.
+	CropH *int `json:"crop_h,omitempty"`
 }
 
 // GetScenesParams defines parameters for GetScenes.
@@ -761,6 +773,50 @@ func (siw *ServerInterfaceWrapper) GetFilesIdPreviewsFilename(w http.ResponseWri
 	err = runtime.BindQueryParameter("form", true, false, "border_color", r.URL.Query(), &params.BorderColor)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter border_color: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "crop_x" -------------
+	if paramValue := r.URL.Query().Get("crop_x"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "crop_x", r.URL.Query(), &params.CropX)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter crop_x: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "crop_y" -------------
+	if paramValue := r.URL.Query().Get("crop_y"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "crop_y", r.URL.Query(), &params.CropY)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter crop_y: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "crop_w" -------------
+	if paramValue := r.URL.Query().Get("crop_w"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "crop_w", r.URL.Query(), &params.CropW)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter crop_w: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "crop_h" -------------
+	if paramValue := r.URL.Query().Get("crop_h"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "crop_h", r.URL.Query(), &params.CropH)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter crop_h: %s", err), http.StatusBadRequest)
 		return
 	}
 

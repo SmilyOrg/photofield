@@ -206,6 +206,10 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 						faceOpts.FaceEmbedding = emb
 					}
 				}
+				if expression.Imgf.Present {
+					photoId := image.ImageId(expression.Imgf.Value)
+					faceOpts.FileId = &photoId
+				}
 				faces := make(chan layout.FacePhoto, 100)
 				go func() {
 					for face := range imageSource.ListFaces(config.Collection.Dirs, faceOpts) {
