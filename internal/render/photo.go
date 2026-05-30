@@ -140,19 +140,6 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 			continue
 		}
 
-		if crop.W != 0 {
-			if subimg, ok := img.(SubImager); ok {
-				// Get resize scale
-				scale := math.Min(
-					float64(img.Bounds().Dx())/float64(info.Width),
-					float64(img.Bounds().Dy())/float64(info.Height),
-				)
-				// Scale crop to resized image dimensions
-				imgcrop := crop.ScalePoint(Point{X: scale, Y: scale})
-				img = subimg.SubImage(imgcrop.ImageRect())
-			}
-		}
-
 		if !r.FromCache {
 			name := s.Name()
 			elapsedus := float64(elapsed.Microseconds())
@@ -170,6 +157,38 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 		bitmap := Bitmap{
 			Sprite:      photo.Sprite,
 			Orientation: image.Orientation(r.Orientation),
+		}
+
+		// Apply crop
+		if crop.W != 0 {
+			if subimg, ok := img.(SubImager); ok {
+				// Thumb image raw dimensions (unoriented)
+				imgbraw := Rect{
+					X: float64(img.Bounds().Min.X),
+					Y: float64(img.Bounds().Min.Y),
+					W: float64(img.Bounds().Dx()),
+					H: float64(img.Bounds().Dy()),
+				}
+
+				// Thumb image dimensions after orientation is applied
+				imgb := imgbraw
+				if bitmap.Orientation.SwapsDimensions() {
+					imgb.W, imgb.H = imgb.H, imgb.W
+				}
+
+				// Scale factor from thumb to original image dimensions
+				scale := math.Min(
+					imgb.W/float64(info.Width),
+					imgb.H/float64(info.Height),
+				)
+
+				m := canvas.Identity
+				m = crop.OrientMatrix(m, imgbraw.W, imgbraw.H, bitmap.Orientation)
+				m = m.Scale(scale, scale)
+
+				imgcrop := crop.Transform(m)
+				img = subimg.SubImage(imgcrop.ImageRect())
+			}
 		}
 
 		scale := 1.

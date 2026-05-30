@@ -82,7 +82,7 @@ func cropRect(bitmap *Bitmap, bounds goimage.Rectangle) goimage.Rectangle {
 	// This is important when img is a SubImage with a non-zero origin.
 	croprect := goimage.Rectangle{
 		Min: goimage.Point{X: bounds.Min.X + int(math.Round(cropr.X)), Y: bounds.Min.Y + int(math.Round(cropr.Y))},
-		Max: goimage.Point{X: bounds.Min.X + int(math.Round(cropr.X + cropr.W)), Y: bounds.Min.Y + int(math.Round(cropr.Y + cropr.H))},
+		Max: goimage.Point{X: bounds.Min.X + int(math.Round(cropr.X+cropr.W)), Y: bounds.Min.Y + int(math.Round(cropr.Y+cropr.H))},
 	}
 	return croprect
 }
@@ -121,8 +121,9 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 	}
 
 	model = model.Translate(-float64(bounds.Min.X), float64(bounds.Min.Y))
+	model = model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5)
 
-	m := c.View().Mul(model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5))
+	m := c.View().Mul(model)
 
 	var interp draw.Interpolator
 	if hq {
