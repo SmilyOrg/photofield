@@ -1801,6 +1801,15 @@ func applyConfig(appConfig *AppConfig) {
 		oldSource.Close()
 	}
 
+	if appConfig.AI.Host != "" {
+		imageSource.Clip.CheckFacesAvailable()
+		if imageSource.Clip.FacesAvailable() {
+			log.Printf("face detection enabled (AI server supports /faces)")
+		} else {
+			log.Printf("face detection disabled (AI server does not support /faces)")
+		}
+	}
+
 	// Initialize pipeline coordinator
 	if pipelineCoordinator != nil {
 		pipelineCoordinator.Close()

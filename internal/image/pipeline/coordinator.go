@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 
+	"photofield/internal/ai"
 	img "photofield/internal/image"
 	"photofield/internal/task"
 )
@@ -158,6 +159,10 @@ func RunFaces(ctx context.Context, cfg Config, t *task.Task) error {
 	}
 	if cfg.FaceDetector == nil {
 		log.Println("index faces skipped: no face detector configured")
+		return nil
+	}
+	if aiClient, ok := cfg.FaceDetector.(*ai.AI); ok && !aiClient.FacesAvailable() {
+		log.Println("index faces skipped: AI server does not support face detection")
 		return nil
 	}
 	dirs := t.Dirs

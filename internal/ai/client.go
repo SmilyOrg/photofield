@@ -10,6 +10,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -28,10 +30,54 @@ type AI struct {
 	Host    string `json:"host"`
 	Visual  Model  `json:"visual"`
 	Textual Model  `json:"textual"`
+
+	facesAvailable bool
+	facesChecked   bool
+	facesMu        sync.RWMutex
 }
 
 func (a AI) Available() bool {
 	return a.TextualHost() != ""
+}
+
+func (a *AI) CheckFacesAvailable() {
+	if !a.Available() || a.Host == "" {
+		return
+	}
+
+	url := fmt.Sprintf("%s/faces", a.Host)
+	req, err := http.NewRequest(http.MethodHead, url, nil)
+	if err != nil {
+		return
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		a.facesMu.Lock()
+		a.facesAvailable = false
+		a.facesChecked = true
+		a.facesMu.Unlock()
+		return
+	}
+	defer res.Body.Close()
+
+	a.facesMu.Lock()
+	a.facesAvailable = res.StatusCode == http.StatusOK
+	a.facesChecked = true
+	a.facesMu.Unlock()
+}
+
+func (a *AI) FacesAvailable() bool {
+	a.facesMu.RLock()
+	checked := a.facesChecked
+	available := a.facesAvailable
+	a.facesMu.RUnlock()
+
+	if !checked {
+		return false
+	}
+	return available
 }
 
 func (a AI) VisualHost() string {
@@ -187,7 +233,7 @@ type Face struct {
 }
 
 func (a AI) DetectFaces(r io.Reader) ([]Face, error) {
-	if !a.Available() || a.Host == "" {
+	if !a.Available() || a.Host == "" || !a.FacesAvailable() {
 		return nil, ErrNotAvailable
 	}
 
