@@ -1,3 +1,3 @@
 DROP TABLE IF EXISTS face;
 
-ALTER TABLE infos DROP COLUMN faces_done;
+ALTER TABLE infos DROP COLUMN face_count;

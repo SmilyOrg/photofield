@@ -11,4 +11,4 @@ CREATE TABLE face (
 
 CREATE INDEX idx_face_file_id ON face(file_id);
 
-ALTER TABLE infos ADD COLUMN faces_done INTEGER DEFAULT NULL;
+ALTER TABLE infos ADD COLUMN face_count INTEGER DEFAULT NULL;
