@@ -123,13 +123,12 @@ type RegionTag struct {
 }
 
 type RegionFace struct {
-	Id         int  `json:"id"`
-	X          int  `json:"x"`
-	Y          int  `json:"y"`
-	W          int  `json:"w"`
-	H          int  `json:"h"`
-	Confidence int  `json:"confidence"`
-	PersonId   *int `json:"person_id,omitempty"`
+	Id         int `json:"id"`
+	X          int `json:"x"`
+	Y          int `json:"y"`
+	W          int `json:"w"`
+	H          int `json:"h"`
+	Confidence int `json:"confidence"`
 }
 
 type PhotoRegionData struct {
@@ -251,7 +250,6 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 			W:          f.W,
 			H:          f.H,
 			Confidence: f.Confidence,
-			PersonId:   f.PersonId,
 		})
 	}
 

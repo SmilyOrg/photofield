@@ -331,8 +331,8 @@ func (source *Database) writePendingInfosSqlite() {
 	defer updateAI.Finalize()
 
 	insertFace := conn.Prep(`
-		INSERT INTO face(file_id, x, y, w, h, confidence, embedding, person_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, NULL);`)
+		INSERT INTO face(file_id, x, y, w, h, confidence, embedding)
+		VALUES (?, ?, ?, ?, ?, ?, ?);`)
 	defer insertFace.Finalize()
 
 	deleteFaces := conn.Prep(`
@@ -3061,12 +3061,11 @@ type FaceInfo struct {
 	W          int
 	H          int
 	Confidence int
-	PersonId   *int
 }
 
 type FaceListOptions struct {
 	Limit         int
-	FileId        *ImageId  // if set, only return faces from this file
+	FileId        *ImageId     // if set, only return faces from this file
 	FaceEmbedding ai.Embedding // if set, sort results by cosine similarity to this face embedding
 }
 
@@ -3110,7 +3109,7 @@ func (source *Database) ListFaces(dirs []string, options FaceListOptions) <-chan
 		refEmb := options.FaceEmbedding
 		limit := options.Limit
 
-		selectCols := `face.id, face.file_id, face.x, face.y, face.w, face.h, face.confidence, face.person_id`
+		selectCols := `face.id, face.file_id, face.x, face.y, face.w, face.h, face.confidence`
 		if refEmb != nil {
 			selectCols += `, face.embedding`
 		}
@@ -3228,10 +3227,6 @@ func readFaceInfo(stmt *sqlite.Stmt) FaceInfo {
 		H:          stmt.ColumnInt(5),
 		Confidence: stmt.ColumnInt(6),
 	}
-	if stmt.ColumnType(7) != sqlite.TypeNull {
-		personId := stmt.ColumnInt(7)
-		face.PersonId = &personId
-	}
 	return face
 }
 
@@ -3240,7 +3235,7 @@ func (source *Database) GetFacesByFileId(fileId ImageId) []FaceInfo {
 	defer source.pool.Put(conn)
 
 	stmt := conn.Prep(`
-		SELECT id, file_id, x, y, w, h, confidence, person_id
+		SELECT id, file_id, x, y, w, h, confidence
 		FROM face
 		WHERE file_id = ?
 		ORDER BY id ASC;`)

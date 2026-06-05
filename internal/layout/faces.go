@@ -15,7 +15,6 @@ type FacePhoto struct {
 	W          int
 	H          int
 	Confidence int
-	PersonId   *int
 	Info       image.Info
 }
 

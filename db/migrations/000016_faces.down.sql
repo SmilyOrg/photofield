@@ -1,2 +1,3 @@
 DROP TABLE IF EXISTS face;
-DROP TABLE IF EXISTS person;
+
+ALTER TABLE infos DROP COLUMN faces_done;

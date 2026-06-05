@@ -222,7 +222,6 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 							W:          face.W,
 							H:          face.H,
 							Confidence: face.Confidence,
-							PersonId:   face.PersonId,
 							Info:       info,
 						}
 					}
