@@ -1322,13 +1322,12 @@ func (source *Database) WriteAI(id ImageId, embedding ai.Embedding) error {
 	return nil
 }
 
-func (source *Database) WriteFaces(id ImageId, faces []ai.Face) error {
+func (source *Database) WriteFaces(id ImageId, faces []ai.Face) {
 	source.pending <- &InfoWrite{
 		Id:    int64(id),
 		Type:  UpdateFaces,
 		Faces: faces,
 	}
-	return nil
 }
 
 func (source *Database) AddTag(name string) (<-chan struct{}, error) {
@@ -3066,7 +3065,7 @@ type FaceInfo struct {
 
 type FaceListOptions struct {
 	Limit         int
-	FileId        *ImageId  // if set, only return faces from this file
+	FileId        *ImageId     // if set, only return faces from this file
 	FaceEmbedding ai.Embedding // if set, sort results by cosine similarity to this face embedding
 }
 

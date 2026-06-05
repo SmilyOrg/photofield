@@ -607,6 +607,13 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateWhenCompleted := func(t *inttask.Task) {
+		go func() {
+			<-t.Completed()
+			collection.Invalidate()
+		}()
+	}
+
 	switch data.Type {
 
 	case openapi.TaskTypeINDEXFILES:
@@ -614,6 +621,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit,
 		)
+		invalidateWhenCompleted(pt)
 		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXFILES), string(data.CollectionId))
 		if isNew {
 			respond(w, r, http.StatusAccepted, taskItems(t))
@@ -627,6 +635,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit, force,
 		)
+		invalidateWhenCompleted(pt)
 		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXMETADATA), string(data.CollectionId))
 		if isNew {
 			respond(w, r, http.StatusAccepted, taskItems(t))
@@ -640,6 +649,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit, force,
 		)
+		invalidateWhenCompleted(pt)
 		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXCONTENTS), string(data.CollectionId))
 		if isNew {
 			respond(w, r, http.StatusAccepted, taskItems(t))
@@ -653,6 +663,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit, force,
 		)
+		invalidateWhenCompleted(pt)
 		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXFACES), string(data.CollectionId))
 		if isNew {
 			respond(w, r, http.StatusAccepted, taskItems(t))
@@ -674,6 +685,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		anyNew := false
 		tasks := make([]*Task, 0, 3)
 		for i, pt := range pts {
+			invalidateWhenCompleted(pt)
 			t := pipelineTaskResponse(pt, typeNames[i], string(data.CollectionId))
 			tasks = append(tasks, t)
 			if areNew[i] {
@@ -1741,7 +1753,6 @@ func benchmarkSources(collection *collection.Collection, seed int64, sampleSize 
 }
 
 func invalidateDirs(dirs []string) {
-	now := time.Now()
 	for i := range collections {
 		collection := &collections[i]
 		updated := false
@@ -1757,7 +1768,7 @@ func invalidateDirs(dirs []string) {
 			}
 		}
 		if updated {
-			collection.InvalidatedAt = &now
+			collection.Invalidate()
 		}
 	}
 }
