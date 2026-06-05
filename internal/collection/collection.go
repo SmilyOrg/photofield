@@ -47,18 +47,20 @@ func (collection *Collection) MakeValid() {
 	}
 }
 
+func (collection *Collection) Invalidate() {
+	now := time.Now()
+	collection.InvalidatedAt = &now
+}
+
 func (collection *Collection) UpdatedAt() time.Time {
-	if collection.InvalidatedAt != nil && collection.IndexedAt != nil {
-		if collection.InvalidatedAt.After(*collection.IndexedAt) {
-			return *collection.InvalidatedAt
-		}
-		return *collection.IndexedAt
-	} else if collection.InvalidatedAt != nil {
-		return *collection.InvalidatedAt
-	} else if collection.IndexedAt != nil {
-		return *collection.IndexedAt
+	updatedAt := time.Time{}
+	if collection.InvalidatedAt != nil && collection.InvalidatedAt.After(updatedAt) {
+		updatedAt = *collection.InvalidatedAt
 	}
-	return time.Time{}
+	if collection.IndexedAt != nil && collection.IndexedAt.After(updatedAt) {
+		updatedAt = *collection.IndexedAt
+	}
+	return updatedAt
 }
 
 func (collection *Collection) Expand() []Collection {

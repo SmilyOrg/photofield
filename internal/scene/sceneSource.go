@@ -117,7 +117,6 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				scene.SearchEmbedding = embedding
 			}
 
-
 			// If no embedding yet, embed the text
 			if scene.SearchEmbedding == nil && scene.Error == "" && expression.Text != "" {
 				text := expression.Text
