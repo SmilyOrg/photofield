@@ -103,7 +103,6 @@ export default {
       if (!fileId) return null;
       const url = new URL(route.fullPath, window.location.origin);
       url.searchParams.set("f", fileId);
-      url.searchParams.set("zoom", "1");
       url.searchParams.set("layout", "ALBUM");
       url.searchParams.delete("search");
       url.pathname = url.pathname.replace(/(.*\/collections\/[^/]+)\/.*$/, "$1");
