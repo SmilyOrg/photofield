@@ -34,7 +34,8 @@ type Config struct {
 	MaxFaceFileSize int64 // Max file size for face detection (bytes)
 
 	// File scanning
-	Extensions []string
+	Extensions     []string
+	VideoExtensions []string
 
 	// Worker counts
 	MetadataWorkers  int
@@ -203,7 +204,7 @@ func RunFaces(ctx context.Context, cfg Config, t *task.Task) error {
 	}()
 
 	processFaces(ctx, cfg.DB, cfg.FaceDetector,
-		contentsFiles, cfg.FaceWorkers, cfg.MaxFaceFileSize, counter)
+		contentsFiles, cfg.FaceWorkers, cfg.MaxFaceFileSize, cfg.VideoExtensions, counter)
 	log.Println("index faces completed")
 
 	return nil

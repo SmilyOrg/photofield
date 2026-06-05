@@ -1830,6 +1830,7 @@ func applyConfig(appConfig *AppConfig) {
 		MetadataExtractor:   imageSource.Decoder(),
 		EnableTags:          appConfig.Tags.Enable,
 		Extensions:          appConfig.Media.ListExtensions,
+		VideoExtensions:     appConfig.Media.Videos.Extensions,
 		ThumbnailSources:    pipelineThumbSources,
 		ThumbnailGenerators: pipelineThumbGens,
 		ThumbnailSink:       imageSource.ThumbSink(),

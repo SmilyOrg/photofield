@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"photofield/internal/ai"
@@ -16,6 +17,16 @@ type FaceDetector interface {
 	DetectFaces(r io.Reader) ([]ai.Face, error)
 }
 
+// isVideo checks if a file extension is in the video extensions list
+func isVideo(ext string, videoExtensions []string) bool {
+	for _, e := range videoExtensions {
+		if ext == e {
+			return true
+		}
+	}
+	return false
+}
+
 // processFaces detects faces from original files
 // Takes fileWithContents as input to ensure contents are extracted first
 func processFaces(ctx context.Context,
@@ -24,6 +35,7 @@ func processFaces(ctx context.Context,
 	in <-chan fileWithContents,
 	workers int,
 	maxFileSize int64,
+	videoExtensions []string,
 	counter chan<- int) {
 
 	var wg sync.WaitGroup
@@ -54,6 +66,14 @@ func processFaces(ctx context.Context,
 				}
 
 				if stat.Size() > maxFileSize {
+					f.Close()
+					progress.IncCounter("skipped", 1)
+					progress.Inc(1)
+					continue
+				}
+
+				// Skip video files - face detection is only supported for images
+				if isVideo(filepath.Ext(file.Path), videoExtensions) {
 					f.Close()
 					progress.IncCounter("skipped", 1)
 					progress.Inc(1)
