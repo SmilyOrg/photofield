@@ -340,10 +340,10 @@ func (source *Database) writePendingInfosSqlite() {
 		WHERE file_id = ?;`)
 	defer deleteFaces.Finalize()
 
-	updateFacesDone := conn.Prep(`
-		UPDATE infos SET faces_done = 1
+	updateFaceCount := conn.Prep(`
+		UPDATE infos SET face_count = ?
 		WHERE id = ?;`)
-	defer updateFacesDone.Finalize()
+	defer updateFaceCount.Finalize()
 
 	appendPath := conn.Prep(`
 		INSERT OR IGNORE INTO infos(path_prefix_id, filename)
@@ -729,13 +729,14 @@ func (source *Database) writePendingInfosSqlite() {
 					}
 				}
 
-				// Mark faces as done for this image (even if no faces were found)
-				updateFacesDone.BindInt64(1, int64(imageInfo.Id))
-				_, err = updateFacesDone.Step()
+				// Mark face count for this image (even if no faces were found)
+				updateFaceCount.BindInt64(1, int64(len(imageInfo.Faces)))
+				updateFaceCount.BindInt64(2, int64(imageInfo.Id))
+				_, err = updateFaceCount.Step()
 				if err != nil {
-					log.Printf("Unable to mark faces done for %d: %s\n", imageInfo.Id, err.Error())
+					log.Printf("Unable to update face count for %d: %s\n", imageInfo.Id, err.Error())
 				}
-				err = updateFacesDone.Reset()
+				err = updateFaceCount.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -1237,7 +1238,7 @@ func (source *Database) CountMissing(dirs []string, opts Missing) (int, bool) {
 		conditions = append(conditions, "file_id IS NULL")
 	}
 	if opts.Faces {
-		conditions = append(conditions, "faces_done IS NULL")
+		conditions = append(conditions, "face_count IS NULL")
 	}
 
 	if len(conditions) > 0 {
@@ -2926,7 +2927,7 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 		}
 		if opts.Faces {
 			conds = append(conds, condition{
-				inputs: []string{"faces_done"},
+				inputs: []string{"face_count"},
 				output: "missing_faces",
 			})
 		}

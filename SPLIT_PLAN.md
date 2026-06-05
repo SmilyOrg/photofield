@@ -45,9 +45,7 @@ Replaces the old `queue.Queue`-based indexing with a sequential coordinator. Ren
 Self-contained database layer for face data. No behavior change visible to users yet.
 
 **Files**:
-- `db/migrations/000016_faces.{up,down}.sql` — `face` table: `file_id`, `x/y/w/h`, `confidence`, `embedding`, `person_id`
-- `db/migrations/000017_faces_done.{up,down}.sql` — `faces_done` flag in `infos` table
-- `internal/image/database.go` — face DB methods: `WriteFaces`, `ListFaces`, `ListFaceEmbeddings`, `ClearPersonIds`, `BatchUpdatePersonIds`, `WaitForDatabaseCommit`; also `Missing.Faces` field in query logic
+- `db/migrations/000016_faces.{up,down}.sql` — `face` table: `file_id`, `x/y/w/h`, `confidence`, `embedding`, `person_id` + `face_count` count column in `infos`
 - `internal/image/source.go` — `ListFaces()` accessor on `Source`
 
 ---
