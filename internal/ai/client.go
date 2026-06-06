@@ -42,11 +42,11 @@ func (a AI) Available() bool {
 }
 
 func (a *AI) CheckFacesAvailable() {
-	if !a.Available() || a.Host == "" {
+	if !a.Available() || a.FaceHost() == "" {
 		return
 	}
 
-	url := fmt.Sprintf("%s/faces", a.Host)
+	url := fmt.Sprintf("%s/faces", a.FaceHost())
 	req, err := http.NewRequest(http.MethodHead, url, nil)
 	if err != nil {
 		return

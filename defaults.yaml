@@ -42,12 +42,17 @@ ai:
   # host: http://localhost:8081
   # 
   # You can also define the visual (image scanning) host, the 
-  # textual search host, and the face detection host separately, e.g. to scan 
-  # images with a PC w/ GPU, but keep the search part on a NAS.
+  # textual search host, and the face detection host separately.
+  # The textual model host is required to be always available for
+  # semantic search to work, while the visual/faces host is only required
+  # for scanning new photos and can be offline otherwise. 
   # 
-  # visual:
-    # host: http://localhost:8081
+  # For example, this allows you to run the visual scanning on a separate
+  # machine with a GPU, while keeping the search functionality on a NAS.
+  # 
   # textual:
+    # host: http://localhost:8081
+  # visual:
     # host: http://localhost:8081
   # faces:
     # host: http://localhost:8081

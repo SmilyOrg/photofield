@@ -1812,7 +1812,7 @@ func applyConfig(appConfig *AppConfig) {
 		oldSource.Close()
 	}
 
-	if appConfig.AI.Host != "" {
+	if appConfig.AI.FaceHost() != "" {
 		imageSource.Clip.CheckFacesAvailable()
 		if imageSource.Clip.FacesAvailable() {
 			log.Printf("face detection enabled (AI server supports /faces)")
