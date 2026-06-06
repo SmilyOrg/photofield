@@ -382,7 +382,7 @@ func (source *Source) GetFacesByFileId(fileId ImageId) []FaceInfo {
 	return source.database.GetFacesByFileId(fileId)
 }
 
-func (source *Source) ListFaces(dirs []string, options FaceListOptions) <-chan FaceInfo {
+func (source *Source) ListFaces(dirs []string, options ListOptions) <-chan FaceInfo {
 	return source.database.ListFaces(dirs, options)
 }
 

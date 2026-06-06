@@ -55,7 +55,7 @@
         icon="tune"
         placeholder="Filter"
         :format-value="value => value.toFixed(0)"
-        :default-value="75"
+        :default-value="faceId !== null ? 50 : 75"
         :min="0"
         :max="100"
         :step="1"
@@ -216,6 +216,16 @@ const imageIdQualifier = {
   },
 }
 
+const faceIdQualifier = {
+  name: "faceId",
+  regex: /face:(\d+)/,
+  parse: (str) => str,
+  replace: (value) => {
+    if (!value) return '';
+    return `face:${value}`;
+  },
+}
+
 const qualifiers = [
   createdAfterQualifier,
   createdBeforeQualifier,
@@ -250,6 +260,9 @@ const inject = (qualifier, value) => {
 }
 
 const thresholdRange = computed(() => {
+  if (faceId.value !== null) {
+    return [0, 1];
+  }
   if (imageId.value !== null) {
     return [0.500, 0.999];
   }
@@ -299,6 +312,11 @@ const imageId = computed({
   set: (value) => inject(imageIdQualifier, value),
 });
 
+const faceId = computed({
+  get: () => extract(faceIdQualifier),
+  set: (value) => inject(faceIdQualifier, value),
+});
+
 const leftoverText = computed(() => {
   let text = inputValue.value;
   qualifiers.forEach(q => {
@@ -337,12 +355,15 @@ const handleExactDateChange = (date) => {
 };
 
 const searchAttributes = computed(() => {
-  return {
+  const attr = {
     hasFreeText: leftoverText.value.length > 0,
     hasImage: imageId.value !== null,
-    hasFreeTextOrImage: leftoverText.value.length > 0 || imageId.value !== null,
+    hasFace: faceId.value !== null,
+    supportsSimilarity: false,
     hasThreshold: threshold.value !== null,
   }
+  attr.supportsSimilarity = attr.hasFace || attr.hasImage || attr.hasFreeText;
+  return attr;
 });
 
 watch(modelValue, value => {

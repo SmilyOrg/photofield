@@ -28,14 +28,23 @@
           <span class="faces-count">{{ faces.length }} face{{ faces.length === 1 ? '' : 's' }}</span>
         </div>
         <div class="faces-grid">
-          <img
+          <router-link
             v-for="face in faces"
-            :key="face.id"
-            class="face-crop"
-            :src="getFacePreviewUrl(face)"
-            :width="FACES_IMAGE_HEIGHT"
-            :height="FACES_IMAGE_HEIGHT"
-          />
+            :to="{
+              name: 'collection',
+              query: {
+                search: `face:${face.id} t:0.5`,
+              }
+            }"
+          >
+            <img
+              :key="face.id"
+              class="face-crop"
+              :src="getFacePreviewUrl(face)"
+              :width="FACES_IMAGE_HEIGHT"
+              :height="FACES_IMAGE_HEIGHT"
+            />
+          </router-link>
         </div>
       </div>
       <detail-item

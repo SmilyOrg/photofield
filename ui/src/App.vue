@@ -411,9 +411,9 @@ export default {
       }
       let sort = this.query.sort;
       if (attrs) {
-        if (!sort && attrs.hasFreeTextOrImage && !attrs.hasThreshold) {
+        if (!sort && attrs.supportsSimilarity && !attrs.hasThreshold) {
           sort = "-similarity";
-        } else if (sort == "-similarity" && ((attrs.hasFreeTextOrImage && attrs.hasThreshold) || !attrs.hasFreeTextOrImage)) {
+        } else if (sort == "-similarity" && ((attrs.supportsSimilarity && attrs.hasThreshold) || !attrs.supportsSimilarity)) {
           sort = undefined;
         }
       }
