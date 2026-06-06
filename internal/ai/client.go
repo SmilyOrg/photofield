@@ -28,6 +28,7 @@ type AI struct {
 	Host    string `json:"host"`
 	Visual  Model  `json:"visual"`
 	Textual Model  `json:"textual"`
+	Faces   Model  `json:"faces"`
 }
 
 func (a AI) Available() bool {
@@ -44,6 +45,13 @@ func (a AI) VisualHost() string {
 func (a AI) TextualHost() string {
 	if a.Textual.Host != "" {
 		return a.Textual.Host
+	}
+	return a.Host
+}
+
+func (a AI) FaceHost() string {
+	if a.Faces.Host != "" {
+		return a.Faces.Host
 	}
 	return a.Host
 }
@@ -187,7 +195,7 @@ type Face struct {
 }
 
 func (a AI) DetectFaces(r io.Reader) ([]Face, error) {
-	if !a.Available() || a.Host == "" {
+	if !a.Available() || a.FaceHost() == "" {
 		return nil, ErrNotAvailable
 	}
 
@@ -206,7 +214,7 @@ func (a AI) DetectFaces(r io.Reader) ([]Face, error) {
 
 	w.Close()
 
-	url := fmt.Sprintf("%s/faces", a.Host)
+	url := fmt.Sprintf("%s/faces", a.FaceHost())
 	res, err := http.Post(url, w.FormDataContentType(), &b)
 	if err != nil {
 		return nil, err
