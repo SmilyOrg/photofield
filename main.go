@@ -1812,13 +1812,16 @@ func applyConfig(appConfig *AppConfig) {
 		oldSource.Close()
 	}
 
+	if appConfig.AI.TextualHost() != "" {
+		log.Printf("ai textual (search) host: %s", appConfig.AI.TextualHost())
+	}
+
+	if appConfig.AI.VisualHost() != "" {
+		log.Printf("ai visual (indexing) host: %s", appConfig.AI.VisualHost())
+	}
+
 	if appConfig.AI.FaceHost() != "" {
-		imageSource.Clip.CheckFacesAvailable()
-		if imageSource.Clip.FacesAvailable() {
-			log.Printf("face detection enabled (AI server supports /faces)")
-		} else {
-			log.Printf("face detection disabled (AI server does not support /faces)")
-		}
+		log.Printf("ai face (indexing) host: %s", appConfig.AI.FaceHost())
 	}
 
 	// Initialize pipeline coordinator
