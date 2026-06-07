@@ -50,7 +50,7 @@
         :scene="scene"
       />
       <SliderChip
-        v-if="leftoverText.length > 0 || imageId !== null"
+        v-if="searchAttributes.supportsSimilarity"
         v-model="threshold"
         icon="tune"
         placeholder="Filter"
@@ -233,6 +233,7 @@ const qualifiers = [
   createdExactQualifier,
   thresholdQualifier,
   imageIdQualifier,
+  faceIdQualifier,
 ];
 
 const extract = (qualifier) => {
