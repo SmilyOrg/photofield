@@ -1,0 +1,3 @@
+kind: Breaking Changes
+body: The default docker working directory has changed to `/app/photos`. This makes it easier to get started with the default configuration, but if you were relying on the defaults only (without a custom `configuration.yaml`), then you might have to adjust your setup.
+time: 2026-06-07T21:41:25.092605757+02:00

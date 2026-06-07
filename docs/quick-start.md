@@ -29,22 +29,30 @@ When ready, create a `configuration.yaml` in the `data` dir and see [Configurati
 
 ## Docker Compose
   
-This example binds the usual Synology Moments photo directories and assumes
-a certain path structure, modify to your needs graciously. It also assumes you
-have configured the `/photo` and `/user` directories as collections in  `configuration.yaml`.
+Minimal example to get you started with both Photofield and Photofield AI (for semantic search and face detection).
+Set up custom collections and tweak all kinds of details using the [Configuration](/configuration).
 
 ::: code-group
-```yaml [docker-compose.yaml]
-version: '3.3'
+```yaml [compose.yaml]
 services:
-
   photofield:
     image: ghcr.io/smilyorg/photofield:latest
+    container_name: photofield
     ports:
       - 8080:8080
     volumes:
-      - /volume1/docker/photofield/data:/app/data
-      - /volume1/photo/:/photo:ro
-      - /volume1/homes/ExampleUser/Drive/Moments:/exampleuser:ro
+      - ./data:/app/data # Cache and configuration
+      - /path/to/your/photos:/app/photos:ro # Your photos, read-only
+    restart: unless-stopped
+
+  photofield-ai:
+    image: ghcr.io/smilyorg/photofield-ai:latest
+    container_name: photofield-ai
+    restart: unless-stopped
+```
+
+```yaml [configuration.yaml]
+ai:
+  host: http://photofield-ai:8081
 ```
 :::

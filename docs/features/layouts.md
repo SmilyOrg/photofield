@@ -69,7 +69,6 @@ by shrinking similar and repeating photos. This layout requires AI to be enabled
 
 ## Faces (alpha)
 
-The **Faces** layout displays individual face crops detected in your photos,
-one per cell. Face detection requires the
-[photofield-ai](https://github.com/SmilyOrg/photofield-ai) service to be
-configured and running.
+The **Faces** layout displays individual face crops detected in your photos. Faces need to be indexed with an up-to-date version of [photofield-ai](https://github.com/SmilyOrg/photofield-ai) before they are available to be shown.
+
+![Faces layout example](../assets/faces.jpg)
