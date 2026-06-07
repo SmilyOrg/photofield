@@ -11,6 +11,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
+	"photofield/internal/ai"
 	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/layout"
@@ -91,6 +92,9 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 		})
 	}
 
+	var imageEmbedding ai.Embedding
+	var faceEmbedding ai.Embedding
+
 	go func() {
 		finished := metrics.Elapsed("scene load " + config.Collection.Id)
 
@@ -114,11 +118,20 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				if err != nil {
 					scene.Error = fmt.Sprintf("image embed failed: %s", err.Error())
 				}
-				scene.SearchEmbedding = embedding
+				imageEmbedding = embedding
+			}
+
+			// If a face is specified, get its embedding
+			if scene.Error == "" && expression.Face.Present {
+				embedding, err := imageSource.GetFaceEmbedding(int(expression.Face.Value))
+				if err != nil {
+					scene.Error = fmt.Sprintf("face embed failed: %s", err.Error())
+				}
+				faceEmbedding = embedding
 			}
 
 			// If no embedding yet, embed the text
-			if scene.SearchEmbedding == nil && scene.Error == "" && expression.Text != "" {
+			if imageEmbedding == nil && scene.Error == "" && expression.Text != "" {
 				text := expression.Text
 				done := metrics.Elapsed("search embed")
 				embedding, err := imageSource.Clip.EmbedText(text)
@@ -127,7 +140,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 					log.Println("search embed failed")
 					scene.Error = fmt.Sprintf("text embed failed: %s", err.Error())
 				}
-				scene.SearchEmbedding = embedding
+				imageEmbedding = embedding
 			}
 
 			searchDone()
@@ -137,7 +150,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 		isSimilarity := image.IsSimilarityOrder(order)
 
 		// Default threshold for non-similarity-order search (when embedding present but not ordering by similarity)
-		if scene.SearchEmbedding != nil && !isSimilarity && !expression.Threshold.Present {
+		if imageEmbedding != nil && !isSimilarity && !expression.Threshold.Present {
 			expression.Threshold.Present = true
 			expression.Threshold.Value = 0.262
 		}
@@ -167,12 +180,13 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 			} else {
 				var deps image.Dependencies
 				infos, deps = config.Collection.GetInfos(imageSource, image.ListOptions{
-					OrderBy:     order,
-					ShuffleSeed: shuffleSeed,
-					Limit:       config.Collection.Limit,
-					Expression:  expression,
-					Embedding:   scene.SearchEmbedding,
-					Extensions:  extensions,
+					OrderBy:        order,
+					ShuffleSeed:    shuffleSeed,
+					Limit:          config.Collection.Limit,
+					Expression:     expression,
+					ImageEmbedding: imageEmbedding,
+					FaceEmbedding:  faceEmbedding,
+					Extensions:     extensions,
 				})
 				for _, dep := range deps {
 					scene.Dependencies = append(scene.Dependencies, render.Dependency(&dep))
@@ -183,6 +197,8 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				layout.LayoutTimeline(infos, config.Layout, &scene, imageSource)
 			case layout.Album:
 				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
+			case layout.Similarity:
+				layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
 			case layout.Square:
 				layout.LayoutSquare(&scene, imageSource)
 			case layout.Wall:
@@ -193,12 +209,36 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				layout.LayoutStrip(infos, config.Layout, &scene, imageSource)
 			case layout.Flex:
 				layout.LayoutFlex(infos, config.Layout, &scene, imageSource)
+			case layout.Faces:
+				faceInfos := imageSource.ListFaces(config.Collection.Dirs, image.ListOptions{
+					OrderBy:        order,
+					ShuffleSeed:    shuffleSeed,
+					Limit:          config.Collection.Limit,
+					Expression:     expression,
+					ImageEmbedding: imageEmbedding,
+					FaceEmbedding:  faceEmbedding,
+					Extensions:     extensions,
+				})
+				faces := make(chan layout.FacePhoto, 100)
+				go func() {
+					for face := range faceInfos {
+						info := imageSource.GetInfo(face.FileId)
+						faces <- layout.FacePhoto{
+							FileId:     face.FileId,
+							FaceId:     face.Id,
+							X:          face.X,
+							Y:          face.Y,
+							W:          face.W,
+							H:          face.H,
+							Confidence: face.Confidence,
+							Info:       info,
+						}
+					}
+					close(faces)
+				}()
+				layout.LayoutFaces(faces, config.Layout, &scene, imageSource)
 			default:
-				if isSimilarity {
-					layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
-				} else {
-					layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
-				}
+				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
 			}
 		}
 

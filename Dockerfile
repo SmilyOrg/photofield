@@ -34,5 +34,6 @@ COPY --from=builder /build/photofield ./photofield
 RUN mkdir ./data && touch ./data/configuration.yaml
 
 EXPOSE 8080
-ENV PHOTOFIELD_DATA_DIR=./data
-ENTRYPOINT ["./photofield"]
+ENV PHOTOFIELD_DATA_DIR=/app/data
+WORKDIR /app/photos
+ENTRYPOINT ["/app/photofield"]

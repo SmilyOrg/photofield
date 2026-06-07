@@ -16,6 +16,7 @@ func TestCoordinatorSequentialExecution(t *testing.T) {
 		MetadataWorkers:  1,
 		ThumbnailWorkers: 1,
 		ContentsWorkers:  1,
+		FaceWorkers:      1,
 	}
 	coordinator := NewCoordinator(ctx, cfg)
 	defer coordinator.Close()
@@ -153,8 +154,8 @@ func TestCoordinatorList(t *testing.T) {
 	}
 }
 
-// TestCoordinatorPriorityOrder verifies metadata tasks are dequeued before
-// contents, and within a stage newer tasks are dequeued first.
+// TestCoordinatorPriorityOrder verifies metadata tasks are dequeued before contents,
+// contents before faces, and within a stage newer tasks are dequeued first.
 func TestCoordinatorPriorityOrder(t *testing.T) {
 	// Build the queue directly without running the worker
 	c := &Coordinator{
@@ -162,20 +163,22 @@ func TestCoordinatorPriorityOrder(t *testing.T) {
 		queue:    make([]*task.Task, 0),
 	}
 
-	// Insert in "worst" order: contents first, then metadata
+	// Insert in "worst" order: faces first, then contents, then metadata
 	// and within metadata: older first
+	tFaces := task.NewFacesTask("col1", "Col1", []string{}, 0, false)
+	time.Sleep(time.Millisecond)
 	tContents := task.NewContentsTask("col1", "Col1", []string{}, 0, false)
 	time.Sleep(time.Millisecond)
 	tMetaOld := task.NewMetadataTask("col1", "Col1", []string{}, 0, false)
 	time.Sleep(time.Millisecond)
 	tMetaNew := task.NewMetadataTask("col2", "Col2", []string{}, 0, false)
 
-	for _, t := range []*task.Task{tContents, tMetaOld, tMetaNew} {
+	for _, t := range []*task.Task{tFaces, tContents, tMetaOld, tMetaNew} {
 		c.insertSorted(t)
 	}
 
-	// Dequeue from tail: expect metadata-new, metadata-old, contents
-	want := []string{tMetaNew.Id, tMetaOld.Id, tContents.Id}
+	// Dequeue from tail: expect metadata-new, metadata-old, contents, faces
+	want := []string{tMetaNew.Id, tMetaOld.Id, tContents.Id, tFaces.Id}
 	for i, wantId := range want {
 		if len(c.queue) == 0 {
 			t.Fatalf("Queue empty after %d dequeues, want %s", i, wantId)

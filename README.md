@@ -84,6 +84,9 @@ layouts.
 * **Tagging (alpha)**. You can tag and search photos with arbitrary tags. If
   enabled, tags are stored in the cache database and can be used to filter
   photos.
+* **Face detection (alpha)**. Detect and display individual faces in your
+  photos using [photofield-ai]. The Faces layout shows detected face crops,
+  and you can search by face ID.
 * **Reverse geolocation**. Local, embedded reverse geolocation of ~50 thousand
   places via [tinygpkg] with negligible overhead supported in the Timeline and
   Flex layouts.

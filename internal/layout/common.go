@@ -22,10 +22,11 @@ const (
 	Square     Type = "SQUARE"
 	Wall       Type = "WALL"
 	Map        Type = "MAP"
-	Search     Type = "SEARCH"
+	Similarity Type = "SIMILARITY"
 	Strip      Type = "STRIP"
 	Highlights Type = "HIGHLIGHTS"
 	Flex       Type = "FLEX"
+	Faces      Type = "FACES"
 )
 
 type Order int
@@ -121,6 +122,15 @@ type RegionTag struct {
 	Id string `json:"id"`
 }
 
+type RegionFace struct {
+	Id         int `json:"id"`
+	X          int `json:"x"`
+	Y          int `json:"y"`
+	W          int `json:"w"`
+	H          int `json:"h"`
+	Confidence int `json:"confidence"`
+}
+
 type PhotoRegionData struct {
 	Id         int                `json:"id"`
 	Path       string             `json:"path"`
@@ -132,6 +142,7 @@ type PhotoRegionData struct {
 	CreatedAt  string             `json:"created_at"`
 	Thumbnails []RegionThumbnail  `json:"thumbnails"`
 	Tags       []tag.Tag          `json:"tags"`
+	Faces      []RegionFace       `json:"faces,omitempty"`
 	Location   string             `json:"location,omitempty"` // reverse geocoded location
 	LatLng     *PhotoRegionLatLng `json:"latlng,omitempty"`
 	// SmallestThumbnail     string   `json:"smallest_thumbnail"`
@@ -229,6 +240,19 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 		tags = append(tags, tag)
 	}
 
+	faceInfos := source.GetFacesByFileId(photo.Id)
+	faces := make([]RegionFace, 0, len(faceInfos))
+	for _, f := range faceInfos {
+		faces = append(faces, RegionFace{
+			Id:         f.Id,
+			X:          f.X,
+			Y:          f.Y,
+			W:          f.W,
+			H:          f.H,
+			Confidence: f.Confidence,
+		})
+	}
+
 	return render.Region{
 		Id:     id,
 		Bounds: photo.Sprite.Rect,
@@ -243,6 +267,7 @@ func (regionSource PhotoRegionSource) getRegionFromPhoto(id int, photo *render.P
 			CreatedAt:  info.DateTime.Format(time.RFC3339),
 			Thumbnails: thumbnails,
 			Tags:       tags,
+			Faces:      faces,
 			Location:   location,
 			LatLng:     latlng,
 		},

@@ -6,7 +6,7 @@ import (
 	"context"
 	"log"
 	"math"
-	"photofield/internal/clip"
+	"photofield/internal/ai"
 	"photofield/internal/image"
 	"photofield/internal/layout/dag"
 	"photofield/internal/metrics"
@@ -123,7 +123,7 @@ func LayoutHighlights(infos <-chan image.InfoEmb, layout Layout, scene *render.S
 		invnorm := info.Embedding.InvNormFloat32()
 		simHeight := idealHeight
 		if prevEmb != nil {
-			dot, err := clip.DotProductFloat32Float32(
+			dot, err := ai.DotProductFloat32Float32(
 				prevEmb,
 				emb,
 			)
@@ -350,7 +350,7 @@ func LayoutHighlightsBasic(infos <-chan image.InfoEmb, layout Layout, scene *ren
 		emb := info.Embedding.Float32()
 		invnorm := info.Embedding.InvNormFloat32()
 		if prevEmb != nil {
-			dot, err := clip.DotProductFloat32Float32(
+			dot, err := ai.DotProductFloat32Float32(
 				prevEmb,
 				emb,
 			)

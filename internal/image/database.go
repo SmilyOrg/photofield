@@ -62,13 +62,14 @@ func IsSimilarityOrder(order ListOrder) bool {
 }
 
 type ListOptions struct {
-	OrderBy     ListOrder
-	ShuffleSeed int64
-	Limit       int
-	Expression  search.Expression
-	Embedding   ai.Embedding
-	Extensions  []string
-	Batch       int
+	OrderBy        ListOrder
+	ShuffleSeed    int64
+	Limit          int
+	Expression     search.Expression
+	ImageEmbedding ai.Embedding
+	FaceEmbedding  ai.Embedding
+	Extensions     []string
+	Batch          int
 }
 
 type DirsFunc func(dirs []string)
@@ -105,6 +106,7 @@ const (
 	UpdateMeta    InfoWriteType = iota
 	UpdateColor   InfoWriteType = iota
 	UpdateAI      InfoWriteType = iota
+	UpdateFaces   InfoWriteType = iota
 	Delete        InfoWriteType = iota
 	Index         InfoWriteType = iota
 	AddTag        InfoWriteType = iota
@@ -120,6 +122,7 @@ type InfoWrite struct {
 	Path      string
 	Id        int64
 	Embedding ai.Embedding
+	Faces     []ai.Face
 	Type      InfoWriteType
 	Ids       Ids
 	Done      chan any
@@ -327,6 +330,21 @@ func (source *Database) writePendingInfosSqlite() {
 		INSERT OR REPLACE INTO clip_emb(file_id, inv_norm, embedding)
 		VALUES (?, ?, ?);`)
 	defer updateAI.Finalize()
+
+	insertFace := conn.Prep(`
+		INSERT INTO face(file_id, x, y, w, h, confidence, embedding)
+		VALUES (?, ?, ?, ?, ?, ?, ?);`)
+	defer insertFace.Finalize()
+
+	deleteFaces := conn.Prep(`
+		DELETE FROM face
+		WHERE file_id = ?;`)
+	defer deleteFaces.Finalize()
+
+	updateFaceCount := conn.Prep(`
+		UPDATE infos SET face_count = ?
+		WHERE id = ?;`)
+	defer updateFaceCount.Finalize()
 
 	appendPath := conn.Prep(`
 		INSERT OR IGNORE INTO infos(path_prefix_id, filename)
@@ -674,6 +692,52 @@ func (source *Database) writePendingInfosSqlite() {
 					continue
 				}
 				err = updateAI.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+			case UpdateFaces:
+				// Delete existing faces for this image
+				deleteFaces.BindInt64(1, int64(imageInfo.Id))
+				_, err := deleteFaces.Step()
+				if err != nil {
+					log.Printf("Unable to delete faces for %d: %s\n", imageInfo.Id, err.Error())
+					continue
+				}
+				err = deleteFaces.Reset()
+				if err != nil {
+					panic(err)
+				}
+
+				// Insert new faces
+				for _, face := range imageInfo.Faces {
+					insertFace.BindInt64(1, int64(imageInfo.Id))
+					insertFace.BindInt64(2, int64(face.X))
+					insertFace.BindInt64(3, int64(face.Y))
+					insertFace.BindInt64(4, int64(face.W))
+					insertFace.BindInt64(5, int64(face.H))
+					insertFace.BindInt64(6, int64(face.Confidence))
+					insertFace.BindBytes(7, face.Embedding)
+
+					_, err := insertFace.Step()
+					if err != nil {
+						log.Printf("Unable to insert face for %d: %s\n", imageInfo.Id, err.Error())
+						continue
+					}
+					err = insertFace.Reset()
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				// Mark face count for this image (even if no faces were found)
+				updateFaceCount.BindInt64(1, int64(len(imageInfo.Faces)))
+				updateFaceCount.BindInt64(2, int64(imageInfo.Id))
+				_, err = updateFaceCount.Step()
+				if err != nil {
+					log.Printf("Unable to update face count for %d: %s\n", imageInfo.Id, err.Error())
+				}
+				err = updateFaceCount.Reset()
 				if err != nil {
 					panic(err)
 				}
@@ -1134,6 +1198,80 @@ func (source *Database) GetDirsCount(dirs []string) (int, bool) {
 	return stmt.ColumnInt(0), true
 }
 
+// CountMissing counts files with missing data based on given criteria
+func (source *Database) CountMissing(dirs []string, opts Missing) (int, bool) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	sql := `SELECT COUNT(DISTINCT infos.id) FROM infos
+		INNER JOIN prefix ON prefix.id = path_prefix_id`
+
+	if opts.Embedding {
+		sql += `
+		LEFT JOIN clip_emb ON clip_emb.file_id = infos.id`
+	}
+
+	sql += `
+		WHERE path_prefix_id IN (
+			SELECT id
+			FROM prefix
+			WHERE `
+
+	for i := range dirs {
+		sql += `str LIKE ? `
+		if i < len(dirs)-1 {
+			sql += "OR "
+		}
+	}
+
+	sql += `)`
+
+	// Build conditions for missing data
+	conditions := make([]string, 0)
+	if opts.Metadata {
+		conditions = append(conditions,
+			"(width IS NULL OR height IS NULL OR orientation IS NULL OR created_at_unix IS NULL)")
+	}
+	if opts.Color {
+		conditions = append(conditions, "color IS NULL")
+	}
+	if opts.Embedding {
+		conditions = append(conditions, "file_id IS NULL")
+	}
+	if opts.Faces {
+		conditions = append(conditions, "face_count IS NULL")
+	}
+
+	if len(conditions) > 0 {
+		sql += ` AND (`
+		for i, cond := range conditions {
+			sql += cond
+			if i < len(conditions)-1 {
+				sql += " OR "
+			}
+		}
+		sql += `)`
+	}
+
+	stmt := conn.Prep(sql)
+	bindIndex := 1
+	defer stmt.Reset()
+
+	for _, dir := range dirs {
+		stmt.BindText(bindIndex, dir+"%")
+		bindIndex++
+	}
+
+	if exists, err := stmt.Step(); err != nil {
+		log.Printf("error counting missing files: %s\n", err.Error())
+		return 0, false
+	} else if !exists {
+		return 0, false
+	}
+
+	return stmt.ColumnInt(0), true
+}
+
 func (source *Database) Write(path string, info Info, writeType InfoWriteType) error {
 	source.pending <- &InfoWrite{
 		Path: path,
@@ -1184,6 +1322,14 @@ func (source *Database) WriteAI(id ImageId, embedding ai.Embedding) error {
 		Embedding: embedding,
 	}
 	return nil
+}
+
+func (source *Database) WriteFaces(id ImageId, faces []ai.Face) {
+	source.pending <- &InfoWrite{
+		Id:    int64(id),
+		Type:  UpdateFaces,
+		Faces: faces,
+	}
 }
 
 func (source *Database) AddTag(name string) (<-chan struct{}, error) {
@@ -1862,17 +2008,26 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			}
 		}
 
+		similarityOrder := isSimilarityOrder(options.OrderBy)
+
 		joinEmbeddings := false
 		var emb []float32
 		var embInvNorm float32
-		if options.Embedding != nil {
-			emb = options.Embedding.Float32()
-			embInvNorm = options.Embedding.InvNormFloat32()
+		if options.ImageEmbedding != nil {
+			emb = options.ImageEmbedding.Float32()
+			embInvNorm = options.ImageEmbedding.InvNormFloat32()
+		}
+		if options.ImageEmbedding != nil || options.Expression.Deduplicate.Present {
+			joinEmbeddings = true
 		}
 
-		similarityOrder := isSimilarityOrder(options.OrderBy)
-		if options.Expression.Threshold.Present || options.Expression.Deduplicate.Present || similarityOrder {
-			joinEmbeddings = true
+		joinFaces := false
+		var femb []float32
+		var fembInvNorm float32
+		if options.ImageEmbedding == nil && options.FaceEmbedding != nil {
+			femb = options.FaceEmbedding.Float32()
+			fembInvNorm = options.FaceEmbedding.InvNormFloat32()
+			joinFaces = true
 		}
 
 		sql += `
@@ -1884,7 +2039,10 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			sql += `
 				SELECT infos.id, width, height, orientation, color, created_at_unix, created_at_tz_offset, latitude, longitude`
 			if joinEmbeddings {
-				sql += `, inv_norm, embedding`
+				sql += `, inv_norm, clip_emb.embedding`
+			}
+			if joinFaces {
+				sql += `, face.embedding`
 			}
 			sql += `
 				FROM infos
@@ -1900,7 +2058,12 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 
 			if joinEmbeddings {
 				sql += `
-					LEFT JOIN clip_emb ON clip_emb.file_id = id
+					LEFT JOIN clip_emb ON clip_emb.file_id = infos.id
+				`
+			}
+			if joinFaces {
+				sql += `
+					INNER JOIN face ON face.file_id = infos.id
 				`
 			}
 
@@ -2059,6 +2222,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
 
+		var lastInfo SourcedInfo
 		var lastEmb []float32
 		var lastEmbInvNorm float32
 		var similarityBuffer []SourcedInfo
@@ -2072,6 +2236,17 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 
 			var info SourcedInfo
 			info.Id = (ImageId)(stmt.ColumnInt64(0))
+			if lastInfo.Id != 0 && lastInfo.Id != info.Id {
+				// If we're joining faces, there are multiple rows per image (one per face).
+				// We want to only return the one with the highest face similarity (after filtering).
+				// If we are not joining faces, this is just a slightly weird order of emission.
+				if similarityOrder {
+					similarityBuffer = append(similarityBuffer, lastInfo)
+				} else {
+					out <- lastInfo
+				}
+				lastInfo = SourcedInfo{}
+			}
 
 			info.Width = stmt.ColumnInt(1)
 			info.Height = stmt.ColumnInt(2)
@@ -2094,8 +2269,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				info.LatLng = s2.LatLngFromDegrees(stmt.ColumnFloat(7), stmt.ColumnFloat(8))
 			}
 
+			col := 9
+
 			if joinEmbeddings {
-				e, err := readEmbedding(stmt, 9, 10)
+				e, err := readEmbedding(stmt, col, col+1)
+				col += 2
 				if err != nil {
 					if isSimilarityOrder(options.OrderBy) {
 						// Photos without embeddings can't be ranked by similarity — skip them.
@@ -2135,20 +2313,47 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				}
 			}
 
-			if similarityOrder {
-				similarityBuffer = append(similarityBuffer, info)
-			} else {
-				out <- info
+			if joinFaces {
+				fe, err := readFaceEmbedding(stmt, col)
+				col++
+				if err != nil {
+					continue
+				}
+				fee := fe.Float32()
+				feinv := fe.InvNormFloat32()
+				if femb != nil {
+					sim, err := ai.CosineSimilarityFloat32Float32(femb, fembInvNorm, fee, feinv)
+					if err != nil {
+						log.Printf("Error calculating face similarity for %d: %v\n", info.Id, err)
+						continue
+					}
+					if options.Expression.Threshold.Present && sim < options.Expression.Threshold.Value {
+						continue
+					}
+					if sim < lastInfo.Similarity {
+						continue
+					}
+					info.Similarity = sim
+				}
 			}
+
+			lastInfo = info
 		}
 
 		if similarityOrder {
-			sort.Slice(similarityBuffer, func(i, j int) bool {
-				if options.OrderBy == SimilarityAsc {
+			if lastInfo.Id != 0 {
+				// Add the last info if any
+				similarityBuffer = append(similarityBuffer, lastInfo)
+			}
+			if options.OrderBy == SimilarityAsc {
+				sort.Slice(similarityBuffer, func(i, j int) bool {
 					return similarityBuffer[i].Similarity < similarityBuffer[j].Similarity
-				}
-				return similarityBuffer[i].Similarity > similarityBuffer[j].Similarity
-			})
+				})
+			} else {
+				sort.Slice(similarityBuffer, func(i, j int) bool {
+					return similarityBuffer[i].Similarity > similarityBuffer[j].Similarity
+				})
+			}
 			limit := len(similarityBuffer)
 			if options.Limit > 0 && options.Limit < limit {
 				limit = options.Limit
@@ -2156,6 +2361,9 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			for _, info := range similarityBuffer[:limit] {
 				out <- info
 			}
+		} else if lastInfo.Id != 0 {
+			// Emit the last info if any
+			out <- lastInfo
 		}
 
 		close(out)
@@ -2739,76 +2947,6 @@ func (source *Database) ListIds(dirs []string, limit int, missingEmbedding bool)
 	return out
 }
 
-func (source *Database) CountMissing(dirs []string, opts Missing) (int, bool) {
-	conn := source.pool.Get(context.TODO())
-	defer source.pool.Put(conn)
-
-	sql := `SELECT COUNT(DISTINCT infos.id) FROM infos
-		INNER JOIN prefix ON prefix.id = path_prefix_id`
-
-	if opts.Embedding {
-		sql += `
-		LEFT JOIN clip_emb ON clip_emb.file_id = infos.id`
-	}
-
-	sql += `
-		WHERE path_prefix_id IN (
-			SELECT id
-			FROM prefix
-			WHERE `
-
-	for i := range dirs {
-		sql += `str LIKE ? `
-		if i < len(dirs)-1 {
-			sql += "OR "
-		}
-	}
-
-	sql += `)`
-
-	// Build conditions for missing data
-	conditions := make([]string, 0)
-	if opts.Metadata {
-		conditions = append(conditions,
-			"(width IS NULL OR height IS NULL OR orientation IS NULL OR created_at_unix IS NULL)")
-	}
-	if opts.Color {
-		conditions = append(conditions, "color IS NULL")
-	}
-	if opts.Embedding {
-		conditions = append(conditions, "file_id IS NULL")
-	}
-
-	if len(conditions) > 0 {
-		sql += ` AND (`
-		for i, cond := range conditions {
-			sql += cond
-			if i < len(conditions)-1 {
-				sql += " OR "
-			}
-		}
-		sql += `)`
-	}
-
-	stmt := conn.Prep(sql)
-	bindIndex := 1
-	defer stmt.Reset()
-
-	for _, dir := range dirs {
-		stmt.BindText(bindIndex, dir+"%")
-		bindIndex++
-	}
-
-	if exists, err := stmt.Step(); err != nil {
-		log.Printf("error counting missing files: %s\n", err.Error())
-		return 0, false
-	} else if !exists {
-		return 0, false
-	}
-
-	return stmt.ColumnInt(0), true
-}
-
 func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-chan MissingInfo {
 	out := make(chan MissingInfo, 1000)
 	go func() {
@@ -2847,6 +2985,12 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 			conds = append(conds, condition{
 				inputs: []string{"file_id"},
 				output: "missing_embedding",
+			})
+		}
+		if opts.Faces {
+			conds = append(conds, condition{
+				inputs: []string{"face_count"},
+				output: "missing_faces",
 			})
 		}
 
@@ -2960,10 +3104,216 @@ func (source *Database) ListMissing(dirs []string, limit int, opts Missing) <-ch
 				r.Embedding = stmt.ColumnBool(i)
 				i++
 			}
+			if opts.Faces {
+				r.Faces = stmt.ColumnBool(i)
+				i++
+			}
 			out <- r
 		}
 
 		close(out)
 	}()
 	return out
+}
+
+type FaceInfo struct {
+	Id         int
+	FileId     ImageId
+	X          int
+	Y          int
+	W          int
+	H          int
+	Confidence int
+}
+
+// readFaceEmbedding reads the face embedding from the statement at the given column index.
+// Face embeddings are pre-normalized (L2 norm = 1), so inv_norm is always 1.0.
+func readFaceEmbedding(stmt *sqlite.Stmt, embeddingIndex int) (ai.Embedding, error) {
+	if stmt.ColumnType(embeddingIndex) == sqlite.TypeNull {
+		return ai.FromRaw(nil, 0), fmt.Errorf("face embedding is null")
+	}
+	size := stmt.ColumnLen(embeddingIndex)
+	bytes := make([]byte, size)
+	read := stmt.ColumnBytes(embeddingIndex, bytes)
+	if read != size {
+		return ai.FromRaw(nil, 0), fmt.Errorf("unable to read face embedding bytes, expected %d, got %d", size, read)
+	}
+	return ai.FromRaw(bytes, ai.FaceEmbeddingInvNorm), nil
+}
+
+func (source *Database) GetFaceEmbedding(faceId int) (ai.Embedding, error) {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`SELECT embedding FROM face WHERE id = ?;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(faceId))
+	if exists, err := stmt.Step(); err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, nil
+	}
+	return readFaceEmbedding(stmt, 0)
+}
+
+func (source *Database) ListFaces(dirs []string, options ListOptions) <-chan FaceInfo {
+	out := make(chan FaceInfo, 1000)
+	go func() {
+		conn := source.pool.Get(context.TODO())
+		defer source.pool.Put(conn)
+
+		refEmb := options.FaceEmbedding
+		limit := options.Limit
+		similarityOrder := isSimilarityOrder(options.OrderBy)
+		readEmb := refEmb != nil || similarityOrder
+		if readEmb && refEmb == nil {
+			// Use dummy embedding
+			refEmb = ai.FromRaw(nil, ai.FaceEmbeddingInvNorm)
+		}
+
+		selectCols := `face.id, face.file_id, face.x, face.y, face.w, face.h, face.confidence`
+		if readEmb {
+			selectCols += `, face.embedding`
+		}
+
+		sql := fmt.Sprintf(`
+			SELECT %s
+			FROM face
+			INNER JOIN infos ON infos.id = face.file_id
+			INNER JOIN prefix ON prefix.id = infos.path_prefix_id
+			WHERE path_prefix_id IN (
+				SELECT id
+				FROM prefix
+				WHERE
+		`, selectCols)
+
+		for i := range dirs {
+			sql += `str LIKE ? `
+			if i < len(dirs)-1 {
+				sql += "OR "
+			}
+		}
+
+		sql += `)`
+
+		sql += ` ORDER BY face.id ASC`
+
+		if limit > 0 {
+			sql += ` LIMIT ?`
+		}
+
+		sql += ";"
+
+		// println(sql)
+
+		stmt := conn.Prep(sql)
+		defer stmt.Reset()
+
+		bindIndex := 1
+		for _, dir := range dirs {
+			stmt.BindText(bindIndex, dir+"%")
+			bindIndex++
+		}
+
+		if limit > 0 {
+			stmt.BindInt64(bindIndex, int64(limit))
+		}
+
+		type faceWithSim struct {
+			Face       FaceInfo
+			Similarity float32
+		}
+
+		var similarityBuffer []faceWithSim
+
+		for {
+			if exists, err := stmt.Step(); err != nil {
+				log.Printf("Error listing faces: %s\n", err.Error())
+				break
+			} else if !exists {
+				break
+			}
+			face := readFaceInfo(stmt)
+			sim := float32(0)
+			if readEmb {
+				emb, err := readFaceEmbedding(stmt, 7)
+				if err != nil {
+					log.Printf("Error reading face embedding for face %d: %s\n", face.Id, err.Error())
+					continue
+				}
+
+				sim, _ = ai.CosineSimilarityEmbeddingFloat32(emb, refEmb.Float32(), refEmb.InvNormFloat32())
+				if options.Expression.Threshold.Present && sim < options.Expression.Threshold.Value {
+					continue
+				}
+			}
+			if similarityOrder {
+				similarityBuffer = append(similarityBuffer, faceWithSim{Face: face, Similarity: sim})
+			} else {
+				out <- face
+			}
+		}
+
+		if similarityOrder {
+			if options.OrderBy == SimilarityAsc {
+				sort.Slice(similarityBuffer, func(i, j int) bool {
+					return similarityBuffer[i].Similarity < similarityBuffer[j].Similarity
+				})
+			} else {
+				sort.Slice(similarityBuffer, func(i, j int) bool {
+					return similarityBuffer[i].Similarity > similarityBuffer[j].Similarity
+				})
+			}
+			limit := len(similarityBuffer)
+			if options.Limit > 0 && options.Limit < limit {
+				limit = options.Limit
+			}
+			for _, fs := range similarityBuffer[:limit] {
+				out <- fs.Face
+			}
+		}
+
+		close(out)
+	}()
+	return out
+}
+
+func readFaceInfo(stmt *sqlite.Stmt) FaceInfo {
+	face := FaceInfo{
+		Id:         stmt.ColumnInt(0),
+		FileId:     ImageId(stmt.ColumnInt64(1)),
+		X:          stmt.ColumnInt(2),
+		Y:          stmt.ColumnInt(3),
+		W:          stmt.ColumnInt(4),
+		H:          stmt.ColumnInt(5),
+		Confidence: stmt.ColumnInt(6),
+	}
+	return face
+}
+
+func (source *Database) GetFacesByFileId(fileId ImageId) []FaceInfo {
+	conn := source.pool.Get(context.TODO())
+	defer source.pool.Put(conn)
+
+	stmt := conn.Prep(`
+		SELECT id, file_id, x, y, w, h, confidence
+		FROM face
+		WHERE file_id = ?
+		ORDER BY id ASC;`)
+	defer stmt.Reset()
+
+	stmt.BindInt64(1, int64(fileId))
+
+	var faces []FaceInfo
+	for {
+		if exists, err := stmt.Step(); err != nil {
+			log.Printf("Error getting faces for file %d: %s\n", fileId, err.Error())
+			break
+		} else if !exists {
+			break
+		}
+		faces = append(faces, readFaceInfo(stmt))
+	}
+	return faces
 }

@@ -7,6 +7,10 @@ These tools are not strictly required, but if they are installed in your system,
 - [djpeg (libjpeg-turbo)]: Accelerates JPEG decoding of big images in cases where there are no other appropriate thumbnails available.
 - [libwebp]: Enables high-performance WebP encoding via dynamic library loading. When available, the [go-libwebp] encoder can use the native libwebp dynamic shared library for faster encoding (`webp-jackdyn`) compared to pure Go implementations (`webp-jacktra`).
 
+:::tip
+To use [semantic search](features/search#semantic-search), [deduplication](features/search#deduplication) or [face detection](features/layouts#faces-alpha), install the [photofield-ai] service and configure it in the `ai` section of the [configuration](./configuration).
+:::
+
 ## Quick Install
 
 ### Docker
@@ -39,3 +43,5 @@ sudo dnf install exiftool ffmpeg libjpeg-turbo-utils libwebp
 [goexif]: https://github.com/rwcarlsen/goexif
 [go-libwebp]: https://git.sr.ht/~jackmordaunt/go-libwebp/
 [libwebp]: https://developers.google.com/speed/webp
+[photofield-ai]: https://github.com/smilyorg/photofield-ai
+[configuration]: ./configuration

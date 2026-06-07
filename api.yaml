@@ -585,6 +585,38 @@ paths:
           schema:
             $ref: "#/components/schemas/Color"
         
+        - name: crop_x
+          in: query
+          required: false
+          description: Crop left edge in original image pixels. Requires crop_w and crop_h.
+          schema:
+            type: integer
+            minimum: 0
+        
+        - name: crop_y
+          in: query
+          required: false
+          description: Crop top edge in original image pixels. Requires crop_w and crop_h.
+          schema:
+            type: integer
+            minimum: 0
+        
+        - name: crop_w
+          in: query
+          required: false
+          description: Crop width in original image pixels.
+          schema:
+            type: integer
+            minimum: 1
+        
+        - name: crop_h
+          in: query
+          required: false
+          description: Crop height in original image pixels.
+          schema:
+            type: integer
+            minimum: 1
+        
       responses:
         "200":
           description: Successfully generated preview image
@@ -1171,6 +1203,7 @@ components:
         - INDEX_CONTENTS
         - INDEX_CONTENTS_COLOR
         - INDEX_CONTENTS_AI
+        - INDEX_FACES
         - INDEX_ALL
     
     CollectionId:
@@ -1311,11 +1344,14 @@ components:
     LayoutType:
       type: string
       enum:
-        - TIMELINE
         - ALBUM
-        - SQUARE
+        - TIMELINE
         - WALL
-        - STRIP
+        - MAP
+        - HIGHLIGHTS
+        - FLEX
+        - SIMILARITY
+        - FACES
 
     Problem:
       type: object

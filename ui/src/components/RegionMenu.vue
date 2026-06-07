@@ -47,8 +47,20 @@
         <ui-item @click="copyImageLink()">
           Copy Image Link
         </ui-item>
-        <ui-item @click="findSimilar()">
-          Find Similar Images
+        <ui-item
+          class="routerlink"
+        >
+          <router-link :to="similarImagesLink" @click="$emit('close')">
+            Find Similar Images
+          </router-link>
+        </ui-item>
+        <ui-item
+          class="routerlink"
+          v-if="region.data.face_id"
+        >
+          <router-link :to="similarFacesLink" @click="$emit('close')">
+            Find Similar Faces
+          </router-link>
         </ui-item>
       </ui-nav>
       <div v-if="expanded" class="thumbnails">
@@ -105,10 +117,38 @@ export default {
       url.pathname = url.pathname.replace(/(.*\/collections\/[^/]+)\/.*$/, "$1");
       return url.toString();
     });
+    const similarImagesLink = computed(() => {
+      const id = props.region?.data?.id;
+      if (!id) return null;
+      return {
+        name: "collection",
+        query: {
+          ...route.query,
+          search: `img:${id}`,
+          sort: "-similarity",
+          layout: "SIMILARITY",
+        }
+      };
+    });
+    const similarFacesLink = computed(() => {
+      const faceId = props.region?.data?.face_id;
+      if (!faceId) return null;
+      return {
+        name: "collection",
+        query: {
+          ...route.query,
+          search: `face:${faceId} t:0.3`,
+          sort: "-similarity",
+        }
+      };
+    });
+    
     return {
       viewer,
       viewport,
       albumUrl,
+      similarImagesLink,
+      similarFacesLink,
     }
   },
   computed: {
@@ -145,12 +185,6 @@ export default {
     async copyImageLink() {
       await navigator.clipboard.writeText(this.fileUrl);
       this.$emit("close");
-    },
-    async findSimilar() {
-      const id = this.region?.data?.id;
-      if (!id) return;
-      this.$emit("close");
-      this.$emit("search", `img:${id}`);
     },
   }
 };
@@ -213,6 +247,20 @@ export default {
 
 .actions .nav {
   width: 100%;
+}
+
+.actions .nav :deep(.mdc-deprecated-list-item).routerlink {
+  padding: 0;
+}
+
+.actions .nav :deep(.mdc-deprecated-list-item) > a {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--mdc-theme-text-primary-on-background);
+  padding: 0 16px;
 }
 
 .actions .icon {

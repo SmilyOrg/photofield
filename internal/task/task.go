@@ -12,6 +12,7 @@ const (
 	TypeIndexFiles    = "INDEX_FILES"
 	TypeIndexMetadata = "INDEX_METADATA"
 	TypeIndexContents = "INDEX_CONTENTS"
+	TypeIndexFaces    = "INDEX_FACES"
 )
 
 // Task represents a long-running operation that can be tracked
@@ -147,7 +148,7 @@ func New(taskType, id, name, collectionId string) *Task {
 
 // NewIndexTask creates a task for indexing a collection
 //
-// Deprecated: use NewMetadataTask or NewContentsTask instead.
+// Deprecated: use NewMetadataTask, NewContentsTask, or NewFacesTask instead.
 func NewIndexTask(collectionId, collectionName string, dirs []string, maxPhotos int, intent interface{}) *Task {
 	t := New(
 		"INDEX",
@@ -166,6 +167,7 @@ func newStageTask(taskType, collectionId, collectionName string, dirs []string, 
 		TypeIndexFiles:    "files",
 		TypeIndexMetadata: "metadata",
 		TypeIndexContents: "contents",
+		TypeIndexFaces:    "faces",
 	}[taskType]
 	t := New(
 		taskType,
@@ -195,3 +197,10 @@ func NewContentsTask(collectionId, collectionName string, dirs []string, maxPhot
 func NewFilesTask(collectionId, collectionName string, dirs []string, maxPhotos int) *Task {
 	return newStageTask(TypeIndexFiles, collectionId, collectionName, dirs, maxPhotos, false)
 }
+
+// NewFacesTask creates a task for face detection
+func NewFacesTask(collectionId, collectionName string, dirs []string, maxPhotos int, force bool) *Task {
+	return newStageTask(TypeIndexFaces, collectionId, collectionName, dirs, maxPhotos, force)
+}
+
+

@@ -66,3 +66,9 @@ photos. This layout is designed to make travel photo collections more skimmable
 by shrinking similar and repeating photos. This layout requires AI to be enabled.
 
 ![Highlights layout example](../assets/highlights.png)
+
+## Faces (alpha)
+
+The **Faces** layout displays individual face crops detected in your photos. Faces need to be indexed with an up-to-date version of [photofield-ai](https://github.com/SmilyOrg/photofield-ai) before they are available to be shown.
+
+![Faces layout example](../assets/faces.jpg)

@@ -41,13 +41,20 @@ ai:
   # 
   # host: http://localhost:8081
   # 
-  # You can also define the visual (image scanning) host and the 
-  # textual search host separately, e.g. to scan images with a PC w/ GPU,
-  # but keep the search part on a NAS.
+  # You can also define the visual (image scanning) host, the 
+  # textual search host, and the face detection host separately.
+  # The textual model host is required to be always available for
+  # semantic search to work, while the visual/faces host is only required
+  # for scanning new photos and can be offline otherwise. 
   # 
+  # For example, this allows you to run the visual scanning on a separate
+  # machine with a GPU, while keeping the search functionality on a NAS.
+  # 
+  # textual:
+    # host: http://localhost:8081
   # visual:
     # host: http://localhost:8081
-  # textual:
+  # faces:
     # host: http://localhost:8081
 
 tags:
@@ -101,6 +108,9 @@ media:
   
   # Extract AI embeddings from this many files concurrently
   concurrent_ai_loads: 8
+
+  # Maximum file size for face detection (files larger than this are skipped)
+  max_face_file_size: 50Mi
   
   # Number of exiftool instances to run concurrently for metadata extraction
   exif_tool_count: 4
@@ -223,6 +233,9 @@ media:
       height: 256
       fit: "INSIDE"
       cost:
+        # Embedded JPEG thumbnail size is somewhat unpredictable,
+        # so we add a bias to account for that.
+        time: 4ms
         time_per_original_megapixel: 670us
 
     image:
@@ -247,7 +260,6 @@ media:
     
     # Internal thumbnail database
     - type: sqlite
-
     
     # Embedded JPEG thumbnails
     - type: goexif

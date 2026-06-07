@@ -22,6 +22,31 @@
         @add="addTag($event)"
         @remove="removeTag($event)"
       ></tags>
+      <div v-if="faces.length > 0" class="faces-section">
+        <div class="faces-label">
+          <ui-icon class="faces-icon" outlined>face</ui-icon>
+          <span class="faces-count">{{ faces.length }} face{{ faces.length === 1 ? '' : 's' }}</span>
+        </div>
+        <div class="faces-grid">
+          <router-link
+            v-for="face in faces"
+            :key="face.id"
+            :to="{
+              name: 'collection',
+              query: {
+                search: `face:${face.id} t:0.5`,
+              }
+            }"
+          >
+            <img
+              class="face-crop"
+              :src="getFacePreviewUrl(face)"
+              :width="FACES_IMAGE_HEIGHT"
+              :height="FACES_IMAGE_HEIGHT"
+            />
+          </router-link>
+        </div>
+      </div>
       <detail-item
         icon="today"
         class="swipeable"
@@ -51,18 +76,6 @@
         class="map"
         :geoview="geoview"
       ></Map>
-      <!-- <div class="thumbnails">
-        <a
-          class="thumbnail"
-          v-for="thumb in region.data?.thumbnails"
-          :key="thumb.name"
-          :href="getThumbnailUrl(region.data.id, thumb.name, thumb.filename)"
-          :title="thumb.width + ' x ' + thumb.height + ' (' + thumb.display_name + ')'"
-          target="_blank"
-        >
-          {{ thumb.width }}
-        </a>
-      </div> -->
     </dl>
   </div>
 </template>
@@ -76,7 +89,10 @@ import { useRegion, useRegionTags } from '../use';
 import DetailItem from './DetailItem.vue';
 import Map from './Map.vue';
 import Tags from './Tags.vue';
-import { useApi } from '../api';
+import { useApi, getPreviewUrl } from '../api';
+
+const FACES_IMAGE_HEIGHT = 72; // px, display size of each face crop
+const FACES_BUFFER = 1.2;      // matches server-side faceBuffer in faces.go
 
 const props = defineProps({
   scene: Object,
@@ -129,6 +145,25 @@ const createdAt = computed(() => {
 const photo = computed(() => {
   return region.value?.data;
 });
+
+const faces = computed(() => {
+  return photo.value?.faces ?? [];
+});
+
+function getFacePreviewUrl(face) {
+  if (!photo.value?.id) return '';
+  const cropSize = Math.round(Math.max(face.w, face.h) * FACES_BUFFER);
+  const cropX = Math.max(0, Math.round(face.x + face.w * 0.5 - cropSize * 0.5));
+  const cropY = Math.max(0, Math.round(face.y + face.h * 0.5 - cropSize * 0.5));
+  return getPreviewUrl(photo.value.id, 'face.jpg', {
+    w: FACES_IMAGE_HEIGHT,
+    h: FACES_IMAGE_HEIGHT,
+    crop_x: cropX,
+    crop_y: cropY,
+    crop_w: cropSize,
+    crop_h: cropSize,
+  });
+}
 
 const date = computed(() => {
   if (!createdAt.value) return "";
@@ -201,27 +236,45 @@ const geoview = computed(() => {
   align-items: center;
 }
 
-.thumbnails {
-  display: flex;
-  flex-wrap: wrap;
-  padding: 0 12px;
+.bar > h2 {
+  margin: 0;
 }
-
-.thumbnail {
-  font-size: 0.8em;
-  padding: 10px 6px;
-  text-decoration: none;
-  color: var(--mdc-theme-text-primary-on-background);
-}
-
 
 .tags {
   padding: 0 18px;
   box-sizing: border-box;
 }
 
-.bar > h2 {
-  margin: 0;
+.faces-section {
+  padding: 12px 24px 16px;
+}
+
+.faces-label {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.faces-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.faces-count {
+  margin-left: 16px;
+}
+
+.faces-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.face-crop {
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
 }
 
 </style>

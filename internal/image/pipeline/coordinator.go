@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 
+	"photofield/internal/ai"
 	img "photofield/internal/image"
 	"photofield/internal/task"
 )
@@ -28,13 +29,19 @@ type Config struct {
 	AIService    AIService
 	ImageDecoder ImageDecoder
 
+	// Face detection
+	FaceDetector    FaceDetector
+	MaxFaceFileSize int64 // Max file size for face detection (bytes)
+
 	// File scanning
-	Extensions []string
+	Extensions     []string
+	VideoExtensions []string
 
 	// Worker counts
 	MetadataWorkers  int
 	ThumbnailWorkers int
 	ContentsWorkers  int
+	FaceWorkers      int
 
 	// TaskRunner overrides task execution. When non-nil it is called instead of
 	// the built-in stage runners. Intended for tests only.
@@ -51,6 +58,8 @@ func stagePriority(taskType string) int {
 		return 2
 	case task.TypeIndexContents:
 		return 1
+	case task.TypeIndexFaces:
+		return 0
 	default:
 		return -2
 	}
@@ -107,11 +116,12 @@ func RunContents(ctx context.Context, cfg Config, t *task.Task) error {
 	dirs := t.Dirs
 	maxPhotos := t.MaxPhotos
 	force := t.Force
-	includeEmbedding := cfg.AIService != nil && cfg.AIService.Available()
-	missing := img.Missing{Color: true, Embedding: includeEmbedding}
 
 	counter := t.Counter()
 	defer close(counter)
+
+	includeEmbedding := cfg.AIService != nil && cfg.AIService.Available()
+	missing := img.Missing{Color: true, Embedding: includeEmbedding}
 
 	if force {
 		if count, ok := cfg.DB.GetDirsCount(dirs); ok {
@@ -139,6 +149,63 @@ func RunContents(ctx context.Context, cfg Config, t *task.Task) error {
 	processThumbnails(ctx, cfg.ThumbnailSources, cfg.ThumbnailGenerators,
 		cfg.ThumbnailSink, metaOut, cfg.ThumbnailWorkers, counter, contents.Process)
 	contents.Done()
+
+	return nil
+}
+
+// RunFaces executes Stage 3: detect faces in files.
+func RunFaces(ctx context.Context, cfg Config, t *task.Task) error {
+	if cfg.DB == nil {
+		return nil
+	}
+	if cfg.FaceDetector == nil {
+		log.Println("index faces skipped: no face detector configured")
+		return nil
+	}
+	if aiClient, ok := cfg.FaceDetector.(*ai.AI); ok && !aiClient.FacesAvailable() {
+		log.Println("index faces skipped: AI server does not support face detection")
+		return nil
+	}
+	dirs := t.Dirs
+	maxPhotos := t.MaxPhotos
+	force := t.Force
+
+	counter := t.Counter()
+	defer close(counter)
+
+	if force {
+		if count, ok := cfg.DB.GetDirsCount(dirs); ok {
+			if maxPhotos > 0 && count > maxPhotos {
+				count = maxPhotos
+			}
+			t.SetTotal(count)
+			log.Printf("index faces starting %d files\n", count)
+		}
+	} else {
+		if count, ok := cfg.DB.CountMissing(dirs, img.Missing{Faces: true}); ok {
+			if maxPhotos > 0 && count > maxPhotos {
+				count = maxPhotos
+			}
+			t.SetTotal(count)
+			if count > 0 {
+				log.Printf("index faces starting %d files\n", count)
+			}
+		}
+	}
+
+	files := fileSource(ctx, cfg.DB, dirs, maxPhotos, force, img.Missing{Faces: true})
+
+	contentsFiles := make(chan fileWithContents, 100)
+	go func() {
+		defer close(contentsFiles)
+		for file := range files {
+			contentsFiles <- fileWithContents{fileRef: file}
+		}
+	}()
+
+	processFaces(ctx, cfg.DB, cfg.FaceDetector,
+		contentsFiles, cfg.FaceWorkers, cfg.MaxFaceFileSize, cfg.VideoExtensions, counter)
+	log.Println("index faces completed")
 
 	return nil
 }
@@ -236,11 +303,14 @@ func (c *Coordinator) processTask(t *task.Task) {
 				// Auto-enqueue follow-up pipeline stages after file scan
 				c.AddMetadata(t.CollectionId, t.CollectionName, t.Dirs, t.MaxPhotos, false)
 				c.AddContents(t.CollectionId, t.CollectionName, t.Dirs, t.MaxPhotos, false)
+				c.AddFaces(t.CollectionId, t.CollectionName, t.Dirs, t.MaxPhotos, false)
 			}
 		case task.TypeIndexMetadata:
 			err = RunMetadata(t.Context(), c.cfg, t)
 		case task.TypeIndexContents:
 			err = RunContents(t.Context(), c.cfg, t)
+		case task.TypeIndexFaces:
+			err = RunFaces(t.Context(), c.cfg, t)
 		default:
 			log.Printf("index task error: unknown type: %q: %s\n", t.Id, t.Type)
 			return
@@ -317,8 +387,8 @@ func (c *Coordinator) addTask(t *task.Task) (*task.Task, bool) {
 }
 
 // AddFiles queues a file scan task for the given collection.
-// On success the coordinator automatically enqueues metadata and contents
-// tasks so callers only need to trigger this single stage.
+// On success the coordinator automatically enqueues metadata, contents, and
+// face detection tasks so callers only need to trigger this single stage.
 func (c *Coordinator) AddFiles(collectionId, collectionName string, dirs []string, maxPhotos int) (*task.Task, bool) {
 	return c.addTask(task.NewFilesTask(collectionId, collectionName, dirs, maxPhotos))
 }
@@ -333,13 +403,19 @@ func (c *Coordinator) AddContents(collectionId, collectionName string, dirs []st
 	return c.addTask(task.NewContentsTask(collectionId, collectionName, dirs, maxPhotos, force))
 }
 
-// AddAll queues both stages (metadata and contents) for the given collection.
+// AddFaces queues a face detection task for the given collection.
+func (c *Coordinator) AddFaces(collectionId, collectionName string, dirs []string, maxPhotos int, force bool) (*task.Task, bool) {
+	return c.addTask(task.NewFacesTask(collectionId, collectionName, dirs, maxPhotos, force))
+}
+
+// AddAll queues all three stages (metadata, contents, faces) for the given collection.
 // Returns one entry per stage with a bool indicating whether it was newly added.
-func (c *Coordinator) AddAll(collectionId, collectionName string, dirs []string, maxPhotos int, force bool) ([2]*task.Task, [2]bool) {
-	var tasks [2]*task.Task
-	var isNew [2]bool
+func (c *Coordinator) AddAll(collectionId, collectionName string, dirs []string, maxPhotos int, force bool) ([3]*task.Task, [3]bool) {
+	var tasks [3]*task.Task
+	var isNew [3]bool
 	tasks[0], isNew[0] = c.AddMetadata(collectionId, collectionName, dirs, maxPhotos, force)
 	tasks[1], isNew[1] = c.AddContents(collectionId, collectionName, dirs, maxPhotos, force)
+	tasks[2], isNew[2] = c.AddFaces(collectionId, collectionName, dirs, maxPhotos, force)
 	return tasks, isNew
 }
 

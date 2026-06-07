@@ -55,6 +55,7 @@ type Missing struct {
 	Metadata  bool
 	Color     bool
 	Embedding bool
+	Faces     bool
 }
 
 type IdPath struct {
@@ -89,6 +90,17 @@ type Caches struct {
 	Image CacheConfig `json:"image"`
 }
 
+func (config *Config) MaxFaceFileSizeBytes() int64 {
+	if config.MaxFaceFileSize == "" {
+		return 0
+	}
+	value, err := units.FromHumanSize(config.MaxFaceFileSize)
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
 type Config struct {
 	DataDir   string
 	AI        ai.AI
@@ -99,12 +111,13 @@ type Config struct {
 	DjpegPath    string `json:"djpeg_path"`
 	ExifToolPath string `json:"exif_tool_path"`
 
-	ExifToolCount        int  `json:"exif_tool_count"`
-	SkipLoadInfo         bool `json:"skip_load_info"`
-	SkipCollectionCounts bool `json:"skip_collection_counts"`
-	ConcurrentMetaLoads  int  `json:"concurrent_meta_loads"`
-	ConcurrentColorLoads int  `json:"concurrent_color_loads"`
-	ConcurrentAILoads    int  `json:"concurrent_ai_loads"`
+	ExifToolCount        int    `json:"exif_tool_count"`
+	SkipLoadInfo         bool   `json:"skip_load_info"`
+	SkipCollectionCounts bool   `json:"skip_collection_counts"`
+	ConcurrentMetaLoads  int    `json:"concurrent_meta_loads"`
+	ConcurrentColorLoads int    `json:"concurrent_color_loads"`
+	ConcurrentAILoads    int    `json:"concurrent_ai_loads"`
+	MaxFaceFileSize      string `json:"max_face_file_size"`
 
 	ListExtensions []string        `json:"extensions"`
 	DateFormats    []string        `json:"date_formats"`
@@ -361,6 +374,18 @@ func (source *Source) GetImageEmbedding(id ImageId) (ai.Embedding, error) {
 	return source.database.GetImageEmbedding(id)
 }
 
+func (source *Source) GetFaceEmbedding(faceId int) (ai.Embedding, error) {
+	return source.database.GetFaceEmbedding(faceId)
+}
+
+func (source *Source) GetFacesByFileId(fileId ImageId) []FaceInfo {
+	return source.database.GetFacesByFileId(fileId)
+}
+
+func (source *Source) ListFaces(dirs []string, options ListOptions) <-chan FaceInfo {
+	return source.database.ListFaces(dirs, options)
+}
+
 func (source *Source) GetDir(dir string) Info {
 	if source == nil {
 		return Info{}
@@ -526,4 +551,9 @@ func (source *Source) WriteDummyFiles(count int, seed int64) error {
 	source.database.Close()
 
 	return nil
+}
+
+// WaitForDatabaseCommit waits for all pending database writes to complete
+func (source *Source) WaitForDatabaseCommit() <-chan any {
+	return source.database.CommitBarrier()
 }

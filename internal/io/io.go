@@ -113,6 +113,11 @@ func (s Size) Fit(original Size, fit AspectRatioFit) Size {
 			tw = th * oar
 		}
 	}
+	// Don't upscale - clamp to original dimensions
+	if tw > ow || th > oh {
+		tw = ow
+		th = oh
+	}
 	return Size{
 		X: int(math.Round(tw)),
 		Y: int(math.Round(th)),

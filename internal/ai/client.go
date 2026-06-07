@@ -10,6 +10,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -28,10 +30,55 @@ type AI struct {
 	Host    string `json:"host"`
 	Visual  Model  `json:"visual"`
 	Textual Model  `json:"textual"`
+	Faces   Model  `json:"faces"`
+
+	facesAvailable bool
+	facesChecked   bool
+	facesMu        sync.RWMutex
 }
 
 func (a AI) Available() bool {
 	return a.TextualHost() != ""
+}
+
+func (a *AI) CheckFacesAvailable() {
+	if !a.Available() || a.FaceHost() == "" {
+		return
+	}
+
+	url := fmt.Sprintf("%s/faces", a.FaceHost())
+	req, err := http.NewRequest(http.MethodHead, url, nil)
+	if err != nil {
+		return
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		a.facesMu.Lock()
+		a.facesAvailable = false
+		a.facesChecked = true
+		a.facesMu.Unlock()
+		return
+	}
+	defer res.Body.Close()
+
+	a.facesMu.Lock()
+	a.facesAvailable = res.StatusCode == http.StatusOK
+	a.facesChecked = true
+	a.facesMu.Unlock()
+}
+
+func (a *AI) FacesAvailable() bool {
+	a.facesMu.RLock()
+	checked := a.facesChecked
+	available := a.facesAvailable
+	a.facesMu.RUnlock()
+
+	if !checked {
+		return false
+	}
+	return available
 }
 
 func (a AI) VisualHost() string {
@@ -44,6 +91,13 @@ func (a AI) VisualHost() string {
 func (a AI) TextualHost() string {
 	if a.Textual.Host != "" {
 		return a.Textual.Host
+	}
+	return a.Host
+}
+
+func (a AI) FaceHost() string {
+	if a.Faces.Host != "" {
+		return a.Faces.Host
 	}
 	return a.Host
 }
@@ -187,7 +241,7 @@ type Face struct {
 }
 
 func (a AI) DetectFaces(r io.Reader) ([]Face, error) {
-	if !a.Available() || a.Host == "" {
+	if !a.Available() || a.FaceHost() == "" || !a.FacesAvailable() {
 		return nil, ErrNotAvailable
 	}
 
@@ -206,7 +260,7 @@ func (a AI) DetectFaces(r io.Reader) ([]Face, error) {
 
 	w.Close()
 
-	url := fmt.Sprintf("%s/faces", a.Host)
+	url := fmt.Sprintf("%s/faces", a.FaceHost())
 	res, err := http.Post(url, w.FormDataContentType(), &b)
 	if err != nil {
 		return nil, err

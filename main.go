@@ -61,7 +61,6 @@ import (
 	"photofield/internal/image/pipeline"
 	pfio "photofield/internal/io"
 	"photofield/internal/io/bench"
-	iogoimage "photofield/internal/io/goimage"
 	"photofield/internal/layout"
 	"photofield/internal/metrics"
 	"photofield/internal/openapi"
@@ -515,8 +514,10 @@ func taskDisplayOrder(taskType string) int {
 		return 0
 	case string(openapi.TaskTypeINDEXCONTENTS):
 		return 1
-	default:
+	case string(openapi.TaskTypeINDEXFACES):
 		return 2
+	default:
+		return 3
 	}
 }
 
@@ -606,6 +607,13 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	invalidateWhenCompleted := func(t *inttask.Task) {
+		go func() {
+			<-t.Completed()
+			collection.Invalidate()
+		}()
+	}
+
 	switch data.Type {
 
 	case openapi.TaskTypeINDEXFILES:
@@ -613,6 +621,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit,
 		)
+		invalidateWhenCompleted(pt)
 		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXFILES), string(data.CollectionId))
 		if isNew {
 			respond(w, r, http.StatusAccepted, taskItems(t))
@@ -626,6 +635,7 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit, force,
 		)
+		invalidateWhenCompleted(pt)
 		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXMETADATA), string(data.CollectionId))
 		if isNew {
 			respond(w, r, http.StatusAccepted, taskItems(t))
@@ -639,7 +649,22 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit, force,
 		)
+		invalidateWhenCompleted(pt)
 		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXCONTENTS), string(data.CollectionId))
+		if isNew {
+			respond(w, r, http.StatusAccepted, taskItems(t))
+		} else {
+			respond(w, r, http.StatusConflict, taskItems(t))
+		}
+
+	case openapi.TaskTypeINDEXFACES:
+		force := data.Force != nil && *data.Force
+		pt, isNew := pipelineCoordinator.AddFaces(
+			string(data.CollectionId), collection.Name,
+			collection.Dirs, collection.IndexLimit, force,
+		)
+		invalidateWhenCompleted(pt)
+		t := pipelineTaskResponse(pt, string(openapi.TaskTypeINDEXFACES), string(data.CollectionId))
 		if isNew {
 			respond(w, r, http.StatusAccepted, taskItems(t))
 		} else {
@@ -652,13 +677,15 @@ func (*Api) PostTasks(w http.ResponseWriter, r *http.Request) {
 			string(data.CollectionId), collection.Name,
 			collection.Dirs, collection.IndexLimit, force,
 		)
-		typeNames := [2]string{
+		typeNames := [3]string{
 			string(openapi.TaskTypeINDEXMETADATA),
 			string(openapi.TaskTypeINDEXCONTENTS),
+			string(openapi.TaskTypeINDEXFACES),
 		}
 		anyNew := false
-		tasks := make([]*Task, 0, 2)
+		tasks := make([]*Task, 0, 3)
 		for i, pt := range pts {
+			invalidateWhenCompleted(pt)
 			t := pipelineTaskResponse(pt, typeNames[i], string(data.CollectionId))
 			tasks = append(tasks, t)
 			if areNew[i] {
@@ -1528,8 +1555,27 @@ func (*Api) GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request, i
 		H: contentH,
 	}
 
+	// Build optional crop rect from crop_x/y/w/h params
+	var crop render.Rect
+	if params.CropW != nil && params.CropH != nil {
+		cropX := 0
+		if params.CropX != nil {
+			cropX = *params.CropX
+		}
+		cropY := 0
+		if params.CropY != nil {
+			cropY = *params.CropY
+		}
+		crop = render.Rect{
+			X: float64(cropX),
+			Y: float64(cropY),
+			W: float64(*params.CropW),
+			H: float64(*params.CropH),
+		}
+	}
+
 	// Draw photo on top of border using existing rendering logic
-	photo.Draw(ctx, &rn, nil, c, render.Scales{Tile: 1.0}, imageSource, false)
+	photo.Draw(ctx, &rn, nil, c, render.Scales{Tile: 1.0}, imageSource, false, crop)
 
 	w.Header().Add("Content-Type", encoder.ContentType)
 	w.Header().Add("Vary", "Accept")
@@ -1707,7 +1753,6 @@ func benchmarkSources(collection *collection.Collection, seed int64, sampleSize 
 }
 
 func invalidateDirs(dirs []string) {
-	now := time.Now()
 	for i := range collections {
 		collection := &collections[i]
 		updated := false
@@ -1723,7 +1768,7 @@ func invalidateDirs(dirs []string) {
 			}
 		}
 		if updated {
-			collection.InvalidatedAt = &now
+			collection.Invalidate()
 		}
 	}
 }
@@ -1767,6 +1812,15 @@ func applyConfig(appConfig *AppConfig) {
 		oldSource.Close()
 	}
 
+	if appConfig.AI.FaceHost() != "" {
+		imageSource.Clip.CheckFacesAvailable()
+		if imageSource.Clip.FacesAvailable() {
+			log.Printf("face detection enabled (AI server supports /faces)")
+		} else {
+			log.Printf("face detection disabled (AI server does not support /faces)")
+		}
+	}
+
 	// Initialize pipeline coordinator
 	if pipelineCoordinator != nil {
 		pipelineCoordinator.Close()
@@ -1787,14 +1841,18 @@ func applyConfig(appConfig *AppConfig) {
 		MetadataExtractor:   imageSource.Decoder(),
 		EnableTags:          appConfig.Tags.Enable,
 		Extensions:          appConfig.Media.ListExtensions,
+		VideoExtensions:     appConfig.Media.Videos.Extensions,
 		ThumbnailSources:    pipelineThumbSources,
 		ThumbnailGenerators: pipelineThumbGens,
 		ThumbnailSink:       imageSource.ThumbSink(),
 		AIService:           imageSource.Clip,
-		ImageDecoder:        iogoimage.Image{},
+		FaceDetector:        imageSource.Clip,
+		MaxFaceFileSize:     appConfig.Media.MaxFaceFileSizeBytes(),
+		ImageDecoder:        imageSource.ThumbSink(),
 		MetadataWorkers:     appConfig.Media.ConcurrentMetaLoads,
 		ThumbnailWorkers:    appConfig.Media.ConcurrentColorLoads,
 		ContentsWorkers:     appConfig.Media.ConcurrentAILoads,
+		FaceWorkers:         appConfig.Media.ConcurrentMetaLoads,
 	}
 	pipelineCoordinator = pipeline.NewCoordinator(context.Background(), pipelineCfg)
 
@@ -2216,12 +2274,14 @@ func main() {
 		filePt, _ := pipelineCoordinator.AddFiles(c.Id, c.Name, c.Dirs, c.IndexLimit)
 		metaPt, _ := pipelineCoordinator.AddMetadata(c.Id, c.Name, c.Dirs, c.IndexLimit, false)
 		contentsPt, _ := pipelineCoordinator.AddContents(c.Id, c.Name, c.Dirs, c.IndexLimit, false)
+		facesPt, _ := pipelineCoordinator.AddFaces(c.Id, c.Name, c.Dirs, c.IndexLimit, false)
 		log.Printf("collection %s scan started", *scanFlag)
 
 		// Wait for all pipeline stages to complete sequentially
 		<-filePt.Completed()
 		<-metaPt.Completed()
 		<-contentsPt.Completed()
+		<-facesPt.Completed()
 
 		log.Printf("collection %s scan finished", *scanFlag)
 

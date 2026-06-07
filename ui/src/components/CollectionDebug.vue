@@ -4,6 +4,7 @@
     <p>
       <ui-button @click="emit('reload', 'INDEX_METADATA', force)">Index metadata</ui-button>
       <ui-button @click="emit('reload', 'INDEX_CONTENTS', force)">Index color & AI</ui-button>
+      <ui-button @click="emit('reload', 'INDEX_FACES', force)">Index faces</ui-button>
       <ui-button @click="emit('reload', 'INDEX_ALL', force)">Index all</ui-button>
     </p>
     <label class="checkbox-label">

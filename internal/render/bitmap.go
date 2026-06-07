@@ -24,6 +24,10 @@ type Bitmap struct {
 	Orientation image.Orientation
 }
 
+type SubImager interface {
+	SubImage(r goimage.Rectangle) goimage.Image
+}
+
 func fitInside(cw float64, ch float64, w float64, h float64) (float64, float64) {
 	r := w / h
 	cr := cw / ch
@@ -67,18 +71,30 @@ func cropsBlackbarsOnly(img goimage.Image, crop goimage.Rectangle) bool {
 	return sum < 2
 }
 
-func cropRect(bitmap *Bitmap, bounds goimage.Rectangle) goimage.Rectangle {
-	brect := Rect{W: float64(bounds.Dx()), H: float64(bounds.Dy())}
-	rect := bitmap.Sprite.Rect
-	if bitmap.Orientation.SwapsDimensions() {
-		rect.W, rect.H = rect.H, rect.W
+func cropRect(orig Rect, thumb Rect, orientation image.Orientation) Rect {
+	if orientation.SwapsDimensions() {
+		orig.W, orig.H = orig.H, orig.W
 	}
-	cropr := rect.FitInside(brect)
-	croprect := goimage.Rectangle{
-		Min: goimage.Point{X: int(math.Round(cropr.X)), Y: int(math.Round(cropr.Y))},
-		Max: goimage.Point{X: int(math.Round(cropr.X + cropr.W)), Y: int(math.Round(cropr.Y + cropr.H))},
+	return orig.FitInside(thumb)
+}
+
+func cropBlackbars(orig Rect, img goimage.Image, orientation image.Orientation) goimage.Image {
+	thumb := FromImageRect(img.Bounds())
+	arb := thumb.W / thumb.H
+	aro := orig.W / orig.H
+	ard := math.Abs(arb - aro)
+	crop := ard > 0.05
+	if !crop {
+		return img
 	}
-	return croprect
+	croprect := cropRect(orig, thumb, orientation).ImageRect()
+	if !cropsBlackbarsOnly(img, croprect) {
+		return img
+	}
+	if subimg, ok := img.(SubImager); ok {
+		img = subimg.SubImage(croprect)
+	}
+	return img
 }
 
 func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimage.Image, c *canvas.Context, scale float64, hq bool, cover bool) {
@@ -86,33 +102,17 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 
 	bounds := img.Bounds()
 
-	arb := float64(bounds.Dx()) / float64(bounds.Dy())
-	aro := float64(bitmap.Sprite.Rect.W) / float64(bitmap.Sprite.Rect.H)
-	ard := math.Abs(arb - aro)
-	crop := ard > 0.05
-	// crop = false
-
-	var croprect goimage.Rectangle
-	if crop || cover {
-		croprect = cropRect(bitmap, bounds)
-		if !cover && !cropsBlackbarsOnly(img, croprect) {
-			crop = false
-			// Cropping is disabled because the detected crop rectangle would remove more than just black bars.
-			// Use the full image bounds as the crop rectangle in this fallback case.
-			croprect = bounds
-		}
-	} else {
-		croprect = bounds
-	}
-
 	var model canvas.Matrix
-	if crop || cover {
+	if cover {
 		model = bitmap.Sprite.Rect.GetMatrixFillBoundsRotate(bounds, bitmap.Orientation)
 	} else {
 		model = bitmap.Sprite.Rect.GetMatrixFitBoundsRotate(bounds, bitmap.Orientation)
 	}
 
-	m := c.View().Mul(model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5))
+	model = model.Translate(-float64(bounds.Min.X), float64(bounds.Min.Y))
+	model = model.ScaleAbout(scale, scale, float64(bounds.Max.X)*0.5, float64(bounds.Max.Y)*0.5)
+
+	m := c.View().Mul(model)
 
 	var interp draw.Interpolator
 	if hq {
@@ -120,7 +120,7 @@ func (bitmap *Bitmap) DrawImage(ctx context.Context, rimg draw.Image, img goimag
 	} else {
 		interp = draw.ApproxBiLinear
 	}
-	renderImage(ctx, rimg, img, m, croprect, interp)
+	renderImage(ctx, rimg, img, m, bounds, interp)
 }
 
 func renderImage(ctx context.Context, rimg draw.Image, img goimage.Image, m canvas.Matrix, crop goimage.Rectangle, interpolator draw.Interpolator) {

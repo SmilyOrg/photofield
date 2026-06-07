@@ -85,6 +85,7 @@ export default {
           }
         ]
         .concat(
+          // TODO: use video_extensions from region.data
           this.region?.data?.thumbnails
             ?.filter(thumbnail => thumbnail.filename.endsWith(".mp4"))
             .sort((a, b) => b.height - a.height)
