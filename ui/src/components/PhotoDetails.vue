@@ -30,6 +30,7 @@
         <div class="faces-grid">
           <router-link
             v-for="face in faces"
+            :key="face.id"
             :to="{
               name: 'collection',
               query: {
@@ -38,7 +39,6 @@
             }"
           >
             <img
-              :key="face.id"
               class="face-crop"
               :src="getFacePreviewUrl(face)"
               :width="FACES_IMAGE_HEIGHT"
