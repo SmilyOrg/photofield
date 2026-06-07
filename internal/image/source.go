@@ -258,11 +258,9 @@ func NewSource(config Config, migrations embed.FS, geo *geo.Geo) *Source {
 	}
 	source.thumbnailSink = sqliteSink
 
+	source.Clip = &source.Config.AI
 	if config.SkipLoadInfo {
 		log.Printf("skipping load info")
-	} else {
-
-		source.Clip = &source.Config.AI
 	}
 
 	return &source

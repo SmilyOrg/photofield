@@ -228,8 +228,11 @@ func (a *AI) DetectFaces(r io.Reader) ([]Face, error) {
 	w.Close()
 
 	url := fmt.Sprintf("%s/faces", a.FaceHost())
-	res, err := http.Post(url, w.FormDataContentType(), &b)
-	if err != nil || res.StatusCode != http.StatusOK {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	res, err := client.Post(url, w.FormDataContentType(), &b)
+	if err != nil {
 		a.facesMu.Lock()
 		a.facesAvailable = false
 		dur := 1 * time.Hour
@@ -238,12 +241,23 @@ func (a *AI) DetectFaces(r io.Reader) ([]Face, error) {
 		fmt.Printf("face detection failed, retrying in %v: %v\n", dur, err)
 		return nil, err
 	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		err = fmt.Errorf("face request failed with status %s", res.Status)
+		a.facesMu.Lock()
+		a.facesAvailable = false
+		dur := 1 * time.Hour
+		a.facesAvailableUntil = time.Now().Add(dur)
+		a.facesMu.Unlock()
+		fmt.Printf("face detection failed, retrying in %v: %v\n", dur, err)
+		return nil, err
+	}
+
 	a.facesMu.Lock()
 	a.facesAvailable = true
 	a.facesAvailableUntil = time.Time{}
 	a.facesMu.Unlock()
-
-	defer res.Body.Close()
 	decoder := json.NewDecoder(res.Body)
 
 	var response struct {
