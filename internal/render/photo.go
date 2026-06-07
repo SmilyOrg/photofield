@@ -159,16 +159,13 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 			Orientation: image.Orientation(r.Orientation),
 		}
 
+		orig := Rect{W: float64(info.Width), H: float64(info.Height)}
+		img = cropBlackbars(orig, img, bitmap.Orientation)
+
 		// Apply crop
 		if crop.W != 0 {
 			if subimg, ok := img.(SubImager); ok {
-				// Thumb image raw dimensions (unoriented)
-				imgbraw := Rect{
-					X: float64(img.Bounds().Min.X),
-					Y: float64(img.Bounds().Min.Y),
-					W: float64(img.Bounds().Dx()),
-					H: float64(img.Bounds().Dy()),
-				}
+				imgbraw := FromImageRect(img.Bounds())
 
 				// Thumb image dimensions after orientation is applied
 				imgb := imgbraw
@@ -184,6 +181,7 @@ func (photo *Photo) Draw(ctx context.Context, config *Render, scene *Scene, c *c
 
 				m := canvas.Identity
 				m = crop.OrientMatrix(m, imgbraw.W, imgbraw.H, bitmap.Orientation)
+				m = m.Translate(imgb.X, imgb.Y)
 				m = m.Scale(scale, scale)
 
 				imgcrop := crop.Transform(m)
