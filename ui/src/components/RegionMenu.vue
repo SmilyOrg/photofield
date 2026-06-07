@@ -126,6 +126,7 @@ export default {
           ...route.query,
           search: `img:${id}`,
           sort: "-similarity",
+          layout: "SIMILARITY",
         }
       };
     });

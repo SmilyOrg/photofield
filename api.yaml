@@ -1344,11 +1344,14 @@ components:
     LayoutType:
       type: string
       enum:
-        - TIMELINE
         - ALBUM
-        - SQUARE
+        - TIMELINE
         - WALL
-        - STRIP
+        - MAP
+        - HIGHLIGHTS
+        - FLEX
+        - SIMILARITY
+        - FACES
 
     Problem:
       type: object

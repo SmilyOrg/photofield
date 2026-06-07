@@ -197,6 +197,8 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				layout.LayoutTimeline(infos, config.Layout, &scene, imageSource)
 			case layout.Album:
 				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
+			case layout.Similarity:
+				layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
 			case layout.Square:
 				layout.LayoutSquare(&scene, imageSource)
 			case layout.Wall:
@@ -236,11 +238,7 @@ func (source *SceneSource) loadScene(config SceneConfig, imageSource *image.Sour
 				}()
 				layout.LayoutFaces(faces, config.Layout, &scene, imageSource)
 			default:
-				if isSimilarity {
-					layout.LayoutSearch(infos, config.Layout, &scene, imageSource)
-				} else {
-					layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
-				}
+				layout.LayoutAlbum(infos, config.Layout, &scene, imageSource)
 			}
 		}
 

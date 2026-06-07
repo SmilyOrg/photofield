@@ -16,9 +16,15 @@ import (
 const (
 	LayoutTypeALBUM LayoutType = "ALBUM"
 
-	LayoutTypeSQUARE LayoutType = "SQUARE"
+	LayoutTypeFACES LayoutType = "FACES"
 
-	LayoutTypeSTRIP LayoutType = "STRIP"
+	LayoutTypeFLEX LayoutType = "FLEX"
+
+	LayoutTypeHIGHLIGHTS LayoutType = "HIGHLIGHTS"
+
+	LayoutTypeMAP LayoutType = "MAP"
+
+	LayoutTypeSIMILARITY LayoutType = "SIMILARITY"
 
 	LayoutTypeTIMELINE LayoutType = "TIMELINE"
 

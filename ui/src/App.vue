@@ -410,14 +410,19 @@ export default {
         }
       }
       let sort = this.query.sort;
+      let layout = this.query.layout;
       if (attrs) {
         if (!sort && attrs.supportsSimilarity && !attrs.hasThreshold) {
           sort = "-similarity";
+          layout = "SIMILARITY";
         } else if (sort == "-similarity" && ((attrs.supportsSimilarity && attrs.hasThreshold) || !attrs.supportsSimilarity)) {
           sort = undefined;
+          if (layout == "SIMILARITY") {
+            layout = undefined;
+          }
         }
       }
-      this.setQuery({ search: query, f: undefined, sort });
+      this.setQuery({ search: query, f: undefined, sort, layout });
     },
   }
 }

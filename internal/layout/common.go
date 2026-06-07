@@ -22,7 +22,7 @@ const (
 	Square     Type = "SQUARE"
 	Wall       Type = "WALL"
 	Map        Type = "MAP"
-	Search     Type = "SEARCH"
+	Similarity Type = "SIMILARITY"
 	Strip      Type = "STRIP"
 	Highlights Type = "HIGHLIGHTS"
 	Flex       Type = "FLEX"

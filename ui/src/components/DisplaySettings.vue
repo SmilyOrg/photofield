@@ -95,6 +95,7 @@ const layoutOptions = computed(() => {
         { label: "Map", value: "MAP" },
         { label: "Highlights", value: "HIGHLIGHTS" },
         { label: "Flex", value: "FLEX" },
+        { label: "Similarity", value: "SIMILARITY" },
         { label: "Faces", value: "FACES" },
     ];
     
@@ -169,23 +170,21 @@ const sortValue = computed(() => {
 });
 
 const onSortChange = (value) => {
+    const updates = { sort: value };
+    if (layoutValue.value === 'SIMILARITY' && !value?.endsWith('similarity')) {
+        // If currently in SIMILARITY layout and switching to a non-similarity sort, switch layout to DEFAULT
+        updates.layout = 'DEFAULT';
+    }
     if (!value || value === 'DEFAULT') {
         // Clear sort to use default
-        const updates = { sort: undefined };
-        
-        // No need to change layout when going back to default
-        emit('query', updates);
+        updates.sort = undefined;
     } else if (value.startsWith('+shuffle-')) {
         // If shuffle is selected and layout is DEFAULT, switch to FLEX
-        const updates = { sort: value };
-        if (!props.query?.layout || props.query.layout === 'DEFAULT') {
+        if (layoutValue.value === 'DEFAULT') {
             updates.layout = 'FLEX';
         }
-        emit('query', updates);
-    } else {
-        // Regular sort (date ascending/descending)
-        emit('query', { sort: value });
     }
+    emit('query', updates);
 };
 
 </script>
