@@ -88,9 +88,9 @@ tasks:
         silent: true
       - cmd: git branch --show-current | grep -q '^main$' || { echo "Must be on main branch to release."; exit 1; }
         silent: true
-      - changie batch auto
-      - code --wait .changes/$(changie latest).md
-      - changie merge
+      # - changie batch auto
+      # - code --wait .changes/$(changie latest).md
+      # - changie merge
       - git add CHANGELOG.md .changes
       - git commit -m "Release $(changie latest)"
       - git tag -a $(changie latest) -m "Release $(changie latest)"
