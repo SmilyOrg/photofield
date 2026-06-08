@@ -32,77 +32,44 @@ type AI struct {
 	Textual Model  `json:"textual"`
 	Faces   Model  `json:"faces"`
 
-	facesAvailable bool
-	facesChecked   bool
-	facesMu        sync.RWMutex
+	facesAvailable      bool
+	facesAvailableUntil time.Time
+	facesMu             sync.RWMutex
 }
 
-func (a AI) Available() bool {
+func (a *AI) Available() bool {
 	return a.TextualHost() != ""
-}
-
-func (a *AI) CheckFacesAvailable() {
-	if !a.Available() || a.FaceHost() == "" {
-		return
-	}
-
-	url := fmt.Sprintf("%s/faces", a.FaceHost())
-	req, err := http.NewRequest(http.MethodHead, url, nil)
-	if err != nil {
-		return
-	}
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	res, err := client.Do(req)
-	if err != nil {
-		a.facesMu.Lock()
-		a.facesAvailable = false
-		a.facesChecked = true
-		a.facesMu.Unlock()
-		return
-	}
-	defer res.Body.Close()
-
-	a.facesMu.Lock()
-	a.facesAvailable = res.StatusCode == http.StatusOK
-	a.facesChecked = true
-	a.facesMu.Unlock()
 }
 
 func (a *AI) FacesAvailable() bool {
 	a.facesMu.RLock()
-	checked := a.facesChecked
-	available := a.facesAvailable
-	a.facesMu.RUnlock()
-
-	if !checked {
-		return false
-	}
-	return available
+	defer a.facesMu.RUnlock()
+	now := time.Now()
+	return now.After(a.facesAvailableUntil) || a.facesAvailable
 }
 
-func (a AI) VisualHost() string {
+func (a *AI) VisualHost() string {
 	if a.Visual.Host != "" {
 		return a.Visual.Host
 	}
 	return a.Host
 }
 
-func (a AI) TextualHost() string {
+func (a *AI) TextualHost() string {
 	if a.Textual.Host != "" {
 		return a.Textual.Host
 	}
 	return a.Host
 }
 
-func (a AI) FaceHost() string {
+func (a *AI) FaceHost() string {
 	if a.Faces.Host != "" {
 		return a.Faces.Host
 	}
 	return a.Host
 }
 
-func (a AI) EmbedImagePath(path string) (Embedding, error) {
+func (a *AI) EmbedImagePath(path string) (Embedding, error) {
 	if !a.Available() || a.TextualHost() == "" {
 		return nil, ErrNotAvailable
 	}
@@ -122,7 +89,7 @@ func (a AI) EmbedImagePath(path string) (Embedding, error) {
 	return a.EmbedImageReader(f)
 }
 
-func (a AI) EmbedImageReader(r io.Reader) (Embedding, error) {
+func (a *AI) EmbedImageReader(r io.Reader) (Embedding, error) {
 	if !a.Available() || a.VisualHost() == "" {
 		return nil, ErrNotAvailable
 	}
@@ -179,7 +146,7 @@ func (a AI) EmbedImageReader(r io.Reader) (Embedding, error) {
 	}, nil
 }
 
-func (a AI) EmbedText(text string) (Embedding, error) {
+func (a *AI) EmbedText(text string) (Embedding, error) {
 	if !a.Available() {
 		return nil, ErrNotAvailable
 	}
@@ -240,7 +207,7 @@ type Face struct {
 	Embedding  []byte // Normalized face embedding
 }
 
-func (a AI) DetectFaces(r io.Reader) ([]Face, error) {
+func (a *AI) DetectFaces(r io.Reader) ([]Face, error) {
 	if !a.Available() || a.FaceHost() == "" || !a.FacesAvailable() {
 		return nil, ErrNotAvailable
 	}
@@ -261,12 +228,36 @@ func (a AI) DetectFaces(r io.Reader) ([]Face, error) {
 	w.Close()
 
 	url := fmt.Sprintf("%s/faces", a.FaceHost())
-	res, err := http.Post(url, w.FormDataContentType(), &b)
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	res, err := client.Post(url, w.FormDataContentType(), &b)
 	if err != nil {
+		a.facesMu.Lock()
+		a.facesAvailable = false
+		dur := 1 * time.Hour
+		a.facesAvailableUntil = time.Now().Add(dur)
+		a.facesMu.Unlock()
+		fmt.Printf("face detection failed, retrying in %v: %v\n", dur, err)
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		err = fmt.Errorf("face request failed with status %s", res.Status)
+		a.facesMu.Lock()
+		a.facesAvailable = false
+		dur := 1 * time.Hour
+		a.facesAvailableUntil = time.Now().Add(dur)
+		a.facesMu.Unlock()
+		fmt.Printf("face detection failed, retrying in %v: %v\n", dur, err)
 		return nil, err
 	}
 
-	defer res.Body.Close()
+	a.facesMu.Lock()
+	a.facesAvailable = true
+	a.facesAvailableUntil = time.Time{}
+	a.facesMu.Unlock()
 	decoder := json.NewDecoder(res.Body)
 
 	var response struct {

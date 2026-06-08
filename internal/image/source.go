@@ -154,7 +154,7 @@ type Source struct {
 	thumbnailGenerators io.Sources
 	thumbnailSink       *sqlite.Source
 
-	Clip ai.AI
+	Clip *ai.AI
 	Geo  *geo.Geo
 }
 
@@ -258,11 +258,9 @@ func NewSource(config Config, migrations embed.FS, geo *geo.Geo) *Source {
 	}
 	source.thumbnailSink = sqliteSink
 
+	source.Clip = &source.Config.AI
 	if config.SkipLoadInfo {
 		log.Printf("skipping load info")
-	} else {
-
-		source.Clip = config.AI
 	}
 
 	return &source
