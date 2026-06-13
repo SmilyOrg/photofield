@@ -171,6 +171,9 @@ sqlite3 data/photofield.cache.db ".tables"
 # Test a specific tool with arguments
 ./tools/agent-test.sh mcp call get_photo --file_id 1
 
+# Test get_photo_metadata (metadata-only, no image data)
+./tools/agent-test.sh mcp call get_photo_metadata --file_id 1
+
 # Test error handling
 ./tools/agent-test.sh mcp call get_photo --file_id 999999
 

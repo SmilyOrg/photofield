@@ -110,10 +110,18 @@ type getPhotoInput struct {
 	CropH *int `json:"crop_h" jsonschema:"Crop height in original image pixels"`
 }
 
-// getPhotoOutput contains the structured metadata for the get_photo MCP tool.
-// The actual image is returned as an MCP ImageContent block in CallToolResult.Content,
-// separate from this structured output (which holds metadata like tags, faces, etc.).
-type getPhotoOutput struct {
+// getPhotoMetadataInput contains the parameters for the get_photo_metadata MCP tool.
+type getPhotoMetadataInput struct {
+	FileId int `json:"file_id" jsonschema:"The photo file ID to retrieve metadata for"`
+}
+
+// getPhotoOutput is the empty output type for get_photo — this tool returns only
+// the image (as MCP ImageContent), no structured metadata. Metadata is available
+// via the separate get_photo_metadata tool.
+type getPhotoOutput struct{}
+
+// getPhotoMetadataOutput contains the structured metadata for the get_photo_metadata MCP tool.
+type getPhotoMetadataOutput struct {
 	Width       int         `json:"width"`        // rendered output width in pixels
 	Height      int         `json:"height"`       // rendered output height in pixels
 	OrigWidth   int         `json:"orig_width"`   // original image width in pixels
@@ -163,6 +171,61 @@ type Thumbnail struct {
 	Height      int    `json:"height"`
 	Filename    string `json:"filename"`
 	Url         string `json:"url,omitempty"` // absolute URL to the thumbnail variant
+}
+
+// getPhotoMetadataHandler handles the get_photo_metadata MCP tool request.
+// Returns all photo metadata without the image data — useful for inspecting
+// tags, faces, location, thumbnails, and dimensions without downloading the image.
+// serverBaseURL is the absolute URL of the photofield API (e.g. "http://localhost:8080").
+func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Source, serverBaseURL string) mcp.ToolHandlerFor[getPhotoMetadataInput, getPhotoMetadataOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input getPhotoMetadataInput) (*mcp.CallToolResult, getPhotoMetadataOutput, error) {
+		// Ensure we have a valid context - fall back to Background if nil.
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		var panicked any
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = r
+				fmt.Fprintf(os.Stderr, "get_photo_metadata handler recovered from panic: %v\n%s", r, stackTrace())
+			}
+		}()
+
+		// Get file info to validate existence
+		info := imageSource.GetInfo(image.ImageId(input.FileId))
+		if info.Width == 0 || info.Height == 0 {
+			return nil, getPhotoMetadataOutput{}, fmt.Errorf("file not found: %d", input.FileId)
+		}
+
+		// Gather metadata using the same logic as get_photo
+		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, serverBaseURL, info.Width, info.Height, "jpeg")
+
+		if panicked != nil {
+			return nil, getPhotoMetadataOutput{}, fmt.Errorf("internal error reading photo metadata: %v", panicked)
+		}
+
+		// Return only structured metadata — no image content block.
+		res := &mcp.CallToolResult{
+			Content: []mcp.Content{},
+		}
+		return res, getPhotoMetadataOutput{
+			ImageUrl:   metadata.ImageUrl,
+			Width:      info.Width,
+			Height:     info.Height,
+			OrigWidth:  info.Width,
+			OrigHeight: info.Height,
+			Path:       metadata.Path,
+			Filename:   metadata.Filename,
+			Extension:  metadata.Extension,
+			Video:      metadata.Video,
+			CreatedAt:  metadata.CreatedAt,
+			Tags:       metadata.Tags,
+			Faces:      metadata.Faces,
+			Location:   metadata.Location,
+			LatLng:     metadata.LatLng,
+			Thumbnails: metadata.Thumbnails,
+		}, nil
+	}
 }
 
 // getPhotoHandler handles the get_photo MCP tool request.
@@ -229,11 +292,8 @@ func getPhotoHandler(_ *[]collection.Collection, imageSource *image.Source, serv
 			return nil, getPhotoOutput{}, fmt.Errorf("internal error rendering photo: %v", panicked)
 		}
 
-		// Gather metadata
-		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, serverBaseURL, *targetW, *targetH, formatStr)
-
-		// Return a CallToolResult with an MCP ImageContent block for the embedded
-		// image, plus the typed output struct as structured_content for metadata.
+		// Return only the image as MCP ImageContent — no structured metadata.
+		// Use get_photo_metadata(file_id) to retrieve tags, faces, dimensions, URLs, etc.
 		// The SDK handles base64 encoding for the JSON wire format.
 		res := &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -243,23 +303,7 @@ func getPhotoHandler(_ *[]collection.Collection, imageSource *image.Source, serv
 				},
 			},
 		}
-		return res, getPhotoOutput{
-			ImageUrl:   metadata.ImageUrl,
-			Width:      *targetW,
-			Height:     *targetH,
-			OrigWidth:  info.Width,
-			OrigHeight: info.Height,
-			Path:       metadata.Path,
-			Filename:   metadata.Filename,
-			Extension:  metadata.Extension,
-			Video:      metadata.Video,
-			CreatedAt:  metadata.CreatedAt,
-			Tags:       metadata.Tags,
-			Faces:      metadata.Faces,
-			Location:   metadata.Location,
-			LatLng:     metadata.LatLng,
-			Thumbnails: metadata.Thumbnails,
-		}, nil
+		return res, getPhotoOutput{}, nil
 	}
 }
 

@@ -110,8 +110,34 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 	}, searchPhotosHandler(collections, imageSource))
 
 	mcp.AddTool(s, &mcp.Tool{
+		Name: "get_photo_metadata",
+		Description: "Retrieve all photo metadata as structured JSON without the image data. Useful for inspecting tags, faces, location, dimensions, and thumbnail URLs without downloading the image.\n\n" +
+			"OUTPUT METADATA:\n" +
+			"- image_url: Absolute URL to medium thumbnail (M: 320x320) or original image (for markdown embedding)\n" +
+			"- width/height: The rendered output dimensions (same as orig when no resize is applied)\n" +
+			"- orig_width/orig_height: The original image's native resolution\n" +
+			"- path/filename/extension: Original file path details\n" +
+			"- video: true if the file is a video\n" +
+			"- created_at: Creation date in ISO 8601 format\n" +
+			"- tags: Detected semantic tags with file counts\n" +
+			"- faces: Detected faces with bounding box coordinates (x,y,w,h) and confidence scores\n" +
+			"- latlng: GPS coordinates if available\n" +
+			"- location: Reverse-geocoded location string (e.g. 'Paris, France')\n" +
+			"- thumbnails: Available thumbnail variants with their sizes and absolute URLs\n" +
+			"- faces[].preview_url: Direct URL to each face's cropped preview image (200x200)\n\n" +
+			"WORKFLOW: Use list_collections → events/search_photos for discovery → get_photo_metadata(file_id) to inspect all metadata → get_photo(file_id) only when you need the actual image data.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{
+				"file_id": map[string]any{"type": "integer", "description": "The photo file ID (required). Obtain from search_photos results."},
+			},
+			"required": []string{"file_id"},
+		},
+	}, getPhotoMetadataHandler(collections, imageSource, serverBaseURL))
+
+	mcp.AddTool(s, &mcp.Tool{
 		Name: "get_photo",
-		Description: "Retrieve a photo as a base64-encoded image with rich metadata and embeddable URLs. This is the only tool that returns actual image data.\n\n" +
+		Description: "Retrieve a photo as a base64-encoded image. This is the only tool that returns actual image data.\n\n" +
 			"CRITICAL DEFAULT BEHAVIOR — ALWAYS CALL WITH ONLY file_id FIRST:\n" +
 			"When you call get_photo with ONLY the file_id parameter (no w, h, crop, or format), it returns a small " +
 			"256x256 pixel thumbnail as JPEG. This is the recommended default for: browsing search results, getting a " +
@@ -126,25 +152,8 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 			"- crop_x/crop_y/crop_w/crop_h: Use ONLY when you need to zoom into a specific region of the photo. " +
 			"Coordinates are in the ORIGINAL image's pixel space (not the output dimensions). All four must be " +
 			"specified together. The crop is applied before resizing by w/h. Example: to zoom into a face, you'd " +
-			"need to know approximate coordinates from metadata or previous calls.\n\n" +
-			"EMBEDDABLE URL (returned in structured metadata — use for markdown, HTML, etc.):\n" +
-			"- image_url: Absolute URL to the medium thumbnail (M: 320x320) if available, or original image URL as fallback. Use this for embedding images in markdown or HTML.\n" +
-			"- thumbnail[].url: URLs to pre-sized thumbnail variants (S=120px, SM=240px, M=320px, B=640px, XL=1280px)\n" +
-			"- faces[].preview_url: Direct URL to each face's cropped preview image (200x200)\n\n" +
-			"OUTPUT METADATA (returned alongside the image):\n" +
-			"- image_url: Absolute URL to medium thumbnail (M) or original image (for markdown embedding)\n" +
-			"- width/height: The rendered output dimensions\n" +
-			"- orig_width/orig_height: The original image's native resolution\n" +
-			"- path/filename/extension: Original file path details\n" +
-			"- video: true if this is a video file\n" +
-			"- created_at: Creation date in ISO 8601 format\n" +
-			"- tags: Detected semantic tags with file counts\n" +
-			"- faces: Detected faces with bounding box coordinates and confidence scores\n" +
-			"- latlng: GPS coordinates if available\n" +
-			"- location: Reverse-geocoded location string (e.g. 'Paris, France')\n" +
-			"- thumbnails: Available thumbnail variants with their sizes and URLs\n\n" +
-			"WORKFLOW: Use list_collections → events/search_photos for discovery → get_photo(file_id) for thumbnails → " +
-			"get_photo(file_id, w=800, h=600) only when you need to inspect details. Use the returned image_url for markdown embedding.",
+			"need to know approximate coordinates from metadata (use get_photo_metadata first).\n\n" +
+			"WORKFLOW: Use list_collections → events/search_photos for discovery → get_photo_metadata(file_id) to inspect dimensions and coordinates → get_photo(file_id) for the image → get_photo(file_id, w=800, h=600) only when you need to inspect details.",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{
