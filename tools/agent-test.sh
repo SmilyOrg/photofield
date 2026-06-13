@@ -53,10 +53,10 @@ else
   COL_GREEN=''; COL_RED=''; COL_CYAN=''; COL_BOLD=''; COL_RESET=''
 fi
 
-log_ok()    { echo "${COL_GREEN}✓${COL_RESET} $*"; }
-log_fail()  { echo "${COL_RED}✗${COL_RESET} $*" >&2; }
-log_info()  { echo "${COL_CYAN}ℹ${COL_RESET} $*" >&2; }
-log_step()  { echo "${COL_BOLD}--- $*${COL_RESET}" >&2; }
+log_ok()    { printf '%s\n' "${COL_GREEN}✓${COL_RESET} $*" >&2; }
+log_fail()  { printf '%s\n' "${COL_RED}✗${COL_RESET} $*" >&2; }
+log_info()  { printf '%s\n' "${COL_CYAN}ℹ${COL_RESET} $*" >&2; }
+log_step()  { printf '%s\n' "${COL_CYAN}▶${COL_RESET} $*" >&2; }
 
 # ─── Server Management ───
 server_is_running() {
@@ -82,7 +82,7 @@ server_start() {
 
   if [[ ! -x "$BIN" ]]; then
     log_fail "Server binary not found: ${BIN}"
-    echo "  Set AGT_BIN=/path/to/photofield to override" >&2
+    log_info "Set AGT_BIN=/path/to/photofield to override"
     return 1
   fi
 
@@ -90,7 +90,7 @@ server_start() {
   nohup "$BIN" > /tmp/photofield-agent-test.log 2>&1 &
   _SERVER_MANAGED=true
   local pid=$!
-  echo "$pid" > "$_pid_file"
+  printf '%s\n' "$pid" > "$_pid_file"
   log_info "PID: ${pid} (log: /tmp/photofield-agent-test.log)"
 
   local waited=0
@@ -230,18 +230,18 @@ api_call() {
   local raw
   raw=$(cat "$tmpfile"; rm -f "$tmpfile")
 
+  log_info "HTTP ${status_code}"
+
   # Try to pretty-print as JSON
   local pretty
   pretty=$(echo "$raw" | jq '.' 2>/dev/null)
   if [[ -n "$pretty" ]]; then
-    echo "${COL_GREEN}HTTP ${status_code}${COL_RESET}"
     echo "$pretty"
   else
-    echo "${COL_GREEN}HTTP ${status_code}${COL_RESET} (plain)"
     if [[ ${#raw} -lt 500 ]]; then
       echo "$raw"
     else
-      echo "${raw:0:500}... [${#raw} chars total]"
+      printf '%s\n' "${raw:0:500}... [${#raw} chars total]"
     fi
   fi
 }
@@ -338,7 +338,7 @@ print_result() {
   local rpc_error
   rpc_error=$(echo "$resp" | jq -r '.error.message // empty' 2>/dev/null)
   if [[ -n "$rpc_error" ]]; then
-    echo "${COL_RED}✗${COL_RED}${COL_BOLD} ${tool}${COL_RESET} — ${rpc_error}"
+    printf '%s\n' "${COL_RED}✗${COL_RESET} ${COL_BOLD}${tool}${COL_RESET} — ${rpc_error}"
     [[ "$VERBOSE" == "1" ]] && echo "$resp" | jq '.' 2>/dev/null
     return 1
   fi
@@ -353,7 +353,7 @@ print_result() {
 
   if [[ -n "$content_text" ]]; then
     if [[ "$is_error" == "true" ]]; then
-      echo "${COL_RED}✗${COL_BOLD} ${tool}${COL_RESET} — ${content_text}"
+      printf '%s\n' "${COL_RED}✗${COL_RESET} ${COL_BOLD}${tool}${COL_RESET} — ${content_text}"
       [[ "$VERBOSE" == "1" ]] && echo "$resp" | jq '.' 2>/dev/null
       return 1
     fi
@@ -383,15 +383,15 @@ print_result() {
           "ok"
         end
       ' 2>/dev/null)
-      echo "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET} — ${summary_label}"
+      printf '%s\n' "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET} — ${summary_label}"
       echo "$inner_json" | jq '.' 2>/dev/null || echo "$inner_json"
     else
       # Plain text response
       if [[ ${#content_text} -lt 500 ]]; then
-        echo "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET}"
+        printf '%s\n' "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET}"
         echo "$content_text"
       else
-        echo "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET} — ${#content_text} chars"
+        printf '%s\n' "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET} — ${#content_text} chars"
         echo "$content_text" | head -c 500
         echo "..."
       fi
@@ -406,14 +406,14 @@ print_result() {
     local sc_json
     sc_json=$(echo "$resp" | jq -r '.result.structuredContent' 2>/dev/null)
     if [[ -n "$sc_json" ]]; then
-      echo "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET}"
+      printf '%s\n' "${COL_GREEN}✓${COL_RESET} ${COL_BOLD}${tool}${COL_RESET}"
       echo "$sc_json" | jq '.' 2>/dev/null || echo "$sc_json"
       return 0
     fi
   fi
 
   # No result at all
-  echo "${COL_RED}✗${COL_BOLD} ${tool}${COL_RESET} — no result"
+  printf '%s\n' "${COL_RED}✗${COL_RESET} ${COL_BOLD}${tool}${COL_RESET} — no result"
   [[ "$VERBOSE" == "1" ]] && echo "$resp" | jq '.' 2>/dev/null || echo "$resp"
   return 1
 }
@@ -421,7 +421,7 @@ print_result() {
 # ─── MCP REPL ───
 run_repl() {
   echo ""
-  echo "${COL_BOLD}Agent Test Shell${COL_RESET}  (type 'help' for commands, 'quit' to exit)"
+  printf '%s\n' "${COL_CYAN}Agent Test Shell${COL_RESET}  (type 'help' for commands, 'quit' to exit)"
   echo ""
 
   session_init
