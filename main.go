@@ -2446,6 +2446,11 @@ func main() {
 		var api Api
 		r.Mount("/", openapi.Handler(&api))
 		r.Mount("/metrics", promhttp.Handler())
+		r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"status":"ok"}`)
+		})
 	})
 
 	r.Mount("/debug", middleware.Profiler())
