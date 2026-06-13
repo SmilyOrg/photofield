@@ -3,7 +3,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	goimage "image"
 	"image/color"
@@ -111,12 +110,10 @@ type getPhotoInput struct {
 	CropH *int `json:"crop_h" jsonschema:"Crop height in original image pixels"`
 }
 
-// getPhotoOutput contains the response for the get_photo MCP tool.
-// The `data` and `mimeType` fields mirror MCP ImageContent for the embedded image,
-// while the remaining fields provide rich photo metadata (mirrors PhotoRegionData).
+// getPhotoOutput contains the structured metadata for the get_photo MCP tool.
+// The actual image is returned as an MCP ImageContent block in CallToolResult.Content,
+// separate from this structured output (which holds metadata like tags, faces, etc.).
 type getPhotoOutput struct {
-	Data        string      `json:"data"`         // base64-encoded image data (matches MCP ImageContent)
-	MimeType    string      `json:"mimeType"`     // MIME type (matches MCP ImageContent)
 	Width       int         `json:"width"`        // rendered output width in pixels
 	Height      int         `json:"height"`       // rendered output height in pixels
 	OrigWidth   int         `json:"orig_width"`   // original image width in pixels
@@ -235,27 +232,18 @@ func getPhotoHandler(_ *[]collection.Collection, imageSource *image.Source, serv
 		// Gather metadata
 		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, serverBaseURL, *targetW, *targetH, formatStr)
 
-		// Return a CallToolResult with a proper MCP ImageContent block
-		// (type: "image", data: <base64>, mimeType: <mime>) instead of letting the
-		// SDK serialize the output struct as generic JSON text content.
-		// The SDK will marshal the typed output into StructuredContent automatically.
-		//
-		// NOTE: Pass raw image bytes ([]byte) directly, NOT a pre-encoded base64
-		// string. Go's json.Marshal on []byte performs base64 encoding — feeding it
-		// a pre-encoded base64 string causes double-encoding: json.Marshal([]byte(
-		// "base64(image)")) → base64(base64(image)) → 400 from downstream consumers.
-		b64Data := base64.StdEncoding.EncodeToString(imageData)
+		// Return a CallToolResult with an MCP ImageContent block for the embedded
+		// image, plus the typed output struct as structured_content for metadata.
+		// The SDK handles base64 encoding for the JSON wire format.
 		res := &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.ImageContent{
-					Data:     imageData, // raw bytes — SDK base64-encodes for JSON wire
+					Data:     imageData,
 					MIMEType: mime,
 				},
 			},
 		}
 		return res, getPhotoOutput{
-			Data:       b64Data,
-			MimeType:   mime,
 			ImageUrl:   metadata.ImageUrl,
 			Width:      *targetW,
 			Height:     *targetH,
