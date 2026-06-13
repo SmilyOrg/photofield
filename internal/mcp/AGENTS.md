@@ -93,6 +93,10 @@ Non-verbose mode shows a clean summary:
 Errors show with a red ✗ and the error message. Set `--verbose` for full JSON
 on every call, or use it with `quick` for the full response.
 
+All status messages (✓, ✗, ℹ, ▶) go to stderr. Tool results (JSON bodies,
+search results, image data) go to stdout. This separation lets you pipe the
+output without mixing status lines with data.
+
 ### Optional fields
 
 When a struct field is a **pointer** (`*int`, `*string`), the MCP SDK may still
