@@ -47,8 +47,8 @@ _headers_file="/tmp/agent-test-headers-$$"
 
 # ─── Colors ───
 if [[ -t 1 ]]; then
-  COL_GREEN='\033[0;32m'; COL_RED='\033[0;31m'; COL_CYAN='\033[0;36m'
-  COL_BOLD='\033[1m'; COL_RESET='\033[0m'
+  COL_GREEN=$'\033[0;32m'; COL_RED=$'\033[0;31m'; COL_CYAN=$'\033[0;36m'
+  COL_BOLD=$'\033[1m'; COL_RESET=$'\033[0m'
 else
   COL_GREEN=''; COL_RED=''; COL_CYAN=''; COL_BOLD=''; COL_RESET=''
 fi
