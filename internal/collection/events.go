@@ -2,7 +2,6 @@ package collection
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/golang/geo/s2"
@@ -31,10 +30,7 @@ type EventSummary struct {
 // and are no more than eventGapTime apart. Reverse-geocoding is applied to
 // photo locations that are >1km apart and >15 minutes apart.
 func (collection *Collection) SplitIntoEvents(ctx context.Context, source *image.Source) ([]EventSummary, error) {
-	infos, err := collection.GetInfos(source, image.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("get infos: %w", err)
-	}
+	infos, _ := collection.GetInfos(source, image.ListOptions{})
 
 	var events []EventSummary
 	var current *EventSummary

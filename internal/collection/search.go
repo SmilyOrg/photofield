@@ -154,16 +154,13 @@ func (collection *Collection) Search(
 		limit = 50
 	}
 
-	infos, err := collection.GetInfos(source, image.ListOptions{
+	infos, _ := collection.GetInfos(source, image.ListOptions{
 		OrderBy:        order,
 		Limit:          limit,
 		Expression:     expr,
 		ImageEmbedding: imageEmbedding,
 		FaceEmbedding:  faceEmbedding,
 	})
-	if err != nil {
-		return nil, tokens, expr.Errors, fmt.Errorf("get infos: %w", err)
-	}
 
 	// 5. Collect results
 	results := make([]SearchResult, 0)
