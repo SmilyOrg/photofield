@@ -26,7 +26,7 @@ set -uo pipefail
 # ─── Config ───
 PORT="${MCPT_PORT:-8080}"
 URL="${MCPT_URL:-http://localhost:${PORT}/mcp}"
-BIN="${MCPT_BIN:-$(cd "$(dirname "$0")/../.." && pwd)/photofield}"
+BIN="${MCPT_BIN:-$(cd "$(dirname "$0")/.." && pwd)/photofield}"
 DATA_DIR="${MCPT_DATA_DIR:-$(pwd)/data}"
 AUTO_START="${MCPT_START:-true}"
 VERBOSE=0
@@ -308,6 +308,7 @@ run_repl() {
 
 # ─── CLI ───
 # Parse args: --verbose/--v must come before subcommand
+cmd="help"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --verbose|-v) VERBOSE=1; shift ;;
