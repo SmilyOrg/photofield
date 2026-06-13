@@ -278,6 +278,22 @@ func encodePhoto(ctx context.Context, source *image.Source, fileId image.ImageId
 		return nil, fmt.Errorf("dimensions %dx%d out of range (1-4096)", targetW, targetH)
 	}
 
+	// Validate crop bounds
+	if cropW != nil && cropH != nil && *cropW > 0 && *cropH > 0 {
+		cx := 0
+		cy := 0
+		if cropX != nil {
+			cx = *cropX
+		}
+		if cropY != nil {
+			cy = *cropY
+		}
+		if cx < 0 || cy < 0 || cx+*cropW > info.Width || cy+*cropH > info.Height {
+			return nil, fmt.Errorf("crop bounds (%d,%d)+(%dx%d) exceed image size (%dx%d)",
+				cx, cy, *cropW, *cropH, info.Width, info.Height)
+		}
+	}
+
 	// Create render config (similar to defaultSceneConfig.Render)
 	rn := render.Render{
 		TileSize:          256,
@@ -317,16 +333,9 @@ func encodePhoto(ctx context.Context, source *image.Source, fileId image.ImageId
 	// Build optional crop rect
 	var crop render.Rect
 	if cropW != nil && cropH != nil && *cropW > 0 && *cropH > 0 {
-		cx, cy := 0, 0
-		if cropX != nil {
-			cx = *cropX
-		}
-		if cropY != nil {
-			cy = *cropY
-		}
 		crop = render.Rect{
-			X: float64(cx),
-			Y: float64(cy),
+			X: float64(*cropX),
+			Y: float64(*cropY),
 			W: float64(*cropW),
 			H: float64(*cropH),
 		}

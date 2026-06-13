@@ -154,13 +154,16 @@ func (collection *Collection) Search(
 		limit = 50
 	}
 
-	infos, _ := collection.GetInfos(source, image.ListOptions{
+	infos, err := collection.GetInfos(source, image.ListOptions{
 		OrderBy:        order,
 		Limit:          limit,
 		Expression:     expr,
 		ImageEmbedding: imageEmbedding,
 		FaceEmbedding:  faceEmbedding,
 	})
+	if err != nil {
+		return nil, tokens, expr.Errors, fmt.Errorf("get infos: %w", err)
+	}
 
 	// 5. Collect results
 	results := make([]SearchResult, 0)
@@ -199,10 +202,7 @@ func (collection *Collection) Search(
 					location, err := source.Geo.ReverseGeocode(ctx, info.LatLng)
 					if err == nil {
 						lastLatLng = info.LatLng
-						// Assign location to the last result in results (if any)
-						if len(results) > 0 {
-							results[len(results)-1].Location = location
-						}
+						res.Location = location // assign to current photo
 					}
 				}
 			}
