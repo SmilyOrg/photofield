@@ -42,43 +42,44 @@ before rebuilding.
 
 ## 2. Calling MCP Tools
 
-Use `tools/mcp-test.sh` for all MCP tool calls. It handles the session
+Use `tools/agent-test.sh` for all MCP tool calls. It handles the session
 handshake, SSE parsing, and session ID management automatically.
 
 ### Basic usage
 
 ```bash
 # Call a tool with JSON args
-./tools/mcp-test.sh call list_collections '{}'
+./tools/agent-test.sh mcp call list_collections '{}'
 
 # Call with named args (auto-detects --key val pairs)
-./tools/mcp-test.sh call search_photos --query 'beach' --collection_id 'test' --limit 3
+./tools/agent-test.sh mcp call search_photos --query 'beach' --collection_id 'test' --limit 3
 
 # Verbose mode — always shows full JSON
-./tools/mcp-test.sh --verbose call get_photo --file_id 1 --w 200
+./tools/agent-test.sh --verbose mcp call get_photo --file_id 1 --w 200
 
 # Quick smoke test (list_collections only)
-./tools/mcp-test.sh quick
+./tools/agent-test.sh mcp quick
 
 # Interactive REPL
-./tools/mcp-test.sh shell
+./tools/agent-test.sh mcp shell
 ```
 
 ### Arguments
 
-- **JSON mode**: `./tools/mcp-test.sh call <tool> '<json_args>'`
-- **Named args**: `./tools/mcp-test.sh call <tool> --key val` (auto-detected)
-- **Explicit named**: `./tools/mcp-test.sh call <tool> -- --key val` (forces mode)
+- **JSON mode**: `./tools/agent-test.sh mcp call <tool> '<json_args>'`
+- **Named args**: `./tools/agent-test.sh mcp call <tool> --key val` (auto-detected)
+- **Explicit named**: `./tools/agent-test.sh mcp call <tool> -- --key val` (forces mode)
 
 ### Environment
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MCPT_PORT` | `8080` | Server port |
-| `MCPT_BIN` | `./photofield` | Path to binary |
-| `MCPT_DATA_DIR` | `./data` | Data directory |
-| `MCPT_START` | `true` | Auto-start if not running |
-| `MCPT_URL` | (derived) | Full URL (overrides PORT) |
+| `AGT_PORT` | `8080` | Server port |
+| `AGT_BIN` | `./photofield` | Path to binary |
+| `AGT_DATA_DIR` | `./data` | Data directory |
+| `AGT_START` | `true` | Auto-start if not running |
+| `AGT_URL` | (derived) | Full MCP endpoint URL |
+| `AGT_API_BASE` | `http://localhost:$PORT` | Base URL for generic API calls |
 
 ### Output
 
@@ -132,13 +133,13 @@ sqlite3 data/photofield.cache.db ".tables"
 
 ```bash
 # List all collections
-./tools/mcp-test.sh call list_collections '{}'
+./tools/agent-test.sh mcp call list_collections '{}'
 
 # Check a specific collection's events
-./tools/mcp-test.sh call events --collection_id 'test'
+./tools/agent-test.sh mcp call events --collection_id 'test'
 
 # Search photos
-./tools/mcp-test.sh call search_photos --query 'faces' --collection_id 'test' --limit 5
+./tools/agent-test.sh mcp call search_photos --query 'faces' --collection_id 'test' --limit 5
 ```
 
 ## 5. Common Fixes
@@ -157,20 +158,20 @@ sqlite3 data/photofield.cache.db ".tables"
 ### Quick smoke test
 
 ```bash
-./tools/mcp-test.sh quick
+./tools/agent-test.sh mcp quick
 ```
 
 ### Manual tool testing
 
 ```bash
 # Test a specific tool with arguments
-./tools/mcp-test.sh call get_photo --file_id 1
+./tools/agent-test.sh mcp call get_photo --file_id 1
 
 # Test error handling
-./tools/mcp-test.sh call get_photo --file_id 999999
+./tools/agent-test.sh mcp call get_photo --file_id 999999
 
 # Verbose output for debugging
-./tools/mcp-test.sh --verbose call search_photos --query 'test' --collection_id 'test'
+./tools/agent-test.sh --verbose mcp call search_photos --query 'test' --collection_id 'test'
 ```
 
 ### From another directory
@@ -179,11 +180,11 @@ The harness auto-detects the `photofield` binary relative to the repo root.
 To call it from elsewhere:
 
 ```bash
-MCPT_BIN=/path/to/photofield ./tools/mcp-test.sh call list_collections '{}'
+AGT_BIN=/path/to/photofield ./tools/agent-test.sh mcp call list_collections '{}'
 ```
 
 Or use a custom URL:
 
 ```bash
-MCPT_URL=http://remote-host:9000/mcp ./tools/mcp-test.sh call list_collections '{}'
+AGT_URL=http://remote-host:9000/mcp ./tools/agent-test.sh mcp call list_collections '{}'
 ```
