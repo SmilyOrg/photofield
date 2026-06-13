@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "photofield": {
+      "url": "http://localhost:8080/mcp",
+      "transport": "http",
+      "directTools": true
+    }
+  }
+}

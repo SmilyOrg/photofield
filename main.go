@@ -62,6 +62,7 @@ import (
 	pfio "photofield/internal/io"
 	"photofield/internal/io/bench"
 	"photofield/internal/layout"
+	"photofield/internal/mcp"
 	"photofield/internal/metrics"
 	"photofield/internal/openapi"
 	"photofield/internal/render"
@@ -265,6 +266,23 @@ func getCollectionById(id string) *collection.Collection {
 		}
 	}
 	return nil
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func parseTime(s string) *time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func ptrToStrSlice(s []string) *[]string {
+	if len(s) == 0 {
+		return nil
+	}
+	return &s
 }
 
 func pushApiRequest(request ApiRequest) {
@@ -505,7 +523,98 @@ func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.
 		}
 	}
 
-	problem(w, r, http.StatusNotFound, "Scene not found")
+	problem(w, r, http.StatusNotFound, "Collection not found")
+}
+
+func (*Api) GetCollectionsIdEvents(w http.ResponseWriter, r *http.Request, id openapi.CollectionId) {
+	coll := getCollectionById(string(id))
+	if coll == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+
+	items, err := coll.SplitIntoEvents(r.Context(), imageSource)
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	apiItems := make([]openapi.EventSummary, len(items))
+	for i, e := range items {
+		apiItems[i] = openapi.EventSummary{
+			Index:         ptr(e.Index),
+			CreatedAfter:  parseTime(e.CreatedAfter),
+			CreatedBefore: parseTime(e.CreatedBefore),
+			PhotoCount:    ptr(e.PhotoCount),
+			LocationCount: ptr(e.LocationCount),
+			Locations:     ptrToStrSlice(e.Locations),
+		}
+	}
+
+	respond(w, r, http.StatusOK, openapi.EventsList{Items: &apiItems})
+}
+
+func (*Api) GetCollectionsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.CollectionId, params openapi.GetCollectionsIdFilesParams) {
+	coll := getCollectionById(string(id))
+	if coll == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+
+	limit := 50
+	if params.Limit != nil && int(*params.Limit) > 0 {
+		limit = int(*params.Limit)
+	}
+
+	opts := collection.SearchOptions{
+		Limit: limit,
+	}
+	if params.Search != nil {
+		opts.QueryStr = string(*params.Search)
+	}
+	if params.Sort != nil {
+		opts.Sort = collection.SortType(string(*params.Sort))
+	}
+
+	items, _, _, err := coll.Search(r.Context(), imageSource, opts)
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if items == nil {
+		items = make([]collection.SearchResult, 0)
+	}
+
+	apiItems := make([]openapi.FileInfo, len(items))
+	for i, item := range items {
+		apiItems[i] = openapi.FileInfo{
+			Id:         ptr(int(item.Id)),
+			FileName:   &item.FileName,
+			Similarity: ptr(item.Similarity),
+		}
+		if item.DateTime != "" {
+			t := parseTime(item.DateTime)
+			apiItems[i].Datetime = t
+		}
+		if item.Width != 0 {
+			apiItems[i].Width = ptr(item.Width)
+		}
+		if item.Height != 0 {
+			apiItems[i].Height = ptr(item.Height)
+		}
+		if item.Color != "" {
+			apiItems[i].Color = &item.Color
+		}
+		if item.Location != "" {
+			apiItems[i].Location = &item.Location
+		}
+		if item.Tags != nil {
+			apiItems[i].Tags = ptrToStrSlice(item.Tags)
+		}
+	}
+
+	respond(w, r, http.StatusOK, openapi.FileList{Items: &apiItems})
 }
 
 func taskDisplayOrder(taskType string) int {
@@ -2110,6 +2219,12 @@ func detectEncoderSupport() {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "PANIC: %v\n", r)
+			os.Exit(1)
+		}
+	}()
 	var err error
 
 	startupTime = time.Now()
@@ -2335,6 +2450,35 @@ func main() {
 
 	r.Mount("/debug", middleware.Profiler())
 	r.Handle("/debug/fgprof", fgprof.Handler())
+
+	// MCP server — construct base URL for image URLs
+	mcpServerBaseURL := os.Getenv("PHOTOFIELD_MCP_BASE_URL")
+	if mcpServerBaseURL == "" {
+		// Default to http://localhost:{port} based on the configured address
+		host := "localhost"
+		port := "8080"
+		if addr != "" {
+			// Parse address like ":8080" or "0.0.0.0:8080"
+			if h, p, err := net.SplitHostPort(addr); err == nil {
+				host = h
+				if host == "" || host == "0.0.0.0" {
+					host = "localhost"
+				}
+				port = p
+			}
+		}
+		mcpServerBaseURL = "http://" + host + ":" + port
+	}
+	srv, err := mcp.New(&collections, imageSource, mcpServerBaseURL)
+	if err != nil {
+		log.Fatalf("failed to create MCP server: %v", err)
+	}
+	mcpPrefix := os.Getenv("PHOTOFIELD_MCP_PREFIX")
+	if mcpPrefix == "" {
+		mcpPrefix = "/mcp"
+	}
+	r.Mount(mcpPrefix, srv.Handler())
+	log.Printf("MCP server mounted at %s", mcpPrefix)
 
 	msg := ""
 	if apiPrefix != "/" {

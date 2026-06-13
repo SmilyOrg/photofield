@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1978,6 +1979,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintln(os.Stderr, "listWithPrefixIds recovered from panic:", r)
+			}
+		}()
 		if options.Batch == 0 {
 			defer metrics.Elapsed("list infos sqlite")()
 		}
@@ -2406,11 +2412,9 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan Sourced
 	concurrent := (len(prefixIds) + batchSize - 1) / batchSize
 
 	if concurrent <= 1 {
-		log.Printf("list infos dirs %d\n", len(prefixIds))
 		options.Batch = 0
 		return source.listWithPrefixIds(prefixIds, options)
 	}
-	log.Printf("list infos dirs %d batches %d\n", len(prefixIds), concurrent)
 	out := make(chan SourcedInfo, 1000)
 	tags := options.Expression.Tags.Values()
 	deps := Dependencies{
@@ -2426,6 +2430,11 @@ func (source *Database) List(dirs []string, options ListOptions) (<-chan Sourced
 		return out, deps
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Fprintln(os.Stderr, "List recovered from panic:", r)
+			}
+		}()
 		defer metrics.Elapsed("list infos sqlite")()
 		var channels []<-chan SourcedInfo
 		for i := 0; i < concurrent; i++ {
