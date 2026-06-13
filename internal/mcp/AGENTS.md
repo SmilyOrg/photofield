@@ -40,38 +40,57 @@ sleep 5
 The server listens on port `8080` by default. Kill with `pkill -f photofield`
 before rebuilding.
 
-## 2. Sending MCP Requests
+## 2. Calling MCP Tools
 
-The MCP server uses JSON-RPC 2.0 over HTTP with streamable transport. You need
-a **session lifecycle**:
+Use `tools/mcp-test.sh` for all MCP tool calls. It handles the session
+handshake, SSE parsing, and session ID management automatically.
+
+### Basic usage
 
 ```bash
-BASE="http://localhost:8080/mcp"
+# Call a tool with JSON args
+./tools/mcp-test.sh call list_collections '{}'
 
-# Step 1: Initialize — gets a Session-Id back in headers
-curl -v -X POST "$BASE" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",
-       "params":{"protocolVersion":"2024-11-05",
-                 "capabilities":{},
-                 "clientInfo":{"name":"test","version":"1.0"}}}' \
-  2>&1
+# Call with named args (auto-detects --key val pairs)
+./tools/mcp-test.sh call search_photos --query 'beach' --collection_id 'test' --limit 3
 
-# Step 2: Send initialized notification (no ID)
-curl -s -X POST "$BASE" \
-  -H "Content-Type: application/json" \
-  -H "Mcp-Session-Id: ABC123" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+# Verbose mode — always shows full JSON
+./tools/mcp-test.sh --verbose call get_photo --file_id 1 --w 200
 
-# Step 3: Call any tool
-curl -s -X POST "$BASE" \
-  -H "Content-Type: application/json" \
-  -H "Mcp-Session-Id: ABC123" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call",
-       "params":{"name":"list_collections","arguments":{}}}'
+# Quick smoke test (list_collections only)
+./tools/mcp-test.sh quick
+
+# Interactive REPL
+./tools/mcp-test.sh shell
 ```
+
+### Arguments
+
+- **JSON mode**: `./tools/mcp-test.sh call <tool> '<json_args>'`
+- **Named args**: `./tools/mcp-test.sh call <tool> --key val` (auto-detected)
+- **Explicit named**: `./tools/mcp-test.sh call <tool> -- --key val` (forces mode)
+
+### Environment
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MCPT_PORT` | `8080` | Server port |
+| `MCPT_BIN` | `./photofield` | Path to binary |
+| `MCPT_DATA_DIR` | `./data` | Data directory |
+| `MCPT_START` | `true` | Auto-start if not running |
+| `MCPT_URL` | (derived) | Full URL (overrides PORT) |
+
+### Output
+
+Non-verbose mode shows a clean summary:
+```
+✓ list_collections — 22 items
+✓ events — 19 events
+✓ get_photo
+```
+
+Errors show with a red ✗ and the error message. Set `--verbose` for full JSON
+on every call, or use it with `quick` for the full response.
 
 ### Optional fields
 
@@ -112,10 +131,14 @@ sqlite3 data/photofield.cache.db ".tables"
 ### Collection status via MCP
 
 ```bash
-curl -s -X POST "$BASE" \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call",
-       "params":{"name":"list_collections","arguments":{}}}'
+# List all collections
+./tools/mcp-test.sh call list_collections '{}'
+
+# Check a specific collection's events
+./tools/mcp-test.sh call events --collection_id 'test'
+
+# Search photos
+./tools/mcp-test.sh call search_photos --query 'faces' --collection_id 'test' --limit 5
 ```
 
 ## 5. Common Fixes
@@ -129,6 +152,38 @@ curl -s -X POST "$BASE" \
 | Server not responding | Old binary running | `pkill -f photofield` then rebuild |
 | No photos found | Default config points to empty dirs | Create `data/configuration.yaml` |
 
-## 6. Test Script
+## 6. Testing
 
-See `test_mcp.sh` in the repo root for a quick end-to-end test.
+### Quick smoke test
+
+```bash
+./tools/mcp-test.sh quick
+```
+
+### Manual tool testing
+
+```bash
+# Test a specific tool with arguments
+./tools/mcp-test.sh call get_photo --file_id 1
+
+# Test error handling
+./tools/mcp-test.sh call get_photo --file_id 999999
+
+# Verbose output for debugging
+./tools/mcp-test.sh --verbose call search_photos --query 'test' --collection_id 'test'
+```
+
+### From another directory
+
+The harness auto-detects the `photofield` binary relative to the repo root.
+To call it from elsewhere:
+
+```bash
+MCPT_BIN=/path/to/photofield ./tools/mcp-test.sh call list_collections '{}'
+```
+
+Or use a custom URL:
+
+```bash
+MCPT_URL=http://remote-host:9000/mcp ./tools/mcp-test.sh call list_collections '{}'
+```
