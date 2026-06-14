@@ -1,22 +1,32 @@
-// VitePress 2.x config (see https://vitepress.dev/guide/migration-guide)
-export default {
+import { defineConfig } from 'vitepress'
+
+// https://vitepress.dev/reference/site-config
+export default defineConfig({
   title: "Photofield",
   description: "Self-Hosted Personal Photo Gallery",
-  outDir: 'dist', // VitePress 2.x default changed to .vitepress/dist/
   ignoreDeadLinks: [
     /^https?:\/\/localhost/,
   ],
   base: '/docs/',
   cleanUrls: true,
-  theme: {
+  themeConfig: {
+    // https://vitepress.dev/reference/default-theme-config
+
     logo: "/favicon-32x32.png",
+
     search: {
       provider: 'local',
     },
+
+    editLink: {
+      pattern: 'https://github.com/smilyorg/photofield/edit/main/docs/:path'
+    },
+
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Quick Start', link: '/quick-start' },
     ],
+
     sidebar: [
       {
         text: 'Install',
@@ -60,8 +70,10 @@ export default {
         ]
       }
     ],
+
     socialLinks: [
       { icon: 'github', link: 'https://github.com/SmilyOrg/photofield' }
-    ],
+    ]
+
   },
-}
+})

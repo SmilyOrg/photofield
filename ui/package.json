@@ -36,6 +36,6 @@
     "rollup-plugin-visualizer": "^6.0.5",
     "vite": "^8.0.0",
     "vite-plugin-compression": "^0.5.1",
-    "vite-plugin-vue-devtools": "^8.1.2"
+    "vite-plugin-vue-devtools": "^8.1.3"
   }
 }
