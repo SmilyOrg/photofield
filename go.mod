@@ -1,8 +1,6 @@
 module photofield
 
-go 1.24.0
-
-toolchain go1.24.6
+go 1.25.11
 
 require (
 	git.sr.ht/~jackmordaunt/go-libwebp v1.8.0
@@ -34,7 +32,7 @@ require (
 	github.com/mostlygeek/go-exiftool v0.0.0-20190130212521-a0e5de16f760
 	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9
 	github.com/peterstace/simplefeatures v0.44.0
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/rjeczalik/notify v0.9.3
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sheerun/queue v1.0.1
@@ -43,8 +41,8 @@ require (
 	github.com/x448/float16 v0.8.4
 	github.com/zelenko/go v0.0.0-20210326203833-2c97fc39fc36
 	golang.org/x/exp v0.0.0-20250819170805-f6d41f060dd3
-	golang.org/x/image v0.29.0
-	golang.org/x/sync v0.16.0
+	golang.org/x/image v0.42.0
+	golang.org/x/sync v0.21.0
 	modernc.org/libc v1.66.7
 	modernc.org/sqlite v1.38.2
 	zombiezen.com/go/sqlite v1.4.2
@@ -92,7 +90,7 @@ require (
 	github.com/wcharczuk/go-chart v2.0.2-0.20191206192251-962b9abdec2b+incompatible // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
