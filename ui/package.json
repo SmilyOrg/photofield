@@ -10,7 +10,7 @@
   "dependencies": {
     "@fontsource/roboto": "^5.2.9",
     "@unhead/vue": "^2.1.1",
-    "@vitejs/plugin-vue": "^6.0.3",
+    "@vitejs/plugin-vue": "^6.0.7",
     "@vueuse/core": "^14.1.0",
     "balm-ui": "^10.31.2",
     "copy-image-clipboard": "^2.1.2",
@@ -27,12 +27,15 @@
     "vue-multiselect": "^3.4.0",
     "vue-router": "^4.6.4"
   },
+  "overrides": {
+    "esbuild": "0.28.1"
+  },
   "devDependencies": {
     "eslint": "^9.39.2",
     "eslint-plugin-vue": "^9.33.0",
     "rollup-plugin-visualizer": "^6.0.5",
-    "vite": "^7.3.0",
+    "vite": "^8.0.0",
     "vite-plugin-compression": "^0.5.1",
-    "vite-plugin-vue-devtools": "^8.0.5"
+    "vite-plugin-vue-devtools": "^8.1.2"
   }
 }
