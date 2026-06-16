@@ -205,10 +205,9 @@ func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Sour
 		}
 
 		// Return only structured metadata — no image content block.
-		res := &mcp.CallToolResult{
-			Content: []mcp.Content{},
-		}
-		return res, getPhotoMetadataOutput{
+		// Leave Content nil so the SDK auto-populates it with JSON text
+		// from StructuredContent (required for MCP clients that only read content).
+		return nil, getPhotoMetadataOutput{
 			ImageUrl:   metadata.ImageUrl,
 			Width:      info.Width,
 			Height:     info.Height,
