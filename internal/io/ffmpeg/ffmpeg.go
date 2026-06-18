@@ -137,7 +137,7 @@ func (f FFmpeg) Get(ctx context.Context, id io.ImageId, path string) io.Result {
 		"-loglevel", "error",
 		"-i", path,
 		"-vframes", "1",
-		"-vf", f.FilterGraph(),
+		"-filter_complex", f.FilterGraph(),
 		// "-q:v", "2",
 		// "-f", "image2pipe", // jpeg
 		"-c:v", "pam",
