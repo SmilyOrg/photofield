@@ -5,8 +5,10 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -16,26 +18,29 @@ import (
 
 // Server holds the MCP server instance and its chi-mountable HTTP handler.
 type Server struct {
-	srv           *mcp.Server
-	handler       http.Handler
-	serverBaseURL string // e.g. "http://localhost:8080" — used to build absolute image URLs
+	srv     *mcp.Server
+	handler http.Handler
+	baseURL atomic.Value // set from request Host header per request (stores string)
 }
 
 // New creates a new MCP server for photofield with the given data sources
-// and registers all available tools. The serverBaseURL parameter is the
-// absolute URL at which the photofield API is accessible (e.g. "http://localhost:8080").
-// This is used to construct absolute image URLs for embedding in markdown etc.
-// Callers should mount handler() on a chi router, e.g.:
+// and registers all available tools. The base URL is derived at request time
+// from the incoming request's Host header, with `addr` used as a fallback
+// default (derived from the listener address). Callers should mount handler()
+// on a chi router, e.g.:
 //
 //	r.Mount("/mcp", s.handler())
-func New(collections *[]collection.Collection, imageSource *image.Source, serverBaseURL string) (*Server, error) {
-	s := mcp.NewServer(&mcp.Implementation{
+func New(collections *[]collection.Collection, imageSource *image.Source, addr string) (*Server, error) {
+	sdkSrv := mcp.NewServer(&mcp.Implementation{
 		Name:    "photofield",
 		Version: "dev",
 	}, nil)
 
-	// Handler closure captures collections and imageSource.
-	mcp.AddTool(s, &mcp.Tool{
+	// Handler closures capture collections, imageSource, and a pointer to this Server
+	// so they can read the current base URL at request time.
+	srv := &Server{srv: sdkSrv}
+
+	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "list_collections",
 		Description: "List all photo collections available in the library with their current indexed status. " +
 			"Use this first to discover which collections exist, their IDs, how many photos are indexed, " +
@@ -49,7 +54,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 		},
 	}, listCollections(collections, imageSource))
 
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "events",
 		Description: "Split a collection's photos into chronological events based on time gaps. Photos on different " +
 			"calendar days, or more than 1 hour apart (within the same day), are placed in separate events. Returns " +
@@ -67,7 +72,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 		},
 	}, eventsHandler(collections, imageSource))
 
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "search_photos",
 		Description: "Search a collection's photos using natural language text, visual similarity to another image, " +
 			"or similarity to a detected face. This is the primary discovery tool for finding specific photos. Returns " +
@@ -109,7 +114,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 		},
 	}, searchPhotosHandler(collections, imageSource))
 
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo_metadata",
 		Description: "Retrieve all photo metadata as structured JSON without the image data. Useful for inspecting tags, faces, location, dimensions, and thumbnail URLs without downloading the image.\n\n" +
 			"OUTPUT METADATA:\n" +
@@ -133,9 +138,9 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 			},
 			"required": []string{"file_id"},
 		},
-	}, getPhotoMetadataHandler(collections, imageSource, serverBaseURL))
+	}, getPhotoMetadataHandler(collections, imageSource, srv))
 
-	mcp.AddTool(s, &mcp.Tool{
+	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo",
 		Description: "Retrieve a photo as a base64-encoded image. This is the only tool that returns actual image data.\n\n" +
 			"CRITICAL DEFAULT BEHAVIOR — ALWAYS CALL WITH ONLY file_id FIRST:\n" +
@@ -168,14 +173,42 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 			},
 			"required": []string{"file_id"},
 		},
-	}, getPhotoHandler(collections, imageSource, serverBaseURL))
+	}, getPhotoHandler(collections, imageSource, srv))
 
 	h := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
-		return s
+		return sdkSrv
 	}, nil)
 
-	// Wrap with panic recovery to prevent server crashes from tool handler panics
+	// Derive a default base URL from the listener address for fallback when
+	// the Host header is absent (e.g. behind certain reverse proxies).
+	var fallbackAddr string
+	if addr != "" {
+		_, p, err := net.SplitHostPort(addr)
+		if err != nil {
+			p = addr // might be a bare port like "8080"
+		}
+		if p == "" {
+			p = "8080"
+		}
+		fallbackAddr = net.JoinHostPort("localhost", p)
+	} else {
+		fallbackAddr = "localhost:8080"
+	}
+
+	// Wrap with panic recovery to prevent server crashes from tool handler panics.
+	// Also extract the Host header from each request and store it in srv.baseURL
+	// so that tool handlers can construct absolute image URLs.
 	wrappedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if host == "" {
+			host = fallbackAddr
+		}
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		srv.baseURL.Store(scheme + "://" + host)
+
 		var written bool
 		// Wrap ResponseWriter to detect if WriteHeader was called
 		wrappedW := &responseWriterWrapper{ResponseWriter: w, wroteHeader: &written}
@@ -192,7 +225,11 @@ func New(collections *[]collection.Collection, imageSource *image.Source, server
 		h.ServeHTTP(wrappedW, r)
 	})
 
-	return &Server{srv: s, handler: wrappedHandler}, nil
+	// Initialize baseURL with the fallback default; the wrappedHandler
+	// overwrites it per-request.
+	srv.baseURL.Store("http://" + fallbackAddr)
+
+	return &Server{srv: sdkSrv, handler: wrappedHandler}, nil
 }
 
 // --- list_collections ---

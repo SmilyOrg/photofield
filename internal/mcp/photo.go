@@ -176,8 +176,7 @@ type Thumbnail struct {
 // getPhotoMetadataHandler handles the get_photo_metadata MCP tool request.
 // Returns all photo metadata without the image data — useful for inspecting
 // tags, faces, location, thumbnails, and dimensions without downloading the image.
-// serverBaseURL is the absolute URL of the photofield API (e.g. "http://localhost:8080").
-func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Source, serverBaseURL string) mcp.ToolHandlerFor[getPhotoMetadataInput, getPhotoMetadataOutput] {
+func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[getPhotoMetadataInput, getPhotoMetadataOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, input getPhotoMetadataInput) (*mcp.CallToolResult, getPhotoMetadataOutput, error) {
 		// Ensure we have a valid context - fall back to Background if nil.
 		if ctx == nil {
@@ -198,7 +197,7 @@ func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Sour
 		}
 
 		// Gather metadata using the same logic as get_photo
-		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, serverBaseURL, info.Width, info.Height, "jpeg")
+		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, srv.baseURL.Load().(string), info.Width, info.Height, "jpeg")
 
 		if panicked != nil {
 			return nil, getPhotoMetadataOutput{}, fmt.Errorf("internal error reading photo metadata: %v", panicked)
@@ -228,8 +227,7 @@ func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Sour
 }
 
 // getPhotoHandler handles the get_photo MCP tool request.
-// serverBaseURL is the absolute URL of the photofield API (e.g. "http://localhost:8080").
-func getPhotoHandler(_ *[]collection.Collection, imageSource *image.Source, serverBaseURL string) mcp.ToolHandlerFor[getPhotoInput, getPhotoOutput] {
+func getPhotoHandler(_ *[]collection.Collection, imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[getPhotoInput, getPhotoOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, input getPhotoInput) (*mcp.CallToolResult, getPhotoOutput, error) {
 		// Ensure we have a valid context - fall back to Background if nil.
 		if ctx == nil {

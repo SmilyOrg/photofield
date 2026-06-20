@@ -1,32 +1,32 @@
 #!/bin/bash
-# agent-test.sh — Unified harness for testing photofield MCP server
+# agent.sh — Unified harness for testing the photofield server
 #
-# Covers server lifecycle, generic HTTP API calls, and MCP tool calls.
+# Covers server lifecycle, generic HTTP API calls, and tool calls.
 #
 # USAGE:
-#   agent-test.sh --help                          Print this help
-#   agent-test.sh --verbose                       Verbose output (env override)
+#   agent.sh --help                          Print this help
+#   agent.sh --verbose                       Verbose output (env override)
 #
-#   agent-test.sh server start                    Start server (auto-detect / launch)
-#   agent-test.sh server stop                     Stop via PID file
-#   agent-test.sh server restart                  Stop + start
-#   agent-test.sh server status                   Check if running
-#   agent-test.sh server kill                     Aggressive pkill (photofield + exiftool)
+#   agent.sh server start                    Start server (auto-detect / launch)
+#   agent.sh server stop                     Stop via PID file
+#   agent.sh server restart                  Stop + start
+#   agent.sh server status                   Check if running
+#   agent.sh server kill                     Aggressive pkill (photofield + exiftool)
 #
-#   agent-test.sh api <method> <url> [body]       Generic HTTP call
-#   agent-test.sh api <method> <url> --key val    Named-arg body
+#   agent.sh api <method> <url> [body]       Generic HTTP call
+#   agent.sh api <method> <url> --key val    Named-arg body
 #
-#   agent-test.sh mcp call <tool> <args>          MCP tool call (JSON or named)
-#   agent-test.sh mcp call <tool> --key val       MCP tool call (named args)
-#   agent-test.sh mcp quick [tool args]           Smoke test
-#   agent-test.sh mcp shell                       Interactive REPL
+#   agent.sh mcp call <tool> <args>          Tool call (JSON or named args)
+#   agent.sh mcp call <tool> --key val       Tool call (named args)
+#   agent.sh mcp quick [tool args]           Smoke test
+#   agent.sh mcp shell                       Interactive REPL
 #
 # ENV:
 #   AGT_PORT        — Server port (default: 8080)
 #   AGT_BIN         — Path to photofield binary
 #   AGT_DATA_DIR    — Path to data directory
 #   AGT_START       — Auto-start server (default: true)
-#   AGT_URL         — Full MCP endpoint URL (overrides PORT)
+#   AGT_URL         — Full endpoint URL (overrides PORT)
 #   AGT_API_BASE    — API base URL (default: http://localhost:$PORT)
 
 set -uo pipefail
@@ -34,7 +34,7 @@ set -uo pipefail
 # ─── Config ───
 PORT="${AGT_PORT:-8080}"
 API_BASE="${AGT_API_BASE:-http://localhost:${PORT}}"
-MCP_URL="${AGT_URL:-${API_BASE}/mcp}"
+ENDPOINT_URL="${AGT_URL:-${API_BASE}/mcp}"
 BIN="${AGT_BIN:-$(cd "$(dirname "$0")/.." && pwd)/photofield}"
 DATA_DIR="${AGT_DATA_DIR:-$(pwd)/data}"
 AUTO_START="${AGT_START:-true}"
@@ -42,8 +42,8 @@ VERBOSE=0
 _SERVER_MANAGED=false
 
 # ─── Paths ───
-_pid_file="/tmp/photofield-agent-test.pid"
-_headers_file="/tmp/agent-test-headers-$$"
+_pid_file="/tmp/photofield-agent.pid"
+_headers_file="/tmp/agent-headers-$$"
 
 # ─── Colors ───
 if [[ -t 1 ]]; then
@@ -70,7 +70,7 @@ server_is_running() {
     rm -f "$_pid_file"
   fi
   # Fall back to port check
-  curl -s --max-time 1 "${MCP_URL}" &>/dev/null
+  curl -s --max-time 1 "${ENDPOINT_URL}" &>/dev/null
 }
 
 server_start() {
@@ -86,16 +86,16 @@ server_start() {
     return 1
   fi
 
-  log_step "Starting MCP server..."
-  nohup "$BIN" > /tmp/photofield-agent-test.log 2>&1 &
+  log_step "Starting server..."
+  nohup "$BIN" > /tmp/photofield-agent.log 2>&1 &
   _SERVER_MANAGED=true
   local pid=$!
   printf '%s\n' "$pid" > "$_pid_file"
-  log_info "PID: ${pid} (log: /tmp/photofield-agent-test.log)"
+  log_info "PID: ${pid} (log: /tmp/photofield-agent.log)"
 
   local waited=0
   while (( waited < 30 )); do
-    if curl -s --max-time 2 "${MCP_URL}" &>/dev/null; then
+    if curl -s --max-time 2 "${ENDPOINT_URL}" &>/dev/null; then
       log_ok "Server is ready"
       return 0
     fi
@@ -104,7 +104,7 @@ server_start() {
   done
 
   log_fail "Server failed to start within 30s"
-  tail -20 /tmp/photofield-agent-test.log >&2
+  tail -20 /tmp/photofield-agent.log >&2
   return 1
 }
 
@@ -219,7 +219,7 @@ api_call() {
   [[ -n "$body" ]] && log_info "Body: ${body:0:200}"
 
   local status_code tmpfile
-  tmpfile=$(mktemp /tmp/agent-test-raw-XXXXXX)
+  tmpfile=$(mktemp /tmp/agent-raw-XXXXXX)
   status_code=$(curl -s -o "$tmpfile" -w "%{http_code}" \
     "${hdrs[@]}" \
     -H "Content-Type: application/json" \
@@ -246,35 +246,35 @@ api_call() {
   fi
 }
 
-# ─── MCP Session & Requests ───
-_MCP_SESSION_ID=""
-_MCP_REQUEST_ID=0
+# ─── Session & Requests ───
+_SESSION_ID=""
+_REQUEST_ID=0
 
 session_init() {
   local resp
   resp=$(curl -s -D "$_headers_file" \
-    -X POST "${MCP_URL}" \
+    -X POST "${ENDPOINT_URL}" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \
     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
       "protocolVersion":"2024-11-05",
       "capabilities":{},
-      "clientInfo":{"name":"agent-test","version":"0.1"}
+      "clientInfo":{"name":"agent","version":"0.1"}
     }}' 2>/dev/null)
 
-  _MCP_SESSION_ID=$(grep -i "Mcp-Session-Id" "$_headers_file" 2>/dev/null | head -1 | tr -d '\r' | sed 's/.*[Mm]cp-[Ss]ession-[Ii]d:[[:space:]]*//')
+  _SESSION_ID=$(grep -i "Mcp-Session-Id" "$_headers_file" 2>/dev/null | head -1 | tr -d '\r' | sed 's/.*[Mm]cp-[Ss]ession-[Ii]d:[[:space:]]*//')
   rm -f "$_headers_file"
 
-  if [[ -z "$_MCP_SESSION_ID" ]]; then
+  if [[ -z "$_SESSION_ID" ]]; then
     log_info "No session ID (server may not require one)"
   else
-    log_info "Session: ${_MCP_SESSION_ID}"
+    log_info "Session: ${_SESSION_ID}"
   fi
 
   # Send initialized notification
   local hdrs=(-H "Content-Type: application/json")
-  [[ -n "$_MCP_SESSION_ID" ]] && hdrs+=(-H "Mcp-Session-Id: ${_MCP_SESSION_ID}")
-  curl -s -X POST "${MCP_URL}" \
+  [[ -n "$_SESSION_ID" ]] && hdrs+=(-H "Mcp-Session-Id: ${_SESSION_ID}")
+  curl -s -X POST "${ENDPOINT_URL}" \
     "${hdrs[@]}" \
     -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' 2>/dev/null || true
 }
@@ -286,20 +286,20 @@ _sse_parse() {
 }
 
 # Call a tool, return cleaned JSON on stdout
-mcp_call() {
+call_tool() {
   local tool="$1"
   shift
   local args="$*"
   [[ -z "$args" ]] && args="{}"
-  _MCP_REQUEST_ID=$((_MCP_REQUEST_ID + 1))
+  _REQUEST_ID=$((_REQUEST_ID + 1))
 
   local hdrs=(-H "Content-Type: application/json" -H "Accept: application/json, text/event-stream")
-  [[ -n "$_MCP_SESSION_ID" ]] && hdrs+=(-H "Mcp-Session-Id: ${_MCP_SESSION_ID}")
+  [[ -n "$_SESSION_ID" ]] && hdrs+=(-H "Mcp-Session-Id: ${_SESSION_ID}")
 
   local raw
-  raw=$(curl -s --max-time 30 -X POST "${MCP_URL}" \
+  raw=$(curl -s --max-time 30 -X POST "${ENDPOINT_URL}" \
     "${hdrs[@]}" \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":${_MCP_REQUEST_ID},\"method\":\"tools/call\",\"params\":{\"name\":\"${tool}\",\"arguments\":${args}}}" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":${_REQUEST_ID},\"method\":\"tools/call\",\"params\":{\"name\":\"${tool}\",\"arguments\":${args}}}" \
     2>/dev/null)
 
   _sse_parse "$raw"
@@ -343,7 +343,7 @@ print_result() {
     return 1
   fi
 
-  # Check for result.isError (MCP tools can return errors in result)
+  # Check for result.isError (tools can return errors in result)
   local is_error
   is_error=$(echo "$resp" | jq -r '.result.isError // false' 2>/dev/null)
 
@@ -418,7 +418,7 @@ print_result() {
   return 1
 }
 
-# ─── MCP REPL ───
+# ─── REPL ───
 run_repl() {
   echo ""
   printf '%s\n' "${COL_CYAN}Agent Test Shell${COL_RESET}  (type 'help' for commands, 'quit' to exit)"
@@ -466,7 +466,7 @@ run_repl() {
         args="{}"
       fi
       local resp
-      resp=$(mcp_call "$tool" "$args")
+      resp=$(call_tool "$tool" "$args")
       print_result "$tool" "$resp"
     else
       echo "Unknown command: $line (type 'help')"
@@ -477,10 +477,10 @@ run_repl() {
 # ─── Help ───
 print_help() {
   cat <<'EOF'
-agent-test.sh — Unified harness for testing photofield MCP server
+agent.sh — Unified harness for testing the photofield server
 
 Usage:
-  agent-test.sh [options] <command> [args...]
+  agent.sh [options] <command> [args...]
 
 Options:
   --verbose, -v         Verbose output (also AGT_VERBOSE=1)
@@ -497,7 +497,7 @@ API commands:
   api <method> <url> [body]    Generic HTTP call (GET/POST/PUT/DELETE)
   api <method> <url> --key val Named-arg body construction
 
-MCP commands:
+Tool commands:
   mcp call <tool> <json>       Call a tool with JSON args
   mcp call <tool> --key val    Call a tool with named args
   mcp quick [tool args]        Smoke test (default: list_collections)
@@ -508,7 +508,7 @@ Environment variables:
   AGT_BIN         — Path to photofield binary
   AGT_DATA_DIR    — Path to data directory
   AGT_START       — Auto-start server (default: true)
-  AGT_URL         — Full MCP endpoint URL
+  AGT_URL         — Full endpoint URL
   AGT_API_BASE    — API base URL (default: http://localhost:$PORT)
   AGT_VERBOSE     — Verbose output (1 = yes)
 EOF
@@ -558,7 +558,7 @@ case "$cmd" in
       status)   server_status ;;
       kill)     server_kill ;;
       *)
-        echo "Usage: agent-test.sh server <start|stop|restart|status|kill>" >&2
+        echo "Usage: agent.sh server <start|stop|restart|status|kill>" >&2
         exit 1
         ;;
     esac
@@ -566,7 +566,7 @@ case "$cmd" in
 
   api)
     if [[ $# -lt 2 ]]; then
-      echo "Usage: agent-test.sh api <METHOD> <URL> [body]" >&2
+      echo "Usage: agent.sh api <METHOD> <URL> [body]" >&2
       exit 1
     fi
     api_call "$@"
@@ -579,7 +579,7 @@ case "$cmd" in
         call_tool=""
         named_mode=false
         if [[ $# -eq 0 ]]; then
-          echo "Usage: agent-test.sh mcp call <tool> <args>" >&2
+          echo "Usage: agent.sh mcp call <tool> <args>" >&2
           exit 1
         fi
         call_tool="$1"
@@ -601,7 +601,7 @@ case "$cmd" in
 
         [[ "$AUTO_START" == "true" ]] && server_start
         session_init
-        resp=$(mcp_call "$call_tool" "$args_json")
+        resp=$(call_tool "$call_tool" "$args_json")
         print_result "$call_tool" "$resp"
         ;;
       quick)
@@ -612,7 +612,7 @@ case "$cmd" in
         quick_args="${quick_arg#* }"
         [[ "$quick_tool" == "$quick_args" ]] && quick_args="{}"
         [[ -z "$quick_tool" ]] && quick_tool="list_collections" && quick_args="{}"
-        resp=$(mcp_call "$quick_tool" "$quick_args")
+        resp=$(call_tool "$quick_tool" "$quick_args")
         if print_result "$quick_tool" "$resp"; then
           log_ok "Quick test passed"
         else
@@ -625,7 +625,7 @@ case "$cmd" in
         run_repl
         ;;
       *)
-        echo "Usage: agent-test.sh mcp <call|quick|shell> [args...]" >&2
+        echo "Usage: agent.sh mcp <call|quick|shell> [args...]" >&2
         exit 1
         ;;
     esac

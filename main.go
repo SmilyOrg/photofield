@@ -2456,25 +2456,9 @@ func main() {
 	r.Mount("/debug", middleware.Profiler())
 	r.Handle("/debug/fgprof", fgprof.Handler())
 
-	// MCP server — construct base URL for image URLs
-	mcpServerBaseURL := os.Getenv("PHOTOFIELD_MCP_BASE_URL")
-	if mcpServerBaseURL == "" {
-		// Default to http://localhost:{port} based on the configured address
-		host := "localhost"
-		port := "8080"
-		if addr != "" {
-			// Parse address like ":8080" or "0.0.0.0:8080"
-			if h, p, err := net.SplitHostPort(addr); err == nil {
-				host = h
-				if host == "" || host == "0.0.0.0" {
-					host = "localhost"
-				}
-				port = p
-			}
-		}
-		mcpServerBaseURL = "http://" + host + ":" + port
-	}
-	srv, err := mcp.New(&collections, imageSource, mcpServerBaseURL)
+	// MCP server — base URL is derived from request Host header at runtime,
+	// falling back to the listener address if the Host header is absent.
+	srv, err := mcp.New(&collections, imageSource, addr)
 	if err != nil {
 		log.Fatalf("failed to create MCP server: %v", err)
 	}

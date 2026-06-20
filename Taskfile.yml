@@ -48,6 +48,7 @@ tasks:
       - "echo '  task docs: Run the docs frontend in development mode'"
       - "echo '  task e2e: Run end-to-end tests in watch mode'"
       - "echo '  task release:local: Build, package, and create a local Docker image'"
+      - "echo '  task agent -- mcp call <tool> <args>: Test MCP tools via the agent harness'"
     silent: true
 
   commit:analyze:
@@ -61,6 +62,11 @@ tasks:
       - echo "=== STAGED CHANGES ==="
       - git diff --cached || echo "No staged changes"
     silent: true
+
+  agent:
+    desc: Forward arguments to tools/agent.sh (the MCP testing harness)
+    cmds:
+      - bash tools/agent.sh {{.CLI_ARGS}}
 
   added: 
     desc: Create a new changelog entry for added features

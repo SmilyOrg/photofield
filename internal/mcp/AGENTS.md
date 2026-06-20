@@ -40,35 +40,35 @@ sleep 5
 The server listens on port `8080` by default. Kill with `pkill -f photofield`
 before rebuilding.
 
-## 2. Calling MCP Tools
+## 2. Calling Tools
 
-Use `tools/agent-test.sh` for all MCP tool calls. It handles the session
+Use `tools/agent.sh` for all tool calls. It handles the session
 handshake, SSE parsing, and session ID management automatically.
 
 ### Basic usage
 
 ```bash
 # Call a tool with JSON args
-./tools/agent-test.sh mcp call list_collections '{}'
+./tools/agent.sh mcp call list_collections '{}'
 
 # Call with named args (auto-detects --key val pairs)
-./tools/agent-test.sh mcp call search_photos --query 'beach' --collection_id 'test' --limit 3
+./tools/agent.sh mcp call search_photos --query 'beach' --collection_id 'test' --limit 3
 
 # Verbose mode — always shows full JSON
-./tools/agent-test.sh --verbose mcp call get_photo --file_id 1 --w 200
+./tools/agent.sh --verbose mcp call get_photo --file_id 1 --w 200
 
 # Quick smoke test (list_collections only)
-./tools/agent-test.sh mcp quick
+./tools/agent.sh mcp quick
 
 # Interactive REPL
-./tools/agent-test.sh mcp shell
+./tools/agent.sh mcp shell
 ```
 
 ### Arguments
 
-- **JSON mode**: `./tools/agent-test.sh mcp call <tool> '<json_args>'`
-- **Named args**: `./tools/agent-test.sh mcp call <tool> --key val` (auto-detected)
-- **Explicit named**: `./tools/agent-test.sh mcp call <tool> -- --key val` (forces mode)
+- **JSON mode**: `./tools/agent.sh mcp call <tool> '<json_args>'`
+- **Named args**: `./tools/agent.sh mcp call <tool> --key val` (auto-detected)
+- **Explicit named**: `./tools/agent.sh mcp call <tool> -- --key val` (forces mode)
 
 ### Environment
 
@@ -78,7 +78,7 @@ handshake, SSE parsing, and session ID management automatically.
 | `AGT_BIN` | `./photofield` | Path to binary |
 | `AGT_DATA_DIR` | `./data` | Data directory |
 | `AGT_START` | `true` | Auto-start if not running |
-| `AGT_URL` | (derived) | Full MCP endpoint URL |
+| `AGT_URL` | (derived) | Full endpoint URL |
 | `AGT_API_BASE` | `http://localhost:$PORT` | Base URL for generic API calls |
 
 ### Output
@@ -133,17 +133,17 @@ sqlite3 data/photofield.cache.db "SELECT id, width, height FROM infos ORDER BY i
 sqlite3 data/photofield.cache.db ".tables"
 ```
 
-### Collection status via MCP
+### Collection status via the harness
 
 ```bash
 # List all collections
-./tools/agent-test.sh mcp call list_collections '{}'
+./tools/agent.sh mcp call list_collections '{}'
 
 # Check a specific collection's events
-./tools/agent-test.sh mcp call events --collection_id 'test'
+./tools/agent.sh mcp call events --collection_id 'test'
 
 # Search photos
-./tools/agent-test.sh mcp call search_photos --query 'faces' --collection_id 'test' --limit 5
+./tools/agent.sh mcp call search_photos --query 'faces' --collection_id 'test' --limit 5
 ```
 
 ## 5. Common Fixes
@@ -162,23 +162,23 @@ sqlite3 data/photofield.cache.db ".tables"
 ### Quick smoke test
 
 ```bash
-./tools/agent-test.sh mcp quick
+./tools/agent.sh mcp quick
 ```
 
 ### Manual tool testing
 
 ```bash
 # Test a specific tool with arguments
-./tools/agent-test.sh mcp call get_photo --file_id 1
+./tools/agent.sh mcp call get_photo --file_id 1
 
 # Test get_photo_metadata (metadata-only, no image data)
-./tools/agent-test.sh mcp call get_photo_metadata --file_id 1
+./tools/agent.sh mcp call get_photo_metadata --file_id 1
 
 # Test error handling
-./tools/agent-test.sh mcp call get_photo --file_id 999999
+./tools/agent.sh mcp call get_photo --file_id 999999
 
 # Verbose output for debugging
-./tools/agent-test.sh --verbose mcp call search_photos --query 'test' --collection_id 'test'
+./tools/agent.sh --verbose mcp call search_photos --query 'test' --collection_id 'test'
 ```
 
 ### From another directory
@@ -187,11 +187,11 @@ The harness auto-detects the `photofield` binary relative to the repo root.
 To call it from elsewhere:
 
 ```bash
-AGT_BIN=/path/to/photofield ./tools/agent-test.sh mcp call list_collections '{}'
+AGT_BIN=/path/to/photofield ./tools/agent.sh mcp call list_collections '{}'
 ```
 
 Or use a custom URL:
 
 ```bash
-AGT_URL=http://remote-host:9000/mcp ./tools/agent-test.sh mcp call list_collections '{}'
+AGT_URL=http://remote-host:9000/mcp ./tools/agent.sh mcp call list_collections '{}'
 ```
