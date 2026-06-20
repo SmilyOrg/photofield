@@ -21,7 +21,7 @@ git branch --show-current | grep -q '^main$'
 
 ```bash
 # Working directory must be clean
-git diff-index --quiet HEAD -- || echo "NOT CLEAN"
+git diff-index --quiet HEAD -- || { echo "NOT CLEAN"; exit 1; }
 ```
 
 ```bash
