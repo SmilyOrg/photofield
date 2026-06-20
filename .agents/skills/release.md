@@ -8,9 +8,7 @@ description: >-
 
 # Photofield Release Process
 
-Follow these steps to create a new Photofield release. This is a superset of
-[`RELEASE_CHECKLIST.md`](./RELEASE_CHECKLIST.md) — use it as the primary
-source of truth for release automation.
+Follow these steps to create a new Photofield release.
 
 ## 1. Prerequisites
 
