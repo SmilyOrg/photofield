@@ -28,7 +28,7 @@ git diff-index --quiet HEAD -- || echo "NOT CLEAN"
 
 ```bash
 # CI must be passing on current HEAD
-curl -s "https://api.github.com/repos/SmilyOrg/photofield/commits/$(git rev-parse HEAD)/check-runs" | grep -oP '"conclusion":"[^"]*"' | grep -v '"success"' && echo "CI FAILING" || echo "CI PASSING"
+curl -s "https://api.github.com/repos/SmilyOrg/photofield/commits/$(git rev-parse HEAD)/status" | grep -q '"state":"success"' && echo "CI PASSING" || echo "CI NOT PASSING"
 ```
 
 If any check fails, stop and report the issue to the user. Do not proceed.
@@ -45,7 +45,7 @@ Tell the user: *"No unreleased changelog entries found. Nothing to release."*
 List each entry for the user (read the YAML files):
 
 ```bash
-for f in .changes/unreleased/*.yaml; do
+for f in .changes/unreleased/*.yaml; do [ -e "$f" ] || continue
   kind=$(grep '^kind:' "$f" | sed 's/kind: //')
   body=$(grep '^body:' "$f" | sed 's/body: //')
   echo "- [$kind] $body"
@@ -77,8 +77,8 @@ PATCH=$(echo "$CURRENT" | cut -d. -f3)
 Check if any entry is a minor-bump kind:
 
 ```bash
-# Returns "true" if any entry is minor-bump
-grep -l -E '^kind: (Breaking Changes|Added|Removed|Deprecated)' .changes/unreleased/*.yaml 2>/dev/null | grep -qv '^$' && echo "MINOR" || echo "PATCH"
+# Sets BUMP to "MINOR" if any entry is a minor-bump kind, otherwise "PATCH"
+BUMP=$(grep -l -E '^kind: (Breaking Changes|Added|Removed|Deprecated)' .changes/unreleased/*.yaml 2>/dev/null | grep -qv '^$' && echo "MINOR" || echo "PATCH")
 ```
 
 ```bash
