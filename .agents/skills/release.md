@@ -192,13 +192,13 @@ git tag -d "$NEXT"
 git reset --hard HEAD~1
 ```
 
-### After push
+### After push (Only With Explicit Approval)
 
 ```bash
 git tag -d "$NEXT"
 git push origin :refs/tags/$NEXT
 git reset --hard HEAD~1
-git push -f origin main
+git push --force-with-lease origin main
 ```
 
 Then fix the issue and restart from §6.
