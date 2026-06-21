@@ -5,7 +5,7 @@
 #
 # USAGE:
 #   agent.sh --help                          Print this help
-#   agent.sh --verbose                       Verbose output (env override)
+#   agent.sh --verbose                       Verbose output (must precede subcommand; env override: AGT_VERBOSE=1)
 #
 #   agent.sh server start                    Start server (auto-detect / launch)
 #   agent.sh server stop                     Stop via PID file
@@ -38,7 +38,7 @@ ENDPOINT_URL="${AGT_URL:-${API_BASE}/mcp}"
 BIN="${AGT_BIN:-$(cd "$(dirname "$0")/.." && pwd)/photofield}"
 DATA_DIR="${AGT_DATA_DIR:-$(pwd)/data}"
 AUTO_START="${AGT_START:-true}"
-VERBOSE=0
+VERBOSE=${AGT_VERBOSE:-0}
 _SERVER_MANAGED=false
 
 # ─── Paths ───
@@ -483,7 +483,7 @@ Usage:
   agent.sh [options] <command> [args...]
 
 Options:
-  --verbose, -v         Verbose output (also AGT_VERBOSE=1)
+  --verbose, -v         Global verbosity flag (must precede subcommand; also AGT_VERBOSE=1)
   --help, -h, --        Print this help
 
 Server commands:
@@ -524,13 +524,26 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --verbose|-v|-V) VERBOSE=1; verbose_override=1; shift ;;
     --help|-h|--) cmd="help"; shift ;;
-    server) cmd="server"; shift; subcmd="${1:-help}"; shift ;;
+    server)
+      cmd="server"
+      shift
+      # Detect misplaced --verbose (position 2) and fail loudly
+      if [[ $# -gt 0 && "$1" == "--verbose" ]]; then
+        echo "Error: --verbose must come before subcommand. Use: agent.sh --verbose server <start|stop|restart|status|kill>" >&2
+        exit 1
+      fi
+      subcmd="${1:-help}"
+      shift
+      ;;
     api) cmd="api"; shift; break ;;
     mcp)
       cmd="mcp"
       shift
-      subcmd="${1:-help}"
-      shift
+      # Detect misplaced --verbose (position 2) and fail loudly
+      if [[ $# -gt 0 && "$1" == "--verbose" ]]; then
+        echo "Error: --verbose must come before subcommand. Use: agent.sh --verbose mcp <call|quick|shell>" >&2
+        exit 1
+      fi
       break
       ;;
     *)
@@ -544,6 +557,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ─── Execute ───
+# For mcp/server, subcmd is the first remaining arg after the main loop
+[[ -z "$subcmd" && $# -gt 0 ]] && subcmd="$1" && shift
+
 case "$cmd" in
   help)
     print_help
