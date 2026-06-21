@@ -21,7 +21,7 @@ type Server struct {
 	srv       *mcp.Server
 	handler   http.Handler
 	baseURL   atomic.Value // set from request Host header per request (stores string)
-	apiPrefix string         // e.g. "/api" — used for constructing file URLs
+	apiPrefix string       // e.g. "/api" — used for constructing file URLs
 }
 
 // New creates a new MCP server for photofield with the given data sources
@@ -57,7 +57,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 		Description: "Split a collection's photos into chronological events. Returns metadata summaries (photo count, date ranges, location count) — NOT the photo images themselves. " +
 			"Use after list_collections, before search_photos, to get high-level context about where and when photos were taken.",
 		InputSchema: map[string]any{
-			"type":       "object",
+			"type": "object",
 			"properties": map[string]any{
 				"collection_id": map[string]any{"type": "string", "description": "The collection ID from list_collections. Use the 'id' field from the collection object returned by list_collections."},
 			},
@@ -100,12 +100,12 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			"- 'filename:IMG_*.jpg' — all IMG_ photos, oldest first\n\n" +
 			"WORKFLOW: search_photos → get_photo_metadata(file_id) to get preview_url → embed directly in markdown, or get_photo(file_id) for the image.",
 		InputSchema: map[string]any{
-			"type":       "object",
+			"type": "object",
 			"properties": map[string]any{
 				"collection_id": map[string]any{"type": "string", "description": "The collection ID from list_collections."},
 				"query":         map[string]any{"type": "string", "description": "Search query: natural language text, image similarity (img:ID), or face similarity (face:ID)."},
-				"sort":          map[string]any{"type":       [3]string{"null", "string"}, "description": "Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."},
-				"limit":         map[string]any{"type":       [2]string{"null", "integer"}, "description": "Max results. Default 50. Results beyond limit are silently discarded."},
+				"sort":          map[string]any{"type": [3]string{"null", "string"}, "description": "Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."},
+				"limit":         map[string]any{"type": [2]string{"null", "integer"}, "description": "Max results. Default 50. Results beyond limit are silently discarded."},
 			},
 			"required": []string{"collection_id", "query"},
 		},
@@ -114,10 +114,12 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo_metadata",
 		Description: "Retrieve structured photo metadata (dimensions, path, dates, tags, faces, location, URLs). " +
-			"Show photos using preview_url and link to original_url for full resolution (use HTML: <a href=original_url><img src=preview_url></a>). " +
+			"Returns preview_url and original_url fields. " +
+			"⚠️ Do NOT output raw HTML (<a><img>) or bare URLs to display photos — the MCP client will not render them. " +
+			"Use preview_url directly in markdown syntax (![alt](url)). " +
 			"Use after list_collections, events, or search_photos to inspect details on specific file_ids.",
 		InputSchema: map[string]any{
-			"type":       "object",
+			"type": "object",
 			"properties": map[string]any{
 				"file_id": map[string]any{"type": "integer", "description": "The photo file ID (required). Obtain from search_photos results."},
 			},
@@ -128,21 +130,22 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo",
 		Description: "Retrieve a photo as a base64-encoded image. This is the only tool that returns actual image data. " +
+			"⚠️ DO NOT output raw HTML (<img src=...>) or bare image URLs — the MCP client will not render them. Always call get_photo(file_id) instead. " +
 			"Default (file_id only): 256x256 JPEG thumbnail. Format: jpeg (default), png, webp. " +
 			"Crop params (crop_x/y/w/h) are in original image pixel coordinates; all four must be specified together. " +
 			"⚠️ Only pass optional parameters (w, h, crop) when investigating specific details — always start with file_id alone.\n\n" +
 			"WORKFLOW: search_photos → get_photo_metadata(file_id) for dimensions/preview_url → get_photo(file_id) for the image.",
 		InputSchema: map[string]any{
-			"type":       "object",
+			"type": "object",
 			"properties": map[string]any{
 				"file_id": map[string]any{"type": "integer", "description": "The photo file ID."},
-				"w":       map[string]any{"type":       [2]string{"null", "integer"}, "description": "Target width in pixels (1-4096). Omit unless investigating details — always start with the default 256x256 thumbnail."},
-				"h":       map[string]any{"type":       [2]string{"null", "integer"}, "description": "Target height in pixels (1-4096). Omit unless investigating details — always start with the default 256x256 thumbnail."},
-				"format":  map[string]any{"type":       [2]string{"null", "string"}, "description": "Output format. Default: jpeg. Options: jpeg, png, webp."},
-				"crop_x":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop left edge in original image pixels. Must specify all four crop params together."},
-				"crop_y":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop top edge in original image pixels."},
-				"crop_w":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop width in original image pixels."},
-				"crop_h":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop height in original image pixels."},
+				"w":       map[string]any{"type": [2]string{"null", "integer"}, "description": "Target width in pixels (1-4096). Omit unless investigating details — always start with the default 256x256 thumbnail."},
+				"h":       map[string]any{"type": [2]string{"null", "integer"}, "description": "Target height in pixels (1-4096). Omit unless investigating details — always start with the default 256x256 thumbnail."},
+				"format":  map[string]any{"type": [2]string{"null", "string"}, "description": "Output format. Default: jpeg. Options: jpeg, png, webp."},
+				"crop_x":  map[string]any{"type": [2]string{"null", "integer"}, "description": "Crop left edge in original image pixels. Must specify all four crop params together."},
+				"crop_y":  map[string]any{"type": [2]string{"null", "integer"}, "description": "Crop top edge in original image pixels."},
+				"crop_w":  map[string]any{"type": [2]string{"null", "integer"}, "description": "Crop width in original image pixels."},
+				"crop_h":  map[string]any{"type": [2]string{"null", "integer"}, "description": "Crop height in original image pixels."},
 			},
 			"required": []string{"file_id"},
 		},
