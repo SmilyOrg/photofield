@@ -15,12 +15,12 @@ import (
 type Collection struct {
 	Id            string     `json:"id"`
 	Name          string     `json:"name"`
-	Layout        string     `json:"layout"`
-	Sort          string     `json:"sort"`
-	Limit         int        `json:"limit"`
-	IndexLimit    int        `json:"index_limit"`
-	ExpandSubdirs bool       `json:"expand_subdirs"`
-	ExpandSort    string     `json:"expand_sort"`
+	Layout        string     `json:"layout,omitempty"`
+	Sort          string     `json:"sort,omitempty"`
+	Limit         int        `json:"limit,omitempty"`
+	IndexLimit    int        `json:"index_limit,omitempty"`
+	ExpandSubdirs bool       `json:"expand_subdirs,omitempty"`
+	ExpandSort    string     `json:"expand_sort,omitempty"`
 	Dirs          []string   `json:"dirs"`
 	IndexedAt     *time.Time `json:"indexed_at,omitempty"`
 	IndexedCount  int        `json:"indexed_count"`

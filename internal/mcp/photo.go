@@ -11,8 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
-	"strings"
+
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -122,21 +121,16 @@ type getPhotoOutput struct{}
 
 // getPhotoMetadataOutput contains the structured metadata for the get_photo_metadata MCP tool.
 type getPhotoMetadataOutput struct {
-	Width       int         `json:"width"`        // rendered output width in pixels
-	Height      int         `json:"height"`       // rendered output height in pixels
-	OrigWidth   int         `json:"orig_width"`   // original image width in pixels
-	OrigHeight  int         `json:"orig_height"`  // original image height in pixels
-	Path        string      `json:"path"`         // original file path
-	Filename    string      `json:"filename"`     // original file name with extension
-	Extension   string      `json:"extension"`    // file extension (e.g. ".jpg")
-	Video       bool        `json:"video"`        // true if the file is a video
-	CreatedAt   string      `json:"created_at"`   // file creation time in RFC 3339
-	Tags        []SimpleTag `json:"tags,omitempty"`
-	Faces       []FaceInfo  `json:"faces,omitempty"`
-	Location    string      `json:"location,omitempty"`      // reverse-geocoded location
-	LatLng      *LatLng     `json:"latlng,omitempty"`         // GPS coordinates
-	Thumbnails  []Thumbnail `json:"thumbnails,omitempty"`    // available thumbnail variants
-	ImageUrl    string      `json:"image_url"`    // absolute URL to the medium thumbnail (M) or original (for markdown embedding)
+	Width    int         `json:"width"`    // original image width in pixels
+	Height   int         `json:"height"`   // original image height in pixels
+	Path         string      `json:"path"`          // original file path
+	Video        bool        `json:"video,omitempty"`        // true if the file is a video
+	CreatedAt    string      `json:"created_at"`    // file creation time in RFC 3339
+	Tags         []SimpleTag `json:"tags,omitempty"`
+	Faces        []FaceInfo  `json:"faces,omitempty"`
+	Location     string      `json:"location,omitempty"`      // reverse-geocoded location
+	LatLng       *LatLng     `json:"latlng,omitempty"`         // GPS coordinates
+	OriginalUrl  string      `json:"original_url"`  // absolute URL to the original image (full-resolution variant)
 }
 
 // FaceInfo represents detected face data for a photo.
@@ -163,17 +157,7 @@ type SimpleTag struct {
 	FileCount int    `json:"file_count"`
 }
 
-// Thumbnail describes an available thumbnail variant.
-type Thumbnail struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	Filename    string `json:"filename"`
-	Url         string `json:"url,omitempty"` // absolute URL to the thumbnail variant
-}
-
-// getPhotoMetadataHandler handles the get_photo_metadata MCP tool request.
+// getPhotoMetadataHandler handles the get_photo_metadata tool request.
 // Returns all photo metadata without the image data — useful for inspecting
 // tags, faces, location, thumbnails, and dimensions without downloading the image.
 func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[getPhotoMetadataInput, getPhotoMetadataOutput] {
@@ -197,31 +181,26 @@ func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Sour
 		}
 
 		// Gather metadata using the same logic as get_photo
-		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, srv.baseURL.Load().(string), info.Width, info.Height, "jpeg")
+		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, srv.baseURL.Load().(string))
 
 		if panicked != nil {
 			return nil, getPhotoMetadataOutput{}, fmt.Errorf("internal error reading photo metadata: %v", panicked)
 		}
 
-		// Return only structured metadata — no image content block.
+			// Return only structured metadata — no image content block.
 		// Leave Content nil so the SDK auto-populates it with JSON text
 		// from StructuredContent (required for MCP clients that only read content).
 		return nil, getPhotoMetadataOutput{
-			ImageUrl:   metadata.ImageUrl,
-			Width:      info.Width,
-			Height:     info.Height,
-			OrigWidth:  info.Width,
-			OrigHeight: info.Height,
-			Path:       metadata.Path,
-			Filename:   metadata.Filename,
-			Extension:  metadata.Extension,
-			Video:      metadata.Video,
-			CreatedAt:  metadata.CreatedAt,
-			Tags:       metadata.Tags,
-			Faces:      metadata.Faces,
-			Location:   metadata.Location,
-			LatLng:     metadata.LatLng,
-			Thumbnails: metadata.Thumbnails,
+			OriginalUrl: metadata.OriginalUrl,
+			Width:  info.Width,
+			Height: info.Height,
+			Path:        metadata.Path,
+			Video:       metadata.Video,
+			CreatedAt:   metadata.CreatedAt,
+			Tags:        metadata.Tags,
+			Faces:       metadata.Faces,
+			Location:    metadata.Location,
+			LatLng:      metadata.LatLng,
 		}, nil
 	}
 }
@@ -438,24 +417,19 @@ func encodePhoto(ctx context.Context, source *image.Source, fileId image.ImageId
 
 // photoMetadata holds all metadata fields for a photo.
 type photoMetadata struct {
-	Path       string
-	Filename   string
-	Extension  string
-	Video      bool
-	CreatedAt  string
-	ImageUrl   string
-	Tags       []SimpleTag
-	Faces      []FaceInfo
-	Location   string
-	LatLng     *LatLng
-	Thumbnails []Thumbnail
+	Path        string
+	Video       bool
+	CreatedAt   string
+	OriginalUrl string
+	Tags        []SimpleTag
+	Faces       []FaceInfo
+	Location    string
+	LatLng      *LatLng
 }
 
 // gatherPhotoMetadata collects all metadata for a photo by file ID.
 // serverBaseURL is the absolute API base URL (e.g. "http://localhost:8080").
-// targetW/targetH/format are used to construct the image and preview URLs.
-// Mirrors the logic from layout.common.go:getRegionFromPhoto.
-func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, info image.Info, serverBaseURL string, targetW, targetH int, format string) photoMetadata {
+func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, info image.Info, serverBaseURL string) photoMetadata {
 	originalPath, _ := source.GetImagePath(image.ImageId(fileId))
 	location := ""
 	var latlng *LatLng
@@ -468,40 +442,20 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 	}
 
 	isVideo := source.IsSupportedVideo(originalPath)
-	extension := filepath.Ext(originalPath)
 	filename := filepath.Base(originalPath)
 
-	// Gather thumbnails from each source
-	var thumbnails []Thumbnail
-	originalSize := io.Size{X: info.Width, Y: info.Height}
-	basename := strings.TrimSuffix(filename, extension)
+	// Build original image URL: use the 'original' variant (full-resolution source copy)
+	var originalUrl string
 	for _, s := range source.Sources {
+		if s.Name() != "original" {
+			continue
+		}
 		if !s.Exists(ctx, io.ImageId(fileId), originalPath) {
 			continue
 		}
-		size := s.Size(originalSize)
-		ext := s.Ext()
-		if ext == "" {
-			ext = extension
-		}
-		thumbFilename := fmt.Sprintf("%s_%s%s", basename, s.Name(), ext)
-		thumbnails = append(thumbnails, Thumbnail{
-			Name:        s.Name(),
-			DisplayName: s.DisplayName(),
-			Width:       size.X,
-			Height:      size.Y,
-			Filename:    thumbFilename,
-			Url:         serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/variants/" + s.Name() + "/" + thumbFilename,
-		})
+		originalUrl = serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/variants/" + s.Name() + "/" + filename
+		break
 	}
-	sort.Slice(thumbnails, func(i, j int) bool {
-		a, b := &thumbnails[i], &thumbnails[j]
-		aa, bb := a.Width*a.Height, b.Width*b.Height
-		if aa != bb {
-			return aa < bb
-		}
-		return a.Name < b.Name
-	})
 
 	// Gather tags
 	tags := make([]SimpleTag, 0)
@@ -542,31 +496,19 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 		})
 	}
 
-	// Build image URL: use medium thumbnail (M: 320x320) if available, otherwise original
-	imgUrl := ""
-	for _, thumb := range thumbnails {
-		if thumb.Name == "M" && thumb.Url != "" {
-			imgUrl = thumb.Url
-			break
-		}
+	if originalUrl == "" {
+		originalUrl = serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/variants/" + filename
 	}
-	// Fallback to original if no medium thumbnail found
-	if imgUrl == "" {
-		imgUrl = serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/variants/" + filename
-	}
-	
+
 	return photoMetadata{
-		Path:       originalPath,
-		Filename:   filename,
-		Extension:  extension,
-		Video:      isVideo,
-		ImageUrl:   imgUrl,
-		CreatedAt:  info.DateTime.Format("2006-01-02T15:04:05Z07:00"),
-		Tags:       tags,
-		Faces:      faces,
-		Location:   location,
-		LatLng:     latlng,
-		Thumbnails: thumbnails,
+		Path:        originalPath,
+		Video:       isVideo,
+		OriginalUrl: originalUrl,
+		CreatedAt:   info.DateTime.Format("2006-01-02T15:04:05Z07:00"),
+		Tags:        tags,
+		Faces:       faces,
+		Location:    location,
+		LatLng:      latlng,
 	}
 }
 

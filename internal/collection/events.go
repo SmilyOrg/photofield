@@ -17,11 +17,11 @@ const (
 
 // EventSummary represents a time-bounded event within a collection.
 type EventSummary struct {
-	Index         int        `json:"index"`
+	Index         int        `json:"index,omitempty"`
 	CreatedAfter  string     `json:"created_after"`
 	CreatedBefore string     `json:"created_before"`
 	PhotoCount    int        `json:"photo_count"`
-	LocationCount int        `json:"location_count"`
+	LocationCount int        `json:"location_count,omitempty"`
 	Locations     []string   `json:"locations,omitempty"`
 }
 
