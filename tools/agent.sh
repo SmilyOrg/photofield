@@ -87,6 +87,8 @@ server_start() {
   fi
 
   log_step "Starting server..."
+  export PHOTOFIELD_ADDRESS=":$(echo "$PORT" | sed 's/.*://')"
+  export PHOTOFIELD_DATA_DIR="$DATA_DIR"
   nohup "$BIN" > /tmp/photofield-agent.log 2>&1 &
   _SERVER_MANAGED=true
   local pid=$!
