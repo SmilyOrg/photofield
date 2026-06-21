@@ -213,7 +213,8 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 	// overwrites it per-request.
 	srv.baseURL.Store("http://" + fallbackAddr)
 
-	return &Server{srv: sdkSrv, handler: wrappedHandler}, nil
+	srv.handler = wrappedHandler
+	return srv, nil
 }
 
 // --- list_collections ---
