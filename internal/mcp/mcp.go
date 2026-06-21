@@ -42,11 +42,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr s
 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "list_collections",
-		Description: "List all photo collections available in the library with their current indexed status. " +
-			"Use this first to discover which collections exist, their IDs, how many photos are indexed, " +
-			"and when indexing last occurred. The collection ID from the response is required for all other " +
-			"tools (events, search_photos, get_photo). This tool has no input parameters — call it with an empty object {}. " +
-			"Returns indexed_count (how many photos have been processed) and indexed_at (timestamp of last indexing). " +
+		Description: "List all photo collections. Use this first — the collection_id from the response is required by all other tools. " +
 			"If indexed_count is 0 or indexed_at is missing, the collection has not been indexed yet.",
 		InputSchema: map[string]any{
 			"type":       "object",
@@ -56,13 +52,8 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr s
 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "events",
-		Description: "Split a collection's photos into chronological events based on time gaps. Photos on different " +
-			"calendar days, or more than 1 hour apart (within the same day), are placed in separate events. Returns " +
-			"metadata summaries only (photo count, date ranges, number of distinct locations, location names) — NOT " +
-			"the photo images themselves. Uses reverse-geocoded location names for photos that are more than 1 km " +
-			"apart AND more than 15 minutes apart (to avoid excessive geocoding API calls). Best used after " +
-			"list_collections to pick a collection_id, then before search_photos to get high-level context about " +
-			"where and when photos were taken.",
+		Description: "Split a collection's photos into chronological events. Returns metadata summaries (photo count, date ranges, location count) — NOT the photo images themselves. " +
+			"Use after list_collections, before search_photos, to get high-level context about where and when photos were taken.",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{
@@ -74,41 +65,45 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr s
 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "search_photos",
-		Description: "Search a collection's photos using natural language text, visual similarity to another image, " +
-			"or similarity to a detected face. This is the primary discovery tool for finding specific photos. Returns " +
-			"metadata summaries (file name, date, dimensions, dominant color, location, tags, similarity score) — NOT " +
-			"the image data itself. Use get_photo with the returned file_id to retrieve actual images and their embeddable URLs.\n\n" +
+		Description: "Search a collection's photos by text, image reference (img:ID), or face reference (face:ID). Returns metadata summaries — NOT the image data. " +
+			"Results beyond the limit are silently discarded. Use get_photo_metadata on results to get preview_url for markdown embedding, or get_photo for the full image.\n\n" +
 			"QUERY TYPES:\n" +
-			"- Text search: e.g. 'red car on highway' — uses CLIP embeddings to find semantically similar images, sorted by match quality\n" +
+			"- Text search: e.g. 'red car on highway' — uses CLIP embeddings, sorted by match quality\n" +
 			"- Image similarity: e.g. 'img:1234' — finds photos visually similar to the given image ID\n" +
 			"- Face similarity: e.g. 'face:5678' — finds photos containing similar faces\n\n" +
-			"COMBINABLE QUALIFIERS (can mix with text search or use standalone):\n" +
+			"COMBINABLE QUALIFIERS (mix with text or use standalone):\n" +
 			"- tag:name — filter by tag (e.g. 'vacation', 'fav')\n" +
 			"- filename:text — filter by filename (supports * and ? wildcards, e.g. 'filename:*.png')\n" +
 			"- created:YYYY-MM-DD — filter by date (supports ranges like 'created:2023-01-01..2023-12-31', wildcards like 'created:*-12-25', and operators like 'created:>=2023-06-15')\n" +
 			"- t:X — similarity threshold filter (0.15-0.30, where higher = more strict; e.g. 'beach sunset t:0.25')\n" +
 			"- dedup:X — filter duplicates by similarity (0-1, e.g. 'dedup:0.9' keeps only photos <90% similar to each other)\n\n" +
+			"SORT OPTIONS (passed as the 'sort' parameter):\n" +
+			"- -date (default) — newest first\n" +
+			"- +date — oldest first\n" +
+			"- -similarity — best matches first\n" +
+			"- +similarity — worst matches first\n" +
+			"- +shuffle-hourly — random within each hour\n" +
+			"- +shuffle-daily — random within each day\n" +
+			"- +shuffle-weekly — random within each week\n" +
+			"- +shuffle-monthly — random within each month\n" +
+			"- Multiple fields: e.g. '-similarity,+date' (sort by similarity, break ties newest first)\n\n" +
 			"EXAMPLES:\n" +
 			"- 'beach sunset' — semantically search for beach/sunset photos\n" +
 			"- 'beach sunset t:0.25' — find beach sunsets with at least 0.25 similarity\n" +
 			"- 'created:2023-06..2023-08 tag:vacation' — vacation photos from summer 2023\n" +
-			"- 'img:100 tag:fav' — favorited photos similar to image 100\n\n" +
-			"PARAMETERS:\n" +
-			"- collection_id (required): From list_collections\n" +
-			"- query (required): Search query as described above\n" +
-			"- sort (optional): Controls result ordering. Default is '-date' (newest first). Options: '-date' " +
-			"(newest), '+date' (oldest), '-similarity' (best match first), '-similarity,+date' (best match, then " +
-			"newest). The '-' prefix means descending, '+' means ascending. Multiple fields can be combined with commas.\n" +
-			"- limit (optional): Maximum number of results. Default is 50. Use a smaller value (10-20) for quick " +
-			"previews, or larger (100-200) for comprehensive result sets. Results beyond the limit are silently discarded.\n\n" +
-			"WORKFLOW: Call search_photos to find candidates → examine the results → call get_photo on specific file_ids to see actual images and get their embeddable URLs.",
+			"- 'img:100 tag:fav' — favorited photos similar to image 100\n" +
+			"- 'dog' sort:-similarity — dogs sorted by relevance\n" +
+			"- 'dog' sort:+shuffle-daily — random order, but grouped by day\n" +
+			"- 'portrait' sort:-similarity,+date — best portraits first, newest tiebreak\n" +
+			"- 'filename:IMG_*.jpg' — all IMG_ photos, oldest first\n\n" +
+			"WORKFLOW: search_photos → get_photo_metadata(file_id) to get preview_url → embed directly in markdown, or get_photo(file_id) for the image.",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{
 				"collection_id": map[string]any{"type": "string", "description": "The collection ID from list_collections."},
-				"query":         map[string]any{"type": "string", "description": "Search query: natural language text ('red car on highway'), image similarity ('img:1234'), face similarity ('face:5678'), or combined with qualifiers ('beach sunset tag:vacation created:2023-06'). Required."},
-				"sort":          map[string]any{"type":       [3]string{"null", "string"}, "description": "Sort order. Default is '-date' (newest first). Options: '-date', '+date', '-similarity', '-similarity,+date'. Descending uses '-', ascending uses '+'."},
-				"limit":         map[string]any{"type":       [2]string{"null", "integer"}, "description": "Max results. Default 50. Use 10-20 for quick previews, 100-200 for comprehensive sets."},
+				"query":         map[string]any{"type": "string", "description": "Search query: natural language text, image similarity (img:ID), or face similarity (face:ID)."},
+				"sort":          map[string]any{"type":       [3]string{"null", "string"}, "description": "Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."},
+				"limit":         map[string]any{"type":       [2]string{"null", "integer"}, "description": "Max results. Default 50. Results beyond limit are silently discarded."},
 			},
 			"required": []string{"collection_id", "query"},
 		},
@@ -116,21 +111,9 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr s
 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo_metadata",
-		Description: "Retrieve all photo metadata as structured JSON without the image data. Useful for inspecting tags, faces, location, dimensions, and thumbnail URLs without downloading the image.\n\n" +
-			"OUTPUT METADATA:\n" +
-			"- image_url: Absolute URL to medium thumbnail (M: 320x320) or original image (for markdown embedding)\n" +
-			"- width/height: The rendered output dimensions (same as orig when no resize is applied)\n" +
-			"- orig_width/orig_height: The original image's native resolution\n" +
-			"- path/filename/extension: Original file path details\n" +
-			"- video: true if the file is a video\n" +
-			"- created_at: Creation date in ISO 8601 format\n" +
-			"- tags: Detected semantic tags with file counts\n" +
-			"- faces: Detected faces with bounding box coordinates (x,y,w,h) and confidence scores\n" +
-			"- latlng: GPS coordinates if available\n" +
-			"- location: Reverse-geocoded location string (e.g. 'Paris, France')\n" +
-			"- thumbnails: Available thumbnail variants with their sizes and absolute URLs\n" +
-			"- faces[].preview_url: Direct URL to each face's cropped preview image (200x200)\n\n" +
-			"WORKFLOW: Use list_collections → events/search_photos for discovery → get_photo_metadata(file_id) to inspect all metadata → get_photo(file_id) only when you need the actual image data.",
+		Description: "Retrieve structured photo metadata (dimensions, path, dates, tags, faces, location, URLs). " +
+			"Show photos using preview_url and link to original_url for full resolution (use HTML: <a href=original_url><img src=preview_url></a>). " +
+			"Use after list_collections, events, or search_photos to inspect details on specific file_ids.",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{
@@ -142,34 +125,22 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr s
 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo",
-		Description: "Retrieve a photo as a base64-encoded image. This is the only tool that returns actual image data.\n\n" +
-			"CRITICAL DEFAULT BEHAVIOR — ALWAYS CALL WITH ONLY file_id FIRST:\n" +
-			"When you call get_photo with ONLY the file_id parameter (no w, h, crop, or format), it returns a small " +
-			"256x256 pixel thumbnail as JPEG. This is the recommended default for: browsing search results, getting a " +
-			"quick overview, identifying content at a glance, and most everyday use cases. Small thumbnails are fast, " +
-			"efficient, and usually sufficient for identifying what a photo contains.\n\n" +
-			"ONLY add extra parameters when you genuinely need more detail:\n" +
-			"- w/h: Use ONLY when the thumbnail is too small to make out details. E.g., if you need to read text in a " +
-			"sign, identify a distant person, or examine architectural details. Range: 1-4096. Omit both for the default " +
-			"256x256 thumbnail.\n" +
-			"- format: Rarely needed. Options: 'jpeg' (default, best for photos), 'png' (lossless, good for " +
-			"screenshots/diagrams), 'webp' (smaller file size, modern format). Use default jpeg unless you have a specific need.\n" +
-			"- crop_x/crop_y/crop_w/crop_h: Use ONLY when you need to zoom into a specific region of the photo. " +
-			"Coordinates are in the ORIGINAL image's pixel space (not the output dimensions). All four must be " +
-			"specified together. The crop is applied before resizing by w/h. Example: to zoom into a face, you'd " +
-			"need to know approximate coordinates from metadata (use get_photo_metadata first).\n\n" +
-			"WORKFLOW: Use list_collections → events/search_photos for discovery → get_photo_metadata(file_id) to inspect dimensions and coordinates → get_photo(file_id) for the image → get_photo(file_id, w=800, h=600) only when you need to inspect details.",
+		Description: "Retrieve a photo as a base64-encoded image. This is the only tool that returns actual image data. " +
+			"Default (file_id only): 256x256 JPEG thumbnail. Format: jpeg (default), png, webp. " +
+			"Crop params (crop_x/y/w/h) are in original image pixel coordinates; all four must be specified together. " +
+			"⚠️ Only pass optional parameters (w, h, crop) when investigating specific details — always start with file_id alone.\n\n" +
+			"WORKFLOW: search_photos → get_photo_metadata(file_id) for dimensions/preview_url → get_photo(file_id) for the image.",
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{
-				"file_id": map[string]any{"type": "integer", "description": "The photo file ID (required). Obtain from search_photos results or get_photo output."},
-				"w":       map[string]any{"type":       [2]string{"null", "integer"}, "description": "Target width in pixels (1-4096). OMIT for default 256x256 thumbnail. ONLY specify when you need larger output to inspect details that are unclear in the thumbnail."},
-				"h":       map[string]any{"type":       [2]string{"null", "integer"}, "description": "Target height in pixels (1-4096). OMIT for default 256x256 thumbnail. ONLY specify when you need larger output to inspect details that are unclear in the thumbnail."},
-				"format":  map[string]any{"type":       [2]string{"null", "string"}, "description": "Output format. Default: 'jpeg'. Options: 'jpeg' (recommended for photos, best quality/size balance), 'png' (lossless, use for screenshots/text), 'webp' (smaller files, modern). Rarely need to change from default."},
-				"crop_x":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop left edge in ORIGINAL image pixels. Use with crop_y/crop_w/crop_h to zoom into a specific region. Coordinates are in the original image's pixel space, not the output dimensions."},
-				"crop_y":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop top edge in ORIGINAL image pixels. Must be used with crop_w and crop_h."},
-				"crop_w":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop width in ORIGINAL image pixels. Must be used with crop_x, crop_y, and crop_h."},
-				"crop_h":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop height in ORIGINAL image pixels. Must be used with crop_x, crop_y, and crop_w."},
+				"file_id": map[string]any{"type": "integer", "description": "The photo file ID."},
+				"w":       map[string]any{"type":       [2]string{"null", "integer"}, "description": "Target width in pixels (1-4096). Omit unless investigating details — always start with the default 256x256 thumbnail."},
+				"h":       map[string]any{"type":       [2]string{"null", "integer"}, "description": "Target height in pixels (1-4096). Omit unless investigating details — always start with the default 256x256 thumbnail."},
+				"format":  map[string]any{"type":       [2]string{"null", "string"}, "description": "Output format. Default: jpeg. Options: jpeg, png, webp."},
+				"crop_x":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop left edge in original image pixels. Must specify all four crop params together."},
+				"crop_y":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop top edge in original image pixels."},
+				"crop_w":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop width in original image pixels."},
+				"crop_h":  map[string]any{"type":       [2]string{"null", "integer"}, "description": "Crop height in original image pixels."},
 			},
 			"required": []string{"file_id"},
 		},
@@ -258,7 +229,7 @@ func listCollections(collections *[]collection.Collection, imageSource *image.So
 // --- events ---
 
 type eventsInput struct {
-	CollectionId string `json:"collection_id" jsonschema:"The collection ID from list_collections. Use the 'id' field from the collection object returned by list_collections."`
+	CollectionId string `json:"collection_id" jsonschema:"The collection ID from list_collections."`
 }
 
 type eventsOutput struct {
@@ -297,9 +268,9 @@ func eventsHandler(collections *[]collection.Collection, imageSource *image.Sour
 
 type searchPhotosInput struct {
 	CollectionId string  `json:"collection_id" jsonschema:"The collection ID from list_collections."`
-	Query        string  `json:"query" jsonschema:"Search query: natural language text ('red car on highway'), image similarity ('img:1234'), face similarity ('face:5678'), or combined with qualifiers ('beach sunset tag:vacation created:2023-06'). Required."`
-	Sort         *string `json:"sort" jsonschema:"Sort order. Default: \"-date\" (newest first). Options: \"-date\", \"+date\", \"-similarity\", \"-similarity,+date\". \"-\" = descending, \"+\" = ascending. Multiple fields separated by commas."`
-	Limit        *int    `json:"limit" jsonschema:"Max results. Default 50. Use 10-20 for quick previews, 100-200 for comprehensive sets."`
+	Query        string  `json:"query" jsonschema:"Search query: natural language text, image similarity (img:ID), or face similarity (face:ID)."`
+	Sort         *string `json:"sort" jsonschema:"Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."`
+	Limit        *int    `json:"limit" jsonschema:"Max results. Default 50. Results beyond limit are silently discarded."`
 }
 
 type searchPhotosOutput struct {
