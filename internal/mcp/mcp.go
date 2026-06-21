@@ -68,6 +68,8 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "search_photos",
 		Description: "Search a collection's photos by text, image reference (img:ID), or face reference (face:ID). Returns metadata summaries — NOT the image data. " +
+			"⚠️ Use get_photo(file_id) to verify key results visually before showing photos to the user — metadata and similarity scores can be misleading. " +
+			"Use your judgment on when to verify: for single specific results, definitely check; for browsing large sets, verify only the top matches.\n\n" +
 			"Results beyond the limit are silently discarded. Use get_photo_metadata on results to get preview_url for markdown embedding, or get_photo for the full image.\n\n" +
 			"QUERY TYPES:\n" +
 			"- Text search: e.g. 'red car on highway' — uses CLIP embeddings, sorted by match quality\n" +
@@ -98,7 +100,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			"- 'dog' sort:+shuffle-daily — random order, but grouped by day\n" +
 			"- 'portrait' sort:-similarity,+date — best portraits first, newest tiebreak\n" +
 			"- 'filename:IMG_*.jpg' — all IMG_ photos, oldest first\n\n" +
-			"WORKFLOW: search_photos → get_photo_metadata(file_id) to get preview_url → embed directly in markdown, or get_photo(file_id) for the image.",
+			"VERIFICATION: For single specific results, call get_photo on top matches to confirm content. For large browse results, verify the top 1-3 matches before presenting.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -114,8 +116,10 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo_metadata",
 		Description: "Retrieve structured photo metadata (dimensions, path, dates, tags, faces, location, URLs). " +
+			"⚠️ Metadata alone may not be reliable — if you're about to show a photo to the user based on metadata or search results, call get_photo(file_id) to visually confirm it actually contains what you claim. " +
+			"Tags, location, and similarity scores can be wrong or misleading. " +
 			"Returns preview_url and original_url fields. " +
-			"⚠️ Do NOT output raw HTML (<a><img>) or bare URLs to display photos — the MCP client will not render them. " +
+			"Do NOT output raw HTML (<a><img>) or bare URLs to display photos — the MCP client will not render them. " +
 			"Use preview_url directly in markdown syntax (![alt](url)). " +
 			"Use after list_collections, events, or search_photos to inspect details on specific file_ids.",
 		InputSchema: map[string]any{
@@ -130,11 +134,15 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo",
 		Description: "Retrieve a photo as a base64-encoded image. This is the only tool that returns actual image data. " +
+			"Use this as a verification tool — call get_photo(file_id) on search results to visually confirm the photo contains what you expect before showing it to the user. " +
+			"Metadata and search scores can be misleading, so visual confirmation is recommended for key results.\n\n" +
 			"⚠️ DO NOT output raw HTML (<img src=...>) or bare image URLs — the MCP client will not render them. Always call get_photo(file_id) instead. " +
-			"Default (file_id only): 256x256 JPEG thumbnail. Format: jpeg (default), png, webp. " +
+			"Default (file_id only): 256x256 JPEG thumbnail — fast and usually sufficient for verification. " +
+			"Format: jpeg (default), png, webp. " +
 			"Crop params (crop_x/y/w/h) are in original image pixel coordinates; all four must be specified together. " +
-			"⚠️ Only pass optional parameters (w, h, crop) when investigating specific details — always start with file_id alone.\n\n" +
-			"WORKFLOW: search_photos → get_photo_metadata(file_id) for dimensions/preview_url → get_photo(file_id) for the image.",
+			"Only pass optional parameters (w, h, crop) when the thumbnail is too small to verify details.\n\n" +
+			"KEY RULE: Always call get_photo on any photo you're about to show the user or confirm in your response. " +
+			"Use your judgment on when to verify for intermediate/browsing results — check top matches, but don't feel you must check every single result.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
