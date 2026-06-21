@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"sync"
 
@@ -130,6 +131,7 @@ type getPhotoMetadataOutput struct {
 	Faces        []FaceInfo  `json:"faces,omitempty"`
 	Location     string      `json:"location,omitempty"`      // reverse-geocoded location
 	LatLng       *LatLng     `json:"latlng,omitempty"`         // GPS coordinates
+	PreviewUrl   string      `json:"preview_url"`    // absolute URL to a ~400px wide preview image (for direct markdown embedding: ![name](preview_url))
 	OriginalUrl  string      `json:"original_url"`  // absolute URL to the original image (full-resolution variant)
 }
 
@@ -191,6 +193,7 @@ func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Sour
 		// Leave Content nil so the SDK auto-populates it with JSON text
 		// from StructuredContent (required for MCP clients that only read content).
 		return nil, getPhotoMetadataOutput{
+			PreviewUrl:  metadata.PreviewUrl,
 			OriginalUrl: metadata.OriginalUrl,
 			Width:  info.Width,
 			Height: info.Height,
@@ -420,6 +423,7 @@ type photoMetadata struct {
 	Path        string
 	Video       bool
 	CreatedAt   string
+	PreviewUrl  string
 	OriginalUrl string
 	Tags        []SimpleTag
 	Faces       []FaceInfo
@@ -443,6 +447,13 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 
 	isVideo := source.IsSupportedVideo(originalPath)
 	filename := filepath.Base(originalPath)
+	previewFilename := strings.TrimSuffix(filename, filepath.Ext(filename)) + "_preview.jpg"
+
+	// Build preview URL: use /previews/ endpoint with ~400px width for direct markdown embedding
+	var previewUrl string
+	if originalPath != "" {
+		previewUrl = serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/previews/" + previewFilename + "?w=400"
+	}
 
 	// Build original image URL: use the 'original' variant (full-resolution source copy)
 	var originalUrl string
@@ -503,8 +514,9 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 	return photoMetadata{
 		Path:        originalPath,
 		Video:       isVideo,
-		OriginalUrl: originalUrl,
 		CreatedAt:   info.DateTime.Format("2006-01-02T15:04:05Z07:00"),
+		PreviewUrl:  previewUrl,
+		OriginalUrl: originalUrl,
 		Tags:        tags,
 		Faces:       faces,
 		Location:    location,
