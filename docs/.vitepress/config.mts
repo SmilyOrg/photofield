@@ -43,6 +43,7 @@ export default defineConfig({
           { text: 'Search', link: '/features/search' },
           { text: 'Tags', link: '/features/tags' },
           { text: 'Reverse Geolocation', link: '/features/geolocation' },
+          { text: 'MCP Server', link: '/mcp-server' },
         ]
       },
       {
