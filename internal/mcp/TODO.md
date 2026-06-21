@@ -4,7 +4,7 @@ Issues selected for fixing (validated by Copilot review + manual investigation).
 
 ## High Priority
 
-### [ ] 1. `tools/agent.sh:91` — `server start` ignores `AGT_PORT`/`AGT_DATA_DIR`
+### [x] 1. `tools/agent.sh:91` — `server start` ignores `AGT_PORT`/`AGT_DATA_DIR` ✅ Committed
 
 **Problem:** `server_start()` launches the server with `nohup "$BIN"` but never passes `PHOTOFIELD_ADDRESS` or `PHOTOFIELD_DATA_DIR` env vars. The script defines `PORT` and `DATA_DIR` locals, but the server reads different names (`PHOTOFIELD_ADDRESS` / `PHOTOFIELD_DATA_DIR`).
 
@@ -19,7 +19,7 @@ Remove any AGT_* env vars that are not needed and update the docs
 
 ---
 
-### [ ] 2. `main.go:1749` — `parsePreviewDimensions` 4096px cap removed (DoS vulnerability)
+### [x] 2. `main.go:1749` — `parsePreviewDimensions` 4096px cap removed (DoS vulnerability) ✅ Committed
 
 **Problem:** Upper bound check (`w > 4096` / `h > 4096`) was accidentally removed in commit `f03b99c`. An attacker can request unbounded dimensions, causing memory exhaustion (40GB+ for 100k×100k).
 
@@ -27,7 +27,7 @@ Remove any AGT_* env vars that are not needed and update the docs
 
 ---
 
-### [ ] 3. `main.go:2237` — Top-level `recover()` suppresses panic stack trace
+### [x] 3. `main.go:2237` — Top-level `recover()` suppresses panic stack trace ✅ Committed
 
 **Problem:** The top-level `defer recover()` calls `os.Exit(1)` after only printing `PANIC: %v\n`, losing the full stack trace. Startup panics become nearly impossible to debug.
 
@@ -44,7 +44,7 @@ Remove any AGT_* env vars that are not needed and update the docs
 
 ---
 
-### [ ] 4. `main.go:2463` — `/health` endpoint registered under `apiPrefix`
+### [x] 4. `main.go:2463` — `/health` endpoint registered under `apiPrefix` ✅ Committed
 
 **Problem:** PR description says a top-level `/health` endpoint is added, but it's registered inside `r.Route(apiPrefix, ...)`, making it reachable at `/api/health` (default) instead of `/health`.
 
@@ -57,7 +57,7 @@ Remove any AGT_* env vars that are not needed and update the docs
 
 ## Medium Priority
 
-### [ ] 5. `internal/mcp/mcp.go:216` — `New()` returns different Server instance
+### [x] 5. `internal/mcp/mcp.go:216` — `New()` returns different Server instance ✅ Committed
 
 **Problem:** `New()` creates a local `srv`, captures it in handler closures, but returns a different `*Server` instance. Handlers work because they close over the local `srv`, and the returned Server only has `handler` set — sufficient for `Handler()` to work.
 
@@ -79,7 +79,7 @@ Or simpler: just return `srv` after setting its `handler` and `baseURL` fields.
 
 ---
 
-### [ ] 6. `internal/mcp/mcp.go:109` — JSON schema uses `[3]string{"null", "string"}`
+### [x] 6. `internal/mcp/mcp.go:109` — JSON schema uses `[3]string{"null", "string"}` ✅ Committed
 
 **Problem:** `[3]string{"null", "string"}` produces a 3-element array `["null","string",""]` (empty string is the zero value). The `""` is not a valid JSON Schema type.
 
@@ -93,7 +93,7 @@ Or simpler: just return `srv` after setting its `handler` and `baseURL` fields.
 
 ---
 
-### [ ] 7. `internal/mcp/mcp.go:269` — Events returns empty result for unknown collection
+### [x] 7. `internal/mcp/mcp.go:269` — Events returns empty result for unknown collection ✅ Committed
 
 **Problem:** When `collection_id` is invalid, the events handler returns `{ "events": [] }` with no error — indistinguishable from an empty collection.
 
@@ -106,7 +106,7 @@ if coll == nil {
 
 ---
 
-### [ ] 8. `internal/mcp/mcp.go:310` — Search returns empty result for unknown collection
+### [x] 8. `internal/mcp/mcp.go:310` — Search returns empty result for unknown collection ✅ Committed
 
 **Problem:** Same as #7 — the search handler silently returns empty results for invalid collection IDs.
 
@@ -119,7 +119,7 @@ if coll == nil {
 
 ---
 
-### [ ] 9. `internal/mcp/photo.go:359` — `encodePhoto` panics with partial crop params
+### [x] 9. `internal/mcp/photo.go:359` — `encodePhoto` panics with partial crop params ✅ Committed
 
 **Problem:** The crop rect building block dereferences `*cropX` and `*cropY` without nil checks. Sending `{crop_w: 100, crop_h: 100}` without `crop_x`/`crop_y` triggers a panic.
 
@@ -142,7 +142,7 @@ if cropW != nil && cropH != nil && *cropW > 0 && *cropH > 0 {
 
 ---
 
-### [ ] 10. `internal/mcp/photo.go:454` — `gatherPhotoMetadata` doesn't check Geo is non-nil
+### [x] 10. `internal/mcp/photo.go:454` — `gatherPhotoMetadata` doesn't check Geo is non-nil ✅ Committed
 
 **Problem:** `source.Geo` is a `*geo.Geo` pointer that can be nil when geo is disabled. Calling `source.Geo.ReverseGeocode()` panics.
 
@@ -161,7 +161,7 @@ if image.IsValidLatLng(info.LatLng) {
 
 ---
 
-### [ ] 11. `internal/mcp/photo.go:514` — Face PreviewUrl 404
+### [x] 11. `internal/mcp/photo.go:514` — Face PreviewUrl 404 ✅ Committed
 
 **Problem:** Face `PreviewUrl` uses `/files/{id}/face.jpg?...`, but the OpenAPI routes only expose `/files/{id}/original/...`, `/files/{id}/variants/...`, and `/files/{id}/previews/...`. All face preview URLs will 404.
 
@@ -177,7 +177,7 @@ faces = append(faces, FaceInfo{
 
 ---
 
-### [ ] 12. `internal/mcp/photo.go:189` — `panicked` flag is dead code in `get_photo_metadata`
+### [x] 12. `internal/mcp/photo.go:189` — `panicked` flag is dead code in `get_photo_metadata` ✅ Committed
 
 **Problem:** The deferred `recover()` sets `panicked = r`, but the `if panicked != nil` check after `gatherPhotoMetadata` is unreachable dead code. When `gatherPhotoMetadata` panics, Go's defer machinery returns immediately.
 
@@ -205,7 +205,7 @@ if metaErr != nil {
 
 ---
 
-### [ ] 13. `internal/mcp/photo.go:223` — Same dead code in `get_photo`
+### [x] 13. `internal/mcp/photo.go:223` — Same dead code in `get_photo` ✅ Committed
 
 **Problem:** Identical broken `panicked` flag pattern in `getPhotoHandler`. If `encodePhoto` panics, the `if panicked != nil` check is unreachable.
 

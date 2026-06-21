@@ -198,6 +198,18 @@ The output shows the HTTP status code, pretty-printed JSON when possible, and
 the response body (truncated if over 500 chars). Note: `AGT_VERBOSE=1` does
 not currently change the truncation behavior for API calls.
 
+### Health Check
+
+The server exposes a health check endpoint to verify it is running:
+
+```bash
+./tools/agent.sh api GET http://localhost:8080/api/health
+```
+
+Returns `{"status": "ok"}` when healthy. The path includes the API prefix
+(default `/api`). If `PHOTOFIELD_API_PREFIX` is set to a different value
+(e.g., `/v1`), the endpoint would be at `/v1/health`.
+
 ## 6. Test the Server
 
 ### Tool tests

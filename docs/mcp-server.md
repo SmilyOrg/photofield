@@ -60,7 +60,3 @@ Without the AI server, `search_photos` still works for tag, date, and filename f
 The server exposes a health check endpoint:
 
 | Path | Method | Description |
-|---|---|---|
-| `/api/health` | GET | Returns `{"status": "ok"}` when healthy |
-
-> **Note:** The path includes the API prefix. If `PHOTOFIELD_API_PREFIX` is set to a different value (e.g., `/v1`), the health endpoint would be at `/v1/health`.

@@ -1744,12 +1744,50 @@ func parsePreviewDimensions(origW, origH int, reqW, reqH *int) (w, h int, err er
 	}
 
 	// Clamp to maximum allowed dimension (prevents DoS via huge allocations)
+	// Clamp the source dimension first, then the derived dimension, and
+	// re-balance aspect ratio if needed.
 	const maxPreviewDim = 4096
-	if w > maxPreviewDim {
-		w = maxPreviewDim
-	}
-	if h > maxPreviewDim {
-		h = maxPreviewDim
+	if reqW != nil && reqH != nil {
+		// Both specified — clamp independently (no aspect ratio to preserve)
+		if w > maxPreviewDim {
+			w = maxPreviewDim
+		}
+		if h > maxPreviewDim {
+			h = maxPreviewDim
+		}
+	} else if reqW != nil {
+		// Only width — clamp it, then derive height; re-balance if height exceeds
+		if w > maxPreviewDim {
+			w = maxPreviewDim
+		}
+		h = int(float64(origH) * float64(w) / float64(origW))
+		if h < 1 {
+			h = 1
+		}
+		if h > maxPreviewDim {
+			h = maxPreviewDim
+			w = int(float64(origW) * float64(h) / float64(origH))
+		}
+	} else if reqH != nil {
+		// Only height — clamp it, then derive width; re-balance if width exceeds
+		if h > maxPreviewDim {
+			h = maxPreviewDim
+		}
+		w = int(float64(origW) * float64(h) / float64(origH))
+		if w < 1 {
+			w = 1
+		}
+		if w > maxPreviewDim {
+			w = maxPreviewDim
+			h = int(float64(origH) * float64(w) / float64(origW))
+		}
+	} else {
+		// Neither — use original dimensions; scale proportionally if either exceeds
+		if w > maxPreviewDim || h > maxPreviewDim {
+			scale := float64(maxPreviewDim) / float64(max(w, h))
+			w = int(float64(w) * scale)
+			h = int(float64(h) * scale)
+		}
 	}
 
 	// Validate

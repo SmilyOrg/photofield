@@ -60,7 +60,7 @@ func TestParsePreviewDimensions_Clamp(t *testing.T) {
 			reqW:    intPtr(10000),
 			reqH:    nil,
 			wantW:   4096,
-			wantH:   4096,
+			wantH:   3072,
 			wantErr: false,
 		},
 		{
@@ -70,7 +70,7 @@ func TestParsePreviewDimensions_Clamp(t *testing.T) {
 			reqW:    nil,
 			reqH:    intPtr(10000),
 			wantW:   4096,
-			wantH:   4096,
+			wantH:   3072,
 			wantErr: false,
 		},
 		{
@@ -90,7 +90,7 @@ func TestParsePreviewDimensions_Clamp(t *testing.T) {
 			reqW:    nil,
 			reqH:    nil,
 			wantW:   4096,
-			wantH:   4096,
+			wantH:   3072,
 			wantErr: false,
 		},
 		{
