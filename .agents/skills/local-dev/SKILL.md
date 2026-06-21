@@ -3,8 +3,8 @@ name: local-dev
 description: >-
   Run, test, and debug the photofield server locally. Use when building,
   running, or testing the server, making API calls, calling MCP tools, or
-  inspecting runtime state. Covers server lifecycle via `task agent -- server`,
-  generic HTTP calls via `task agent -- api`, MCP tool calls, database inspection,
+  inspecting runtime state. Covers server lifecycle via `./tools/agent.sh server`,
+  generic HTTP calls via `./tools/agent.sh api`, MCP tool calls, database inspection,
   error debugging, and common fixes.
 ---
 
@@ -14,53 +14,24 @@ This skill covers building, running, testing, and debugging the photofield
 server on your local machine.
 
 All tool invocation, server management, and API calls go through
-`task agent`, which forwards arguments to `tools/agent.sh` — a unified
-harness that handles the server lifecycle, generic HTTP calls, and MCP tool
-invocation with session management, SSE parsing, and named-arg parsing.
+`./tools/agent.sh` — a unified harness that handles the server lifecycle,
+generic HTTP calls, and MCP tool invocation with session management, SSE
+parsing, and named-arg parsing.
 
-## The `--` Separator — Read This First
+## Verbose Flag
 
-**Every command starts with `task agent --`.** The `--` after `agent` is
-mandatory — there is no form that omits it. Without it, the `task` runner
-tries to find a task named after the next word and fails:
-
-```bash
-# ❌ FAILS — task runner looks for a task named "server"
-task agent server status
-task: Task "server" does not exist
-
-# ✅ WORKS — `--` tells task that "server" is an argument to the `agent` task
-task agent -- server status
-```
-
-### Two `--` in one command
-
-Some commands end up with two `--` in a row. They serve different roles:
-
-| `--` | Role | Example |
-|------|------|--------|
-| **First `--`** | Task separator — required for every command | `task agent -- server status` |
-| **Second `--`** | (rare) Explicit named-arg boundary | `task agent -- mcp call -- --key val` |
-
-The second `--` is only needed when you want to force `agent.sh` into
-named-arg mode even if the first arg doesn't start with `--`. In practice,
-`agent.sh` auto-detects named args, so the second `--` is almost never
-needed.
-
-### Verbose flag forms
-
-The verbose flag accepts `--verbose`, `-v`, and `-V`. It must come **after**
-the task separator `--`:
+The harness accepts `--verbose`, `-v`, and `-V`. Any of these can be placed
+directly after `./tools/agent.sh`:
 
 ```bash
-task agent -- --verbose mcp call get_photo --file_id 1
-task agent -- -v mcp call get_photo --file_id 1
-task agent -- -V mcp call get_photo --file_id 1
+./tools/agent.sh --verbose mcp call get_photo --file_id 1
+./tools/agent.sh -v mcp call get_photo --file_id 1
+./tools/agent.sh -V mcp call get_photo --file_id 1
 ```
 
 Or avoid the flag entirely via environment variable:
 ```bash
-AGT_VERBOSE=1 task agent -- mcp call get_photo --file_id 1
+AGT_VERBOSE=1 ./tools/agent.sh mcp call get_photo --file_id 1
 ```
 
 ## 1. Build
@@ -72,7 +43,7 @@ go build -o photofield .
 Kill any old instance before rebuilding:
 
 ```bash
-task agent -- server kill
+./tools/agent.sh server kill
 ```
 
 ## 2. Configuration
@@ -94,24 +65,23 @@ EOF
 
 ## 3. Server Lifecycle
 
-Use `task agent -- server <command>` to manage the server process. Every
-call requires the `--` after `agent`:
+Use `./tools/agent.sh server <command>` to manage the server process:
 
 ```bash
 # Start (auto-detects if already running)
-task agent -- server start
+./tools/agent.sh server start
 
 # Stop gracefully (uses PID file)
-task agent -- server stop
+./tools/agent.sh server stop
 
 # Restart
-task agent -- server restart
+./tools/agent.sh server restart
 
 # Check status (shows PID and port listeners)
-task agent -- server status
+./tools/agent.sh server status
 
 # Aggressive kill (PID file + all port listeners including exiftool)
-task agent -- server kill
+./tools/agent.sh server kill
 ```
 
 **How it works:** `server start` launches the binary with `nohup` and writes a
@@ -124,7 +94,7 @@ ready (up to 30s). `server stop` reads the PID file and sends SIGTERM.
 ```bash
 ./photofield -scan test
 # or from another directory:
-AGT_BIN=/path/to/photofield task agent -- server start && ./photofield -scan test
+AGT_BIN=/path/to/photofield ./tools/agent.sh server start && ./photofield -scan test
 ```
 
 The server listens on port `8080` by default (override with `AGT_PORT`).
@@ -142,7 +112,7 @@ and launch a new instance. `server status` also removes stale entries.
 
 ## 4. MCP Tool Calls
 
-Use `task agent -- mcp` to call MCP tools. The harness handles the session
+Use `./tools/agent.sh mcp` to call MCP tools. The harness handles the session
 handshake (initialize + initialized notification), session ID extraction from
 response headers, SSE response parsing, and named-arg to JSON conversion.
 
@@ -150,33 +120,33 @@ response headers, SSE response parsing, and named-arg to JSON conversion.
 
 ```bash
 # Call a tool with JSON args
-task agent -- mcp call list_collections '{}'
+./tools/agent.sh mcp call list_collections '{}'
 
 # Call with named args (auto-detects --key val pairs)
-task agent -- mcp call search_photos --query 'beach' --collection_id 'test' --limit 3
+./tools/agent.sh mcp call search_photos --query 'beach' --collection_id 'test' --limit 3
 
 # Verbose mode — shows full raw JSON response
-task agent -- --verbose mcp call get_photo --file_id 1 --w 200
-# Also accepts -v or -V: task agent -- -v mcp call get_photo --file_id 1
+./tools/agent.sh --verbose mcp call get_photo --file_id 1 --w 200
+# Also accepts -v or -V: ./tools/agent.sh -v mcp call get_photo --file_id 1
 # Or via env (no --verbose flag at all):
-# AGT_VERBOSE=1 task agent -- mcp call get_photo --file_id 1 --w 200
+# AGT_VERBOSE=1 ./tools/agent.sh mcp call get_photo --file_id 1 --w 200
 
 # Smoke test (calls list_collections by default)
-task agent -- mcp quick
+./tools/agent.sh mcp quick
 
 # Smoke test with a specific tool
-task agent -- mcp quick get_photo --file_id 1
+./tools/agent.sh mcp quick get_photo --file_id 1
 
 # Interactive REPL
-task agent -- mcp shell
+./tools/agent.sh mcp shell
 ```
 
 ### Argument modes
 
 | Mode | Syntax |
 |------|--------|
-| JSON | `task agent -- mcp call <tool> '<json>'` |
-| Named | `task agent -- mcp call <tool> --key val` |
+| JSON | `./tools/agent.sh mcp call <tool> '<json>'` |
+| Named | `./tools/agent.sh mcp call <tool> --key val` |
 
 Named args are auto-converted to JSON: numbers stay numeric, `true`/`false`
 become booleans, `null` stays null, everything else is quoted as strings.
@@ -197,35 +167,35 @@ or `-V`) for full raw JSON on every call.
 
 **Output streams:** The `log_*` helpers (`ℹ`, `▶`) go to stderr. Tool result
 summaries (`✓`, `✗`) and raw JSON output go to stdout. This lets you pipe tool
-results: `task agent -- mcp call list_collections '{}' | jq '.collections'`.
+results: `./tools/agent.sh mcp call list_collections '{}' | jq '.collections'`.
 
 ### From another directory
 
 ```bash
-AGT_BIN=/path/to/photofield task agent -- mcp call list_collections '{}'
-AGT_URL=http://remote-host:9000/mcp task agent -- mcp call list_collections '{}'
+AGT_BIN=/path/to/photofield ./tools/agent.sh mcp call list_collections '{}'
+AGT_URL=http://remote-host:9000/mcp ./tools/agent.sh mcp call list_collections '{}'
 ```
 
 ## 5. Generic API Calls
 
-Use `task agent -- api` for arbitrary HTTP calls to any server endpoint. This is
+Use `./tools/agent.sh api` for arbitrary HTTP calls to any server endpoint. This is
 useful for testing non-MCP routes, debugging, or calling endpoints that don't
 have a dedicated tool.
 
 ```bash
 # GET request
-task agent -- api GET http://localhost:8080/api/health
+./tools/agent.sh api GET http://localhost:8080/api/health
 
 # POST with JSON body
-task agent -- api POST http://localhost:8080/api/collections \
+./tools/agent.sh api POST http://localhost:8080/api/collections \
   '{"name":"my-collection","dirs":["/path/to/photos"]}'
 
 # POST with named args (auto-constructs JSON body)
-task agent -- api POST http://localhost:8080/api/collections \
+./tools/agent.sh api POST http://localhost:8080/api/collections \
   --name my-collection --dirs /path/to/photos
 
 # PUT / DELETE
-task agent -- api DELETE http://localhost:8080/api/collections/test
+./tools/agent.sh api DELETE http://localhost:8080/api/collections/test
 ```
 
 The output shows the HTTP status code, pretty-printed JSON when possible, and
@@ -237,33 +207,33 @@ not currently change the truncation behavior for API calls.
 ### Smoke test
 
 ```bash
-task agent -- mcp quick
+./tools/agent.sh mcp quick
 ```
 
 ### Tool tests
 
 ```bash
 # Basic call
-task agent -- mcp call get_photo --file_id 1
+./tools/agent.sh mcp call get_photo --file_id 1
 
 # Metadata-only call
-task agent -- mcp call get_photo_metadata --file_id 1
+./tools/agent.sh mcp call get_photo_metadata --file_id 1
 
 # Error handling
-task agent -- mcp call get_photo --file_id 999999
+./tools/agent.sh mcp call get_photo --file_id 999999
 
 # Verbose debugging
-task agent -- --verbose mcp call search_photos --query 'test' --collection_id 'test'
+./tools/agent.sh --verbose mcp call search_photos --query 'test' --collection_id 'test'
 ```
 
 ### API tests
 
 ```bash
 # Check health
-task agent -- api GET http://localhost:8080/api/health
+./tools/agent.sh api GET http://localhost:8080/api/health
 
 # List collections via API (alternative to mcp call)
-task agent -- api GET http://localhost:8080/api/collections
+./tools/agent.sh api GET http://localhost:8080/api/collections
 ```
 
 ## 7. Inspect Errors and Crashes
@@ -287,7 +257,7 @@ message: `No session ID (server may not require one)`.
 | `file not found: N` | Photo ID doesn't exist | Scan collection or check DB |
 | Empty response data | Rendering panic | Check server log |
 | Schema says all fields required | SDK infers from Go struct pointers | Use explicit `InputSchema` in tool registration |
-| Server not responding | Old binary running | `task agent -- server kill` then rebuild |
+| Server not responding | Old binary running | `./tools/agent.sh server kill` then rebuild |
 | No photos found | Config points to empty dirs | Create `data/configuration.yaml` |
 
 ## 8. Inspect Runtime State
@@ -303,13 +273,13 @@ sqlite3 data/photofield.cache.db ".tables"
 
 ```bash
 # List collections
-task agent -- mcp call list_collections '{}'
+./tools/agent.sh mcp call list_collections '{}'
 
 # Check events for a collection
-task agent -- mcp call events --collection_id 'test'
+./tools/agent.sh mcp call events --collection_id 'test'
 
 # Search photos
-task agent -- mcp call search_photos --query 'faces' --collection_id 'test' --limit 5
+./tools/agent.sh mcp call search_photos --query 'faces' --collection_id 'test' --limit 5
 ```
 
 ## Environment Variables
@@ -330,14 +300,14 @@ task agent -- mcp call search_photos --query 'faces' --collection_id 'test' --li
 |---------|---------|
 | `go build -o photofield .` | Build the server |
 | `./photofield -scan <name>` | Scan a collection |
-| `task agent -- server start` | Start the server |
-| `task agent -- server stop` | Stop the server |
-| `task agent -- server restart` | Restart the server |
-| `task agent -- server status` | Show PID/port status |
-| `task agent -- server kill` | Kill server processes |
-| `task agent -- mcp call <tool> <args>` | Call an MCP tool |
-| `task agent -- mcp quick [tool]` | Smoke test |
-| `task agent -- mcp shell` | Interactive REPL |
-| `task agent -- api <method> <url> [body]` | Generic HTTP call |
-| `task agent -- -v <cmd>` | Verbose output (`--verbose`, `-V` also accepted) |
+| `./tools/agent.sh server start` | Start the server |
+| `./tools/agent.sh server stop` | Stop the server |
+| `./tools/agent.sh server restart` | Restart the server |
+| `./tools/agent.sh server status` | Show PID/port status |
+| `./tools/agent.sh server kill` | Kill server processes |
+| `./tools/agent.sh mcp call <tool> <args>` | Call an MCP tool |
+| `./tools/agent.sh mcp quick [tool]` | Smoke test |
+| `./tools/agent.sh mcp shell` | Interactive REPL |
+| `./tools/agent.sh api <method> <url> [body]` | Generic HTTP call |
+| `./tools/agent.sh -v <cmd>` | Verbose output (`--verbose`, `-V` also accepted) |
 | `sqlite3 data/photofield.cache.db ...` | Inspect the database |
