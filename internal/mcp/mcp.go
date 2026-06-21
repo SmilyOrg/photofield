@@ -18,19 +18,21 @@ import (
 
 // Server holds the MCP server instance and its chi-mountable HTTP handler.
 type Server struct {
-	srv     *mcp.Server
-	handler http.Handler
-	baseURL atomic.Value // set from request Host header per request (stores string)
+	srv       *mcp.Server
+	handler   http.Handler
+	baseURL   atomic.Value // set from request Host header per request (stores string)
+	apiPrefix string         // e.g. "/api" — used for constructing file URLs
 }
 
 // New creates a new MCP server for photofield with the given data sources
 // and registers all available tools. The base URL is derived at request time
 // from the incoming request's Host header, with `addr` used as a fallback
-// default (derived from the listener address). Callers should mount handler()
+// default (derived from the listener address). `apiPrefix` is the HTTP route
+// prefix for file endpoints (e.g. "/api"). Callers should mount handler()
 // on a chi router, e.g.:
 //
 //	r.Mount("/mcp", s.handler())
-func New(collections *[]collection.Collection, imageSource *image.Source, addr string) (*Server, error) {
+func New(collections *[]collection.Collection, imageSource *image.Source, addr, apiPrefix string) (*Server, error) {
 	sdkSrv := mcp.NewServer(&mcp.Implementation{
 		Name:    "photofield",
 		Version: "dev",
@@ -38,7 +40,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr s
 
 	// Handler closures capture collections, imageSource, and a pointer to this Server
 	// so they can read the current base URL at request time.
-	srv := &Server{srv: sdkSrv}
+	srv := &Server{srv: sdkSrv, apiPrefix: apiPrefix}
 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "list_collections",

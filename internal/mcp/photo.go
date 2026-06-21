@@ -183,7 +183,7 @@ func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Sour
 		}
 
 		// Gather metadata using the same logic as get_photo
-		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, srv.baseURL.Load().(string))
+		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, srv.baseURL.Load().(string), srv.apiPrefix)
 
 		if panicked != nil {
 			return nil, getPhotoMetadataOutput{}, fmt.Errorf("internal error reading photo metadata: %v", panicked)
@@ -431,9 +431,18 @@ type photoMetadata struct {
 	LatLng      *LatLng
 }
 
+// fileURL builds an absolute URL to a file endpoint, handling an empty or root apiPrefix.
+func fileURL(serverBaseURL, apiPrefix, path string) string {
+	if apiPrefix == "" || apiPrefix == "/" {
+		return serverBaseURL + path
+	}
+	return serverBaseURL + apiPrefix + path
+}
+
 // gatherPhotoMetadata collects all metadata for a photo by file ID.
 // serverBaseURL is the absolute API base URL (e.g. "http://localhost:8080").
-func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, info image.Info, serverBaseURL string) photoMetadata {
+// apiPrefix is the HTTP route prefix for file endpoints (e.g. "/api" or "").
+func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, info image.Info, serverBaseURL, apiPrefix string) photoMetadata {
 	originalPath, _ := source.GetImagePath(image.ImageId(fileId))
 	location := ""
 	var latlng *LatLng
@@ -449,10 +458,10 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 	filename := filepath.Base(originalPath)
 	previewFilename := strings.TrimSuffix(filename, filepath.Ext(filename)) + "_preview.jpg"
 
-	// Build preview URL: use /previews/ endpoint with ~400px width for direct markdown embedding
+	// Build preview URL: use /api/files/{id}/previews/{filename} with ~400px width for direct markdown embedding
 	var previewUrl string
 	if originalPath != "" {
-		previewUrl = serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/previews/" + previewFilename + "?w=400"
+		previewUrl = fileURL(serverBaseURL, apiPrefix, "/files/"+fmt.Sprintf("%d", fileId)+"/previews/"+previewFilename+"?w=400")
 	}
 
 	// Build original image URL: use the 'original' variant (full-resolution source copy)
@@ -464,7 +473,7 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 		if !s.Exists(ctx, io.ImageId(fileId), originalPath) {
 			continue
 		}
-		originalUrl = serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/variants/" + s.Name() + "/" + filename
+		originalUrl = fileURL(serverBaseURL, apiPrefix, "/files/"+fmt.Sprintf("%d", fileId)+"/variants/"+s.Name()+"/"+filename)
 		break
 	}
 
@@ -503,12 +512,12 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 			W:           f.W,
 			H:           f.H,
 			Confidence:  f.Confidence,
-			PreviewUrl:  serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/face.jpg?w=200&h=200&crop_x=" + fmt.Sprintf("%d", cropX) + "&crop_y=" + fmt.Sprintf("%d", cropY) + "&crop_w=" + fmt.Sprintf("%d", faceCropSize) + "&crop_h=" + fmt.Sprintf("%d", faceCropSize),
+			PreviewUrl:  fileURL(serverBaseURL, apiPrefix, "/files/"+fmt.Sprintf("%d", fileId)+"/face.jpg?w=200&h=200&crop_x="+fmt.Sprintf("%d", cropX)+"&crop_y="+fmt.Sprintf("%d", cropY)+"&crop_w="+fmt.Sprintf("%d", faceCropSize)+"&crop_h="+fmt.Sprintf("%d", faceCropSize)),
 		})
 	}
 
 	if originalUrl == "" {
-		originalUrl = serverBaseURL + "/files/" + fmt.Sprintf("%d", fileId) + "/variants/" + filename
+		originalUrl = fileURL(serverBaseURL, apiPrefix, "/files/"+fmt.Sprintf("%d", fileId)+"/variants/"+filename)
 	}
 
 	return photoMetadata{

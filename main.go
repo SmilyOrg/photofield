@@ -2468,7 +2468,7 @@ func main() {
 
 	// MCP server — base URL is derived from request Host header at runtime,
 	// falling back to the listener address if the Host header is absent.
-	srv, err := mcp.New(&collections, imageSource, addr)
+	srv, err := mcp.New(&collections, imageSource, addr, apiPrefix)
 	if err != nil {
 		log.Fatalf("failed to create MCP server: %v", err)
 	}
