@@ -1743,6 +1743,15 @@ func parsePreviewDimensions(origW, origH int, reqW, reqH *int) (w, h int, err er
 		w, h = origW, origH
 	}
 
+	// Clamp to maximum allowed dimension (prevents DoS via huge allocations)
+	const maxPreviewDim = 4096
+	if w > maxPreviewDim {
+		w = maxPreviewDim
+	}
+	if h > maxPreviewDim {
+		h = maxPreviewDim
+	}
+
 	// Validate
 	if w < 1 || h < 1 {
 		return 0, 0, fmt.Errorf("invalid dimensions: width and height must be positive")
