@@ -167,25 +167,26 @@ func getPhotoMetadataHandler(imageSource *image.Source, srv *Server) mcp.ToolHan
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		var panicked any
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = r
-				fmt.Fprintf(os.Stderr, "get_photo_metadata handler recovered from panic: %v\n%s", r, stackTrace())
-			}
-		}()
-
-		// Get file info to validate existence
+			// Get file info to validate existence
 		info := imageSource.GetInfo(image.ImageId(input.FileId))
 		if info.Width == 0 || info.Height == 0 {
 			return nil, getPhotoMetadataOutput{}, fmt.Errorf("file not found: %d", input.FileId)
 		}
 
 		// Gather metadata using the same logic as get_photo
-		metadata := gatherPhotoMetadata(ctx, imageSource, input.FileId, info, srv.baseURL.Load().(string), srv.apiPrefix)
-
-		if panicked != nil {
-			return nil, getPhotoMetadataOutput{}, fmt.Errorf("internal error reading photo metadata: %v", panicked)
+		var metadata photoMetadata
+		var metaErr error
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					metaErr = fmt.Errorf("internal error reading photo metadata: %v", r)
+					fmt.Fprintf(os.Stderr, "get_photo_metadata handler recovered from panic: %v\n%s", r, stackTrace())
+				}
+			}()
+			metadata = gatherPhotoMetadata(ctx, imageSource, input.FileId, info, srv.baseURL.Load().(string), srv.apiPrefix)
+		}()
+		if metaErr != nil {
+			return nil, getPhotoMetadataOutput{}, metaErr
 		}
 
 			// Return only structured metadata — no image content block.
@@ -214,14 +215,6 @@ func getPhotoHandler(imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		var panicked any
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = r
-				fmt.Fprintf(os.Stderr, "get_photo handler recovered from panic: %v\n%s", r, stackTrace())
-			}
-		}()
-
 		// Get file info to validate existence
 		info := imageSource.GetInfo(image.ImageId(input.FileId))
 		if info.Width == 0 || info.Height == 0 {
@@ -253,10 +246,20 @@ func getPhotoHandler(imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[
 		}
 
 		// Encode image data
-		imageData, err := encodePhoto(ctx, imageSource, image.ImageId(input.FileId), *targetW, *targetH, formatStr,
-			input.CropX, input.CropY, input.CropW, input.CropH)
-		if err != nil {
-			return nil, getPhotoOutput{}, err
+		var imageData []byte
+		var encodeErr error
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					encodeErr = fmt.Errorf("internal error rendering photo: %v", r)
+					fmt.Fprintf(os.Stderr, "get_photo handler recovered from panic: %v\n%s", r, stackTrace())
+				}
+			}()
+			imageData, encodeErr = encodePhoto(ctx, imageSource, image.ImageId(input.FileId), *targetW, *targetH, formatStr,
+				input.CropX, input.CropY, input.CropW, input.CropH)
+		}()
+		if encodeErr != nil {
+			return nil, getPhotoOutput{}, encodeErr
 		}
 
 		mime := "image/jpeg"
@@ -264,10 +267,6 @@ func getPhotoHandler(imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[
 			mime = "image/png"
 		} else if formatStr == "webp" {
 			mime = "image/webp"
-		}
-
-		if panicked != nil {
-			return nil, getPhotoOutput{}, fmt.Errorf("internal error rendering photo: %v", panicked)
 		}
 
 		// Return only the image as MCP ImageContent — no structured metadata.
@@ -514,6 +513,7 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 		if cropY < 0 {
 			cropY = 0
 		}
+		faceFilename := fmt.Sprintf("face_%d.jpg", f.Id)
 		faces = append(faces, FaceInfo{
 			Id:          f.Id,
 			X:           f.X,
@@ -521,7 +521,7 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 			W:           f.W,
 			H:           f.H,
 			Confidence:  f.Confidence,
-			PreviewUrl:  fileURL(serverBaseURL, apiPrefix, "/files/"+fmt.Sprintf("%d", fileId)+"/face.jpg?w=200&h=200&crop_x="+fmt.Sprintf("%d", cropX)+"&crop_y="+fmt.Sprintf("%d", cropY)+"&crop_w="+fmt.Sprintf("%d", faceCropSize)+"&crop_h="+fmt.Sprintf("%d", faceCropSize)),
+			PreviewUrl:  fileURL(serverBaseURL, apiPrefix, "/files/"+fmt.Sprintf("%d", fileId)+"/previews/"+faceFilename+"?w=200&h=200&crop_x="+fmt.Sprintf("%d", cropX)+"&crop_y="+fmt.Sprintf("%d", cropY)+"&crop_w="+fmt.Sprintf("%d", faceCropSize)+"&crop_h="+fmt.Sprintf("%d", faceCropSize)),
 		})
 	}
 
