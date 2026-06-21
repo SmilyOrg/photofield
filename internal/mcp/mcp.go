@@ -106,7 +106,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			"properties": map[string]any{
 				"collection_id": map[string]any{"type": "string", "description": "The collection ID from list_collections."},
 				"query":         map[string]any{"type": "string", "description": "Search query: natural language text, image similarity (img:ID), or face similarity (face:ID)."},
-				"sort":          map[string]any{"type": [3]string{"null", "string"}, "description": "Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."},
+				"sort":          map[string]any{"type": [2]string{"null", "string"}, "description": "Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."},
 				"limit":         map[string]any{"type": [2]string{"null", "integer"}, "description": "Max results. Default 50. Results beyond limit are silently discarded."},
 			},
 			"required": []string{"collection_id", "query"},
