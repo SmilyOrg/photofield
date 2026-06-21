@@ -2238,12 +2238,6 @@ func detectEncoderSupport() {
 }
 
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "PANIC: %v\n", r)
-			os.Exit(1)
-		}
-	}()
 	var err error
 
 	startupTime = time.Now()
