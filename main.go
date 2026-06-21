@@ -1616,8 +1616,18 @@ func (*Api) GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	img, c := getPoolImage(&rn)
-	defer putPoolImage(&rn, img)
+	var img draw.Image
+	var c *canvas.Context
+	if params.W != nil && params.H != nil && rn.ImageWidth == rn.ImageHeight {
+		img, c = getPoolImage(&rn)
+		defer putPoolImage(&rn, img)
+	} else {
+		img = goimage.NewRGBA(
+			goimage.Rect(0, 0, rn.ImageWidth, rn.ImageHeight),
+		)
+		renderer := rasterizer.New(img, 1.0)
+		c = canvas.NewContext(renderer)
+	}
 
 	rn.CanvasImage = img
 	rn.MaxSolidPixelArea = 0 // Force full render, no solid color optimization
@@ -1734,8 +1744,8 @@ func parsePreviewDimensions(origW, origH int, reqW, reqH *int) (w, h int, err er
 	}
 
 	// Validate
-	if w < 1 || w > 4096 || h < 1 || h > 4096 {
-		return 0, 0, fmt.Errorf("dimensions %dx%d out of range (1-4096)", w, h)
+	if w < 1 || h < 1 {
+		return 0, 0, fmt.Errorf("invalid dimensions: width and height must be positive")
 	}
 
 	return w, h, nil
