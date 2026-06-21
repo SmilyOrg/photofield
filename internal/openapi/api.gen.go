@@ -746,6 +746,10 @@ func (siw *ServerInterfaceWrapper) GetCollectionsIdFiles(w http.ResponseWriter, 
 	var params GetCollectionsIdFilesParams
 
 	// ------------- Optional query parameter "search" -------------
+	if paramValue := r.URL.Query().Get("search"); paramValue != "" {
+
+	}
+
 	err = runtime.BindQueryParameter("form", true, false, "search", r.URL.Query(), &params.Search)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter search: %s", err), http.StatusBadRequest)
@@ -753,6 +757,10 @@ func (siw *ServerInterfaceWrapper) GetCollectionsIdFiles(w http.ResponseWriter, 
 	}
 
 	// ------------- Optional query parameter "sort" -------------
+	if paramValue := r.URL.Query().Get("sort"); paramValue != "" {
+
+	}
+
 	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter sort: %s", err), http.StatusBadRequest)
@@ -760,6 +768,10 @@ func (siw *ServerInterfaceWrapper) GetCollectionsIdFiles(w http.ResponseWriter, 
 	}
 
 	// ------------- Optional query parameter "limit" -------------
+	if paramValue := r.URL.Query().Get("limit"); paramValue != "" {
+
+	}
+
 	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid format for parameter limit: %s", err), http.StatusBadRequest)
