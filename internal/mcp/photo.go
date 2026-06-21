@@ -24,7 +24,6 @@ import (
 	webpjack "photofield/internal/codec/webp/jack"
 	webpjackdyn "photofield/internal/codec/webp/jack/dynamic"
 	webpjacktra "photofield/internal/codec/webp/jack/transpiled"
-	"photofield/internal/collection"
 	"photofield/internal/image"
 	"photofield/internal/io"
 	"photofield/internal/render"
@@ -162,7 +161,7 @@ type SimpleTag struct {
 // getPhotoMetadataHandler handles the get_photo_metadata tool request.
 // Returns all photo metadata without the image data — useful for inspecting
 // tags, faces, location, thumbnails, and dimensions without downloading the image.
-func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[getPhotoMetadataInput, getPhotoMetadataOutput] {
+func getPhotoMetadataHandler(imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[getPhotoMetadataInput, getPhotoMetadataOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, input getPhotoMetadataInput) (*mcp.CallToolResult, getPhotoMetadataOutput, error) {
 		// Ensure we have a valid context - fall back to Background if nil.
 		if ctx == nil {
@@ -209,7 +208,7 @@ func getPhotoMetadataHandler(_ *[]collection.Collection, imageSource *image.Sour
 }
 
 // getPhotoHandler handles the get_photo MCP tool request.
-func getPhotoHandler(_ *[]collection.Collection, imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[getPhotoInput, getPhotoOutput] {
+func getPhotoHandler(imageSource *image.Source, srv *Server) mcp.ToolHandlerFor[getPhotoInput, getPhotoOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, input getPhotoInput) (*mcp.CallToolResult, getPhotoOutput, error) {
 		// Ensure we have a valid context - fall back to Background if nil.
 		if ctx == nil {

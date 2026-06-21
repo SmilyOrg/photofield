@@ -129,7 +129,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			},
 			"required": []string{"file_id"},
 		},
-	}, getPhotoMetadataHandler(collections, imageSource, srv))
+	}, getPhotoMetadataHandler(imageSource, srv))
 
 	mcp.AddTool(sdkSrv, &mcp.Tool{
 		Name: "get_photo",
@@ -157,7 +157,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			},
 			"required": []string{"file_id"},
 		},
-	}, getPhotoHandler(collections, imageSource, srv))
+	}, getPhotoHandler(imageSource, srv))
 
 	h := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return sdkSrv
