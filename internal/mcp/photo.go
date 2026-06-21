@@ -355,9 +355,17 @@ func encodePhoto(ctx context.Context, source *image.Source, fileId image.ImageId
 	// Build optional crop rect
 	var crop render.Rect
 	if cropW != nil && cropH != nil && *cropW > 0 && *cropH > 0 {
+		cx := 0
+		cy := 0
+		if cropX != nil {
+			cx = *cropX
+		}
+		if cropY != nil {
+			cy = *cropY
+		}
 		crop = render.Rect{
-			X: float64(*cropX),
-			Y: float64(*cropY),
+			X: float64(cx),
+			Y: float64(cy),
 			W: float64(*cropW),
 			H: float64(*cropH),
 		}
@@ -450,7 +458,9 @@ func gatherPhotoMetadata(ctx context.Context, source *image.Source, fileId int, 
 			Lat: info.LatLng.Lat.Degrees(),
 			Lng: info.LatLng.Lng.Degrees(),
 		}
-		location, _ = source.Geo.ReverseGeocode(ctx, info.LatLng)
+		if source.Geo != nil && source.Geo.Available() {
+			location, _ = source.Geo.ReverseGeocode(ctx, info.LatLng)
+		}
 	}
 
 	isVideo := source.IsSupportedVideo(originalPath)
