@@ -266,7 +266,7 @@ func eventsHandler(collections *[]collection.Collection, imageSource *image.Sour
 			}
 		}
 		if coll == nil {
-			return nil, eventsOutput{}, nil
+			return nil, eventsOutput{}, fmt.Errorf("collection not found: %s", input.CollectionId)
 		}
 
 		// Delegate to collection method
@@ -307,7 +307,7 @@ func searchPhotosHandler(collections *[]collection.Collection, imageSource *imag
 			}
 		}
 		if coll == nil {
-			return nil, searchPhotosOutput{}, nil
+			return nil, searchPhotosOutput{}, fmt.Errorf("collection not found: %s", input.CollectionId)
 		}
 
 		limit := 50
