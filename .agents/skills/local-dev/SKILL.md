@@ -127,9 +127,6 @@ response headers, SSE response parsing, and named-arg to JSON conversion.
 
 # Verbose mode — shows full raw JSON response
 ./tools/agent.sh --verbose mcp call get_photo --file_id 1 --w 200
-# Also accepts -v or -V: ./tools/agent.sh -v mcp call get_photo --file_id 1
-# Or via env (no --verbose flag at all):
-# AGT_VERBOSE=1 ./tools/agent.sh mcp call get_photo --file_id 1 --w 200
 
 # Smoke test (calls list_collections by default)
 ./tools/agent.sh mcp quick
@@ -162,8 +159,7 @@ Non-verbose mode shows a clean summary:
 ✓ get_photo
 ```
 
-Errors show with a red ✗ and the error message. Set `--verbose` (or `-v`
-or `-V`) for full raw JSON on every call.
+Errors show with a red ✗ and the error message. Set `--verbose` (see Verbose Flag above) for full raw JSON on every call.
 
 **Output streams:** The `log_*` helpers (`ℹ`, `▶`) go to stderr. Tool result
 summaries (`✓`, `✗`) and raw JSON output go to stdout. This lets you pipe tool
@@ -203,12 +199,6 @@ the response body (truncated if over 500 chars). Note: `AGT_VERBOSE=1` does
 not currently change the truncation behavior for API calls.
 
 ## 6. Test the Server
-
-### Smoke test
-
-```bash
-./tools/agent.sh mcp quick
-```
 
 ### Tool tests
 
@@ -309,5 +299,5 @@ sqlite3 data/photofield.cache.db ".tables"
 | `./tools/agent.sh mcp quick [tool]` | Smoke test |
 | `./tools/agent.sh mcp shell` | Interactive REPL |
 | `./tools/agent.sh api <method> <url> [body]` | Generic HTTP call |
-| `./tools/agent.sh -v <cmd>` | Verbose output (`--verbose`, `-V` also accepted) |
+| `./tools/agent.sh --verbose <cmd>` | Verbose output (see Verbose Flag above for `-v`/`-V`/env var) |
 | `sqlite3 data/photofield.cache.db ...` | Inspect the database |
