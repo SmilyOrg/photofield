@@ -62,6 +62,7 @@ import (
 	pfio "photofield/internal/io"
 	"photofield/internal/io/bench"
 	"photofield/internal/layout"
+	"photofield/internal/mcp"
 	"photofield/internal/metrics"
 	"photofield/internal/openapi"
 	"photofield/internal/render"
@@ -265,6 +266,23 @@ func getCollectionById(id string) *collection.Collection {
 		}
 	}
 	return nil
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func parseTime(s string) *time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func ptrToStrSlice(s []string) *[]string {
+	if len(s) == 0 {
+		return nil
+	}
+	return &s
 }
 
 func pushApiRequest(request ApiRequest) {
@@ -505,7 +523,98 @@ func (*Api) GetCollectionsId(w http.ResponseWriter, r *http.Request, id openapi.
 		}
 	}
 
-	problem(w, r, http.StatusNotFound, "Scene not found")
+	problem(w, r, http.StatusNotFound, "Collection not found")
+}
+
+func (*Api) GetCollectionsIdEvents(w http.ResponseWriter, r *http.Request, id openapi.CollectionId) {
+	coll := getCollectionById(string(id))
+	if coll == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+
+	items, err := coll.SplitIntoEvents(r.Context(), imageSource)
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	apiItems := make([]openapi.EventSummary, len(items))
+	for i, e := range items {
+		apiItems[i] = openapi.EventSummary{
+			Index:         ptr(e.Index),
+			CreatedAfter:  parseTime(e.CreatedAfter),
+			CreatedBefore: parseTime(e.CreatedBefore),
+			PhotoCount:    ptr(e.PhotoCount),
+			LocationCount: ptr(e.LocationCount),
+			Locations:     ptrToStrSlice(e.Locations),
+		}
+	}
+
+	respond(w, r, http.StatusOK, openapi.EventsList{Items: &apiItems})
+}
+
+func (*Api) GetCollectionsIdFiles(w http.ResponseWriter, r *http.Request, id openapi.CollectionId, params openapi.GetCollectionsIdFilesParams) {
+	coll := getCollectionById(string(id))
+	if coll == nil {
+		problem(w, r, http.StatusBadRequest, "Collection not found")
+		return
+	}
+
+	limit := 50
+	if params.Limit != nil && int(*params.Limit) > 0 {
+		limit = int(*params.Limit)
+	}
+
+	opts := collection.SearchOptions{
+		Limit: limit,
+	}
+	if params.Search != nil {
+		opts.QueryStr = string(*params.Search)
+	}
+	if params.Sort != nil {
+		opts.Sort = collection.SortType(string(*params.Sort))
+	}
+
+	items, _, _, err := coll.Search(r.Context(), imageSource, opts)
+	if err != nil {
+		problem(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if items == nil {
+		items = make([]collection.SearchResult, 0)
+	}
+
+	apiItems := make([]openapi.FileInfo, len(items))
+	for i, item := range items {
+		apiItems[i] = openapi.FileInfo{
+			Id:         ptr(int(item.Id)),
+			FileName:   &item.FileName,
+			Similarity: ptr(item.Similarity),
+		}
+		if item.DateTime != "" {
+			t := parseTime(item.DateTime)
+			apiItems[i].Datetime = t
+		}
+		if item.Width != 0 {
+			apiItems[i].Width = ptr(item.Width)
+		}
+		if item.Height != 0 {
+			apiItems[i].Height = ptr(item.Height)
+		}
+		if item.Color != "" {
+			apiItems[i].Color = &item.Color
+		}
+		if item.Location != "" {
+			apiItems[i].Location = &item.Location
+		}
+		if item.Tags != nil {
+			apiItems[i].Tags = ptrToStrSlice(item.Tags)
+		}
+	}
+
+	respond(w, r, http.StatusOK, openapi.FileList{Items: &apiItems})
 }
 
 func taskDisplayOrder(taskType string) int {
@@ -1507,8 +1616,18 @@ func (*Api) GetFilesIdPreviewsFilename(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	img, c := getPoolImage(&rn)
-	defer putPoolImage(&rn, img)
+	var img draw.Image
+	var c *canvas.Context
+	if params.W != nil && params.H != nil && rn.ImageWidth == rn.ImageHeight {
+		img, c = getPoolImage(&rn)
+		defer putPoolImage(&rn, img)
+	} else {
+		img = goimage.NewRGBA(
+			goimage.Rect(0, 0, rn.ImageWidth, rn.ImageHeight),
+		)
+		renderer := rasterizer.New(img, 1.0)
+		c = canvas.NewContext(renderer)
+	}
 
 	rn.CanvasImage = img
 	rn.MaxSolidPixelArea = 0 // Force full render, no solid color optimization
@@ -1624,9 +1743,56 @@ func parsePreviewDimensions(origW, origH int, reqW, reqH *int) (w, h int, err er
 		w, h = origW, origH
 	}
 
+	// Clamp to maximum allowed dimension (prevents DoS via huge allocations)
+	// Clamp the source dimension first, then the derived dimension, and
+	// re-balance aspect ratio if needed.
+	const maxPreviewDim = 4096
+	if reqW != nil && reqH != nil {
+		// Both specified — clamp independently (no aspect ratio to preserve)
+		if w > maxPreviewDim {
+			w = maxPreviewDim
+		}
+		if h > maxPreviewDim {
+			h = maxPreviewDim
+		}
+	} else if reqW != nil {
+		// Only width — clamp it, then derive height; re-balance if height exceeds
+		if w > maxPreviewDim {
+			w = maxPreviewDim
+		}
+		h = int(float64(origH) * float64(w) / float64(origW))
+		if h < 1 {
+			h = 1
+		}
+		if h > maxPreviewDim {
+			h = maxPreviewDim
+			w = int(float64(origW) * float64(h) / float64(origH))
+		}
+	} else if reqH != nil {
+		// Only height — clamp it, then derive width; re-balance if width exceeds
+		if h > maxPreviewDim {
+			h = maxPreviewDim
+		}
+		w = int(float64(origW) * float64(h) / float64(origH))
+		if w < 1 {
+			w = 1
+		}
+		if w > maxPreviewDim {
+			w = maxPreviewDim
+			h = int(float64(origH) * float64(w) / float64(origW))
+		}
+	} else {
+		// Neither — use original dimensions; scale proportionally if either exceeds
+		if w > maxPreviewDim || h > maxPreviewDim {
+			scale := float64(maxPreviewDim) / float64(max(w, h))
+			w = int(float64(w) * scale)
+			h = int(float64(h) * scale)
+		}
+	}
+
 	// Validate
-	if w < 1 || w > 4096 || h < 1 || h > 4096 {
-		return 0, 0, fmt.Errorf("dimensions %dx%d out of range (1-4096)", w, h)
+	if w < 1 || h < 1 {
+		return 0, 0, fmt.Errorf("invalid dimensions: width and height must be positive")
 	}
 
 	return w, h, nil
@@ -2331,10 +2497,28 @@ func main() {
 		var api Api
 		r.Mount("/", openapi.Handler(&api))
 		r.Mount("/metrics", promhttp.Handler())
+		r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"status":"ok"}`)
+		})
 	})
 
 	r.Mount("/debug", middleware.Profiler())
 	r.Handle("/debug/fgprof", fgprof.Handler())
+
+	// MCP server — base URL is derived from request Host header at runtime,
+	// falling back to the listener address if the Host header is absent.
+	srv, err := mcp.New(&collections, imageSource, addr, apiPrefix)
+	if err != nil {
+		log.Fatalf("failed to create MCP server: %v", err)
+	}
+	mcpPrefix := os.Getenv("PHOTOFIELD_MCP_PREFIX")
+	if mcpPrefix == "" {
+		mcpPrefix = "/mcp"
+	}
+	r.Mount(mcpPrefix, srv.Handler())
+	log.Printf("MCP server mounted at %s", mcpPrefix)
 
 	msg := ""
 	if apiPrefix != "/" {

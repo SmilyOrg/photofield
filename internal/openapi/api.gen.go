@@ -103,6 +103,21 @@ type DocsCapability struct {
 	Url string `json:"url"`
 }
 
+// EventSummary defines model for EventSummary.
+type EventSummary struct {
+	CreatedAfter  *time.Time `json:"created_after,omitempty"`
+	CreatedBefore *time.Time `json:"created_before,omitempty"`
+	Index         *int       `json:"index,omitempty"`
+	LocationCount *int       `json:"location_count,omitempty"`
+	Locations     *[]string  `json:"locations,omitempty"`
+	PhotoCount    *int       `json:"photo_count,omitempty"`
+}
+
+// EventsList defines model for EventsList.
+type EventsList struct {
+	Items *[]EventSummary `json:"items,omitempty"`
+}
+
 // A validated and typed search query expression, types omitted as this is subject to many changes.
 type Expression map[string]interface{}
 
@@ -111,6 +126,24 @@ type FileBinary string
 
 // FileId defines model for FileId.
 type FileId int
+
+// FileInfo defines model for FileInfo.
+type FileInfo struct {
+	Color      *string    `json:"color,omitempty"`
+	Datetime   *time.Time `json:"datetime,omitempty"`
+	FileName   *string    `json:"file_name,omitempty"`
+	Height     *int       `json:"height,omitempty"`
+	Id         *int       `json:"id,omitempty"`
+	Location   *string    `json:"location,omitempty"`
+	Similarity *float32   `json:"similarity,omitempty"`
+	Tags       *[]string  `json:"tags,omitempty"`
+	Width      *int       `json:"width,omitempty"`
+}
+
+// FileList defines model for FileList.
+type FileList struct {
+	Items *[]FileInfo `json:"items,omitempty"`
+}
 
 // GeoJSON FeatureCollection
 type GeoJSON struct {
@@ -352,6 +385,18 @@ type TagIdPathParam TagId
 // TaskIdPathParam defines model for TaskIdPathParam.
 type TaskIdPathParam TaskId
 
+// GetCollectionsIdFilesParams defines parameters for GetCollectionsIdFiles.
+type GetCollectionsIdFilesParams struct {
+	// Natural language or structured search query
+	Search *Search `json:"search,omitempty"`
+
+	// Sort order. Prefix with `-` for descending or `+` for ascending, e.g. `-date` (newest first), `+date` (oldest first), `-similarity` (best matches first). Multiple values allowed.
+	Sort *Sort `json:"sort,omitempty"`
+
+	// Maximum number of results
+	Limit *Limit `json:"limit,omitempty"`
+}
+
 // GetFilesIdPreviewsFilenameParams defines parameters for GetFilesIdPreviewsFilename.
 type GetFilesIdPreviewsFilenameParams struct {
 	// Target width in pixels. If omitted, uses original width or scales proportionally with height.
@@ -522,6 +567,12 @@ type ServerInterface interface {
 	// (GET /collections/{id})
 	GetCollectionsId(w http.ResponseWriter, r *http.Request, id CollectionId)
 
+	// (GET /collections/{id}/events)
+	GetCollectionsIdEvents(w http.ResponseWriter, r *http.Request, id CollectionId)
+
+	// (GET /collections/{id}/files)
+	GetCollectionsIdFiles(w http.ResponseWriter, r *http.Request, id CollectionId, params GetCollectionsIdFilesParams)
+
 	// (GET /files/{id})
 	GetFilesId(w http.ResponseWriter, r *http.Request, id FileIdPathParam)
 
@@ -641,6 +692,94 @@ func (siw *ServerInterfaceWrapper) GetCollectionsId(w http.ResponseWriter, r *ht
 
 	var handler = func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCollectionsId(w, r, id)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// GetCollectionsIdEvents operation middleware
+func (siw *ServerInterfaceWrapper) GetCollectionsIdEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id CollectionId
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCollectionsIdEvents(w, r, id)
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler(w, r.WithContext(ctx))
+}
+
+// GetCollectionsIdFiles operation middleware
+func (siw *ServerInterfaceWrapper) GetCollectionsIdFiles(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id CollectionId
+
+	err = runtime.BindStyledParameter("simple", false, "id", chi.URLParam(r, "id"), &id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter id: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCollectionsIdFilesParams
+
+	// ------------- Optional query parameter "search" -------------
+	if paramValue := r.URL.Query().Get("search"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "search", r.URL.Query(), &params.Search)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter search: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+	if paramValue := r.URL.Query().Get("sort"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter sort: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+	if paramValue := r.URL.Query().Get("limit"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid format for parameter limit: %s", err), http.StatusBadRequest)
+		return
+	}
+
+	var handler = func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCollectionsIdFiles(w, r, id, params)
 	}
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1789,6 +1928,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/collections/{id}", wrapper.GetCollectionsId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/collections/{id}/events", wrapper.GetCollectionsIdEvents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/collections/{id}/files", wrapper.GetCollectionsIdFiles)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/files/{id}", wrapper.GetFilesId)

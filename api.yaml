@@ -47,6 +47,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /collections/{id}/events:
+    get:
+      description: Split a collection's photos into time-bounded events based on time and location proximity.
+      tags: ["Display"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Collection ID
+          schema:
+            $ref: "#/components/schemas/CollectionId"
+      responses:
+        "200":
+          description: List of events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventsList"
+
+  /collections/{id}/files:
+    get:
+      description: Search a collection's photos by text or structured query.
+      tags: ["Source"]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/CollectionId"
+
+        - name: search
+          in: query
+          description: Natural language or structured search query
+          schema:
+            $ref: "#/components/schemas/Search"
+
+        - name: sort
+          in: query
+          description: Sort order. Prefix with `-` for descending or `+` for ascending, e.g. `-date` (newest first), `+date` (oldest first), `-similarity` (best matches first). Multiple values allowed.
+          schema:
+            $ref: "#/components/schemas/Sort"
+
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            $ref: "#/components/schemas/Limit"
+
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileList"
+
   /scenes:
     post:
       description: Create a new scene using the provided parameters
@@ -1466,3 +1522,64 @@ components:
         text:
           type: string
           description: Feature text to be displayed on the map
+
+    EventSummary:
+      type: object
+      properties:
+        index:
+          type: integer
+        created_after:
+          type: string
+          format: date-time
+        created_before:
+          type: string
+          format: date-time
+        photo_count:
+          type: integer
+        location_count:
+          type: integer
+        locations:
+          type: array
+          items:
+            type: string
+
+    EventsList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventSummary"
+
+    FileInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        file_name:
+          type: string
+        datetime:
+          type: string
+          format: date-time
+        width:
+          type: integer
+        height:
+          type: integer
+        color:
+          type: string
+        location:
+          type: string
+        similarity:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+
+    FileList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileInfo"
