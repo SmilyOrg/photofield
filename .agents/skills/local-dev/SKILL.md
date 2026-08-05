@@ -85,7 +85,7 @@ Use `./tools/agent.sh server <command>` to manage the server process:
 ```
 
 **How it works:** `server start` launches the binary with `nohup` and writes a
-PID file to `/tmp/photofield-agent.pid`. It then polls the server endpoint until
+PID file to `data/agent.pid`. It then polls the server endpoint until
 ready (up to 30s). `server stop` reads the PID file and sends SIGTERM.
 `server kill` sends SIGKILL to the PID and anything else listening on the port.
 
@@ -179,8 +179,8 @@ useful for testing non-MCP routes, debugging, or calling endpoints that don't
 have a dedicated tool.
 
 ```bash
-# GET request
-./tools/agent.sh api GET http://localhost:8080/api/health
+# GET request (health check)
+./tools/agent.sh api GET http://localhost:8080/health
 
 # POST with JSON body
 ./tools/agent.sh api POST http://localhost:8080/api/collections \
@@ -200,15 +200,13 @@ not currently change the truncation behavior for API calls.
 
 ### Health Check
 
-The server exposes a health check endpoint to verify it is running:
+The server exposes a health check endpoint at `/health`:
 
 ```bash
-./tools/agent.sh api GET http://localhost:8080/api/health
+./tools/agent.sh api GET http://localhost:8080/health
 ```
 
-Returns `{"status": "ok"}` when healthy. The path includes the API prefix
-(default `/api`). If `PHOTOFIELD_API_PREFIX` is set to a different value
-(e.g., `/v1`), the endpoint would be at `/v1/health`.
+Returns `{"status": "ok"}` when healthy.
 
 ## 6. Test the Server
 
@@ -232,7 +230,7 @@ Returns `{"status": "ok"}` when healthy. The path includes the API prefix
 
 ```bash
 # Check health
-./tools/agent.sh api GET http://localhost:8080/api/health
+./tools/agent.sh api GET http://localhost:8080/health
 
 # List collections via API (alternative to mcp call)
 ./tools/agent.sh api GET http://localhost:8080/api/collections
@@ -241,10 +239,10 @@ Returns `{"status": "ok"}` when healthy. The path includes the API prefix
 ## 7. Inspect Errors and Crashes
 
 The harness captures the server's **entire stdout and stderr** to
-`/tmp/photofield-agent.log` via `nohup`. Panics and errors appear in this log:
+`data/agent.log` via `nohup`. Panics and errors appear in this log:
 
 ```bash
-tail -100 /tmp/photofield-agent.log
+tail -100 data/agent.log
 ```
 
 ### Session warnings

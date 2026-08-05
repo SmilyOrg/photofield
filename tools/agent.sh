@@ -42,8 +42,8 @@ VERBOSE=${AGT_VERBOSE:-0}
 _SERVER_MANAGED=false
 
 # ─── Paths ───
-_pid_file="/tmp/photofield-agent.pid"
-_headers_file="/tmp/agent-headers-$$"
+_pid_file="${DATA_DIR}/agent.pid"
+_headers_file="${DATA_DIR}/agent-headers-$$"
 
 # ─── Colors ───
 if [[ -t 1 ]]; then
@@ -87,13 +87,14 @@ server_start() {
   fi
 
   log_step "Starting server..."
+  mkdir -p "$DATA_DIR"
   export PHOTOFIELD_ADDRESS=":$(echo "$PORT" | sed 's/.*://')"
   export PHOTOFIELD_DATA_DIR="$DATA_DIR"
-  nohup "$BIN" > /tmp/photofield-agent.log 2>&1 &
+  nohup "$BIN" > "${DATA_DIR}/agent.log" 2>&1 &
   _SERVER_MANAGED=true
   local pid=$!
   printf '%s\n' "$pid" > "$_pid_file"
-  log_info "PID: ${pid} (log: /tmp/photofield-agent.log)"
+  log_info "PID: ${pid} (log: ${DATA_DIR}/agent.log)"
 
   local waited=0
   while (( waited < 30 )); do
@@ -106,7 +107,7 @@ server_start() {
   done
 
   log_fail "Server failed to start within 30s"
-  tail -20 /tmp/photofield-agent.log >&2
+  tail -20 "${DATA_DIR}/agent.log" >&2
   return 1
 }
 
@@ -221,7 +222,7 @@ api_call() {
   [[ -n "$body" ]] && log_info "Body: ${body:0:200}"
 
   local status_code tmpfile
-  tmpfile=$(mktemp /tmp/agent-raw-XXXXXX)
+  tmpfile=$(mktemp "${DATA_DIR}/agent-raw-XXXXXX")
   status_code=$(curl -s -o "$tmpfile" -w "%{http_code}" \
     "${hdrs[@]}" \
     -H "Content-Type: application/json" \
@@ -560,7 +561,7 @@ done
 
 # ─── Execute ───
 # For mcp/server, subcmd is the first remaining arg after the main loop
-[[ -z "$subcmd" && $# -gt 0 ]] && subcmd="$1" && shift
+[[ -z "$subcmd" && $# -gt 0 && "$cmd" != "api" ]] && subcmd="$1" && shift
 
 case "$cmd" in
   help)
