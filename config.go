@@ -15,7 +15,7 @@ import (
 	"photofield/internal/tag"
 
 	"github.com/goccy/go-yaml"
-	"github.com/imdario/mergo"
+	"dario.cat/mergo"
 )
 
 type AppConfig struct {
