@@ -666,11 +666,8 @@ github.com/tdewolff/minify/v2 v2.7.1-0.20200112204046-70870d25a935 h1:nRG5jPGtwJ
 github.com/tdewolff/minify/v2 v2.7.1-0.20200112204046-70870d25a935/go.mod h1:BkDSm8aMMT0ALGmpt7j3Ra7nLUgZL0qhyrAHXwxcy5w=
 github.com/tdewolff/parse/v2 v2.4.2 h1:Bu2Qv6wepkc+Ou7iB/qHjAhEImlAP5vedzlQRUdj3BI=
 github.com/tdewolff/parse/v2 v2.4.2/go.mod h1:WzaJpRSbwq++EIQHYIRTpbYKNA3gn9it1Ik++q4zyho=
-github.com/tdewolff/parse/v2 v2.8.12 h1:5BBjfaCv482v3nltlS0u6wH1xJaxjR6ofDrWttNvROg=
-github.com/tdewolff/parse/v2 v2.8.12/go.mod h1:Hwlni2tiVNKyzR1o6nUs4FOF07URA+JLBLd6dlIXYqo=
+github.com/tdewolff/test v1.0.6 h1:76mzYJQ83Op284kMT+63iCNCI7NEERsIN8dLM+RiKr4=
 github.com/tdewolff/test v1.0.6/go.mod h1:6DAvZliBAAnD7rhVgwaM7DE5/d9NMOAJ09SqYqeK4QE=
-github.com/tdewolff/test v1.0.11 h1:FdLbwQVHxqG16SlkGveC0JVyrJN62COWTRyUFzfbtBE=
-github.com/tdewolff/test v1.0.11/go.mod h1:XPuWBzvdUzhCuxWO1ojpXsyzsA5bFoS3tO/Q3kFuTG8=
 github.com/tetratelabs/wazero v1.9.0 h1:IcZ56OuxrtaEz8UYNRHBrUa9bYeX9oVY93KspZZBf/I=
 github.com/tetratelabs/wazero v1.9.0/go.mod h1:TSbcXCfFP0L2FGkRPxHphadXPjo1T6W+CseNNY7EkjM=
 github.com/tidwall/pretty v1.0.0/go.mod h1:XNkn88O1ChpSDQmQeStsy+sBenx6DDtFZJxhVysOjyk=
