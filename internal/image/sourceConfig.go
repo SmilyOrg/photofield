@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
-	"github.com/imdario/mergo"
+	"dario.cat/mergo"
 )
 
 const (

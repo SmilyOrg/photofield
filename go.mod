@@ -2,7 +2,10 @@ module photofield
 
 go 1.25.11
 
+toolchain go1.25.12
+
 require (
+	dario.cat/mergo v1.0.0
 	git.sr.ht/~jackmordaunt/go-libwebp v1.8.0
 	github.com/EdlinOrg/prominentcolor v1.0.0
 	github.com/HugoSmits86/nativewebp v1.2.0
@@ -24,7 +27,6 @@ require (
 	github.com/gosimple/slug v1.10.0
 	github.com/grafana/pyroscope-go v1.2.0
 	github.com/hako/durafmt v0.0.0-20200605151348-3a43fc422dd9
-	github.com/imdario/mergo v0.3.13
 	github.com/joho/godotenv v1.3.0
 	github.com/karrick/godirwalk v1.15.6
 	github.com/lpar/gzipped v1.1.0
@@ -41,8 +43,8 @@ require (
 	github.com/tdewolff/canvas v0.0.0-20200504121106-e2600b35c365
 	github.com/x448/float16 v0.8.4
 	github.com/zelenko/go v0.0.0-20210326203833-2c97fc39fc36
-	golang.org/x/exp v0.0.0-20250819170805-f6d41f060dd3
-	golang.org/x/image v0.42.0
+	golang.org/x/exp v0.0.0-20251017212417-90e834f514db
+	golang.org/x/image v0.43.0
 	golang.org/x/sync v0.21.0
 	modernc.org/libc v1.66.7
 	modernc.org/sqlite v1.38.2
@@ -51,7 +53,7 @@ require (
 
 require (
 	github.com/ByteArena/poly2tri-go v0.0.0-20170716161910-d102ad91854f // indirect
-	github.com/ajstarks/svgo v0.0.0-20200320125537-f189e35d30ca // indirect
+	github.com/ajstarks/svgo v0.0.0-20180226025133-644b8db467af // indirect
 	github.com/alecthomas/repr v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.0.0 // indirect
@@ -95,7 +97,7 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.0.0-20190410204940-3a5f52653745 // indirect
