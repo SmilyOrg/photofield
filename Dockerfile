@@ -17,7 +17,8 @@ RUN \
     -o /build/photofield .
 
 # Runtime stage
-FROM alpine:3.23
+# Alpine 3.24 ships ffmpeg 8.1.2 which fixes HEIC tile assembly + orientation handling
+FROM alpine:3.24
 
 # Install runtime dependencies
 # - exiftool: metadata extraction
