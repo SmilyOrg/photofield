@@ -1,5 +1,5 @@
 ---
-name: photofield-release
+name: release
 description: >-
   Follow the Photofield release process: batch changelog entries, create the
   release commit and tag, and push. Use when the user says "release", "cut a
