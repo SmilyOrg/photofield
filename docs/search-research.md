@@ -272,3 +272,92 @@ stored (often `+00:00` even for JST photos).
    stored: for offset-0 rows it's the camera's local date; for
    offset-corrected rows it's the UTC date (skewed by +9h for JST), putting
    the first 9 hours of each JST day into the previous UTC day.
+
+## 6. Known issues register
+
+Bugs found while testing the `search_photos` MCP tool end-to-end (June 2026).
+Statuses as of this revision:
+
+### 6.1 `created:` matched the UTC instant, not the stored local date — FIXED (e67d817)
+
+Photos whose stored instant had a negative UTC offset (e.g. JST = +9h → a
+`2025-06-01T03:30+09:00` photo stores `2025-05-31T18:30Z`) were missed by
+`created:2025-06-01` even though every display surface (metadata, MCP output,
+the SQL filter itself) showed the local date `2025-06-01`. Root cause: the Go
+post-filter in `listWithPrefixIds` (`internal/image/database.go`) compared
+`created:.` against `time.Unix(unix, 0)` (bare UTC) while the SQL pre-filter
+and the wildcard branch used `unix + tz_offset*60`. Fix: evaluate the Go
+filter against the same local instant as the SQL side
+(`time.Unix(unix+int64(tzOffset)*60, 0)`).
+
+### 6.2 `dedup:` compared each row only against the last kept row — FIXED (2a6aa37)
+
+`listWithPrefixIds` tracked a single `lastEmb` and suppressed a row only if it
+was similar to the immediately preceding *kept* row. With `sort:+date` (and
+any order where near-duplicates aren't adjacent), a duplicate separated from
+its original by an unrelated photo slipped through. Fix: keep slices of all
+kept embeddings (`keptEmbs` / `keptEmbInvNorms`) and suppress a row if it is
+similar (≥ the `dedup:` value) to *any* kept row. Cost: O(n²) similarity
+computations in Go — acceptable at current collection sizes; noted for
+future optimization.
+
+### 6.3 Embedding queries: SQL `LIMIT` applied before Go scoring — OPEN
+
+The similarity threshold (`t:`) and image/face scoring run in Go
+(`listWithPrefixIds`), but the SQL `LIMIT` (e.g. the default 50 from
+`search_photos`) clips the row stream *before* those filters run. Two
+consequences for `search_photos 'red car'` (default `sort` → `-date`):
+
+- only the 50 newest rows are ever scored; the best matches beyond row 50
+  are silently discarded (this is what the tool's "results beyond the limit
+  are silently discarded" warning papers over);
+- the `t:` threshold filters that one page, so a query can return far fewer
+  than `limit` results even when plenty of matching photos exist older than
+  the window.
+
+Additionally, the default sort for text/img/face queries is `-date`,
+contradicting the tool description's "Text search … sorted by match
+quality". `SortPrimaryOrder("")` → `DateDesc`
+(`internal/collection/search.go`), and non-similarity orders bind `LIMIT` in
+SQL (`internal/image/database.go`, `options.Limit > 0 && !similarityOrder`).
+
+Planned fix: (a) whenever an image or face embedding is present, skip the
+SQL `LIMIT` and apply the limit in Go *after* threshold/dedup filtering
+(the pattern similarity orders already use: `Limit = 0` + sort + limit in
+Go); (b) default text/img/face queries without an explicit `sort` to
+`-similarity`, so the documented "sorted by match quality" holds; update the
+tool description's sort defaults accordingly.
+
+### 6.4 `dedup:` (without embeddings) + limit: same "limit before filter" defect — OPEN
+
+`dedup:0.9` as a standalone qualifier (no text/img/face) suppresses rows in
+Go, but the SQL `LIMIT` still pre-clips the stream, so results can come back
+short of `limit` even when more unique photos exist beyond the window.
+Same root cause and planned fix as 6.3 (disable the SQL limit when Go-side
+row filtering is active, limit in Go afterwards). Tracked separately because
+6.3's fix is scoped to embedding queries.
+
+### 6.5 Stored-instant skew: same camera, two different "UTC" bases — OPEN (data, not query)
+
+The 6.1 fix made queries consistent with the *display*, but the underlying
+`created_at_unix` values are still skewed: photos whose exiftool
+reconciliation swapped in an offset-carrying date
+(`internal/image/exiftool-mostlygeek.go:126-143`) store the **true UTC
+instant**, while photos with only offsetless EXIF dates store
+**local wall-time-as-UTC** (offset 0, `decoder.go` `parseDateTime`). Two
+photos from the same JST camera taken 10 minutes apart can sit 9 hours apart
+in `created_at_unix`. Sorting by date and bucketing (shuffles, date
+facets) inherit the skew. Fixing this is a scan-time normalization problem
+(e.g. store an explicit "instant unknown; treat as local" flag and normalize
+on re-scan), deliberately out of scope of the query fixes.
+
+### 6.6 `search_photos` description: `filename:` example claims wrong default order — OPEN
+
+The EXAMPLES block says `'filename:IMG_*.jpg' — all IMG_ photos, oldest
+first`, but the default order is **newest** first (`-date`; the same
+description's SORT OPTIONS list says so one line above). Pure docs bug, no
+functional impact — but the description is the contract the calling agent
+reads, so a wrong ordering claim teaches a false fact. Planned fix:
+`'filename:IMG_*.jpg' sort:+date — all IMG_ photos, oldest first`.
+(The `filename:` qualifier itself — substring/LIKE with `*`/`?` wildcards,
+`filenameToLikePattern` — behaves exactly as documented.)
