@@ -2087,14 +2087,18 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				sql += `
 					)`
 			}
+			// Filter on the local wall-clock instant (unix + stored tz offset),
+			// which is the same value the created_at display column shows. Using
+			// created_at_unix alone would put photos on the UTC calendar day
+			// instead of the date they were created in their local timezone.
 			if !options.Expression.Created.From.IsZero() {
 				sql += `
-					AND created_at_unix >= :created_from
+					AND created_at_unix + COALESCE(created_at_tz_offset, 0) * 60 >= :created_from
 				`
 			}
 			if !options.Expression.Created.To.IsZero() {
 				sql += `
-					AND created_at_unix < :created_to
+					AND created_at_unix + COALESCE(created_at_tz_offset, 0) * 60 < :created_to
 				`
 			}
 			if len(filenames) > 0 {
@@ -2257,8 +2261,10 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			timezoneOffset := stmt.ColumnInt(6)
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
 
-			// Search post-query expression filtering
-			if !options.Expression.Created.Match(info.DateTime) {
+			// Search post-query expression filtering. Match against the local
+			// wall-clock instant (unix + stored tz offset) so that wildcard
+			// matching agrees with the SQL date filter above.
+			if !options.Expression.Created.Match(time.Unix(unix+int64(timezoneOffset)*60, 0)) {
 				continue
 			}
 
