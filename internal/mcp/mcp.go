@@ -99,7 +99,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			"- 'dog' sort:-similarity — dogs sorted by relevance\n" +
 			"- 'dog' sort:+shuffle-daily — random order, but grouped by day\n" +
 			"- 'portrait' sort:-similarity,+date — best portraits first, newest tiebreak\n" +
-			"- 'filename:IMG_*.jpg' — all IMG_ photos, oldest first\n\n" +
+			"- 'filename:IMG_*.jpg' sort:+date — all IMG_ photos, oldest first\n\n" +
 			"VERIFICATION: For single specific results, call get_photo on top matches to confirm content. For large browse results, verify the top 1-3 matches before presenting.",
 		InputSchema: map[string]any{
 			"type": "object",
