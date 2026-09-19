@@ -2009,6 +2009,13 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		}
 
 		similarityOrder := isSimilarityOrder(options.OrderBy)
+		// Go scores every row for any query carrying an image or face
+		// embedding (text, img:, face:), not just similarity orders. For
+		// those the SQL LIMIT must not pre-clip the row stream: the similarity
+		// threshold and dedup filters run in Go and would otherwise only see
+		// the first Limit rows in SQL order, silently discarding matches beyond
+		// the window. The limit is applied in Go after filtering instead.
+		goScores := similarityOrder || options.ImageEmbedding != nil || options.FaceEmbedding != nil
 
 		joinEmbeddings := false
 		var emb []float32
@@ -2168,7 +2175,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			// No SQL ordering — similarity sort happens in Go after all results are collected.
 		}
 
-		if options.Limit > 0 && !similarityOrder {
+		if options.Limit > 0 && !goScores {
 			sql += `
 				LIMIT ?
 			`
@@ -2222,11 +2229,14 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			bindIndex++
 		}
 
-		if options.Limit > 0 && !similarityOrder {
+		if options.Limit > 0 && !goScores {
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
 
 		var lastInfo SourcedInfo
+		// Rows emitted so far on non-similarity orders; enforces the limit in
+		// Go after filtering for goScores queries (their SQL LIMIT is disabled).
+		var emitted int
 		// Embeddings of every row kept so far, so that deduplication compares
 		// each row against all kept rows — not just the last one — meaning a
 		// near-duplicate is suppressed even if an unrelated photo separates it
@@ -2250,8 +2260,9 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				// If we are not joining faces, this is just a slightly weird order of emission.
 				if similarityOrder {
 					similarityBuffer = append(similarityBuffer, lastInfo)
-				} else {
+				} else if !goScores || options.Limit <= 0 || emitted < options.Limit {
 					out <- lastInfo
+					emitted++
 				}
 				lastInfo = SourcedInfo{}
 			}
@@ -2379,7 +2390,10 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			}
 		} else if lastInfo.Id != 0 {
 			// Emit the last info if any
-			out <- lastInfo
+			if !goScores || options.Limit <= 0 || emitted < options.Limit {
+				out <- lastInfo
+				emitted++
+			}
 		}
 
 		close(out)
