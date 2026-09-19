@@ -301,7 +301,7 @@ similar (≥ the `dedup:` value) to *any* kept row. Cost: O(n²) similarity
 computations in Go — acceptable at current collection sizes; noted for
 future optimization.
 
-### 6.3 Embedding queries: SQL `LIMIT` applied before Go scoring — OPEN
+### 6.3 Embedding queries: SQL `LIMIT` applied before Go scoring — FIXED (a7068aa)
 
 The similarity threshold (`t:`) and image/face scoring run in Go
 (`listWithPrefixIds`), but the SQL `LIMIT` (e.g. the default 50 from
@@ -321,12 +321,19 @@ quality". `SortPrimaryOrder("")` → `DateDesc`
 (`internal/collection/search.go`), and non-similarity orders bind `LIMIT` in
 SQL (`internal/image/database.go`, `options.Limit > 0 && !similarityOrder`).
 
-Planned fix: (a) whenever an image or face embedding is present, skip the
-SQL `LIMIT` and apply the limit in Go *after* threshold/dedup filtering
-(the pattern similarity orders already use: `Limit = 0` + sort + limit in
-Go); (b) default text/img/face queries without an explicit `sort` to
-`-similarity`, so the documented "sorted by match quality" holds; update the
-tool description's sort defaults accordingly.
+Fixed (a7068aa) exactly as planned: `image.listWithPrefixIds` now computes
+`goScores := similarityOrder || options.ImageEmbedding != nil ||
+options.FaceEmbedding != nil`, disables the SQL `LIMIT` for those queries,
+and enforces the limit in Go after threshold/dedup filtering; and
+collection.Search defaults embedding queries without an explicit `sort` to
+`-similarity` via `primaryOrderFor`, with the `search_photos` description
+updated to document the per-query-kind default sort. Verified by unit tests
+(`TestListThresholdLimitSpansFullSet`, `TestListSimilarityOrderLimitTopMatches`,
+`TestPrimaryOrderFor`) and an e2e run of `img:6 t:0.3` with hand-seeded
+float16 embeddings: limit 2 now returns the top two matches (sim 1.0, 0.9)
+instead of the two newest rows, and `sort:+date` limit 4 returns all four
+threshold-passing rows across the date range. A standalone `dedup:` query
+(no image/face embedding) is *not* gated in, so 6.4 remains open.
 
 ### 6.4 `dedup:` (without embeddings) + limit: same "limit before filter" defect — OPEN
 
@@ -334,8 +341,12 @@ tool description's sort defaults accordingly.
 Go, but the SQL `LIMIT` still pre-clips the stream, so results can come back
 short of `limit` even when more unique photos exist beyond the window.
 Same root cause and planned fix as 6.3 (disable the SQL limit when Go-side
-row filtering is active, limit in Go afterwards). Tracked separately because
-6.3's fix is scoped to embedding queries.
+row filtering is active, limit in Go afterwards). Still open: 6.3's fix
+(a7068aa) gates on a query image/face embedding, but a standalone `dedup:`
+query has no query embedding, so the SQL `LIMIT` still pre-clips its stream
+(`image.listWithPrefixIds`, `goScores` does not include
+`options.Expression.Deduplicate.Present`). One-line extension: add the
+dedup-presence check to `goScores`.
 
 ### 6.5 Stored-instant skew: same camera, two different "UTC" bases — OPEN (data, not query)
 
@@ -351,13 +362,14 @@ facets) inherit the skew. Fixing this is a scan-time normalization problem
 (e.g. store an explicit "instant unknown; treat as local" flag and normalize
 on re-scan), deliberately out of scope of the query fixes.
 
-### 6.6 `search_photos` description: `filename:` example claims wrong default order — OPEN
+### 6.6 `search_photos` description: `filename:` example claims wrong default order — FIXED (eee5b01)
 
-The EXAMPLES block says `'filename:IMG_*.jpg' — all IMG_ photos, oldest
+The EXAMPLES block said `'filename:IMG_*.jpg' — all IMG_ photos, oldest
 first`, but the default order is **newest** first (`-date`; the same
-description's SORT OPTIONS list says so one line above). Pure docs bug, no
+description's SORT OPTIONS list said so one line above). Pure docs bug, no
 functional impact — but the description is the contract the calling agent
-reads, so a wrong ordering claim teaches a false fact. Planned fix:
-`'filename:IMG_*.jpg' sort:+date — all IMG_ photos, oldest first`.
+reads, so a wrong ordering claim teaches a false fact. Fixed (eee5b01) as
+planned: the example now reads `'filename:IMG_*.jpg' sort:+date — all IMG_
+photos, oldest first`, demonstrating the `sort:` argument pattern.
 (The `filename:` qualifier itself — substring/LIKE with `*`/`?` wildcards,
 `filenameToLikePattern` — behaves exactly as documented.)
