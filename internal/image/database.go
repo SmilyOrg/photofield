@@ -2223,8 +2223,12 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		}
 
 		var lastInfo SourcedInfo
-		var lastEmb []float32
-		var lastEmbInvNorm float32
+		// Embeddings of every row kept so far, so that deduplication compares
+		// each row against all kept rows — not just the last one — meaning a
+		// near-duplicate is suppressed even if an unrelated photo separates it
+		// from its original in the stream order.
+		var keptEmbs [][]float32
+		var keptEmbInvNorms []float32
 		var similarityBuffer []SourcedInfo
 
 		for {
@@ -2298,18 +2302,24 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 					}
 				}
 				if options.Expression.Deduplicate.Present {
-					if lastEmb != nil {
-						sim, err := ai.CosineSimilarityFloat32Float32(lastEmb, lastEmbInvNorm, ee, einv)
+					skip := false
+					for i := range keptEmbs {
+						sim, err := ai.CosineSimilarityFloat32Float32(keptEmbs[i], keptEmbInvNorms[i], ee, einv)
 						if err != nil {
 							log.Printf("Error calculating similarity for %d: %v\n", info.Id, err)
-							continue
+							skip = true
+							break
 						}
 						if sim >= options.Expression.Deduplicate.Value {
-							continue
+							skip = true
+							break
 						}
 					}
-					lastEmb = ee
-					lastEmbInvNorm = einv
+					if skip {
+						continue
+					}
+					keptEmbs = append(keptEmbs, ee)
+					keptEmbInvNorms = append(keptEmbInvNorms, einv)
 				}
 			}
 
