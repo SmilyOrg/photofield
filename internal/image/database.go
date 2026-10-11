@@ -97,6 +97,7 @@ type Database struct {
 	pending          chan *InfoWrite
 	transactionMutex sync.RWMutex
 	dirUpdateFuncs   []DirsFunc
+	writerDone       sync.WaitGroup
 }
 
 type InfoWriteType int32
@@ -204,6 +205,7 @@ func NewDatabase(path string, migrations embed.FS) *Database {
 	}
 
 	source.pending = make(chan *InfoWrite, 10000)
+	source.writerDone.Add(1)
 	go source.writePendingInfosSqlite()
 
 	return &source
@@ -213,10 +215,14 @@ func (source *Database) Close() {
 	if source == nil {
 		return
 	}
+	// Close the input first and wait for the writer goroutine to drain it
+	// and exit; it reads dirUpdateFuncs and the pool while flushing, so
+	// touching them before it is gone is a data race.
+	close(source.pending)
+	source.writerDone.Wait()
 	source.dirUpdateFuncs = nil
 	source.pool.Close()
 	source.pool = nil
-	close(source.pending)
 }
 
 func (source *Database) open() *sqlite.Conn {
@@ -282,6 +288,7 @@ func (db *Database) HandleDirUpdates(fn DirsFunc) {
 }
 
 func (source *Database) writePendingInfosSqlite() {
+	defer source.writerDone.Done()
 	conn := source.open()
 	defer conn.Close()
 
