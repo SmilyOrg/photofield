@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/binary"
 	"math"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/x448/float16"
+	"photofield/internal/ai"
 	"photofield/internal/image"
 	"photofield/internal/search"
 )
@@ -16,6 +19,23 @@ import (
 func unitEmbAtSim(t *testing.T, sim float32) (x, y float32) {
 	t.Helper()
 	return sim, float32(math.Sqrt(float64(1 - sim*sim)))
+}
+
+// embeddingBytes encodes a 2D vector normalized to unit length as the
+// little-endian float16 byte blob the clip_emb table stores. The inverse
+// norm of a unit vector is 1.0, whose float16 bits are 0x3C00.
+// (Shared helper — also used by the dedup search tests, #202.)
+func embeddingBytes(t *testing.T, x, y float32) ai.Embedding {
+	t.Helper()
+	n := float32(math.Sqrt(float64(x*x + y*y)))
+	f := [2]uint16{
+		float16.Fromfloat32(x / n).Bits(),
+		float16.Fromfloat32(y / n).Bits(),
+	}
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint16(buf[0:2], f[0])
+	binary.LittleEndian.PutUint16(buf[2:4], f[1])
+	return ai.FromRaw(buf, 0x3C00)
 }
 
 // writePhotoEmbs writes 5 photos dated one day apart (01 oldest … 05 newest)
