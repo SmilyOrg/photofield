@@ -164,14 +164,22 @@ func (o Djpeg) run(ctx context.Context, path, scale string) (image.Image, error)
 		return nil, formatErr(err, "djpeg")
 	}
 
-	img, err := bmp.Decode(stdout)
+	img, decodeErr := bmp.Decode(stdout)
 
-	if err != nil {
-		return nil, err
+	// Reap on every path. Returning early on a decode failure left the child
+	// unreaped, so every file djpeg cannot decode leaked a zombie - one per
+	// attempt, and Get()'s two-pass resize calls run() twice. In a container
+	// these accumulate until the cgroup pids limit is reached, after which all
+	// fork/exec inside the container fails (including ffmpeg, so video
+	// thumbnails stop being generated).
+	waitErr := cmd.Wait()
+
+	if decodeErr != nil {
+		return nil, decodeErr
 	}
 
-	if err := cmd.Wait(); err != nil {
-		return nil, formatErr(err, "djpeg")
+	if waitErr != nil {
+		return nil, formatErr(waitErr, "djpeg")
 	}
 
 	return img, nil
