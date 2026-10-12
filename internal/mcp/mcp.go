@@ -82,7 +82,7 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			"- t:X — similarity threshold filter (0.15-0.30, where higher = more strict; e.g. 'beach sunset t:0.25')\n" +
 			"- dedup:X — filter duplicates by similarity (0-1, e.g. 'dedup:0.9' keeps only photos <90% similar to each other)\n\n" +
 			"SORT OPTIONS (passed as the 'sort' parameter):\n" +
-			"- -date (default for non-text queries) — newest first\n" +
+			"- -date (default for queries without an embedding) — newest first\n" +
 			"- +date — oldest first\n" +
 			"- -similarity (default for text, img: and face: queries) — best matches first\n" +
 			"- +similarity — worst matches first\n" +
