@@ -82,9 +82,9 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			"- t:X — similarity threshold filter (0.15-0.30, where higher = more strict; e.g. 'beach sunset t:0.25')\n" +
 			"- dedup:X — filter duplicates by similarity (0-1, e.g. 'dedup:0.9' keeps only photos <90% similar to each other)\n\n" +
 			"SORT OPTIONS (passed as the 'sort' parameter):\n" +
-			"- -date (default) — newest first\n" +
+			"- -date (default for queries without an embedding) — newest first\n" +
 			"- +date — oldest first\n" +
-			"- -similarity — best matches first\n" +
+			"- -similarity (default for text, img: and face: queries) — best matches first\n" +
 			"- +similarity — worst matches first\n" +
 			"- +shuffle-hourly — random within each hour\n" +
 			"- +shuffle-daily — random within each day\n" +
@@ -99,14 +99,14 @@ func New(collections *[]collection.Collection, imageSource *image.Source, addr, 
 			"- 'dog' sort:-similarity — dogs sorted by relevance\n" +
 			"- 'dog' sort:+shuffle-daily — random order, but grouped by day\n" +
 			"- 'portrait' sort:-similarity,+date — best portraits first, newest tiebreak\n" +
-			"- 'filename:IMG_*.jpg' — all IMG_ photos, oldest first\n\n" +
+			"- 'filename:IMG_*.jpg' sort:+date — all IMG_ photos, oldest first\n\n" +
 			"VERIFICATION: For single specific results, call get_photo on top matches to confirm content. For large browse results, verify the top 1-3 matches before presenting.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"collection_id": map[string]any{"type": "string", "description": "The collection ID from list_collections."},
 				"query":         map[string]any{"type": "string", "description": "Search query: natural language text, image similarity (img:ID), or face similarity (face:ID)."},
-				"sort":          map[string]any{"type": [2]string{"null", "string"}, "description": "Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly."},
+				"sort":          map[string]any{"type": [2]string{"null", "string"}, "description": "Sort order. Text, img: and face: queries default to '-similarity' (best matches first); other queries default to '-date' (newest first). Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly."},
 				"limit":         map[string]any{"type": [2]string{"null", "integer"}, "description": "Max results. Default 50. Results beyond limit are silently discarded."},
 			},
 			"required": []string{"collection_id", "query"},
@@ -283,7 +283,7 @@ func eventsHandler(collections *[]collection.Collection, imageSource *image.Sour
 type searchPhotosInput struct {
 	CollectionId string  `json:"collection_id" jsonschema:"The collection ID from list_collections."`
 	Query        string  `json:"query" jsonschema:"Search query: natural language text, image similarity (img:ID), or face similarity (face:ID)."`
-	Sort         *string `json:"sort" jsonschema:"Sort order. '-date' (newest) by default. Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."`
+	Sort         *string `json:"sort" jsonschema:"Sort order. Text, img: and face: queries default to '-similarity' (best matches first); other queries default to '-date' (newest first). Options: +date, -similarity, +similarity, +shuffle-hourly, +shuffle-daily, +shuffle-weekly, +shuffle-monthly, or comma-joined like '-similarity,+date'."`
 	Limit        *int    `json:"limit" jsonschema:"Max results. Default 50. Results beyond limit are silently discarded."`
 }
 
