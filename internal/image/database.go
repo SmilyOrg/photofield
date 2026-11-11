@@ -97,6 +97,7 @@ type Database struct {
 	pending          chan *InfoWrite
 	transactionMutex sync.RWMutex
 	dirUpdateFuncs   []DirsFunc
+	writerDone       sync.WaitGroup
 }
 
 type InfoWriteType int32
@@ -204,6 +205,7 @@ func NewDatabase(path string, migrations embed.FS) *Database {
 	}
 
 	source.pending = make(chan *InfoWrite, 10000)
+	source.writerDone.Add(1)
 	go source.writePendingInfosSqlite()
 
 	return &source
@@ -213,10 +215,14 @@ func (source *Database) Close() {
 	if source == nil {
 		return
 	}
+	// Close the input first and wait for the writer goroutine to drain it
+	// and exit; it reads dirUpdateFuncs and the pool while flushing, so
+	// touching them before it is gone is a data race.
+	close(source.pending)
+	source.writerDone.Wait()
 	source.dirUpdateFuncs = nil
 	source.pool.Close()
 	source.pool = nil
-	close(source.pending)
 }
 
 func (source *Database) open() *sqlite.Conn {
@@ -282,6 +288,7 @@ func (db *Database) HandleDirUpdates(fn DirsFunc) {
 }
 
 func (source *Database) writePendingInfosSqlite() {
+	defer source.writerDone.Done()
 	conn := source.open()
 	defer conn.Close()
 
@@ -2009,6 +2016,13 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		}
 
 		similarityOrder := isSimilarityOrder(options.OrderBy)
+		// Go scores every row for any query carrying an image or face
+		// embedding (text, img:, face:), not just similarity orders. For
+		// those the SQL LIMIT must not pre-clip the row stream: the similarity
+		// threshold and dedup filters run in Go and would otherwise only see
+		// the first Limit rows in SQL order, silently discarding matches beyond
+		// the window. The limit is applied in Go after filtering instead.
+		goScores := similarityOrder || options.ImageEmbedding != nil || options.FaceEmbedding != nil
 
 		joinEmbeddings := false
 		var emb []float32
@@ -2087,14 +2101,18 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				sql += `
 					)`
 			}
+			// Filter on the local wall-clock instant (unix + stored tz offset),
+			// which is the same value the created_at display column shows. Using
+			// created_at_unix alone would put photos on the UTC calendar day
+			// instead of the date they were created in their local timezone.
 			if !options.Expression.Created.From.IsZero() {
 				sql += `
-					AND created_at_unix >= :created_from
+					AND created_at_unix + COALESCE(created_at_tz_offset, 0) * 60 >= :created_from
 				`
 			}
 			if !options.Expression.Created.To.IsZero() {
 				sql += `
-					AND created_at_unix < :created_to
+					AND created_at_unix + COALESCE(created_at_tz_offset, 0) * 60 < :created_to
 				`
 			}
 			if len(filenames) > 0 {
@@ -2164,7 +2182,7 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			// No SQL ordering — similarity sort happens in Go after all results are collected.
 		}
 
-		if options.Limit > 0 && !similarityOrder {
+		if options.Limit > 0 && !goScores {
 			sql += `
 				LIMIT ?
 			`
@@ -2218,11 +2236,14 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			bindIndex++
 		}
 
-		if options.Limit > 0 && !similarityOrder {
+		if options.Limit > 0 && !goScores {
 			stmt.BindInt64(bindIndex, (int64)(options.Limit))
 		}
 
 		var lastInfo SourcedInfo
+		// Rows emitted so far on non-similarity orders; enforces the limit in
+		// Go after filtering for goScores queries (their SQL LIMIT is disabled).
+		var emitted int
 		var lastEmb []float32
 		var lastEmbInvNorm float32
 		var similarityBuffer []SourcedInfo
@@ -2242,8 +2263,9 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 				// If we are not joining faces, this is just a slightly weird order of emission.
 				if similarityOrder {
 					similarityBuffer = append(similarityBuffer, lastInfo)
-				} else {
+				} else if !goScores || options.Limit <= 0 || emitted < options.Limit {
 					out <- lastInfo
+					emitted++
 				}
 				lastInfo = SourcedInfo{}
 			}
@@ -2257,8 +2279,10 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			timezoneOffset := stmt.ColumnInt(6)
 			info.DateTime = time.Unix(unix, 0).In(time.FixedZone("", timezoneOffset*60))
 
-			// Search post-query expression filtering
-			if !options.Expression.Created.Match(info.DateTime) {
+			// Search post-query expression filtering. Match against the local
+			// wall-clock instant (unix + stored tz offset) so that wildcard
+			// matching agrees with the SQL date filter above.
+			if !options.Expression.Created.Match(time.Unix(unix+int64(timezoneOffset)*60, 0)) {
 				continue
 			}
 
@@ -2363,7 +2387,10 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 			}
 		} else if lastInfo.Id != 0 {
 			// Emit the last info if any
-			out <- lastInfo
+			if !goScores || options.Limit <= 0 || emitted < options.Limit {
+				out <- lastInfo
+				emitted++
+			}
 		}
 
 		close(out)

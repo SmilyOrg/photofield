@@ -71,6 +71,19 @@ func SortIsSimilarity(s SortType) bool {
 	return lo == image.SimilarityDesc || lo == image.SimilarityAsc
 }
 
+// primaryOrderFor resolves the effective primary order for a search: an
+// explicit sort always wins; text, img: and face: (embedding) queries
+// otherwise rank by match quality; all other queries list newest first.
+func primaryOrderFor(sort SortType, hasEmbedding bool) image.ListOrder {
+	if sort != "" {
+		return SortPrimaryOrder(sort)
+	}
+	if hasEmbedding {
+		return image.SimilarityDesc
+	}
+	return image.DateDesc
+}
+
 // SearchOptions holds the parameters for a collection search.
 type SearchOptions struct {
 	QueryStr string
@@ -140,8 +153,10 @@ func (collection *Collection) Search(
 		imageEmbedding = emb
 	}
 
-	// 3. Determine sort order
-	order := SortPrimaryOrder(opts.Sort)
+	// 3. Determine sort order. An explicit sort wins; otherwise text, img: and
+	// face: queries rank by match quality (the documented search_photos
+	// behavior) while all other queries list newest first.
+	order := primaryOrderFor(opts.Sort, imageEmbedding != nil || faceEmbedding != nil)
 
 	// No default threshold — let all results through and let the caller
 	// control filtering via `t:X` if desired. (The original loadScene used
