@@ -110,7 +110,7 @@ media:
   concurrent_ai_loads: 8
 
   # Maximum file size for face detection (files larger than this are skipped)
-  max_face_file_size: 50MB
+  max_face_file_size: 50Mi
   
   # Number of exiftool instances to run concurrently for metadata extraction
   exif_tool_count: 4
@@ -133,7 +133,7 @@ media:
       # Size of the image cache used while rendering images
       # A larger cache might make display/rendering faster, while a smaller
       # cache will conserve memory.
-      max_size: 1024MB
+      max_size: 1024Mi
     
   # File extensions to index on the file system
   extensions: [
