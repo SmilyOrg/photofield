@@ -20,7 +20,7 @@ func TestReloadLeaks(t *testing.T) {
 collections:
   - name: test
     dirs: ["./dummy-dir"]
-	`
+`
 
 	configPath := tempDir + "/configuration.yaml"
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
