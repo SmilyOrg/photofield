@@ -179,6 +179,10 @@ default. For further configuration, create a `configuration.yaml` in the
   ```
 </details>
 
+### One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/Photofield/)
+
 ### Binaries
 
 1. [Download and unpack a release].
