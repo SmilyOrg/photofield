@@ -36,19 +36,15 @@ git diff-index --quiet HEAD -- || { echo "NOT CLEAN"; exit 1; }
 # CI run finished — check the workflow runs instead:
 SHA=$(git rev-parse HEAD)
 curl -s "https://api.github.com/repos/SmilyOrg/photofield/actions/runs?branch=main&per_page=5" | \
-  python3 -c "
-import json, sys
-runs = [r for r in json.load(sys.stdin)['workflow_runs'] if r['head_sha'] == sys.argv[1]]
-if runs and all(r['conclusion'] == 'success' for r in runs):
-    print('CI PASSING')
-else:
-    print('CI NOT PASSING (pending or failed): ' + str([(r['name'], r['status'], r['conclusion']) for r in runs]))
-" "$SHA"
+  jq -e --arg sha "$SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | length > 0 and all(.conclusion == "success")' \
+  >/dev/null && echo "CI PASSING" || echo "CI NOT PASSING"
 ```
 
 If any check fails, stop and report the issue to the user. Do not proceed.
-If CI is still `in_progress`, wait for it (poll the run every ~20–30 s; it
-typically takes a few minutes) instead of aborting.
+If CI is not passing, check why: re-query the same `/actions/runs` endpoint
+(or look at the Actions page) to see the run statuses. If a run is still
+`in_progress`, wait for it (poll every ~20–30 s; it typically takes a few
+minutes) instead of aborting. If a run failed, report it.
 
 ## 2. Check for Unreleased Changes
 
@@ -64,7 +60,7 @@ release:
 git log --oneline $(git describe --tags --abbrev=0)..HEAD
 ```
 
-If fixes, security updates, or breaking changes shipped without entries,
+If changes shipped without entries (fixes, features, security updates, etc.),
 draft entries for them (see entry-writing guidance below) and ask the user
 before creating them. Only say *"Nothing to release"* if no substantive
 changes exist.
