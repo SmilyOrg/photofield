@@ -20,16 +20,31 @@ git branch --show-current | grep -q '^main$'
 ```
 
 ```bash
+# Local main must be up to date with origin/main (fetch first, then fast-forward)
+git fetch origin main
+git merge --ff-only origin/main || { echo "NOT UP TO DATE (or diverged)"; exit 1; }
+```
+
+```bash
 # Working directory must be clean
 git diff-index --quiet HEAD -- || { echo "NOT CLEAN"; exit 1; }
 ```
 
 ```bash
-# CI must be passing on current HEAD
-curl -s "https://api.github.com/repos/SmilyOrg/photofield/commits/$(git rev-parse HEAD)/status" | grep -q '"state":"success"' && echo "CI PASSING" || echo "CI NOT PASSING"
+# CI must be passing on current HEAD.
+# The commit-status endpoint can stay "pending" (total_count 0) even after the
+# CI run finished — check the workflow runs instead:
+SHA=$(git rev-parse HEAD)
+curl -s "https://api.github.com/repos/SmilyOrg/photofield/actions/runs?branch=main&per_page=5" | \
+  jq -e --arg sha "$SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | length > 0 and all(.conclusion == "success")' \
+  >/dev/null && echo "CI PASSING" || echo "CI NOT PASSING"
 ```
 
 If any check fails, stop and report the issue to the user. Do not proceed.
+If CI is not passing, check why: re-query the same `/actions/runs` endpoint
+(or look at the Actions page) to see the run statuses. If a run is still
+`in_progress`, wait for it (poll every ~20–30 s; it typically takes a few
+minutes) instead of aborting. If a run failed, report it.
 
 ## 2. Check for Unreleased Changes
 
@@ -37,8 +52,18 @@ If any check fails, stop and report the issue to the user. Do not proceed.
 ls -la .changes/unreleased/
 ```
 
-If the directory contains only `.gitkeep`, there are no unreleased entries.
-Tell the user: *"No unreleased changelog entries found. Nothing to release."*
+Whether or not unreleased entries exist, check what changed since the last
+release and compare those changes with the existing entries. Commits may
+have landed without changelog entries:
+
+```bash
+git log --oneline $(git describe --tags --abbrev=0)..HEAD
+```
+
+If changes shipped without entries (fixes, features, security updates, etc.),
+draft entries for them (see entry-writing guidance below) and ask the user
+before creating them. Only say *"Nothing to release"* if no substantive
+changes exist.
 
 List each entry for the user (read the YAML files):
 
@@ -49,6 +74,20 @@ for f in .changes/unreleased/*.yaml; do [ -e "$f" ] || continue
   echo "- [$kind] $body"
 done
 ```
+
+### Entry writing guidance
+
+- **Write for users, not developers.** No internal jargon (goroutines, child
+  processes, SQL, function names). Keep issue refs `(#NNN)` — they are useful.
+  - ❌ `djpeg: reap the child process when decoding fails`
+  - ✅ `Stopped a helper process from lingering when decoding a broken image failed`
+  - ❌ `Close database without racing the in-flight SQLite writer goroutine`
+  - ✅ `Fixed a bug at server shutdown that could lose or corrupt recently updated image information`
+- **Only log changes whose effect survives at HEAD.** If a fix was reverted
+  before release (e.g. split into a follow-up issue), do not log it.
+- **Keep it honest, keep it short.** One entry per distinct user-visible
+  change; group tightly related fixes (e.g. one search entry covering
+  date filters, scoring, and tool docs) rather than fragmenting.
 
 ## 3. Determine Next Version
 
@@ -106,6 +145,12 @@ Replace the default date-based title with a descriptive one:
 |---|---|
 | Patch | `"Security patches"`, `"Bug fixes and dependency updates"`, `"Stability improvements"` |
 | Minor | Short phrase summarizing the main feature(s) |
+
+Front-load the most prominent theme, and **name the feature explicitly** —
+especially if the previous release centered on it (e.g.
+`"MCP bug fixes and security patches"` rather than the generic
+`"Security patches and bug fixes"` when the fixes are all in the MCP
+search path).
 
 Example edit for `.changes/$NEXT.md`:
 
@@ -183,7 +228,20 @@ Then report:
 > - Tag: `$NEXT`
 > - CI running: https://github.com/SmilyOrg/photofield/actions
 
-## 10. Undo Procedures
+## 10. Change the Title After Committing (Before Push)
+
+If the user wants a different title after §7, edit the title line in **both**
+`CHANGELOG.md` and `.changes/$NEXT.md`, then amend and re-tag (the commit hash
+changes, so the tag must be recreated):
+
+```bash
+git add CHANGELOG.md .changes/$NEXT.md
+git commit --amend --no-edit
+git tag -d "$NEXT"
+git tag -a "$NEXT" -m "Release $NEXT"
+```
+
+## 11. Undo Procedures
 
 ### Before push
 
@@ -232,3 +290,14 @@ Then fix the issue and restart from §6.
 5. **`git push` bypasses branch rules** — The repo requires PRs for non-release
    commits. The release commit is exempted (remote logs "Bypassed rule
    violations for refs/heads/main"). This is expected.
+6. **`changie new` can "succeed" without writing** — Verify each fragment
+   file exists (`ls .changes/unreleased/`) and cat it after creating entries;
+   don't trust exit codes alone.
+7. **Validate hand-edited entry YAML** — In a single-quoted YAML scalar,
+   escape an embedded apostrophe as `''`. `changie new -b` handles YAML
+   serialization automatically; this escaping is only needed when manually
+   writing or editing single-quoted scalars.
+8. **Commit-status endpoint lag** — `/commits/<sha>/status` can report
+   `pending`/`total_count 0` while the CI workflow run has already completed.
+   Use the `/actions/runs` API (see §1) and wait for `completed` before
+   committing.
