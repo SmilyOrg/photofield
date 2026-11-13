@@ -52,9 +52,9 @@ minutes) instead of aborting. If a run failed, report it.
 ls -la .changes/unreleased/
 ```
 
-If the directory contains only `.gitkeep`, do **not** stop immediately. Commits
-may have landed without changelog entries. Check what changed since the last
-release:
+Whether or not unreleased entries exist, check what changed since the last
+release and compare those changes with the existing entries. Commits may
+have landed without changelog entries:
 
 ```bash
 git log --oneline $(git describe --tags --abbrev=0)..HEAD
@@ -293,10 +293,10 @@ Then fix the issue and restart from §6.
 6. **`changie new` can "succeed" without writing** — Verify each fragment
    file exists (`ls .changes/unreleased/`) and cat it after creating entries;
    don't trust exit codes alone.
-7. **Apostrophes break entry YAML** — Changie quotes bodies with single
-   quotes; a `'` inside the text produces invalid YAML. Avoid apostrophes in
-   `-b` bodies, or validate afterwards:
-   `python3 -c "import glob, yaml; [yaml.safe_load(open(f)) for f in glob.glob('.changes/unreleased/*.yaml')]"`
+7. **Validate hand-edited entry YAML** — In a single-quoted YAML scalar,
+   escape an embedded apostrophe as `''`. `changie new -b` handles YAML
+   serialization automatically; this escaping is only needed when manually
+   writing or editing single-quoted scalars.
 8. **Commit-status endpoint lag** — `/commits/<sha>/status` can report
    `pending`/`total_count 0` while the CI workflow run has already completed.
    Use the `/actions/runs` API (see §1) and wait for `completed` before
