@@ -1,0 +1,3 @@
+kind: Fixed
+body: Search with `dedup:` and a result limit no longer returns fewer photos than asked for when more unique photos exist further along.
+time: 2026-11-19T10:00:00+01:00
