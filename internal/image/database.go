@@ -2022,7 +2022,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 		// threshold and dedup filters run in Go and would otherwise only see
 		// the first Limit rows in SQL order, silently discarding matches beyond
 		// the window. The limit is applied in Go after filtering instead.
-		goScores := similarityOrder || options.ImageEmbedding != nil || options.FaceEmbedding != nil
+		// A standalone dedup: has no query embedding but filters in Go too.
+		goScores := similarityOrder ||
+			options.ImageEmbedding != nil ||
+			options.FaceEmbedding != nil ||
+			options.Expression.Deduplicate.Present
 
 		joinEmbeddings := false
 		var emb []float32
@@ -2268,6 +2272,11 @@ func (source *Database) listWithPrefixIds(prefixIds []int64, options ListOptions
 					emitted++
 				}
 				lastInfo = SourcedInfo{}
+				if goScores && !similarityOrder && options.Limit > 0 && emitted >= options.Limit {
+					// The limit is reached and the rows are already in their final
+					// order, so reading the rest of the set would only be thrown away.
+					break
+				}
 			}
 
 			info.Width = stmt.ColumnInt(1)
